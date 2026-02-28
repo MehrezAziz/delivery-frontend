@@ -1,34 +1,54 @@
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
 
-export default function WelcomeScreen() {
+export default function RoleSelectionScreen() {
   const router = useRouter();
 
   return (
     <View style={styles.container}>
-      <View style={styles.heroSection}>
+      <View style={styles.content}>
         <View style={styles.iconContainer}>
           <Text style={styles.iconText}>🚚</Text>
         </View>
         
-        <Text style={styles.title}>Fast Delivery</Text>
-        <Text style={styles.subtitle}>Get your packages delivered quickly and safely</Text>
+        <Text style={styles.title}>Welcome to Fast Delivery</Text>
+        <Text style={styles.subtitle}>Choose how you want to continue</Text>
 
-        <View style={styles.buttonContainer}>
+        <View style={styles.cardsContainer}>
+          {/* Customer Card */}
           <TouchableOpacity
-            style={[styles.button, styles.customerButton]}
+            style={[styles.card, styles.customerCard]}
             onPress={() => router.push('/(auth)/customer-login')}
+            activeOpacity={0.8}
           >
-            <Text style={styles.buttonText}>Continue as Customer</Text>
+            <View style={styles.cardIcon}>
+              <Text style={styles.cardIconText}>📦</Text>
+            </View>
+            <Text style={styles.cardTitle}>I'm a Customer</Text>
+            <Text style={styles.cardDescription}>
+              Send packages and track deliveries
+            </Text>
+            <View style={styles.cardButton}>
+              <Text style={styles.cardButtonText}>Continue →</Text>
+            </View>
           </TouchableOpacity>
 
-          <View style={styles.buttonSpacing} />
-
+          {/* Driver Card */}
           <TouchableOpacity
-            style={[styles.button, styles.driverButton]}
+            style={[styles.card, styles.driverCard]}
             onPress={() => router.push('/(auth)/driver-login')}
+            activeOpacity={0.8}
           >
-            <Text style={styles.buttonText}>Continue as Driver</Text>
+            <View style={styles.cardIcon}>
+              <Text style={styles.cardIconText}>🚗</Text>
+            </View>
+            <Text style={styles.cardTitle}>I'm a Driver</Text>
+            <Text style={styles.cardDescription}>
+              Deliver packages and earn money
+            </Text>
+            <View style={styles.cardButton}>
+              <Text style={styles.cardButtonText}>Continue →</Text>
+            </View>
           </TouchableOpacity>
         </View>
       </View>
@@ -45,78 +65,106 @@ export default function WelcomeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: 'white',
+    backgroundColor: '#f9fafb',
   },
-  heroSection: {
+  content: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 24,
   },
   iconContainer: {
-    width: 128,
-    height: 128,
+    width: 100,
+    height: 100,
     backgroundColor: '#0284c7',
-    borderRadius: 64,
+    borderRadius: 50,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 32,
+    marginBottom: 24,
   },
   iconText: {
     fontSize: 48,
-    color: 'white',
   },
   title: {
-    fontSize: 36,
+    fontSize: 28,
     fontWeight: 'bold',
     color: '#111827',
     textAlign: 'center',
-    marginBottom: 16,
+    marginBottom: 8,
   },
   subtitle: {
-    fontSize: 18,
+    fontSize: 16,
     color: '#6b7280',
     textAlign: 'center',
     marginBottom: 48,
   },
-  buttonContainer: {
+  cardsContainer: {
     width: '100%',
+    gap: 16,
   },
-  buttonSpacing: {
-    height: 16,
-  },
-  button: {
-    paddingVertical: 16,
-    paddingHorizontal: 32,
-    borderRadius: 12,
+  card: {
+    backgroundColor: 'white',
+    borderRadius: 20,
+    padding: 24,
+    alignItems: 'center',
     shadowColor: '#000',
     shadowOffset: {
       width: 0,
-      height: 2,
+      height: 4,
     },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
     elevation: 5,
+    borderWidth: 2,
   },
-  customerButton: {
-    backgroundColor: '#0284c7',
+  customerCard: {
+    borderColor: '#0284c7',
   },
-  driverButton: {
-    backgroundColor: '#c026d3',
+  driverCard: {
+    borderColor: '#c026d3',
   },
-  buttonText: {
-    color: 'white',
+  cardIcon: {
+    width: 80,
+    height: 80,
+    backgroundColor: '#f3f4f6',
+    borderRadius: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+  },
+  cardIconText: {
+    fontSize: 40,
+  },
+  cardTitle: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: '#111827',
+    marginBottom: 8,
+  },
+  cardDescription: {
+    fontSize: 14,
+    color: '#6b7280',
     textAlign: 'center',
-    fontSize: 18,
+    marginBottom: 16,
+  },
+  cardButton: {
+    paddingHorizontal: 24,
+    paddingVertical: 10,
+    borderRadius: 20,
+    backgroundColor: '#f3f4f6',
+  },
+  cardButtonText: {
+    fontSize: 16,
     fontWeight: '600',
+    color: '#111827',
   },
   footer: {
     paddingBottom: 32,
     paddingHorizontal: 24,
   },
   footerText: {
-    color: '#6b7280',
+    color: '#9ca3af',
     textAlign: 'center',
-    fontSize: 14,
+    fontSize: 12,
   },
 });

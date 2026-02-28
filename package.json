@@ -1,7 +1,7 @@
 {
   "name": "delivery-frontend",
   "version": "1.0.0",
-  "main": "index.ts",
+  "main": "expo-router/entry",
   "scripts": {
     "start": "expo start",
     "android": "expo start --android",
@@ -9,24 +9,26 @@
     "web": "expo start --web"
   },
   "dependencies": {
-    "@expo/vector-icons": "^15.1.1",
+    "@expo/ngrok": "^4.1.3",
+    "@expo/vector-icons": "^15.0.2",
     "expo": "~55.0.3",
-    "expo-constants": "^55.0.7",
-    "expo-linking": "^55.0.7",
-    "expo-router": "^55.0.2",
+    "expo-constants": "~55.0.7",
+    "expo-linking": "~55.0.7",
+    "expo-router": "~55.0.3",
     "expo-status-bar": "~55.0.4",
     "react": "19.2.0",
-    "react-dom": "^19.2.4",
+    "react-dom": "19.2.0",
     "react-native": "0.83.2",
-    "react-native-paper": "^5.15.0",
+    "react-native-paper": "^5.12.3",
     "react-native-safe-area-context": "~5.6.2",
-    "react-native-screens": "~4.23.0"
+    "react-native-screens": "~4.23.0",
+    "react-native-web": "^0.21.0"
   },
   "devDependencies": {
-    "@types/react": "~19.2.2",
-    "babel-preset-expo": "^55.0.9",
-    "nativewind": "^4.2.2",
-    "tailwindcss": "^3.3.2",
+    "@types/react": "~19.2.10",
+    "babel-preset-expo": "~55.0.8",
+    "nativewind": "^4.0.36",
+    "tailwindcss": "^3.4.0",
     "typescript": "~5.9.2"
   },
   "private": true
