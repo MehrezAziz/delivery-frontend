@@ -1,56 +1,122 @@
-import { View, Text, TouchableOpacity, Image } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
 
 export default function WelcomeScreen() {
   const router = useRouter();
 
   return (
-    <View className="flex-1 bg-white">
-      <StatusBar style="dark" />
-      
-      {/* Hero Section */}
-      <View className="flex-1 justify-center items-center px-6">
-        <View className="w-32 h-32 bg-primary-500 rounded-full items-center justify-center mb-8">
-          <Text className="text-white text-5xl font-bold">🚚</Text>
+    <View style={styles.container}>
+      <View style={styles.heroSection}>
+        <View style={styles.iconContainer}>
+          <Text style={styles.iconText}>🚚</Text>
         </View>
         
-        <Text className="text-4xl font-bold text-gray-900 text-center mb-4">
-          Fast Delivery
-        </Text>
-        
-        <Text className="text-lg text-gray-600 text-center mb-12">
-          Get your packages delivered quickly and safely
-        </Text>
+        <Text style={styles.title}>Fast Delivery</Text>
+        <Text style={styles.subtitle}>Get your packages delivered quickly and safely</Text>
 
-        {/* Role Selection */}
-        <View className="w-full space-y-4">
+        <View style={styles.buttonContainer}>
           <TouchableOpacity
-            className="bg-primary-600 py-4 px-8 rounded-xl shadow-lg"
+            style={[styles.button, styles.customerButton]}
             onPress={() => router.push('/(auth)/customer-login')}
           >
-            <Text className="text-white text-center text-lg font-semibold">
-              Continue as Customer
-            </Text>
+            <Text style={styles.buttonText}>Continue as Customer</Text>
           </TouchableOpacity>
 
+          <View style={styles.buttonSpacing} />
+
           <TouchableOpacity
-            className="bg-secondary-600 py-4 px-8 rounded-xl shadow-lg"
+            style={[styles.button, styles.driverButton]}
             onPress={() => router.push('/(auth)/driver-login')}
           >
-            <Text className="text-white text-center text-lg font-semibold">
-              Continue as Driver
-            </Text>
+            <Text style={styles.buttonText}>Continue as Driver</Text>
           </TouchableOpacity>
         </View>
       </View>
 
-      {/* Footer */}
-      <View className="pb-8 px-6">
-        <Text className="text-gray-500 text-center text-sm">
+      <View style={styles.footer}>
+        <Text style={styles.footerText}>
           By continuing, you agree to our Terms & Privacy Policy
         </Text>
       </View>
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: 'white',
+  },
+  heroSection: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+  },
+  iconContainer: {
+    width: 128,
+    height: 128,
+    backgroundColor: '#0284c7',
+    borderRadius: 64,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 32,
+  },
+  iconText: {
+    fontSize: 48,
+    color: 'white',
+  },
+  title: {
+    fontSize: 36,
+    fontWeight: 'bold',
+    color: '#111827',
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+  subtitle: {
+    fontSize: 18,
+    color: '#6b7280',
+    textAlign: 'center',
+    marginBottom: 48,
+  },
+  buttonContainer: {
+    width: '100%',
+  },
+  buttonSpacing: {
+    height: 16,
+  },
+  button: {
+    paddingVertical: 16,
+    paddingHorizontal: 32,
+    borderRadius: 12,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  customerButton: {
+    backgroundColor: '#0284c7',
+  },
+  driverButton: {
+    backgroundColor: '#c026d3',
+  },
+  buttonText: {
+    color: 'white',
+    textAlign: 'center',
+    fontSize: 18,
+    fontWeight: '600',
+  },
+  footer: {
+    paddingBottom: 32,
+    paddingHorizontal: 24,
+  },
+  footerText: {
+    color: '#6b7280',
+    textAlign: 'center',
+    fontSize: 14,
+  },
+});

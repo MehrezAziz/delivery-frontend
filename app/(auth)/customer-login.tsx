@@ -1,6 +1,5 @@
-import { View, Text, TouchableOpacity, TextInput, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
+import { View, Text, TouchableOpacity, TextInput, ScrollView, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
 import { useState } from 'react';
 
 export default function CustomerLoginScreen() {
@@ -9,86 +8,149 @@ export default function CustomerLoginScreen() {
   const [password, setPassword] = useState('');
 
   const handleLogin = () => {
-    // TODO: Implement login logic
     console.log('Login:', { phone, password });
     router.replace('/(customer)/home');
   };
 
   return (
-    <KeyboardAvoidingView 
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      className="flex-1 bg-white"
-    >
-      <StatusBar style="dark" />
-      <ScrollView contentContainerStyle={{ flexGrow: 1 }}>
-        <View className="flex-1 px-6 pt-16">
-          {/* Back Button */}
-          <TouchableOpacity 
-            onPress={() => router.back()}
-            className="mb-8"
-          >
-            <Text className="text-primary-600 text-lg">← Back</Text>
+    <ScrollView style={styles.container}>
+      <View style={styles.content}>
+        <TouchableOpacity 
+          onPress={() => router.back()}
+          style={styles.backButton}
+        >
+          <Text style={styles.backText}>← Back</Text>
+        </TouchableOpacity>
+
+        <View style={styles.header}>
+          <Text style={styles.title}>Welcome Back</Text>
+          <Text style={styles.subtitle}>Login to your customer account</Text>
+        </View>
+
+        <View style={styles.form}>
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>Phone Number</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="+216 XX XXX XXX"
+              keyboardType="phone-pad"
+              value={phone}
+              onChangeText={setPhone}
+            />
+          </View>
+
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>Password</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="Enter your password"
+              secureTextEntry
+              value={password}
+              onChangeText={setPassword}
+            />
+          </View>
+
+          <TouchableOpacity style={styles.forgotButton}>
+            <Text style={styles.forgotText}>Forgot Password?</Text>
           </TouchableOpacity>
 
-          {/* Header */}
-          <View className="mb-12">
-            <Text className="text-4xl font-bold text-gray-900 mb-2">
-              Welcome Back
-            </Text>
-            <Text className="text-lg text-gray-600">
-              Login to your customer account
-            </Text>
-          </View>
+          <TouchableOpacity style={styles.loginButton} onPress={handleLogin}>
+            <Text style={styles.loginButtonText}>Login</Text>
+          </TouchableOpacity>
 
-          {/* Form */}
-          <View className="space-y-6">
-            <View>
-              <Text className="text-gray-700 font-medium mb-2">Phone Number</Text>
-              <TextInput
-                className="bg-gray-50 border border-gray-300 rounded-xl px-4 py-4 text-base"
-                placeholder="+216 XX XXX XXX"
-                keyboardType="phone-pad"
-                value={phone}
-                onChangeText={setPhone}
-              />
-            </View>
-
-            <View>
-              <Text className="text-gray-700 font-medium mb-2">Password</Text>
-              <TextInput
-                className="bg-gray-50 border border-gray-300 rounded-xl px-4 py-4 text-base"
-                placeholder="Enter your password"
-                secureTextEntry
-                value={password}
-                onChangeText={setPassword}
-              />
-            </View>
-
-            <TouchableOpacity>
-              <Text className="text-primary-600 text-right font-medium">
-                Forgot Password?
-              </Text>
+          <View style={styles.registerLink}>
+            <Text style={styles.registerText}>Don't have an account? </Text>
+            <TouchableOpacity onPress={() => router.push('/(auth)/customer-register')}>
+              <Text style={styles.registerLinkText}>Register</Text>
             </TouchableOpacity>
-
-            <TouchableOpacity
-              className="bg-primary-600 py-4 rounded-xl shadow-lg mt-4"
-              onPress={handleLogin}
-            >
-              <Text className="text-white text-center text-lg font-semibold">
-                Login
-              </Text>
-            </TouchableOpacity>
-
-            {/* Register Link */}
-            <View className="flex-row justify-center items-center mt-6">
-              <Text className="text-gray-600">Don't have an account? </Text>
-              <TouchableOpacity onPress={() => router.push('/(auth)/customer-register')}>
-                <Text className="text-primary-600 font-semibold">Register</Text>
-              </TouchableOpacity>
-            </View>
           </View>
         </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+      </View>
+    </ScrollView>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: 'white',
+  },
+  content: {
+    flex: 1,
+    paddingHorizontal: 24,
+    paddingTop: 64,
+  },
+  backButton: {
+    marginBottom: 32,
+  },
+  backText: {
+    color: '#0284c7',
+    fontSize: 18,
+  },
+  header: {
+    marginBottom: 48,
+  },
+  title: {
+    fontSize: 36,
+    fontWeight: 'bold',
+    color: '#111827',
+    marginBottom: 8,
+  },
+  subtitle: {
+    fontSize: 18,
+    color: '#6b7280',
+  },
+  form: {
+    flex: 1,
+  },
+  inputGroup: {
+    marginBottom: 24,
+  },
+  label: {
+    color: '#374151',
+    fontWeight: '500',
+    marginBottom: 8,
+  },
+  input: {
+    backgroundColor: '#f9fafb',
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    fontSize: 16,
+  },
+  forgotButton: {
+    alignSelf: 'flex-end',
+    marginBottom: 16,
+  },
+  forgotText: {
+    color: '#0284c7',
+    fontWeight: '500',
+  },
+  loginButton: {
+    backgroundColor: '#0284c7',
+    paddingVertical: 16,
+    borderRadius: 12,
+    marginTop: 16,
+  },
+  loginButtonText: {
+    color: 'white',
+    textAlign: 'center',
+    fontSize: 18,
+    fontWeight: '600',
+  },
+  registerLink: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 24,
+  },
+  registerText: {
+    color: '#6b7280',
+  },
+  registerLinkText: {
+    color: '#0284c7',
+    fontWeight: '600',
+  },
+});

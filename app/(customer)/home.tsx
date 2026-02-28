@@ -1,163 +1,70 @@
-import { View, Text, TouchableOpacity, ScrollView } from 'react-native';
-import { StatusBar } from 'expo-status-bar';
-import { useRouter } from 'expo-router';
+import { View, Text, ScrollView, StyleSheet } from 'react-native';
 
 export default function CustomerHomeScreen() {
-  const router = useRouter();
-
   return (
-    <View className="flex-1 bg-gray-50">
-      <StatusBar style="dark" />
-      
-      {/* Header */}
-      <View className="bg-white px-6 pt-14 pb-6 shadow-sm">
-        <Text className="text-3xl font-bold text-gray-900 mb-2">
-          Hello, Ahmed! 👋
-        </Text>
-        <Text className="text-gray-600">
-          Where would you like to send your package?
-        </Text>
+    <View style={styles.container}>
+      <View style={styles.header}>
+        <Text style={styles.greeting}>Hello, Ahmed! 👋</Text>
+        <Text style={styles.subtitle}>Where would you like to send your package?</Text>
       </View>
 
-      <ScrollView className="flex-1">
-        {/* Quick Actions */}
-        <View className="px-6 py-6">
-          <Text className="text-xl font-bold text-gray-900 mb-4">
-            Quick Actions
-          </Text>
+      <ScrollView style={styles.content}>
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Quick Actions</Text>
           
-          <TouchableOpacity 
-            className="bg-primary-600 p-6 rounded-2xl shadow-lg mb-4"
-            onPress={() => {/* TODO: Navigate to create order */}}
-          >
-            <View className="flex-row items-center">
-              <View className="w-12 h-12 bg-white/20 rounded-full items-center justify-center mr-4">
-                <Text className="text-2xl">📦</Text>
-              </View>
-              <View className="flex-1">
-                <Text className="text-white text-lg font-bold mb-1">
-                  Create New Order
-                </Text>
-                <Text className="text-white/80">
-                  Send a package now
-                </Text>
-              </View>
-              <Text className="text-white text-2xl">→</Text>
+          <View style={styles.quickActionCard}>
+            <View style={styles.quickActionIcon}>
+              <Text style={styles.iconText}>📦</Text>
             </View>
-          </TouchableOpacity>
+            <View style={styles.quickActionContent}>
+              <Text style={styles.quickActionTitle}>Create New Order</Text>
+              <Text style={styles.quickActionSubtitle}>Send a package now</Text>
+            </View>
+            <Text style={styles.arrow}>→</Text>
+          </View>
 
-          <View className="flex-row space-x-4">
-            <TouchableOpacity className="flex-1 bg-white p-4 rounded-xl shadow-sm">
-              <Text className="text-3xl mb-2">📍</Text>
-              <Text className="text-gray-900 font-semibold">
-                My Addresses
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity className="flex-1 bg-white p-4 rounded-xl shadow-sm">
-              <Text className="text-3xl mb-2">💳</Text>
-              <Text className="text-gray-900 font-semibold">
-                My Wallet
-              </Text>
-            </TouchableOpacity>
+          <View style={styles.actionRow}>
+            <View style={styles.actionCard}>
+              <Text style={styles.actionIcon}>📍</Text>
+              <Text style={styles.actionTitle}>My Addresses</Text>
+            </View>
+            <View style={styles.actionCard}>
+              <Text style={styles.actionIcon}>💳</Text>
+              <Text style={styles.actionTitle}>My Wallet</Text>
+            </View>
           </View>
         </View>
 
-        {/* Active Orders */}
-        <View className="px-6 py-4">
-          <View className="flex-row justify-between items-center mb-4">
-            <Text className="text-xl font-bold text-gray-900">
-              Active Orders
-            </Text>
-            <TouchableOpacity>
-              <Text className="text-primary-600 font-medium">See All</Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* Order Card */}
-          <View className="bg-white p-4 rounded-xl shadow-sm mb-4">
-            <View className="flex-row justify-between items-start mb-3">
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Active Orders</Text>
+          
+          <View style={styles.orderCard}>
+            <View style={styles.orderHeader}>
               <View>
-                <Text className="text-gray-900 font-bold text-lg mb-1">
-                  Order #12345
-                </Text>
-                <Text className="text-gray-600">
-                  Searching for driver...
-                </Text>
+                <Text style={styles.orderTitle}>Order #12345</Text>
+                <Text style={styles.orderStatus}>Searching for driver...</Text>
               </View>
-              <View className="bg-yellow-100 px-3 py-1 rounded-full">
-                <Text className="text-yellow-800 font-medium text-xs">
-                  SEARCHING
-                </Text>
+              <View style={styles.statusBadge}>
+                <Text style={styles.statusText}>SEARCHING</Text>
               </View>
             </View>
 
-            <View className="border-t border-gray-100 pt-3">
-              <View className="flex-row items-center mb-2">
-                <Text className="text-gray-500 mr-2">📍</Text>
-                <Text className="text-gray-700 flex-1">
-                  Avenue Habib Bourguiba
-                </Text>
+            <View style={styles.orderAddresses}>
+              <View style={styles.addressRow}>
+                <Text style={styles.addressIcon}>📍</Text>
+                <Text style={styles.addressText}>Avenue Habib Bourguiba</Text>
               </View>
-              <View className="flex-row items-center">
-                <Text className="text-gray-500 mr-2">📍</Text>
-                <Text className="text-gray-700 flex-1">
-                  Avenue de la Liberté
-                </Text>
+              <View style={styles.addressRow}>
+                <Text style={styles.addressIcon}>📍</Text>
+                <Text style={styles.addressText}>Avenue de la Liberté</Text>
               </View>
             </View>
 
-            <View className="flex-row justify-between items-center mt-4 pt-3 border-t border-gray-100">
-              <Text className="text-gray-900 font-bold text-lg">
-                25.00 TND
-              </Text>
-              <TouchableOpacity className="bg-primary-600 px-4 py-2 rounded-lg">
-                <Text className="text-white font-medium">View Details</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-
-          {/* Empty State */}
-          {/* <View className="bg-white p-8 rounded-xl items-center">
-            <Text className="text-6xl mb-4">📦</Text>
-            <Text className="text-gray-900 font-bold text-lg mb-2">
-              No Active Orders
-            </Text>
-            <Text className="text-gray-600 text-center">
-              Create your first order to get started
-            </Text>
-          </View> */}
-        </View>
-
-        {/* Stats */}
-        <View className="px-6 py-4 mb-6">
-          <Text className="text-xl font-bold text-gray-900 mb-4">
-            Your Stats
-          </Text>
-          <View className="flex-row space-x-4">
-            <View className="flex-1 bg-white p-4 rounded-xl shadow-sm">
-              <Text className="text-3xl font-bold text-primary-600 mb-1">
-                12
-              </Text>
-              <Text className="text-gray-600">
-                Total Orders
-              </Text>
-            </View>
-            <View className="flex-1 bg-white p-4 rounded-xl shadow-sm">
-              <Text className="text-3xl font-bold text-green-600 mb-1">
-                10
-              </Text>
-              <Text className="text-gray-600">
-                Completed
-              </Text>
-            </View>
-            <View className="flex-1 bg-white p-4 rounded-xl shadow-sm">
-              <Text className="text-3xl font-bold text-yellow-600 mb-1">
-                2
-              </Text>
-              <Text className="text-gray-600">
-                In Progress
-              </Text>
+            <View style={styles.orderFooter}>
+              <Text style={styles.orderPrice}>25.00 TND</Text>
+              <View style={styles.viewButton}>
+                <Text style={styles.viewButtonText}>View Details</Text>
+              </View>
             </View>
           </View>
         </View>
@@ -165,3 +72,167 @@ export default function CustomerHomeScreen() {
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#f9fafb',
+  },
+  header: {
+    backgroundColor: 'white',
+    paddingHorizontal: 24,
+    paddingTop: 56,
+    paddingBottom: 24,
+  },
+  greeting: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: '#111827',
+    marginBottom: 8,
+  },
+  subtitle: {
+    fontSize: 16,
+    color: '#6b7280',
+  },
+  content: {
+    flex: 1,
+  },
+  section: {
+    paddingHorizontal: 24,
+    paddingVertical: 24,
+  },
+  sectionTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#111827',
+    marginBottom: 16,
+  },
+  quickActionCard: {
+    backgroundColor: '#0284c7',
+    padding: 24,
+    borderRadius: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  quickActionIcon: {
+    width: 48,
+    height: 48,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 16,
+  },
+  iconText: {
+    fontSize: 24,
+  },
+  quickActionContent: {
+    flex: 1,
+  },
+  quickActionTitle: {
+    color: 'white',
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 4,
+  },
+  quickActionSubtitle: {
+    color: 'rgba(255,255,255,0.8)',
+  },
+  arrow: {
+    color: 'white',
+    fontSize: 24,
+  },
+  actionRow: {
+    flexDirection: 'row',
+    gap: 16,
+  },
+  actionCard: {
+    flex: 1,
+    backgroundColor: 'white',
+    padding: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  actionIcon: {
+    fontSize: 28,
+    marginBottom: 8,
+  },
+  actionTitle: {
+    color: '#111827',
+    fontWeight: '600',
+  },
+  orderCard: {
+    backgroundColor: 'white',
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 16,
+  },
+  orderHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 12,
+  },
+  orderTitle: {
+    color: '#111827',
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 4,
+  },
+  orderStatus: {
+    color: '#6b7280',
+  },
+  statusBadge: {
+    backgroundColor: '#fef3c7',
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 16,
+  },
+  statusText: {
+    color: '#92400e',
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  orderAddresses: {
+    borderTopWidth: 1,
+    borderTopColor: '#f3f4f6',
+    paddingTop: 12,
+    marginBottom: 12,
+  },
+  addressRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  addressIcon: {
+    marginRight: 8,
+  },
+  addressText: {
+    color: '#374151',
+    flex: 1,
+  },
+  orderFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderTopWidth: 1,
+    borderTopColor: '#f3f4f6',
+    paddingTop: 12,
+  },
+  orderPrice: {
+    color: '#111827',
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  viewButton: {
+    backgroundColor: '#0284c7',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  viewButtonText: {
+    color: 'white',
+    fontWeight: '500',
+  },
+});
