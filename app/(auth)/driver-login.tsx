@@ -1,6 +1,5 @@
-import { View, Text, TouchableOpacity, TextInput, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
+import { View, Text, TouchableOpacity, TextInput, KeyboardAvoidingView, Platform, ScrollView, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
 import { useState } from 'react';
 
 export default function DriverLoginScreen() {
@@ -17,76 +16,70 @@ export default function DriverLoginScreen() {
   return (
     <KeyboardAvoidingView 
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      className="flex-1 bg-white"
+      style={styles.container}
     >
-      <StatusBar style="dark" />
-      <ScrollView contentContainerStyle={{ flexGrow: 1 }}>
-        <View className="flex-1 px-6 pt-16">
+      <ScrollView contentContainerStyle={styles.scrollContent}>
+        <View style={styles.content}>
           {/* Back Button */}
           <TouchableOpacity 
             onPress={() => router.back()}
-            className="mb-8"
+            style={styles.backButton}
           >
-            <Text className="text-secondary-600 text-lg">← Back</Text>
+            <Text style={styles.backText}>← Back</Text>
           </TouchableOpacity>
 
           {/* Header */}
-          <View className="mb-12">
-            <View className="w-20 h-20 bg-secondary-500 rounded-full items-center justify-center mb-6">
-              <Text className="text-white text-3xl">🚗</Text>
+          <View style={styles.header}>
+            <View style={styles.iconContainer}>
+              <Text style={styles.iconText}>🚗</Text>
             </View>
-            <Text className="text-4xl font-bold text-gray-900 mb-2">
-              Driver Login
-            </Text>
-            <Text className="text-lg text-gray-600">
-              Access your driver dashboard
-            </Text>
+            <Text style={styles.title}>Driver Login</Text>
+            <Text style={styles.subtitle}>Access your driver dashboard</Text>
           </View>
 
           {/* Form */}
-          <View className="space-y-6">
-            <View>
-              <Text className="text-gray-700 font-medium mb-2">Phone Number</Text>
+          <View style={styles.form}>
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Phone Number</Text>
               <TextInput
-                className="bg-gray-50 border border-gray-300 rounded-xl px-4 py-4 text-base"
+                style={styles.input}
                 placeholder="+216 XX XXX XXX"
+                placeholderTextColor="#9ca3af"
                 keyboardType="phone-pad"
                 value={phone}
                 onChangeText={setPhone}
               />
             </View>
 
-            <View>
-              <Text className="text-gray-700 font-medium mb-2">Password</Text>
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Password</Text>
               <TextInput
-                className="bg-gray-50 border border-gray-300 rounded-xl px-4 py-4 text-base"
+                style={styles.input}
                 placeholder="Enter your password"
+                placeholderTextColor="#9ca3af"
                 secureTextEntry
                 value={password}
                 onChangeText={setPassword}
               />
             </View>
 
-            <TouchableOpacity>
-              <Text className="text-secondary-600 text-right font-medium">
-                Forgot Password?
-              </Text>
+            <TouchableOpacity style={styles.forgotPassword}>
+              <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
-              className="bg-secondary-600 py-4 rounded-xl shadow-lg mt-4"
+              style={styles.loginButton}
               onPress={handleLogin}
+              activeOpacity={0.8}
             >
-              <Text className="text-white text-center text-lg font-semibold">
-                Login
-              </Text>
+              <Text style={styles.loginButtonText}>Login</Text>
             </TouchableOpacity>
 
             {/* Register Link */}
-            <View className="flex-row justify-center items-center mt-6">
-              <Text className="text-gray-600">Want to become a driver? </Text>
+            <View style={styles.registerContainer}>
+              <Text style={styles.registerText}>Want to become a driver? </Text>
               <TouchableOpacity onPress={() => router.push('/(auth)/driver-register')}>
-                <Text className="text-secondary-600 font-semibold">Register</Text>
+                <Text style={styles.registerLink}>Register</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -95,4 +88,116 @@ export default function DriverLoginScreen() {
     </KeyboardAvoidingView>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#ffffff',
+  },
+  scrollContent: {
+    flexGrow: 1,
+  },
+  content: {
+    flex: 1,
+    paddingHorizontal: 24,
+    paddingTop: 64,
+  },
+  backButton: {
+    marginBottom: 32,
+  },
+  backText: {
+    color: '#c026d3',
+    fontSize: 18,
+    fontWeight: '500',
+  },
+  header: {
+    marginBottom: 48,
+  },
+  iconContainer: {
+    width: 80,
+    height: 80,
+    backgroundColor: '#c026d3',
+    borderRadius: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 24,
+  },
+  iconText: {
+    fontSize: 40,
+  },
+  title: {
+    fontSize: 36,
+    fontWeight: 'bold',
+    color: '#111827',
+    marginBottom: 8,
+  },
+  subtitle: {
+    fontSize: 18,
+    color: '#6b7280',
+  },
+  form: {
+    gap: 24,
+  },
+  inputGroup: {
+    gap: 8,
+  },
+  label: {
+    color: '#374151',
+    fontWeight: '600',
+    fontSize: 16,
+  },
+  input: {
+    backgroundColor: '#f9fafb',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    fontSize: 16,
+    color: '#111827',
+  },
+  forgotPassword: {
+    alignSelf: 'flex-end',
+  },
+  forgotPasswordText: {
+    color: '#c026d3',
+    fontWeight: '600',
+    fontSize: 15,
+  },
+  loginButton: {
+    backgroundColor: '#c026d3',
+    paddingVertical: 16,
+    borderRadius: 12,
+    shadowColor: '#c026d3',
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+    marginTop: 8,
+  },
+  loginButtonText: {
+    color: '#ffffff',
+    textAlign: 'center',
+    fontSize: 18,
+    fontWeight: '600',
+  },
+  registerContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 24,
+  },
+  registerText: {
+    color: '#6b7280',
+    fontSize: 15,
+  },
+  registerLink: {
+    color: '#c026d3',
+    fontWeight: '600',
+    fontSize: 15,
+  },
+});
 

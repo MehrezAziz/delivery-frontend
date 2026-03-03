@@ -1,6 +1,5 @@
-import { View, Text, TouchableOpacity, TextInput, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
+import { View, Text, TouchableOpacity, TextInput, KeyboardAvoidingView, Platform, ScrollView, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
 import { useState } from 'react';
 
 export default function DriverRegisterScreen() {
@@ -23,91 +22,92 @@ export default function DriverRegisterScreen() {
   return (
     <KeyboardAvoidingView 
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      className="flex-1 bg-white"
+      style={styles.container}
     >
-      <StatusBar style="dark" />
-      <ScrollView contentContainerStyle={{ flexGrow: 1 }}>
-        <View className="flex-1 px-6 pt-16 pb-8">
+      <ScrollView contentContainerStyle={styles.scrollContent}>
+        <View style={styles.content}>
           {/* Back Button */}
           <TouchableOpacity 
             onPress={() => router.back()}
-            className="mb-8"
+            style={styles.backButton}
           >
-            <Text className="text-secondary-600 text-lg">← Back</Text>
+            <Text style={styles.backText}>← Back</Text>
           </TouchableOpacity>
 
           {/* Header */}
-          <View className="mb-8">
-            <View className="w-20 h-20 bg-secondary-500 rounded-full items-center justify-center mb-6">
-              <Text className="text-white text-3xl">🚗</Text>
+          <View style={styles.header}>
+            <View style={styles.iconContainer}>
+              <Text style={styles.iconText}>🚗</Text>
             </View>
-            <Text className="text-4xl font-bold text-gray-900 mb-2">
-              Become a Driver
-            </Text>
-            <Text className="text-lg text-gray-600">
-              Start earning by delivering packages
-            </Text>
+            <Text style={styles.title}>Become a Driver</Text>
+            <Text style={styles.subtitle}>Start earning by delivering packages</Text>
           </View>
 
           {/* Form */}
-          <View className="space-y-4">
-            <View>
-              <Text className="text-gray-700 font-medium mb-2">First Name</Text>
+          <View style={styles.form}>
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>First Name</Text>
               <TextInput
-                className="bg-gray-50 border border-gray-300 rounded-xl px-4 py-4 text-base"
+                style={styles.input}
                 placeholder="Enter your first name"
+                placeholderTextColor="#9ca3af"
                 value={formData.firstName}
                 onChangeText={(text) => setFormData({...formData, firstName: text})}
               />
             </View>
 
-            <View>
-              <Text className="text-gray-700 font-medium mb-2">Last Name</Text>
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Last Name</Text>
               <TextInput
-                className="bg-gray-50 border border-gray-300 rounded-xl px-4 py-4 text-base"
+                style={styles.input}
                 placeholder="Enter your last name"
+                placeholderTextColor="#9ca3af"
                 value={formData.secondName}
                 onChangeText={(text) => setFormData({...formData, secondName: text})}
               />
             </View>
 
-            <View>
-              <Text className="text-gray-700 font-medium mb-2">Phone Number</Text>
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Phone Number</Text>
               <TextInput
-                className="bg-gray-50 border border-gray-300 rounded-xl px-4 py-4 text-base"
+                style={styles.input}
                 placeholder="+216 XX XXX XXX"
+                placeholderTextColor="#9ca3af"
                 keyboardType="phone-pad"
                 value={formData.phone}
                 onChangeText={(text) => setFormData({...formData, phone: text})}
               />
             </View>
 
-            <View>
-              <Text className="text-gray-700 font-medium mb-2">Vehicle Type</Text>
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Vehicle Type</Text>
               <TextInput
-                className="bg-gray-50 border border-gray-300 rounded-xl px-4 py-4 text-base"
+                style={styles.input}
                 placeholder="e.g., Motorcycle, Car, Van"
+                placeholderTextColor="#9ca3af"
                 value={formData.vehicleType}
                 onChangeText={(text) => setFormData({...formData, vehicleType: text})}
               />
             </View>
 
-            <View>
-              <Text className="text-gray-700 font-medium mb-2">Password</Text>
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Password</Text>
               <TextInput
-                className="bg-gray-50 border border-gray-300 rounded-xl px-4 py-4 text-base"
+                style={styles.input}
                 placeholder="Create a password"
+                placeholderTextColor="#9ca3af"
                 secureTextEntry
                 value={formData.password}
                 onChangeText={(text) => setFormData({...formData, password: text})}
               />
             </View>
 
-            <View>
-              <Text className="text-gray-700 font-medium mb-2">Confirm Password</Text>
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Confirm Password</Text>
               <TextInput
-                className="bg-gray-50 border border-gray-300 rounded-xl px-4 py-4 text-base"
+                style={styles.input}
                 placeholder="Confirm your password"
+                placeholderTextColor="#9ca3af"
                 secureTextEntry
                 value={formData.confirmPassword}
                 onChangeText={(text) => setFormData({...formData, confirmPassword: text})}
@@ -115,19 +115,18 @@ export default function DriverRegisterScreen() {
             </View>
 
             <TouchableOpacity
-              className="bg-secondary-600 py-4 rounded-xl shadow-lg mt-4"
+              style={styles.registerButton}
               onPress={handleRegister}
+              activeOpacity={0.8}
             >
-              <Text className="text-white text-center text-lg font-semibold">
-                Create Driver Account
-              </Text>
+              <Text style={styles.registerButtonText}>Create Driver Account</Text>
             </TouchableOpacity>
 
             {/* Login Link */}
-            <View className="flex-row justify-center items-center mt-6">
-              <Text className="text-gray-600">Already a driver? </Text>
+            <View style={styles.loginContainer}>
+              <Text style={styles.loginText}>Already a driver? </Text>
               <TouchableOpacity onPress={() => router.back()}>
-                <Text className="text-secondary-600 font-semibold">Login</Text>
+                <Text style={styles.loginLink}>Login</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -136,3 +135,108 @@ export default function DriverRegisterScreen() {
     </KeyboardAvoidingView>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#ffffff',
+  },
+  scrollContent: {
+    flexGrow: 1,
+  },
+  content: {
+    flex: 1,
+    paddingHorizontal: 24,
+    paddingTop: 64,
+    paddingBottom: 32,
+  },
+  backButton: {
+    marginBottom: 32,
+  },
+  backText: {
+    color: '#c026d3',
+    fontSize: 18,
+    fontWeight: '500',
+  },
+  header: {
+    marginBottom: 32,
+  },
+  iconContainer: {
+    width: 80,
+    height: 80,
+    backgroundColor: '#c026d3',
+    borderRadius: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 24,
+  },
+  iconText: {
+    fontSize: 40,
+  },
+  title: {
+    fontSize: 36,
+    fontWeight: 'bold',
+    color: '#111827',
+    marginBottom: 8,
+  },
+  subtitle: {
+    fontSize: 18,
+    color: '#6b7280',
+  },
+  form: {
+    gap: 20,
+  },
+  inputGroup: {
+    gap: 8,
+  },
+  label: {
+    color: '#374151',
+    fontWeight: '600',
+    fontSize: 16,
+  },
+  input: {
+    backgroundColor: '#f9fafb',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    fontSize: 16,
+    color: '#111827',
+  },
+  registerButton: {
+    backgroundColor: '#c026d3',
+    paddingVertical: 16,
+    borderRadius: 12,
+    shadowColor: '#c026d3',
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+    marginTop: 8,
+  },
+  registerButtonText: {
+    color: '#ffffff',
+    textAlign: 'center',
+    fontSize: 18,
+    fontWeight: '600',
+  },
+  loginContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 24,
+  },
+  loginText: {
+    color: '#6b7280',
+    fontSize: 15,
+  },
+  loginLink: {
+    color: '#c026d3',
+    fontWeight: '600',
+    fontSize: 15,
+  },
+});
