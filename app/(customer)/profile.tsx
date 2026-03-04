@@ -1,4 +1,4 @@
-import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Share, ActivityIndicator } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Share, ActivityIndicator, TextInput } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -21,6 +21,11 @@ export default function CustomerProfileScreen() {
   const [referralStats, setReferralStats] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Edit states
+  const [editingField, setEditingField] = useState<string | null>(null);
+  const [editValue, setEditValue] = useState<string>('');
+  const [isSaving, setIsSaving] = useState(false);
 
   // Fetch user data from AsyncStorage and API
   useEffect(() => {
@@ -129,10 +134,111 @@ export default function CustomerProfileScreen() {
     }
   };
 
+  const handleEditField = (field: string, currentValue: string = '') => {
+    setEditingField(field);
+    setEditValue(currentValue);
+  };
+
+  const handleCancelEdit = () => {
+    setEditingField(null);
+    setEditValue('');
+  };
+
+  const handleSaveField = async () => {
+    if (!editingField || !editValue.trim()) return;
+
+    setIsSaving(true);
+    try {
+      const token = await AsyncStorage.getItem('accessToken');
+      if (!token) {
+        setError('No auth token found. Please login again.');
+        return;
+      }
+
+      // Prepare update data - only send the field being updated
+      const updateData: any = {};
+      if (editingField === 'firstName') {
+        updateData.firstName = editValue.trim();
+      } else if (editingField === 'secondName') {
+        updateData.secondName = editValue.trim();
+      } else if (editingField === 'myEmail') {
+        updateData.myEmail = editValue.trim();
+      } else if (editingField === 'userGender') {
+        updateData.userGender = editValue; // 'MALE' or 'FEMALE'
+      }
+
+      console.log('Sending update data:', updateData);
+
+      // Call update API
+      const response = await fetch(`${API_BASE_URL}/customers/me`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify(updateData),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error('Update error response:', errorData);
+        throw new Error(errorData.message || 'Failed to update profile');
+      }
+
+      const updatedProfile = await response.json();
+      console.log('Updated profile:', updatedProfile);
+
+      // Update local state and AsyncStorage
+      const updatedUser = {
+        ...user,
+        ...updatedProfile.user,
+      };
+      setUser(updatedUser);
+      await AsyncStorage.setItem('user', JSON.stringify(updatedUser));
+
+      // Reset edit state
+      setEditingField(null);
+      setEditValue('');
+    } catch (err: any) {
+      console.error('Error updating profile:', err);
+      setError(err.message || 'Failed to update profile');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const getInitials = () => {
-    // Extract first and second name from user data stored in AsyncStorage
-    // For now, use placeholder until we add name fields to User model
+    if (!user) return 'U';
+    
+    const firstName = user.firstName || '';
+    const secondName = user.secondName || '';
+    
+    if (firstName && secondName) {
+      return `${firstName.charAt(0)}${secondName.charAt(0)}`.toUpperCase();
+    } else if (firstName) {
+      return firstName.charAt(0).toUpperCase();
+    } else if (secondName) {
+      return secondName.charAt(0).toUpperCase();
+    }
+    
     return 'U';
+  };
+
+  const getFullName = () => {
+    if (!user) return 'Customer Profile';
+    
+    const firstName = user.firstName || '';
+    const secondName = user.secondName || '';
+    
+    if (firstName && secondName) {
+      return `${firstName} ${secondName}`;
+    } else if (firstName) {
+      return firstName;
+    } else if (secondName) {
+      return secondName;
+    }
+    
+    return 'Customer Profile';
   };
 
   const formatDate = (dateString: string) => {
@@ -186,11 +292,218 @@ export default function CustomerProfileScreen() {
             <View style={styles.avatar}>
               <Text style={styles.avatarText}>{getInitials()}</Text>
             </View>
-            <Text style={styles.name}>Customer Profile</Text>
+            <Text style={styles.name}>{getFullName()}</Text>
             <Text style={styles.phone}>{user.phone}</Text>
+            {user.myEmail && (
+              <Text style={styles.email}>{user.myEmail}</Text>
+            )}
           </View>
 
           <View style={styles.profileDetails}>
+            {/* Gender Field */}
+            {editingField === 'userGender' ? (
+              <View style={styles.editFieldContainer}>
+                <Text style={styles.detailLabel}>Gender</Text>
+                <View style={styles.genderEditContainer}>
+                  <TouchableOpacity
+                    style={[
+                      styles.genderEditButton,
+                      editValue === 'MALE' && styles.genderEditButtonActive
+                    ]}
+                    onPress={() => setEditValue('MALE')}
+                  >
+                    <Text style={[
+                      styles.genderEditButtonText,
+                      editValue === 'MALE' && styles.genderEditButtonTextActive
+                    ]}>Male</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.genderEditButton,
+                      editValue === 'FEMALE' && styles.genderEditButtonActive
+                    ]}
+                    onPress={() => setEditValue('FEMALE')}
+                  >
+                    <Text style={[
+                      styles.genderEditButtonText,
+                      editValue === 'FEMALE' && styles.genderEditButtonTextActive
+                    ]}>Female</Text>
+                  </TouchableOpacity>
+                </View>
+                <View style={styles.editButtonsRow}>
+                  <TouchableOpacity style={styles.cancelButton} onPress={handleCancelEdit}>
+                    <Text style={styles.cancelButtonText}>Cancel</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity 
+                    style={[styles.saveButton, !editValue && styles.saveButtonDisabled]} 
+                    onPress={handleSaveField}
+                    disabled={!editValue || isSaving}
+                  >
+                    {isSaving ? (
+                      <ActivityIndicator size="small" color="#ffffff" />
+                    ) : (
+                      <Text style={styles.saveButtonText}>Save</Text>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ) : user.userGender ? (
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>Gender</Text>
+                <Text style={styles.detailValue}>{user.userGender}</Text>
+              </View>
+            ) : (
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>Gender</Text>
+                <TouchableOpacity 
+                  style={styles.addButton}
+                  onPress={() => handleEditField('userGender')}
+                >
+                  <Text style={styles.addButtonText}>+ Add Gender</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+            
+            {/* Email Field */}
+            {editingField === 'myEmail' ? (
+              <View style={styles.editFieldContainer}>
+                <Text style={styles.detailLabel}>Email</Text>
+                <TextInput
+                  style={styles.editInput}
+                  value={editValue}
+                  onChangeText={setEditValue}
+                  placeholder="Enter email"
+                  placeholderTextColor="#9ca3af"
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  autoFocus
+                />
+                <View style={styles.editButtonsRow}>
+                  <TouchableOpacity style={styles.cancelButton} onPress={handleCancelEdit}>
+                    <Text style={styles.cancelButtonText}>Cancel</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity 
+                    style={[styles.saveButton, !editValue.trim() && styles.saveButtonDisabled]} 
+                    onPress={handleSaveField}
+                    disabled={!editValue.trim() || isSaving}
+                  >
+                    {isSaving ? (
+                      <ActivityIndicator size="small" color="#ffffff" />
+                    ) : (
+                      <Text style={styles.saveButtonText}>Save</Text>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ) : user.myEmail ? (
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>Email</Text>
+                <Text style={styles.detailValue}>{user.myEmail}</Text>
+              </View>
+            ) : (
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>Email</Text>
+                <TouchableOpacity 
+                  style={styles.addButton}
+                  onPress={() => handleEditField('myEmail')}
+                >
+                  <Text style={styles.addButtonText}>+ Add Email</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+            
+            {/* First Name Field */}
+            {editingField === 'firstName' ? (
+              <View style={styles.editFieldContainer}>
+                <Text style={styles.detailLabel}>First Name</Text>
+                <TextInput
+                  style={styles.editInput}
+                  value={editValue}
+                  onChangeText={setEditValue}
+                  placeholder="Enter first name"
+                  placeholderTextColor="#9ca3af"
+                  autoFocus
+                />
+                <View style={styles.editButtonsRow}>
+                  <TouchableOpacity style={styles.cancelButton} onPress={handleCancelEdit}>
+                    <Text style={styles.cancelButtonText}>Cancel</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity 
+                    style={[styles.saveButton, !editValue.trim() && styles.saveButtonDisabled]} 
+                    onPress={handleSaveField}
+                    disabled={!editValue.trim() || isSaving}
+                  >
+                    {isSaving ? (
+                      <ActivityIndicator size="small" color="#ffffff" />
+                    ) : (
+                      <Text style={styles.saveButtonText}>Save</Text>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ) : user.firstName ? (
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>First Name</Text>
+                <Text style={styles.detailValue}>{user.firstName}</Text>
+              </View>
+            ) : (
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>First Name</Text>
+                <TouchableOpacity 
+                  style={styles.addButton}
+                  onPress={() => handleEditField('firstName')}
+                >
+                  <Text style={styles.addButtonText}>+ Add First Name</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+            
+            {/* Last Name Field */}
+            {editingField === 'secondName' ? (
+              <View style={styles.editFieldContainer}>
+                <Text style={styles.detailLabel}>Last Name</Text>
+                <TextInput
+                  style={styles.editInput}
+                  value={editValue}
+                  onChangeText={setEditValue}
+                  placeholder="Enter last name"
+                  placeholderTextColor="#9ca3af"
+                  autoFocus
+                />
+                <View style={styles.editButtonsRow}>
+                  <TouchableOpacity style={styles.cancelButton} onPress={handleCancelEdit}>
+                    <Text style={styles.cancelButtonText}>Cancel</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity 
+                    style={[styles.saveButton, !editValue.trim() && styles.saveButtonDisabled]} 
+                    onPress={handleSaveField}
+                    disabled={!editValue.trim() || isSaving}
+                  >
+                    {isSaving ? (
+                      <ActivityIndicator size="small" color="#ffffff" />
+                    ) : (
+                      <Text style={styles.saveButtonText}>Save</Text>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ) : user.secondName ? (
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>Last Name</Text>
+                <Text style={styles.detailValue}>{user.secondName}</Text>
+              </View>
+            ) : (
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>Last Name</Text>
+                <TouchableOpacity 
+                  style={styles.addButton}
+                  onPress={() => handleEditField('secondName')}
+                >
+                  <Text style={styles.addButtonText}>+ Add Last Name</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+            
             <View style={styles.detailRow}>
               <Text style={styles.detailLabel}>User ID</Text>
               <Text style={styles.detailValue}>{user.id.substring(0, 8)}...</Text>
@@ -207,10 +520,12 @@ export default function CustomerProfileScreen() {
               <Text style={styles.detailLabel}>Completed Orders</Text>
               <Text style={styles.detailValue}>{customer.completedOrders}</Text>
             </View>
-            <View style={styles.detailRow}>
-              <Text style={styles.detailLabel}>Member Since</Text>
-              <Text style={styles.detailValue}>{formatDate(user.createdAt)}</Text>
-            </View>
+            {user.createdAt && (
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>Member Since</Text>
+                <Text style={styles.detailValue}>{formatDate(user.createdAt)}</Text>
+              </View>
+            )}
           </View>
         </View>
 
@@ -418,6 +733,11 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#6b7280',
   },
+  email: {
+    fontSize: 14,
+    color: '#6b7280',
+    marginTop: 4,
+  },
   profileDetails: {
     borderTopWidth: 1,
     borderTopColor: '#f3f4f6',
@@ -435,6 +755,94 @@ const styles = StyleSheet.create({
   detailValue: {
     fontSize: 16,
     color: '#111827',
+    fontWeight: '600',
+  },
+  addButton: {
+    backgroundColor: '#f0f9ff',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#0284c7',
+  },
+  addButtonText: {
+    color: '#0284c7',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  editFieldContainer: {
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f3f4f6',
+  },
+  editInput: {
+    backgroundColor: '#f9fafb',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 16,
+    color: '#111827',
+    marginTop: 8,
+    marginBottom: 12,
+  },
+  genderEditContainer: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 8,
+    marginBottom: 12,
+  },
+  genderEditButton: {
+    flex: 1,
+    backgroundColor: '#f9fafb',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: 8,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  genderEditButtonActive: {
+    backgroundColor: '#0284c7',
+    borderColor: '#0284c7',
+  },
+  genderEditButtonText: {
+    color: '#6b7280',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  genderEditButtonTextActive: {
+    color: '#ffffff',
+  },
+  editButtonsRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  cancelButton: {
+    flex: 1,
+    backgroundColor: '#f3f4f6',
+    paddingVertical: 10,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  cancelButtonText: {
+    color: '#6b7280',
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  saveButton: {
+    flex: 1,
+    backgroundColor: '#0284c7',
+    paddingVertical: 10,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  saveButtonDisabled: {
+    backgroundColor: '#9ca3af',
+  },
+  saveButtonText: {
+    color: '#ffffff',
+    fontSize: 15,
     fontWeight: '600',
   },
   referralCard: {
