@@ -11,9 +11,7 @@ const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/a
 
 // Google OAuth Client IDs
 const GOOGLE_WEB_CLIENT_ID = '295733709390-cmkprqadbcrannp1l4gl3drlab8b37r9.apps.googleusercontent.com';
-// Add your Android Client ID here after creating it in Google Console
 const GOOGLE_ANDROID_CLIENT_ID = '295733709390-ksq2ukvkeo9vb6a656gie0e9qvj5e8f8.apps.googleusercontent.com';
-const GOOGLE_IOS_CLIENT_ID = 'YOUR_IOS_CLIENT_ID.apps.googleusercontent.com';
 
 export const useGoogleAuth = (role: 'CUSTOMER' | 'DRIVER', referralCode?: string) => {
   const router = useRouter();
@@ -21,21 +19,23 @@ export const useGoogleAuth = (role: 'CUSTOMER' | 'DRIVER', referralCode?: string
   const [error, setError] = useState<string | null>(null);
   const processedResponse = useRef(false);
 
-  // Use the standard useIdTokenAuthRequest with platform-specific client IDs
-  const [request, response, promptAsync] = Google.useIdTokenAuthRequest(
+  // Use Expo's auth proxy for proper OAuth flow
+  const [request, response, promptAsync] = Google.useAuthRequest(
     {
       clientId: GOOGLE_WEB_CLIENT_ID,
-      androidClientId: GOOGLE_ANDROID_CLIENT_ID,
-      iosClientId: GOOGLE_IOS_CLIENT_ID,
+      scopes: ['openid', 'profile', 'email'],
+      redirectUri: 'https://auth.expo.io/@aziz_mehrez/delivery-frontend',
     }
   );
 
-  // Log request details
+  // Log request details including redirect URI
   useEffect(() => {
     if (request) {
       console.log('OAuth Request created');
-      console.log('Client ID:', GOOGLE_WEB_CLIENT_ID);
-      console.log('Android Client ID:', GOOGLE_ANDROID_CLIENT_ID);
+      console.log('Web Client ID:', GOOGLE_WEB_CLIENT_ID);
+      console.log('Redirect URI:', request.redirectUri);
+      console.log('Code Challenge Method:', request.codeChallengeMethod);
+      console.log('Response Type:', request.responseType);
     }
   }, [request]);
 
@@ -64,7 +64,36 @@ export const useGoogleAuth = (role: 'CUSTOMER' | 'DRIVER', referralCode?: string
 
   const handleAuthResponse = async (result: any) => {
     try {
-      const { id_token } = result.params;
+      const { code } = result.params;
+      
+      if (!code) {
+        throw new Error('No authorization code received from Google');
+      }
+
+      console.log('Exchanging code for tokens...');
+      
+      // Exchange the authorization code for tokens using Google's token endpoint
+      const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: new URLSearchParams({
+          code,
+          client_id: GOOGLE_WEB_CLIENT_ID,
+          redirect_uri: 'https://auth.expo.io/@aziz_mehrez/delivery-frontend',
+          grant_type: 'authorization_code',
+          code_verifier: request?.codeVerifier || '',
+        }).toString(),
+      });
+
+      const tokenData = await tokenResponse.json();
+      
+      if (!tokenResponse.ok) {
+        throw new Error(tokenData.error_description || 'Failed to exchange code for tokens');
+      }
+
+      const { id_token } = tokenData;
       
       if (!id_token) {
         throw new Error('No ID token received from Google');
@@ -122,7 +151,6 @@ export const useGoogleAuth = (role: 'CUSTOMER' | 'DRIVER', referralCode?: string
     try {
       console.log('Starting Google Sign-In...');
       console.log('Using Web Client ID:', GOOGLE_WEB_CLIENT_ID);
-      console.log('Using Android Client ID:', GOOGLE_ANDROID_CLIENT_ID);
       
       const result = await promptAsync();
       console.log('Prompt completed with type:', result?.type);
