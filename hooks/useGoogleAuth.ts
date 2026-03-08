@@ -19,22 +19,21 @@ export const useGoogleAuth = (role: 'CUSTOMER' | 'DRIVER', referralCode?: string
   const [error, setError] = useState<string | null>(null);
   const processedResponse = useRef(false);
 
-  // Use Expo's auth proxy for proper OAuth flow
-  const [request, response, promptAsync] = Google.useAuthRequest(
+  // Use useIdTokenAuthRequest - works for both Expo Go and standalone builds
+  const [request, response, promptAsync] = Google.useIdTokenAuthRequest(
     {
       clientId: GOOGLE_WEB_CLIENT_ID,
-      scopes: ['openid', 'profile', 'email'],
-      redirectUri: 'https://auth.expo.io/@aziz_mehrez/delivery-frontend',
+      androidClientId: GOOGLE_ANDROID_CLIENT_ID,
     }
   );
 
-  // Log request details including redirect URI
+  // Log request details
   useEffect(() => {
     if (request) {
       console.log('OAuth Request created');
       console.log('Web Client ID:', GOOGLE_WEB_CLIENT_ID);
+      console.log('Android Client ID:', GOOGLE_ANDROID_CLIENT_ID);
       console.log('Redirect URI:', request.redirectUri);
-      console.log('Code Challenge Method:', request.codeChallengeMethod);
       console.log('Response Type:', request.responseType);
     }
   }, [request]);
@@ -64,36 +63,7 @@ export const useGoogleAuth = (role: 'CUSTOMER' | 'DRIVER', referralCode?: string
 
   const handleAuthResponse = async (result: any) => {
     try {
-      const { code } = result.params;
-      
-      if (!code) {
-        throw new Error('No authorization code received from Google');
-      }
-
-      console.log('Exchanging code for tokens...');
-      
-      // Exchange the authorization code for tokens using Google's token endpoint
-      const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        body: new URLSearchParams({
-          code,
-          client_id: GOOGLE_WEB_CLIENT_ID,
-          redirect_uri: 'https://auth.expo.io/@aziz_mehrez/delivery-frontend',
-          grant_type: 'authorization_code',
-          code_verifier: request?.codeVerifier || '',
-        }).toString(),
-      });
-
-      const tokenData = await tokenResponse.json();
-      
-      if (!tokenResponse.ok) {
-        throw new Error(tokenData.error_description || 'Failed to exchange code for tokens');
-      }
-
-      const { id_token } = tokenData;
+      const { id_token } = result.params;
       
       if (!id_token) {
         throw new Error('No ID token received from Google');
