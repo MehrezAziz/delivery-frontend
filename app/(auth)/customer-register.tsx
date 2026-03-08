@@ -2,6 +2,7 @@ import { View, Text, TouchableOpacity, TextInput, KeyboardAvoidingView, Platform
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useGoogleAuth } from '../../hooks/useGoogleAuth';
 
 // For Android emulator, use 10.0.2.2 instead of localhost
 // For physical device, use your computer's IP address (e.g., 192.168.1.x)
@@ -37,6 +38,12 @@ export default function CustomerRegisterScreen() {
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+
+  // Google Auth hook
+  const { handleGoogleSignIn, isLoading: isGoogleLoading, error: googleError } = useGoogleAuth(
+    'CUSTOMER',
+    formData.referralCode.trim() || undefined
+  );
 
   const handleValidateReferralCode = async () => {
     const code = formData.referralCode.trim();
@@ -176,6 +183,17 @@ export default function CustomerRegisterScreen() {
       setSubmitError(error.message || 'Registration failed. Please try again.');
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleGoogleRegister = async () => {
+    setSubmitError(null);
+    const result = await handleGoogleSignIn();
+    
+    if (result.success) {
+      router.replace('/(customer)/home');
+    } else if (result.error) {
+      setSubmitError(result.error);
     }
   };
 
@@ -373,10 +391,10 @@ export default function CustomerRegisterScreen() {
             </View>
 
             {/* Error Display */}
-            {submitError && (
+            {(submitError || googleError) && (
               <View style={styles.errorContainer}>
                 <Text style={styles.errorIcon}>⚠</Text>
-                <Text style={styles.errorText}>{submitError}</Text>
+                <Text style={styles.errorText}>{submitError || googleError}</Text>
               </View>
             )}
 
@@ -399,6 +417,36 @@ export default function CustomerRegisterScreen() {
               )}
             </TouchableOpacity>
 
+            {/* Divider */}
+            <View style={styles.dividerContainer}>
+              <View style={styles.dividerLine} />
+              <Text style={styles.dividerText}>OR</Text>
+              <View style={styles.dividerLine} />
+            </View>
+
+            {/* Google Sign-In Button */}
+            <TouchableOpacity
+              style={[
+                styles.googleButton,
+                isGoogleLoading && styles.googleButtonDisabled
+              ]}
+              onPress={handleGoogleRegister}
+              disabled={isGoogleLoading}
+              activeOpacity={0.8}
+            >
+              {isGoogleLoading ? (
+                <View style={styles.googleButtonContent}>
+                  <ActivityIndicator size="small" color="#1f2937" />
+                  <Text style={styles.googleButtonText}>Signing in...</Text>
+                </View>
+              ) : (
+                <View style={styles.googleButtonContent}>
+                  <Text style={styles.googleIcon}>G</Text>
+                  <Text style={styles.googleButtonText}>Continue with Google</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+
             {/* Login Link */}
             <View style={styles.loginContainer}>
               <Text style={styles.loginText}>Already have an account? </Text>
@@ -417,6 +465,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#ffffff',
+    marginBottom:40,
   },
   scrollContent: {
     flexGrow: 1,
@@ -641,5 +690,56 @@ const styles = StyleSheet.create({
     flex: 1,
     color: '#991b1b',
     fontSize: 14,
+  },
+  dividerContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 8,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: '#e5e7eb',
+  },
+  dividerText: {
+    color: '#9ca3af',
+    fontSize: 14,
+    fontWeight: '500',
+    paddingHorizontal: 16,
+  },
+  googleButton: {
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    paddingVertical: 16,
+    borderRadius: 12,
+    shadowColor: '#000000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  googleButtonDisabled: {
+    backgroundColor: '#f9fafb',
+    opacity: 0.6,
+  },
+  googleButtonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+  },
+  googleIcon: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#4285f4',
+  },
+  googleButtonText: {
+    color: '#1f2937',
+    fontSize: 16,
+    fontWeight: '600',
   },
 });

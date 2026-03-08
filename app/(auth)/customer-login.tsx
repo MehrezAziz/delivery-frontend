@@ -2,6 +2,7 @@ import { View, Text, TouchableOpacity, TextInput, ScrollView, StyleSheet, Platfo
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useGoogleAuth } from '../../hooks/useGoogleAuth';
 
 // For Android emulator, use 10.0.2.2 instead of localhost
 // For physical device, use your computer's IP address (e.g., 192.168.1.x)
@@ -16,6 +17,9 @@ export default function CustomerLoginScreen() {
   const [password, setPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Google Auth
+  const { handleGoogleSignIn, isLoading: isGoogleLoading, error: googleError } = useGoogleAuth('CUSTOMER');
 
   const handleLogin = async () => {
     // Reset error
@@ -111,6 +115,15 @@ export default function CustomerLoginScreen() {
     }
   };
 
+  const handleGoogleLogin = async () => {
+    const result = await handleGoogleSignIn();
+    if (result.success) {
+      router.replace('/(customer)/home');
+    } else if (result.error) {
+      setError(result.error);
+    }
+  };
+
   return (
     <KeyboardAvoidingView 
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -191,6 +204,33 @@ export default function CustomerLoginScreen() {
               )}
             </TouchableOpacity>
 
+            {/* Divider */}
+            <View style={styles.dividerContainer}>
+              <View style={styles.divider} />
+              <Text style={styles.dividerText}>OR</Text>
+              <View style={styles.divider} />
+            </View>
+
+            {/* Google Sign-In Button */}
+            <TouchableOpacity 
+              style={[
+                styles.googleButton,
+                isGoogleLoading && styles.googleButtonDisabled
+              ]}
+              onPress={handleGoogleLogin}
+              disabled={isGoogleLoading || isSubmitting}
+              activeOpacity={0.8}
+            >
+              {isGoogleLoading ? (
+                <ActivityIndicator size="small" color="#4285F4" />
+              ) : (
+                <>
+                  <Text style={styles.googleIcon}>G</Text>
+                  <Text style={styles.googleButtonText}>Continue with Google</Text>
+                </>
+              )}
+            </TouchableOpacity>
+
             <View style={styles.registerLink}>
               <Text style={styles.registerText}>Don't have an account? </Text>
               <TouchableOpacity onPress={() => router.push('/(auth)/customer-register')}>
@@ -208,6 +248,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#ffffff',
+    marginBottom:40,
   },
   scrollContent: {
     flexGrow: 1,
@@ -328,6 +369,54 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     textAlign: 'center',
     fontSize: 18,
+    fontWeight: '600',
+  },
+  dividerContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 24,
+  },
+  divider: {
+    flex: 1,
+    height: 1,
+    backgroundColor: '#e5e7eb',
+  },
+  dividerText: {
+    color: '#6b7280',
+    paddingHorizontal: 16,
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  googleButton: {
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    paddingVertical: 16,
+    borderRadius: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  googleButtonDisabled: {
+    opacity: 0.6,
+  },
+  googleIcon: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#4285F4',
+  },
+  googleButtonText: {
+    color: '#111827',
+    fontSize: 16,
     fontWeight: '600',
   },
   registerLink: {
