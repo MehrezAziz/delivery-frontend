@@ -5,10 +5,11 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useGoogleAuth } from '../../hooks/useGoogleAuth';
 
 // For Android emulator, use 10.0.2.2 instead of localhost
-// For physical device, use your computer's IP address (e.g., 192.168.1.x)
+// For physical device with USB + ADB reverse, use localhost
+// For physical device on WiFi, use your computer's IP address (e.g., 192.168.1.x)
 // For iOS simulator, localhost works fine
 const API_BASE_URL = Platform.OS === 'android' 
-  ? 'http://192.168.1.16:3000/api'  // Physical device - working IP
+  ? 'http://localhost:3000/api'  // USB with ADB reverse
   : 'http://localhost:3000/api'; // iOS simulator or web
 
 export default function CustomerLoginScreen() {

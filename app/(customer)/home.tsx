@@ -1,10 +1,31 @@
 import { View, Text, ScrollView, StyleSheet } from 'react-native';
+import { useState, useEffect } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function CustomerHomeScreen() {
+  const [userName, setUserName] = useState('Customer');
+
+  useEffect(() => {
+    loadUserName();
+  }, []);
+
+  const loadUserName = async () => {
+    try {
+      const userJson = await AsyncStorage.getItem('user');
+      if (userJson) {
+        const user = JSON.parse(userJson);
+        const name = user.firstName || user.secondName || 'Customer';
+        setUserName(name);
+      }
+    } catch (error) {
+      console.error('Error loading user name:', error);
+    }
+  };
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.greeting}>Hello, Ahmed! 👋</Text>
+        <Text style={styles.greeting}>Hello, {userName}! 👋</Text>
         <Text style={styles.subtitle}>Where would you like to send your package?</Text>
       </View>
 

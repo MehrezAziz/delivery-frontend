@@ -16,6 +16,7 @@
     "@react-oauth/google": "^0.13.4",
     "expo": "~55.0.3",
     "expo-auth-session": "~55.0.7",
+    "expo-clipboard": "~55.0.8",
     "expo-constants": "~55.0.7",
     "expo-crypto": "~55.0.9",
     "expo-linking": "~55.0.7",

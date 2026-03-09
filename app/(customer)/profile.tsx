@@ -1,15 +1,12 @@
-import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Share, ActivityIndicator, TextInput } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Share, ActivityIndicator, TextInput, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
+import * as Clipboard from 'expo-clipboard';
 
-// For Android emulator, use 10.0.2.2 instead of localhost
-// For physical device, use your computer's IP address (e.g., 192.168.1.x)
-// For iOS simulator, localhost works fine
-const API_BASE_URL = Platform.OS === 'android' 
-  ? 'http://10.0.2.2:3000/api'  // Android emulator
-  : 'http://localhost:3000/api'; // iOS simulator or web
+// Get API URL from environment variable
+const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api';
 
 export default function CustomerProfileScreen() {
   const router = useRouter();
@@ -131,6 +128,18 @@ export default function CustomerProfileScreen() {
       });
     } catch (error) {
       console.error('Error sharing referral code:', error);
+    }
+  };
+
+  const handleCopyReferralCode = async () => {
+    if (!referralCode) return;
+
+    try {
+      await Clipboard.setStringAsync(referralCode.code);
+      Alert.alert('Copied!', 'Referral code copied to clipboard');
+    } catch (error) {
+      console.error('Error copying referral code:', error);
+      Alert.alert('Error', 'Failed to copy referral code');
     }
   };
 
@@ -538,12 +547,23 @@ export default function CustomerProfileScreen() {
             </View>
             
             <View style={styles.referralCodeContainer}>
-              <Text style={styles.referralCode}>{referralCode.code}</Text>
-              <Text style={styles.referralBenefit}>
-                {referralCode.type === 'PERCENTAGE' 
-                  ? `${referralCode.value}% discount`
-                  : `${referralCode.value} TND discount`}
-              </Text>
+              <View style={styles.referralCodeRow}>
+                <View style={styles.referralCodeTextContainer}>
+                  <Text style={styles.referralCode}>{referralCode.code}</Text>
+                  <Text style={styles.referralBenefit}>
+                    {referralCode.type === 'PERCENTAGE' 
+                      ? `${referralCode.value}% discount`
+                      : `${referralCode.value} TND discount`}
+                  </Text>
+                </View>
+                <TouchableOpacity 
+                  style={styles.copyButton}
+                  onPress={handleCopyReferralCode}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.copyIcon}>📋</Text>
+                </TouchableOpacity>
+              </View>
             </View>
 
             <TouchableOpacity 
@@ -881,8 +901,17 @@ const styles = StyleSheet.create({
     borderStyle: 'dashed',
     borderRadius: 12,
     paddingVertical: 16,
-    alignItems: 'center',
+    paddingHorizontal: 16,
     marginBottom: 16,
+  },
+  referralCodeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  referralCodeTextContainer: {
+    flex: 1,
+    alignItems: 'center',
   },
   referralCode: {
     fontSize: 28,
@@ -895,6 +924,18 @@ const styles = StyleSheet.create({
     color: '#0284c7',
     marginTop: 4,
     fontWeight: '600',
+  },
+  copyButton: {
+    backgroundColor: '#0284c7',
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 12,
+  },
+  copyIcon: {
+    fontSize: 24,
   },
   shareButton: {
     backgroundColor: '#0284c7',

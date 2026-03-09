@@ -5,9 +5,9 @@ import { useRouter } from 'expo-router';
 import { Platform } from 'react-native';
 
 // Use environment variable for API URL
-// For physical device, use your computer's IP address
+// For physical device with USB + ADB reverse, use localhost
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 
-  (Platform.OS === 'android' ? 'http://192.168.1.16:3000/api' : 'http://localhost:3000/api');
+  (Platform.OS === 'android' ? 'http://localhost:3000/api' : 'http://localhost:3000/api');
 
 // Google OAuth Client IDs
 const GOOGLE_WEB_CLIENT_ID = '295733709390-cmkprqadbcrannp1l4gl3drlab8b37r9.apps.googleusercontent.com';
@@ -77,15 +77,46 @@ export const useGoogleAuth = (role: 'CUSTOMER' | 'DRIVER', referralCode?: string
         await AsyncStorage.setItem('refreshToken', data.refreshToken);
       }
 
-      // Store user and customer/driver data
-      if (data.user) {
+      // Store user and customer/driver data if provided (new registration)
+      if (data.user && data.customer) {
         await AsyncStorage.setItem('user', JSON.stringify(data.user));
+        await AsyncStorage.setItem('customer', JSON.stringify(data.customer));
+      } else if (data.user && data.driver) {
+        await AsyncStorage.setItem('user', JSON.stringify(data.user));
+        await AsyncStorage.setItem('driver', JSON.stringify(data.driver));
+      } else {
+        // For existing users (login), fetch profile data
+        console.log('Fetching user profile...');
+        const profileEndpoint = role === 'CUSTOMER' ? '/customers/me' : '/drivers/me';
         
-        // Store customer or driver data based on role
-        if (role === 'CUSTOMER' && data.customer) {
-          await AsyncStorage.setItem('customer', JSON.stringify(data.customer));
-        } else if (role === 'DRIVER' && data.driver) {
-          await AsyncStorage.setItem('driver', JSON.stringify(data.driver));
+        const profileResponse = await fetch(`${API_BASE_URL}${profileEndpoint}`, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${data.accessToken}`,
+          },
+        });
+
+        if (profileResponse.ok) {
+          const profileData = await profileResponse.json();
+          
+          // Store user data
+          await AsyncStorage.setItem('user', JSON.stringify(profileData.user));
+          
+          // Store customer or driver data
+          if (role === 'CUSTOMER') {
+            await AsyncStorage.setItem('customer', JSON.stringify({
+              id: profileData.id,
+              userId: profileData.userId,
+              completedOrders: profileData.completedOrders,
+              customerStatus: profileData.customerStatus,
+              referredByCodeId: profileData.referredByCodeId,
+            }));
+          } else {
+            await AsyncStorage.setItem('driver', JSON.stringify(profileData));
+          }
+        } else {
+          console.error('Failed to fetch profile:', await profileResponse.text());
         }
       }
 
