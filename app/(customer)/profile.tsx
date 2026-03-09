@@ -2,7 +2,6 @@ import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Share, ActivityIn
 import { useRouter } from 'expo-router';
 import { useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Platform } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 
 // Get API URL from environment variable
@@ -34,20 +33,50 @@ export default function CustomerProfileScreen() {
       setLoading(true);
       setError(null);
 
-      // Load user and customer data from AsyncStorage
-      const userJson = await AsyncStorage.getItem('user');
-      const customerJson = await AsyncStorage.getItem('customer');
-
-      if (!userJson || !customerJson) {
-        setError('User data not found. Please login again.');
+      // Get auth token first
+      const token = await AsyncStorage.getItem('accessToken');
+      
+      if (!token) {
+        setError('No auth token found. Please login again.');
         return;
       }
 
-      const userData = JSON.parse(userJson);
-      const customerData = JSON.parse(customerJson);
+      // Fetch fresh profile data from API
+      const profileResponse = await fetch(`${API_BASE_URL}/customers/me`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+      });
 
-      setUser(userData);
-      setCustomer(customerData);
+      if (!profileResponse.ok) {
+        throw new Error('Failed to load profile data');
+      }
+
+      const profileData = await profileResponse.json();
+      
+      console.log('Loaded profile data:', profileData);
+      console.log('User gender:', profileData.user?.userGender);
+
+      // Update AsyncStorage with fresh data
+      await AsyncStorage.setItem('user', JSON.stringify(profileData.user));
+      await AsyncStorage.setItem('customer', JSON.stringify({
+        id: profileData.id,
+        userId: profileData.userId,
+        completedOrders: profileData.completedOrders,
+        customerStatus: profileData.customerStatus,
+        referredByCodeId: profileData.referredByCodeId,
+      }));
+
+      setUser(profileData.user);
+      setCustomer({
+        id: profileData.id,
+        userId: profileData.userId,
+        completedOrders: profileData.completedOrders,
+        customerStatus: profileData.customerStatus,
+        referredByCodeId: profileData.referredByCodeId,
+      });
 
       // Fetch referral code and statistics from API
       await loadReferralData();
@@ -368,7 +397,7 @@ export default function CustomerProfileScreen() {
                   style={styles.addButton}
                   onPress={() => handleEditField('userGender')}
                 >
-                  <Text style={styles.addButtonText}>+ Add Gender</Text>
+                  <Text style={styles.addButtonText}>+ Add Gender {user.userGender}</Text>
                 </TouchableOpacity>
               </View>
             )}
