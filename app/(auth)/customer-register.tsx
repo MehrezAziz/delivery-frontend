@@ -8,7 +8,7 @@ import { useGoogleAuth } from '../../hooks/useGoogleAuth';
 // For physical device, use your computer's IP address (e.g., 192.168.1.x)
 // For iOS simulator, localhost works fine
 const API_BASE_URL = Platform.OS === 'android' 
-  ? 'http://10.0.2.2:3000/api'  // Android emulator
+  ? 'http://192.168.1.16:3000/api'  // Physical device - working IP
   : 'http://localhost:3000/api'; // iOS simulator or web
 
 export default function CustomerRegisterScreen() {
