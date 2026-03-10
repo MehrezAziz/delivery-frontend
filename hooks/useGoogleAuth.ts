@@ -35,7 +35,16 @@ export const useGoogleAuth = (role: 'CUSTOMER' | 'DRIVER', referralCode?: string
       // Check if Google Play Services are available (Android only)
       await GoogleSignin.hasPlayServices();
       
-      // Sign in with Google
+      // Force sign out to clear cached account and show account picker
+      try {
+        await GoogleSignin.signOut();
+        console.log('Cleared cached Google account');
+      } catch (signOutError) {
+        // Ignore sign out errors (user might not be signed in)
+        console.log('Sign out skipped (no cached account)');
+      }
+      
+      // Sign in with Google - now shows account picker
       const response = await GoogleSignin.signIn();
       console.log('Google Sign-In successful:', response);
       
