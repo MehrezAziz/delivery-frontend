@@ -20,7 +20,7 @@ GoogleSignin.configure({
   offlineAccess: true, // If you need to access Google API on behalf of the user FROM YOUR SERVER
 });
 
-export const useGoogleAuth = (role: 'CUSTOMER' | 'DRIVER', referralCode?: string) => {
+export const useGoogleAuth = (role: 'CUSTOMER' | 'DRIVER', referralCode?: string, isLogin: boolean = false) => {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -57,10 +57,13 @@ export const useGoogleAuth = (role: 'CUSTOMER' | 'DRIVER', referralCode?: string
       }
 
       console.log('Sending ID token to backend...');
-      console.log('Backend URL:', `${API_BASE_URL}/auth/google`);
+      
+      // Use different endpoint for login vs register
+      const endpoint = isLogin ? '/auth/google/login' : '/auth/google';
+      console.log('Backend URL:', `${API_BASE_URL}${endpoint}`);
       
       // Send ID token to backend
-      const backendResponse = await fetch(`${API_BASE_URL}/auth/google`, {
+      const backendResponse = await fetch(`${API_BASE_URL}${endpoint}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -68,7 +71,7 @@ export const useGoogleAuth = (role: 'CUSTOMER' | 'DRIVER', referralCode?: string
         body: JSON.stringify({
           idToken: idToken,
           role,
-          referralCode,
+          referralCode: isLogin ? undefined : referralCode, // Only send referral code for registration
         }),
       });
 

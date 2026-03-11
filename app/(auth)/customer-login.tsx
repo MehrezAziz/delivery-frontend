@@ -19,8 +19,8 @@ export default function CustomerLoginScreen() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Google Auth
-  const { handleGoogleSignIn, isLoading: isGoogleLoading, error: googleError } = useGoogleAuth('CUSTOMER');
+  // Google Auth - pass isLogin: true to prevent auto-registration
+  const { handleGoogleSignIn, isLoading: isGoogleLoading, error: googleError } = useGoogleAuth('CUSTOMER', undefined, true);
 
   const handleLogin = async () => {
     // Reset error
@@ -60,6 +60,13 @@ export default function CustomerLoginScreen() {
       const data = await response.json();
 
       if (!response.ok) {
+        // Handle specific error cases
+        if (response.status === 404 || data.message?.includes('not found') || data.message?.includes('does not exist')) {
+          throw new Error('Account not found. Please register first.');
+        }
+        if (response.status === 401 || data.message?.includes('Invalid credentials')) {
+          throw new Error('Invalid phone number or password.');
+        }
         // Handle error response
         throw new Error(data.message || 'Login failed. Please check your credentials.');
       }
