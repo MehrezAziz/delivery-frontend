@@ -58,8 +58,8 @@ export const useGoogleAuth = (role: 'CUSTOMER' | 'DRIVER', referralCode?: string
 
       console.log('Sending ID token to backend...');
       
-      // Use different endpoint for login vs register
-      const endpoint = isLogin ? '/auth/google/login' : '/auth/google';
+      // Backend uses /auth/google for both login and registration
+      const endpoint = '/auth/google';
       console.log('Backend URL:', `${API_BASE_URL}${endpoint}`);
       
       // Send ID token to backend
