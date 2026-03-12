@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import {
   View,
   Text,
@@ -15,8 +15,16 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 import axios from 'axios';
+import { GoogleSignin } from '@react-native-google-signin/google-signin';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
+
+// Configure Google Sign-In
+GoogleSignin.configure({
+  webClientId: '295733709390-cmkprqadbcrannp1l4gl3drlab8b37r9.apps.googleusercontent.com',
+  iosClientId: '295733709390-cmkprqadbcrannp1l4gl3drlab8b37r9.apps.googleusercontent.com',
+  offlineAccess: true,
+});
 
 export default function DriverRegisterStep1() {
   const router = useRouter();
@@ -27,7 +35,6 @@ export default function DriverRegisterStep1() {
     secondName: '',
     myEmail: '',
     userGender: '' as 'MALE' | 'FEMALE' | '',
-    referralCode: '',
   });
   const [profileImage, setProfileImage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -42,7 +49,7 @@ export default function DriverRegisterStep1() {
     }
 
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      mediaTypes: ['images'],
       allowsEditing: true,
       aspect: [1, 1],
       quality: 0.8,
@@ -84,6 +91,55 @@ export default function DriverRegisterStep1() {
     );
   };
 
+  const handleGoogleSignIn = async () => {
+    setLoading(true);
+    try {
+      await GoogleSignin.hasPlayServices();
+      
+      // Force sign out to show account picker
+      try {
+        await GoogleSignin.signOut();
+      } catch (e) {
+        // Ignore
+      }
+      
+      const response = await GoogleSignin.signIn();
+      const idToken = response.data?.idToken;
+      
+      if (!idToken) {
+        throw new Error('No ID token received from Google');
+      }
+
+      // Send to backend
+      const backendResponse = await axios.post(`${API_URL}/auth/driver/google`, {
+        idToken,
+      });
+
+      // Store token
+      await AsyncStorage.setItem('accessToken', backendResponse.data.accessToken);
+      await AsyncStorage.setItem('userRole', 'DRIVER');
+      await AsyncStorage.setItem('driverId', backendResponse.data.driver.id);
+
+      // Navigate to step 2
+      router.push('/(auth)/driver-register-step2');
+    } catch (error: any) {
+      console.error('Google Sign-In error:', error);
+      
+      let errorMessage = 'Failed to sign in with Google';
+      if (error.code === 'SIGN_IN_CANCELLED') {
+        errorMessage = 'Sign-in was cancelled';
+      } else if (error.response?.data?.message) {
+        errorMessage = error.response.data.message;
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
+      Alert.alert('Google Sign-In Failed', errorMessage);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleSubmit = async () => {
     // Validation
     if (!formData.phone || !formData.password) {
@@ -107,7 +163,6 @@ export default function DriverRegisterStep1() {
       if (formData.secondName) formDataToSend.append('secondName', formData.secondName);
       if (formData.myEmail) formDataToSend.append('myEmail', formData.myEmail);
       if (formData.userGender) formDataToSend.append('userGender', formData.userGender);
-      if (formData.referralCode) formDataToSend.append('referralCode', formData.referralCode);
 
       if (profileImage) {
         const filename = profileImage.split('/').pop();
@@ -168,6 +223,23 @@ export default function DriverRegisterStep1() {
             </View>
           )}
         </TouchableOpacity>
+      </View>
+
+      {/* Google Sign-In Button */}
+      <TouchableOpacity
+        style={styles.googleButton}
+        onPress={handleGoogleSignIn}
+        disabled={loading}
+      >
+        <Ionicons name="logo-google" size={24} color="#DB4437" />
+        <Text style={styles.googleButtonText}>Continue with Google</Text>
+      </TouchableOpacity>
+
+      {/* Divider */}
+      <View style={styles.divider}>
+        <View style={styles.dividerLine} />
+        <Text style={styles.dividerText}>OR</Text>
+        <View style={styles.dividerLine} />
       </View>
 
       {/* Phone Input */}
@@ -282,19 +354,6 @@ export default function DriverRegisterStep1() {
         </View>
       </View>
 
-      {/* Referral Code */}
-      <View style={styles.inputGroup}>
-        <Text style={styles.label}>Referral Code (Optional)</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="ABC123"
-          value={formData.referralCode}
-          onChangeText={(text) => setFormData({ ...formData, referralCode: text.toUpperCase() })}
-          autoCapitalize="characters"
-          maxLength={12}
-        />
-      </View>
-
       {/* Submit Button */}
       <TouchableOpacity
         style={[styles.submitButton, loading && styles.submitButtonDisabled]}
@@ -326,7 +385,7 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#fff',
     padding: 20,
-    marginBottom:60,
+    marginBottom: 60,
   },
   header: {
     marginBottom: 30,
@@ -344,7 +403,7 @@ const styles = StyleSheet.create({
   },
   imageContainer: {
     alignItems: 'center',
-    marginBottom: 30,
+    marginBottom: 20,
   },
   imagePicker: {
     width: 120,
@@ -369,6 +428,37 @@ const styles = StyleSheet.create({
   imageText: {
     marginTop: 8,
     color: '#666',
+    fontSize: 14,
+  },
+  googleButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 8,
+    gap: 12,
+    marginBottom: 20,
+  },
+  googleButtonText: {
+    fontSize: 16,
+    color: '#333',
+    fontWeight: '600',
+  },
+  divider: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 20,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: '#ddd',
+  },
+  dividerText: {
+    marginHorizontal: 16,
+    color: '#999',
     fontSize: 14,
   },
   inputGroup: {

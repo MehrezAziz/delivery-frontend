@@ -13,8 +13,16 @@ import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import axios from 'axios';
+import { GoogleSignin } from '@react-native-google-signin/google-signin';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
+
+// Configure Google Sign-In
+GoogleSignin.configure({
+  webClientId: '295733709390-cmkprqadbcrannp1l4gl3drlab8b37r9.apps.googleusercontent.com',
+  iosClientId: '295733709390-cmkprqadbcrannp1l4gl3drlab8b37r9.apps.googleusercontent.com',
+  offlineAccess: true,
+});
 
 export default function DriverLogin() {
   const router = useRouter();
@@ -67,8 +75,62 @@ export default function DriverLogin() {
   };
 
   const handleGoogleLogin = async () => {
-    Alert.alert('Coming Soon', 'Google OAuth login will be available soon!');
-    // TODO: Implement Google OAuth
+    setLoading(true);
+    try {
+      await GoogleSignin.hasPlayServices();
+      
+      // Force sign out to show account picker
+      try {
+        await GoogleSignin.signOut();
+      } catch (e) {
+        // Ignore
+      }
+      
+      const response = await GoogleSignin.signIn();
+      const idToken = response.data?.idToken;
+      
+      if (!idToken) {
+        throw new Error('No ID token received from Google');
+      }
+
+      // Send to backend for login
+      const backendResponse = await axios.post(`${API_URL}/auth/driver/google/login`, {
+        idToken,
+      });
+
+      // Store tokens
+      await AsyncStorage.setItem('accessToken', backendResponse.data.accessToken);
+      await AsyncStorage.setItem('refreshToken', backendResponse.data.refreshToken);
+      await AsyncStorage.setItem('userRole', 'DRIVER');
+
+      // Get driver profile to extract IDs
+      const profileResponse = await axios.get(`${API_URL}/drivers/me`, {
+        headers: {
+          Authorization: `Bearer ${backendResponse.data.accessToken}`,
+        },
+      });
+
+      await AsyncStorage.setItem('userId', profileResponse.data.user.id);
+      await AsyncStorage.setItem('driverId', profileResponse.data.id);
+
+      // Navigate to driver home
+      router.replace('/(driver)/home');
+    } catch (error: any) {
+      console.error('Google Sign-In error:', error);
+      
+      let errorMessage = 'Failed to sign in with Google';
+      if (error.code === 'SIGN_IN_CANCELLED') {
+        errorMessage = 'Sign-in was cancelled';
+      } else if (error.response?.data?.message) {
+        errorMessage = error.response.data.message;
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
+      Alert.alert('Google Sign-In Failed', errorMessage);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
