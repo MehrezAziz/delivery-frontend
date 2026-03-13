@@ -153,9 +153,18 @@ export default function DriverHome() {
       {driver?.status === 'INCOMPLETE' && (
         <View style={styles.alertBox}>
           <Ionicons name="warning" size={24} color="#FF3B30" />
-          <Text style={styles.alertText}>
-            Please complete your registration to start accepting orders.
-          </Text>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.alertText}>
+              Please complete your document verification to start accepting orders.
+            </Text>
+            <TouchableOpacity
+              style={styles.completeVerificationButton}
+              onPress={() => router.push('/(driver)/verification')}
+            >
+              <Text style={styles.completeVerificationText}>Complete Verification</Text>
+              <Ionicons name="arrow-forward" size={16} color="#007AFF" />
+            </TouchableOpacity>
+          </View>
         </View>
       )}
 
@@ -279,6 +288,17 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#856404',
     lineHeight: 20,
+  },
+  completeVerificationButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 12,
+    gap: 4,
+  },
+  completeVerificationText: {
+    fontSize: 14,
+    color: '#007AFF',
+    fontWeight: '600',
   },
   actionsContainer: {
     marginTop: 20,

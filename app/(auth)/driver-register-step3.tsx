@@ -75,6 +75,23 @@ export default function DriverRegisterStep3() {
     }
   };
 
+  const handleSkip = () => {
+    Alert.alert(
+      'Skip Verification?',
+      'You can complete document verification later from your profile. Your account will remain INCOMPLETE until verified.',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Skip for Now',
+          onPress: () => router.replace('/(driver)/home'),
+        },
+      ]
+    );
+  };
+
   const handleSubmit = async () => {
     // Validation
     if (!documentType) {
@@ -287,6 +304,15 @@ export default function DriverRegisterStep3() {
         )}
       </TouchableOpacity>
 
+      {/* Skip Button */}
+      <TouchableOpacity
+        style={styles.skipButton}
+        onPress={handleSkip}
+        disabled={loading}
+      >
+        <Text style={styles.skipButtonText}>Skip for Now</Text>
+      </TouchableOpacity>
+
       <View style={styles.infoBox}>
         <Ionicons name="information-circle" size={24} color="#007AFF" />
         <Text style={styles.infoText}>
@@ -425,6 +451,20 @@ const styles = StyleSheet.create({
   submitButtonText: {
     color: '#fff',
     fontSize: 18,
+    fontWeight: '600',
+  },
+  skipButton: {
+    backgroundColor: 'transparent',
+    padding: 16,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginTop: 12,
+    borderWidth: 1,
+    borderColor: '#007AFF',
+  },
+  skipButtonText: {
+    color: '#007AFF',
+    fontSize: 16,
     fontWeight: '600',
   },
   infoBox: {
