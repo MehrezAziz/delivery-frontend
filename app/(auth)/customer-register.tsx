@@ -1,4 +1,4 @@
-import { View, Text, TouchableOpacity, TextInput, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, ActivityIndicator } from 'react-native';
+import { View, Text, TouchableOpacity, TextInput, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, ActivityIndicator, Modal } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -39,6 +39,7 @@ export default function CustomerRegisterScreen() {
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [showAccountExistsModal, setShowAccountExistsModal] = useState(false);
 
   // Google Auth hook
   const { handleGoogleSignIn, isLoading: isGoogleLoading, error: googleError } = useGoogleAuth(
@@ -146,6 +147,11 @@ export default function CustomerRegisterScreen() {
         // Handle error response
         let errorMessage = data.message || 'Registration failed. Please try again.';
         
+        // Check if account already exists (phone conflict)
+        if (response.status === 409) {
+          errorMessage = 'An account with this phone number already exists.';
+        }
+        
         // Map error codes to user-friendly messages
         if (data.errorCode) {
           switch (data.errorCode) {
@@ -177,7 +183,7 @@ export default function CustomerRegisterScreen() {
       await AsyncStorage.setItem('user', JSON.stringify(data.user));
       await AsyncStorage.setItem('customer', JSON.stringify(data.customer));
 
-      // Navigate to customer home screen
+      // Navigate to customer home (setup country/wallet is optional, done from profile)
       router.replace('/(customer)/home');
     } catch (error: any) {
       console.error('Registration error:', error);
@@ -193,6 +199,8 @@ export default function CustomerRegisterScreen() {
     
     if (result.success) {
       router.replace('/(customer)/home');
+    } else if (result.errorCode === 'ACCOUNT_EXISTS' || result.error === 'ACCOUNT_EXISTS') {
+      setShowAccountExistsModal(true);
     } else if (result.error) {
       setSubmitError(result.error);
     }
@@ -203,6 +211,40 @@ export default function CustomerRegisterScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       style={styles.container}
     >
+      {/* Account Exists Modal */}
+      <Modal
+        visible={showAccountExistsModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowAccountExistsModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Account already exists</Text>
+            <Text style={styles.modalBody}>
+              A customer account is already linked to this Google account. Would you like to log in instead?
+            </Text>
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={styles.modalBtnSecondary}
+                onPress={() => setShowAccountExistsModal(false)}
+              >
+                <Text style={styles.modalBtnSecondaryText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.modalBtnPrimary}
+                onPress={() => {
+                  setShowAccountExistsModal(false);
+                  router.replace('/(auth)/customer-login');
+                }}
+              >
+                <Text style={styles.modalBtnPrimaryText}>Go to Login</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <View style={styles.content}>
           {/* Back Button */}
@@ -742,5 +784,58 @@ const styles = StyleSheet.create({
     color: '#1f2937',
     fontSize: 16,
     fontWeight: '600',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  modalCard: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 24,
+    width: '100%',
+    gap: 16,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#111827',
+  },
+  modalBody: {
+    fontSize: 15,
+    color: '#6b7280',
+    lineHeight: 22,
+  },
+  modalActions: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 4,
+  },
+  modalBtnSecondary: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 10,
+    backgroundColor: '#f3f4f6',
+    alignItems: 'center',
+  },
+  modalBtnSecondaryText: {
+    color: '#374151',
+    fontWeight: '600',
+    fontSize: 15,
+  },
+  modalBtnPrimary: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 10,
+    backgroundColor: '#0284c7',
+    alignItems: 'center',
+  },
+  modalBtnPrimaryText: {
+    color: '#fff',
+    fontWeight: '600',
+    fontSize: 15,
   },
 });

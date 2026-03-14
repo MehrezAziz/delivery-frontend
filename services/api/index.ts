@@ -10,3 +10,7 @@ export * from './types';
 export { authService } from './auth.service';
 export type { RegisterCustomerRequest, RegisterCustomerResponse } from './auth.service';
 export { referralService } from './referral.service';
+export { geographyService } from './geography.service';
+export type { Country, Governorate, Delegation } from './geography.service';
+export { walletService } from './wallet.service';
+export type { Wallet, WalletTransaction, WithdrawalRequest } from './wallet.service';

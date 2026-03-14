@@ -638,6 +638,15 @@ export default function CustomerProfileScreen() {
 
         {/* Menu Items */}
         <View style={styles.menuContainer}>
+          <TouchableOpacity
+            style={styles.menuItem}
+            onPress={() => router.push('/(auth)/customer-setup')}
+          >
+            <Text style={styles.menuIcon}>🌍</Text>
+            <Text style={styles.menuText}>Country & Wallet Setup</Text>
+            <Text style={styles.menuArrow}>→</Text>
+          </TouchableOpacity>
+
           <TouchableOpacity style={styles.menuItem}>
             <Text style={styles.menuIcon}>📍</Text>
             <Text style={styles.menuText}>My Addresses</Text>
@@ -1069,6 +1078,12 @@ const styles = StyleSheet.create({
     fontSize: 18,
     color: '#111827',
     fontWeight: '600',
+  },
+  menuSubText: {
+    fontSize: 13,
+    color: '#f59e0b',
+    fontWeight: '500',
+    marginTop: 2,
   },
   menuArrow: {
     fontSize: 20,

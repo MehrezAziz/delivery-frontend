@@ -72,6 +72,7 @@ export const useGoogleAuth = (role: 'CUSTOMER' | 'DRIVER', referralCode?: string
           idToken: idToken,
           role,
           referralCode: isLogin ? undefined : referralCode, // Only send referral code for registration
+          isLoginOnly: isLogin, // Tell backend whether this is login-only
         }),
       });
 
@@ -80,7 +81,11 @@ export const useGoogleAuth = (role: 'CUSTOMER' | 'DRIVER', referralCode?: string
       console.log('Backend response data:', data);
       
       if (!backendResponse.ok) {
-        throw new Error(data.message || 'Google authentication failed');
+        const errorMessage = data.message || 'Google authentication failed';
+        // Attach errorCode for callers to handle specific cases
+        const err = new Error(errorMessage) as any;
+        err.errorCode = data.message === 'ACCOUNT_EXISTS' ? 'ACCOUNT_EXISTS' : undefined;
+        throw err;
       }
 
       // Store tokens
@@ -165,7 +170,7 @@ export const useGoogleAuth = (role: 'CUSTOMER' | 'DRIVER', referralCode?: string
       setError(errorMessage);
       setIsLoading(false);
       
-      return { success: false, error: errorMessage };
+      return { success: false, error: errorMessage, errorCode: (err as any).errorCode };
     }
   };
 

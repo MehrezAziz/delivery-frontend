@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // API Configuration
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api';
-const TOKEN_STORAGE_KEY = '@delivery_app:auth_token';
+const TOKEN_STORAGE_KEY = 'accessToken';
 
 // Custom error class for API errors
 export class ApiError extends Error {
