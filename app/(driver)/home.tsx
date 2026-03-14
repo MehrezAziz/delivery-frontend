@@ -178,6 +178,16 @@ export default function DriverHome() {
       )}
 
       <View style={styles.actionsContainer}>
+        {driver?.status === 'VERIFIED' && (
+          <TouchableOpacity
+            style={styles.actionButton}
+            onPress={() => router.push('/(driver)/availability')}
+          >
+            <Ionicons name="calendar" size={24} color="#007AFF" />
+            <Text style={styles.actionButtonText}>My Availability</Text>
+          </TouchableOpacity>
+        )}
+
         <TouchableOpacity style={styles.actionButton}>
           <Ionicons name="person" size={24} color="#007AFF" />
           <Text style={styles.actionButtonText}>Edit Profile</Text>
