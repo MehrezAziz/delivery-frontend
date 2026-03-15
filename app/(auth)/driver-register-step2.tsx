@@ -1,122 +1,176 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import {
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  StyleSheet,
-  ScrollView,
-  Alert,
-  ActivityIndicator,
+  View, Text, TextInput, TouchableOpacity, StyleSheet,
+  ScrollView, Alert, ActivityIndicator, FlatList, Modal,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as Location from 'expo-location';
 import { Ionicons } from '@expo/vector-icons';
 import axios from 'axios';
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
+const API_BASE = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api';
+const API_URL = API_BASE.replace(/\/api$/, '');
 
 const VEHICLE_TYPES = ['Motorcycle', 'Car', 'Van', 'Truck', 'Bicycle'];
 
+interface Country { id: string; name: string; isoCode: string; currencyCode: string; }
+interface Governorate { id: string; nameGovernorate: string; }
+interface Delegation { id: string; nameDelegation: string; }
+
+function SearchPicker({ visible, title, data, onSelect, onClose, search, setSearch, labelKey }: any) {
+  return (
+    <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
+      <View style={styles.modalContainer}>
+        <View style={styles.modalHeader}>
+          <Text style={styles.modalTitle}>{title}</Text>
+          <TouchableOpacity onPress={onClose}><Text style={styles.modalClose}>✕</Text></TouchableOpacity>
+        </View>
+        <View style={styles.searchBox}>
+          <Text>🔍</Text>
+          <TextInput style={styles.searchInput} placeholder="Search..." placeholderTextColor="#9ca3af"
+            value={search} onChangeText={setSearch} autoFocus />
+          {search.length > 0 && (
+            <TouchableOpacity onPress={() => setSearch('')}><Text style={styles.clearIcon}>✕</Text></TouchableOpacity>
+          )}
+        </View>
+        <FlatList
+          data={data}
+          keyExtractor={(item: any) => item.id}
+          keyboardShouldPersistTaps="handled"
+          renderItem={({ item }: any) => (
+            <TouchableOpacity style={styles.pickerItem} onPress={() => onSelect(item)}>
+              <Text style={styles.pickerItemText}>{item[labelKey]}</Text>
+              {item.isoCode && <Text style={styles.pickerItemSub}>{item.isoCode} · {item.currencyCode}</Text>}
+            </TouchableOpacity>
+          )}
+          ListEmptyComponent={<Text style={styles.emptyText}>No results</Text>}
+        />
+      </View>
+    </Modal>
+  );
+}
+
 export default function DriverRegisterStep2() {
   const router = useRouter();
-  const [formData, setFormData] = useState({
-    vehicleType: '',
-    description: '',
-    latitude: 0,
-    longitude: 0,
-  });
+  const [vehicleType, setVehicleType] = useState('');
+  const [description, setDescription] = useState('');
   const [loading, setLoading] = useState(false);
-  const [locationLoading, setLocationLoading] = useState(false);
 
-  const getCurrentLocation = async () => {
-    setLocationLoading(true);
+  // Geography
+  const [countries, setCountries] = useState<Country[]>([]);
+  const [governorates, setGovernorates] = useState<Governorate[]>([]);
+  const [delegations, setDelegations] = useState<Delegation[]>([]);
+  const [selectedCountry, setSelectedCountry] = useState<Country | null>(null);
+  const [selectedGovernorate, setSelectedGovernorate] = useState<Governorate | null>(null);
+  const [selectedDelegation, setSelectedDelegation] = useState<Delegation | null>(null);
+  const [street, setStreet] = useState('');
+  const [geoLoading, setGeoLoading] = useState(false);
+
+  // Picker modals
+  const [showCountryPicker, setShowCountryPicker] = useState(false);
+  const [showGovPicker, setShowGovPicker] = useState(false);
+  const [showDelPicker, setShowDelPicker] = useState(false);
+  const [countrySearch, setCountrySearch] = useState('');
+  const [govSearch, setGovSearch] = useState('');
+  const [delSearch, setDelSearch] = useState('');
+
+  useEffect(() => {
+    fetch(`${API_BASE}/geography/countries`)
+      .then(r => r.json())
+      .then(data => setCountries(Array.isArray(data) ? data : []))
+      .catch(() => setCountries([]));
+  }, []);
+
+  const filteredCountries = useMemo(() =>
+    countries.filter(c =>
+      c.name.toLowerCase().includes(countrySearch.toLowerCase()) ||
+      c.isoCode.toLowerCase().includes(countrySearch.toLowerCase())
+    ), [countries, countrySearch]);
+
+  const filteredGov = useMemo(() =>
+    governorates.filter(g => g.nameGovernorate.toLowerCase().includes(govSearch.toLowerCase())),
+    [governorates, govSearch]);
+
+  const filteredDel = useMemo(() =>
+    delegations.filter(d => d.nameDelegation.toLowerCase().includes(delSearch.toLowerCase())),
+    [delegations, delSearch]);
+
+  const handleSelectCountry = async (c: Country) => {
+    setSelectedCountry(c);
+    setSelectedGovernorate(null);
+    setSelectedDelegation(null);
+    setGovernorates([]); setDelegations([]);
+    setShowCountryPicker(false);
+    setGeoLoading(true);
     try {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      
-      if (status !== 'granted') {
-        Alert.alert('Permission Denied', 'We need location permissions to continue.');
-        setLocationLoading(false);
-        return;
-      }
+      const r = await fetch(`${API_BASE}/geography/countries/${c.id}/governorates`);
+      const data = await r.json();
+      setGovernorates(Array.isArray(data) ? data : []);
+    } catch {} finally { setGeoLoading(false); }
+  };
 
-      const location = await Location.getCurrentPositionAsync({});
-      setFormData({
-        ...formData,
-        latitude: location.coords.latitude,
-        longitude: location.coords.longitude,
-      });
-      Alert.alert('Success', 'Location captured successfully!');
-    } catch (error) {
-      console.error('Location error:', error);
-      Alert.alert('Error', 'Failed to get current location');
-    } finally {
-      setLocationLoading(false);
-    }
+  const handleSelectGovernorate = async (g: Governorate) => {
+    setSelectedGovernorate(g);
+    setSelectedDelegation(null);
+    setDelegations([]);
+    setShowGovPicker(false);
+    setGeoLoading(true);
+    try {
+      const r = await fetch(`${API_BASE}/geography/governorates/${g.id}/delegations`);
+      const data = await r.json();
+      setDelegations(Array.isArray(data) ? data : []);
+    } catch {} finally { setGeoLoading(false); }
   };
 
   const handleSubmit = async () => {
-    // Validation
-    if (!formData.vehicleType) {
-      Alert.alert('Error', 'Please select a vehicle type');
-      return;
-    }
+    if (!vehicleType) { Alert.alert('Error', 'Please select a vehicle type'); return; }
+    if (!selectedDelegation) { Alert.alert('Error', 'Please select your country, governorate and delegation'); return; }
 
-    if (formData.latitude === 0 || formData.longitude === 0) {
-      Alert.alert('Error', 'Please capture your location');
+    const pendingToken = await AsyncStorage.getItem('driverPendingToken');
+    if (!pendingToken) {
+      Alert.alert('Session Expired', 'Your registration session has expired. Please start over.');
+      router.replace('/(auth)/driver-register-step1');
       return;
     }
 
     setLoading(true);
-
     try {
-      const token = await AsyncStorage.getItem('accessToken');
-      
-      if (!token) {
-        Alert.alert('Error', 'Session expired. Please start registration again.');
-        router.push('/(auth)/driver-register-step1');
-        return;
-      }
+      const response = await axios.post(`${API_BASE}/auth/driver/register/step2`, {
+        pendingToken,
+        vehicleType,
+        description: description.trim() || undefined,
+        delegationId: selectedDelegation.id,
+        street: street.trim() || undefined,
+      });
 
-      const response = await axios.post(
-        `${API_URL}/auth/driver/register/step2`,
-        formData,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
+      // Step 2 committed — store the real access token
+      await AsyncStorage.setItem('accessToken', response.data.accessToken);
+      await AsyncStorage.setItem('userRole', 'DRIVER');
+      await AsyncStorage.setItem('driverId', response.data.driver.id);
+      await AsyncStorage.removeItem('driverPendingToken');
 
-      // Navigate to step 3
       router.push('/(auth)/driver-register-step3');
     } catch (error: any) {
-      console.error('Step 2 error:', error);
-      Alert.alert(
-        'Error',
-        error.response?.data?.message || 'An error occurred'
-      );
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleBack = () => {
-    router.back();
+      const msg = error.response?.data?.message || 'An error occurred';
+      if (error.response?.status === 401) {
+        Alert.alert('Session Expired', 'Your registration session has expired. Please start over.');
+        router.replace('/(auth)/driver-register-step1');
+      } else {
+        Alert.alert('Error', msg);
+      }
+    } finally { setLoading(false); }
   };
 
   return (
-    <ScrollView style={styles.container}>
+    <ScrollView style={styles.container} keyboardShouldPersistTaps="handled">
       <View style={styles.header}>
-        <TouchableOpacity onPress={handleBack} style={styles.backButton}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
           <Ionicons name="arrow-back" size={24} color="#007AFF" />
         </TouchableOpacity>
         <Text style={styles.title}>Driver Registration</Text>
-        <Text style={styles.subtitle}>Step 2 of 3: Vehicle & Location</Text>
+        <Text style={styles.subtitle}>Step 2 of 3: Vehicle & Address</Text>
       </View>
 
-      {/* Progress Indicator */}
       <View style={styles.progressContainer}>
         <View style={[styles.progressDot, styles.progressDotComplete]} />
         <View style={styles.progressLine} />
@@ -129,23 +183,11 @@ export default function DriverRegisterStep2() {
       <View style={styles.inputGroup}>
         <Text style={styles.label}>Vehicle Type *</Text>
         <View style={styles.vehicleGrid}>
-          {VEHICLE_TYPES.map((type) => (
-            <TouchableOpacity
-              key={type}
-              style={[
-                styles.vehicleButton,
-                formData.vehicleType === type && styles.vehicleButtonActive,
-              ]}
-              onPress={() => setFormData({ ...formData, vehicleType: type })}
-            >
-              <Text
-                style={[
-                  styles.vehicleText,
-                  formData.vehicleType === type && styles.vehicleTextActive,
-                ]}
-              >
-                {type}
-              </Text>
+          {VEHICLE_TYPES.map(type => (
+            <TouchableOpacity key={type}
+              style={[styles.vehicleButton, vehicleType === type && styles.vehicleButtonActive]}
+              onPress={() => setVehicleType(type)}>
+              <Text style={[styles.vehicleText, vehicleType === type && styles.vehicleTextActive]}>{type}</Text>
             </TouchableOpacity>
           ))}
         </View>
@@ -154,210 +196,117 @@ export default function DriverRegisterStep2() {
       {/* Description */}
       <View style={styles.inputGroup}>
         <Text style={styles.label}>Vehicle Description (Optional)</Text>
-        <TextInput
-          style={[styles.input, styles.textArea]}
-          placeholder="e.g., Red Honda Civic 2020"
-          value={formData.description}
-          onChangeText={(text) => setFormData({ ...formData, description: text })}
-          multiline
-          numberOfLines={4}
-          maxLength={500}
-        />
-        <Text style={styles.charCount}>{formData.description.length}/500</Text>
+        <TextInput style={[styles.input, styles.textArea]} placeholder="e.g., Red Honda Civic 2020"
+          value={description} onChangeText={setDescription} multiline numberOfLines={3} maxLength={500} />
+        <Text style={styles.charCount}>{description.length}/500</Text>
       </View>
 
-      {/* Location */}
+      {/* Address — required */}
       <View style={styles.inputGroup}>
-        <Text style={styles.label}>Your Location *</Text>
-        <TouchableOpacity
-          style={styles.locationButton}
-          onPress={getCurrentLocation}
-          disabled={locationLoading}
-        >
-          {locationLoading ? (
-            <ActivityIndicator color="#007AFF" />
-          ) : (
-            <>
-              <Ionicons name="location" size={24} color="#007AFF" />
-              <Text style={styles.locationButtonText}>
-                {formData.latitude !== 0 && formData.longitude !== 0
-                  ? 'Location Captured ✓'
-                  : 'Get Current Location'}
-              </Text>
-            </>
-          )}
+        <Text style={styles.label}>Your Address *</Text>
+        <Text style={styles.hint}>Select your country, governorate and delegation.</Text>
+
+        {/* Country */}
+        <TouchableOpacity style={styles.pickerButton} onPress={() => setShowCountryPicker(true)}>
+          <Text style={selectedCountry ? styles.pickerText : styles.pickerPlaceholder}>
+            {selectedCountry ? `${selectedCountry.name} (${selectedCountry.isoCode})` : 'Select Country *'}
+          </Text>
+          <Text style={styles.pickerArrow}>▾</Text>
         </TouchableOpacity>
-        {formData.latitude !== 0 && formData.longitude !== 0 && (
-          <View style={styles.coordinatesContainer}>
-            <Text style={styles.coordinatesText}>
-              Lat: {formData.latitude.toFixed(6)}
-            </Text>
-            <Text style={styles.coordinatesText}>
-              Lng: {formData.longitude.toFixed(6)}
-            </Text>
-          </View>
+
+        {/* Governorate */}
+        {selectedCountry && (
+          <TouchableOpacity style={[styles.pickerButton, { marginTop: 10 }]}
+            onPress={() => setShowGovPicker(true)} disabled={geoLoading}>
+            {geoLoading && !selectedGovernorate
+              ? <ActivityIndicator size="small" color="#007AFF" />
+              : <Text style={selectedGovernorate ? styles.pickerText : styles.pickerPlaceholder}>
+                  {selectedGovernorate ? selectedGovernorate.nameGovernorate : 'Select Governorate *'}
+                </Text>}
+            <Text style={styles.pickerArrow}>▾</Text>
+          </TouchableOpacity>
+        )}
+
+        {/* Delegation */}
+        {selectedGovernorate && (
+          <TouchableOpacity style={[styles.pickerButton, { marginTop: 10 }]}
+            onPress={() => setShowDelPicker(true)} disabled={geoLoading}>
+            {geoLoading && !selectedDelegation
+              ? <ActivityIndicator size="small" color="#007AFF" />
+              : <Text style={selectedDelegation ? styles.pickerText : styles.pickerPlaceholder}>
+                  {selectedDelegation ? selectedDelegation.nameDelegation : 'Select Delegation *'}
+                </Text>}
+            <Text style={styles.pickerArrow}>▾</Text>
+          </TouchableOpacity>
+        )}
+
+        {/* Street (optional) */}
+        {selectedDelegation && (
+          <TextInput style={[styles.input, { marginTop: 10 }]}
+            placeholder="Street (optional)" placeholderTextColor="#9ca3af"
+            value={street} onChangeText={setStreet} />
         )}
       </View>
 
-      {/* Submit Button */}
-      <TouchableOpacity
-        style={[styles.submitButton, loading && styles.submitButtonDisabled]}
-        onPress={handleSubmit}
-        disabled={loading}
-      >
-        {loading ? (
-          <ActivityIndicator color="#fff" />
-        ) : (
-          <Text style={styles.submitButtonText}>Continue to Step 3</Text>
-        )}
+      <TouchableOpacity style={[styles.submitButton, loading && styles.submitButtonDisabled]}
+        onPress={handleSubmit} disabled={loading}>
+        {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.submitButtonText}>Continue to Step 3</Text>}
       </TouchableOpacity>
+
+      {/* Pickers */}
+      <SearchPicker visible={showCountryPicker} title="Select Country" data={filteredCountries}
+        onSelect={handleSelectCountry} onClose={() => setShowCountryPicker(false)}
+        search={countrySearch} setSearch={setCountrySearch} labelKey="name" />
+      <SearchPicker visible={showGovPicker} title="Select Governorate" data={filteredGov}
+        onSelect={handleSelectGovernorate} onClose={() => setShowGovPicker(false)}
+        search={govSearch} setSearch={setGovSearch} labelKey="nameGovernorate" />
+      <SearchPicker visible={showDelPicker} title="Select Delegation" data={filteredDel}
+        onSelect={(d: Delegation) => { setSelectedDelegation(d); setShowDelPicker(false); }}
+        onClose={() => setShowDelPicker(false)}
+        search={delSearch} setSearch={setDelSearch} labelKey="nameDelegation" />
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#fff',
-    padding: 20,
-  },
-  header: {
-    marginBottom: 20,
-    marginTop: 20,
-  },
-  backButton: {
-    marginBottom: 16,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 8,
-  },
-  subtitle: {
-    fontSize: 16,
-    color: '#666',
-  },
-  progressContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 30,
-  },
-  progressDot: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: '#ddd',
-  },
-  progressDotActive: {
-    backgroundColor: '#007AFF',
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-  },
-  progressDotComplete: {
-    backgroundColor: '#34C759',
-  },
-  progressLine: {
-    width: 40,
-    height: 2,
-    backgroundColor: '#ddd',
-    marginHorizontal: 8,
-  },
-  inputGroup: {
-    marginBottom: 24,
-  },
-  label: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 12,
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
-    padding: 12,
-    fontSize: 16,
-    backgroundColor: '#f9f9f9',
-  },
-  textArea: {
-    height: 100,
-    textAlignVertical: 'top',
-  },
-  charCount: {
-    textAlign: 'right',
-    color: '#999',
-    fontSize: 12,
-    marginTop: 4,
-  },
-  vehicleGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-  },
-  vehicleButton: {
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
-    backgroundColor: '#f9f9f9',
-  },
-  vehicleButtonActive: {
-    backgroundColor: '#007AFF',
-    borderColor: '#007AFF',
-  },
-  vehicleText: {
-    fontSize: 16,
-    color: '#333',
-  },
-  vehicleTextActive: {
-    color: '#fff',
-    fontWeight: '600',
-  },
-  locationButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 16,
-    borderWidth: 2,
-    borderColor: '#007AFF',
-    borderRadius: 8,
-    borderStyle: 'dashed',
-    gap: 12,
-  },
-  locationButtonText: {
-    fontSize: 16,
-    color: '#007AFF',
-    fontWeight: '600',
-  },
-  coordinatesContainer: {
-    marginTop: 12,
-    padding: 12,
-    backgroundColor: '#f0f9ff',
-    borderRadius: 8,
-  },
-  coordinatesText: {
-    fontSize: 14,
-    color: '#666',
-    marginBottom: 4,
-  },
-  submitButton: {
-    backgroundColor: '#007AFF',
-    padding: 16,
-    borderRadius: 8,
-    alignItems: 'center',
-    marginTop: 20,
-    marginBottom: 40,
-  },
-  submitButtonDisabled: {
-    opacity: 0.6,
-  },
-  submitButtonText: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: '600',
-  },
+  container: { flex: 1, backgroundColor: '#fff', padding: 20 },
+  header: { marginBottom: 20, marginTop: 20 },
+  backButton: { marginBottom: 16 },
+  title: { fontSize: 28, fontWeight: 'bold', color: '#333', marginBottom: 8 },
+  subtitle: { fontSize: 16, color: '#666' },
+  progressContainer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginBottom: 30 },
+  progressDot: { width: 12, height: 12, borderRadius: 6, backgroundColor: '#ddd' },
+  progressDotActive: { backgroundColor: '#007AFF', width: 16, height: 16, borderRadius: 8 },
+  progressDotComplete: { backgroundColor: '#34C759' },
+  progressLine: { width: 40, height: 2, backgroundColor: '#ddd', marginHorizontal: 8 },
+  inputGroup: { marginBottom: 24 },
+  label: { fontSize: 16, fontWeight: '600', color: '#333', marginBottom: 12 },
+  hint: { fontSize: 13, color: '#999', marginBottom: 10 },
+  input: { borderWidth: 1, borderColor: '#ddd', borderRadius: 8, padding: 12, fontSize: 16, backgroundColor: '#f9f9f9', color: '#111' },
+  textArea: { height: 90, textAlignVertical: 'top' },
+  charCount: { textAlign: 'right', color: '#999', fontSize: 12, marginTop: 4 },
+  vehicleGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
+  vehicleButton: { paddingVertical: 12, paddingHorizontal: 20, borderWidth: 1, borderColor: '#ddd', borderRadius: 8, backgroundColor: '#f9f9f9' },
+  vehicleButtonActive: { backgroundColor: '#007AFF', borderColor: '#007AFF' },
+  vehicleText: { fontSize: 16, color: '#333' },
+  vehicleTextActive: { color: '#fff', fontWeight: '600' },
+  pickerButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderWidth: 1, borderColor: '#ddd', borderRadius: 8, padding: 14, backgroundColor: '#f9f9f9' },
+  pickerText: { fontSize: 16, color: '#111', flex: 1 },
+  pickerPlaceholder: { fontSize: 16, color: '#9ca3af', flex: 1 },
+  pickerArrow: { fontSize: 16, color: '#9ca3af' },
+  submitButton: { backgroundColor: '#007AFF', padding: 16, borderRadius: 8, alignItems: 'center', marginTop: 20, marginBottom: 40 },
+  submitButtonDisabled: { opacity: 0.6 },
+  submitButtonText: { color: '#fff', fontSize: 18, fontWeight: '600' },
+  // Modal
+  modalContainer: { flex: 1, backgroundColor: '#fff' },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, paddingTop: 56, borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
+  modalTitle: { fontSize: 20, fontWeight: 'bold', color: '#111' },
+  modalClose: { fontSize: 20, color: '#9ca3af', padding: 4 },
+  searchBox: { flexDirection: 'row', alignItems: 'center', margin: 16, borderWidth: 1.5, borderColor: '#e5e7eb', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10, gap: 8 },
+  searchInput: { flex: 1, fontSize: 15, color: '#111', padding: 0 },
+  clearIcon: { fontSize: 14, color: '#9ca3af', paddingHorizontal: 4 },
+  pickerItem: { paddingHorizontal: 20, paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
+  pickerItemText: { fontSize: 16, color: '#111', fontWeight: '500' },
+  pickerItemSub: { fontSize: 13, color: '#6b7280', marginTop: 2 },
+  emptyText: { textAlign: 'center', color: '#9ca3af', padding: 40, fontSize: 15 },
 });
