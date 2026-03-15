@@ -643,7 +643,7 @@ export default function CustomerProfileScreen() {
             onPress={() => router.push('/(auth)/customer-setup')}
           >
             <Text style={styles.menuIcon}>🌍</Text>
-            <Text style={styles.menuText}>Country & Wallet Setup</Text>
+            <Text style={styles.menuText}>Add address</Text>
             <Text style={styles.menuArrow}>→</Text>
           </TouchableOpacity>
 

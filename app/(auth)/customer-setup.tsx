@@ -7,103 +7,106 @@ import { useState, useEffect, useMemo } from 'react';
 import { geographyService, walletService } from '../../services/api';
 import type { Country, Governorate, Delegation } from '../../services/api';
 
-type Step = 'country' | 'address';
+type Step = 'country' | 'governorate' | 'delegation' | 'street';
 
 export default function CustomerSetupScreen() {
   const router = useRouter();
   const [step, setStep] = useState<Step>('country');
 
-  // Geography data
   const [countries, setCountries] = useState<Country[]>([]);
   const [governorates, setGovernorates] = useState<Governorate[]>([]);
   const [delegations, setDelegations] = useState<Delegation[]>([]);
 
-  // Selections
   const [selectedCountry, setSelectedCountry] = useState<Country | null>(null);
   const [selectedGovernorate, setSelectedGovernorate] = useState<Governorate | null>(null);
   const [selectedDelegation, setSelectedDelegation] = useState<Delegation | null>(null);
   const [street, setStreet] = useState('');
 
-  // Search
-  const [countrySearch, setCountrySearch] = useState('');
-  const [govSearch, setGovSearch] = useState('');
-  const [delSearch, setDelSearch] = useState('');
-
-  // Loading / error
-  const [loadingCountries, setLoadingCountries] = useState(true);
-  const [loadingGov, setLoadingGov] = useState(false);
-  const [loadingDel, setLoadingDel] = useState(false);
+  const [search, setSearch] = useState('');
+  const [loadingList, setLoadingList] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Load countries on mount
   useEffect(() => {
+    setLoadingList(true);
     geographyService.getCountries()
       .then(setCountries)
       .catch(() => setError('Failed to load countries'))
-      .finally(() => setLoadingCountries(false));
+      .finally(() => setLoadingList(false));
   }, []);
 
-  // Filtered lists
-  const filteredCountries = useMemo(() =>
-    countries.filter(c =>
-      c.name.toLowerCase().includes(countrySearch.toLowerCase()) ||
-      c.isoCode.toLowerCase().includes(countrySearch.toLowerCase())
-    ), [countries, countrySearch]);
-
-  const filteredGovernorates = useMemo(() =>
-    governorates.filter(g =>
-      g.nameGovernorate.toLowerCase().includes(govSearch.toLowerCase())
-    ), [governorates, govSearch]);
-
-  const filteredDelegations = useMemo(() =>
-    delegations.filter(d =>
-      d.nameDelegation.toLowerCase().includes(delSearch.toLowerCase())
-    ), [delegations, delSearch]);
-
-  const handleSelectCountry = async (country: Country) => {
-    setSelectedCountry(country);
-    setSelectedGovernorate(null);
-    setSelectedDelegation(null);
-    setGovernorates([]);
-    setDelegations([]);
-    setGovSearch('');
-    setDelSearch('');
-    setLoadingGov(true);
+  const loadGovernorates = async (country: Country) => {
+    setLoadingList(true);
+    setError(null);
     try {
       const govs = await geographyService.getGovernorates(country.id);
       setGovernorates(govs);
     } catch {
       setError('Failed to load governorates');
     } finally {
-      setLoadingGov(false);
+      setLoadingList(false);
     }
   };
 
-  const handleSelectGovernorate = async (gov: Governorate) => {
-    setSelectedGovernorate(gov);
-    setSelectedDelegation(null);
-    setDelegations([]);
-    setDelSearch('');
-    setLoadingDel(true);
+  const loadDelegations = async (gov: Governorate) => {
+    setLoadingList(true);
+    setError(null);
     try {
       const dels = await geographyService.getDelegations(gov.id);
       setDelegations(dels);
     } catch {
       setError('Failed to load delegations');
     } finally {
-      setLoadingDel(false);
+      setLoadingList(false);
     }
   };
 
+  const handleSelectCountry = (c: Country) => {
+    setSelectedCountry(c);
+    setSelectedGovernorate(null);
+    setSelectedDelegation(null);
+    setGovernorates([]);
+    setDelegations([]);
+  };
+
+  const handleSelectGovernorate = (g: Governorate) => {
+    setSelectedGovernorate(g);
+    setSelectedDelegation(null);
+    setDelegations([]);
+  };
+
+  const handleNext = async () => {
+    setSearch('');
+    if (step === 'country' && selectedCountry) {
+      await loadGovernorates(selectedCountry);
+      setStep('governorate');
+    } else if (step === 'governorate' && selectedGovernorate) {
+      await loadDelegations(selectedGovernorate);
+      setStep('delegation');
+    } else if (step === 'delegation' && selectedDelegation) {
+      setStep('street');
+    }
+  };
+
+  const handleBack = () => {
+    setSearch('');
+    setError(null);
+    if (step === 'governorate') setStep('country');
+    else if (step === 'delegation') setStep('governorate');
+    else if (step === 'street') setStep('delegation');
+    else router.back();
+  };
+
   const handleSubmit = async () => {
-    if (!selectedCountry) return;
+    if (!selectedCountry || !selectedDelegation) return;
     setSubmitting(true);
     setError(null);
     try {
-      const address = selectedDelegation
-        ? { delegationId: selectedDelegation.id, street: street.trim() || undefined }
-        : undefined;
-      await walletService.setupCustomer(selectedCountry.id, address);
+      await walletService.setupCustomer(selectedCountry.id, {
+        delegationId: selectedDelegation.id,
+        street: street.trim() || undefined,
+      });
       router.back();
     } catch (e: any) {
       setError(e.message || 'Setup failed. Please try again.');
@@ -112,217 +115,178 @@ export default function CustomerSetupScreen() {
     }
   };
 
-  // ─── Country step ──────────────────────────────────────────────────────────
-  if (step === 'country') {
+  // ── Filtered lists ──────────────────────────────────────────────────────────
+  const filteredCountries = useMemo(() =>
+    countries.filter(c =>
+      c.name.toLowerCase().includes(search.toLowerCase()) ||
+      c.isoCode.toLowerCase().includes(search.toLowerCase())
+    ), [countries, search]);
+
+  const filteredGovernorates = useMemo(() =>
+    governorates.filter(g =>
+      g.nameGovernorate.toLowerCase().includes(search.toLowerCase())
+    ), [governorates, search]);
+
+  const filteredDelegations = useMemo(() =>
+    delegations.filter(d =>
+      d.nameDelegation.toLowerCase().includes(search.toLowerCase())
+    ), [delegations, search]);
+
+  // ── Step config ─────────────────────────────────────────────────────────────
+  const stepConfig = {
+    country: {
+      title: 'Choose your country',
+      subtitle: 'Sets your wallet currency and delivery zone.',
+      placeholder: 'Search country or code...',
+      data: filteredCountries,
+      selected: selectedCountry,
+      onSelect: handleSelectCountry,
+      labelKey: 'name' as const,
+      subKey: (c: any) => `${c.currencyCode} · ${c.isoCode}`,
+      nextDisabled: !selectedCountry,
+    },
+    governorate: {
+      title: 'Choose your governorate',
+      subtitle: selectedCountry?.name ?? '',
+      placeholder: 'Search governorate...',
+      data: filteredGovernorates,
+      selected: selectedGovernorate,
+      onSelect: handleSelectGovernorate,
+      labelKey: 'nameGovernorate' as const,
+      subKey: null,
+      nextDisabled: !selectedGovernorate,
+    },
+    delegation: {
+      title: 'Choose your delegation',
+      subtitle: `${selectedCountry?.name} › ${selectedGovernorate?.nameGovernorate}`,
+      placeholder: 'Search delegation...',
+      data: filteredDelegations,
+      selected: selectedDelegation,
+      onSelect: setSelectedDelegation,
+      labelKey: 'nameDelegation' as const,
+      subKey: null,
+      nextDisabled: !selectedDelegation,
+    },
+  };
+
+  // ── Street step ─────────────────────────────────────────────────────────────
+  if (step === 'street') {
     return (
       <View style={styles.container}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backRow}>
+          <TouchableOpacity onPress={handleBack} style={styles.backRow}>
             <Text style={styles.backText}>← Back</Text>
           </TouchableOpacity>
-          <Text style={styles.title}>Choose your country</Text>
-          <Text style={styles.subtitle}>Sets your wallet currency and delivery zone.</Text>
+          <Text style={styles.title}>Street (optional)</Text>
+          <Text style={styles.subtitle}>
+            {selectedCountry?.name} › {selectedGovernorate?.nameGovernorate} › {selectedDelegation?.nameDelegation}
+          </Text>
         </View>
 
-        {/* Search bar */}
-        <View style={styles.searchContainer}>
-          <Text style={styles.searchIcon}>🔍</Text>
+        <View style={styles.streetContainer}>
           <TextInput
-            style={styles.searchInput}
-            placeholder="Search country or code..."
+            style={styles.streetInput}
+            placeholder="e.g. 12 Avenue Habib Bourguiba"
             placeholderTextColor="#9ca3af"
-            value={countrySearch}
-            onChangeText={setCountrySearch}
-            autoCorrect={false}
+            value={street}
+            onChangeText={setStreet}
+            autoFocus
           />
-          {countrySearch.length > 0 && (
-            <TouchableOpacity onPress={() => setCountrySearch('')}>
-              <Text style={styles.clearIcon}>✕</Text>
-            </TouchableOpacity>
-          )}
+          <Text style={styles.streetHint}>You can leave this empty and add it later.</Text>
         </View>
-
-        {loadingCountries ? (
-          <View style={styles.center}>
-            <ActivityIndicator size="large" color="#0284c7" />
-          </View>
-        ) : (
-          <FlatList
-            data={filteredCountries}
-            keyExtractor={c => c.id}
-            contentContainerStyle={styles.listContent}
-            keyboardShouldPersistTaps="handled"
-            ListEmptyComponent={
-              <View style={styles.center}>
-                <Text style={styles.emptyText}>No countries found</Text>
-              </View>
-            }
-            renderItem={({ item: c }) => (
-              <TouchableOpacity
-                style={[styles.item, selectedCountry?.id === c.id && styles.itemSelected]}
-                onPress={() => handleSelectCountry(c)}
-                activeOpacity={0.7}
-              >
-                <View style={styles.itemLeft}>
-                  <Text style={styles.itemTitle}>{c.name}</Text>
-                  <Text style={styles.itemSub}>{c.currencyCode} · {c.isoCode}</Text>
-                </View>
-                {selectedCountry?.id === c.id && <Text style={styles.checkmark}>✓</Text>}
-              </TouchableOpacity>
-            )}
-          />
-        )}
 
         {error && <Text style={styles.errorText}>{error}</Text>}
 
         <View style={styles.footer}>
           <TouchableOpacity
-            style={[styles.btn, !selectedCountry && styles.btnDisabled]}
-            onPress={() => setStep('address')}
-            disabled={!selectedCountry}
+            style={[styles.btn, submitting && styles.btnDisabled]}
+            onPress={handleSubmit}
+            disabled={submitting}
             activeOpacity={0.8}
           >
-            <Text style={styles.btnText}>Next →</Text>
+            {submitting
+              ? <ActivityIndicator color="#fff" />
+              : <Text style={styles.btnText}>Finish Setup</Text>}
           </TouchableOpacity>
         </View>
       </View>
     );
   }
 
-  // ─── Address step ──────────────────────────────────────────────────────────
+  // ── List steps (country / governorate / delegation) ─────────────────────────
+  const cfg = stepConfig[step];
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => setStep('country')} style={styles.backRow}>
+        <TouchableOpacity onPress={handleBack} style={styles.backRow}>
           <Text style={styles.backText}>← Back</Text>
         </TouchableOpacity>
-        <Text style={styles.title}>Add your address</Text>
-        <Text style={styles.subtitle}>Optional — you can skip this and do it later.</Text>
+        <Text style={styles.title}>{cfg.title}</Text>
+        {cfg.subtitle ? <Text style={styles.subtitle}>{cfg.subtitle}</Text> : null}
       </View>
 
-      {/* Governorate search */}
       <View style={styles.searchContainer}>
         <Text style={styles.searchIcon}>🔍</Text>
         <TextInput
           style={styles.searchInput}
-          placeholder="Search governorate..."
+          placeholder={cfg.placeholder}
           placeholderTextColor="#9ca3af"
-          value={govSearch}
-          onChangeText={setGovSearch}
+          value={search}
+          onChangeText={setSearch}
           autoCorrect={false}
         />
-        {govSearch.length > 0 && (
-          <TouchableOpacity onPress={() => setGovSearch('')}>
+        {search.length > 0 && (
+          <TouchableOpacity onPress={() => setSearch('')}>
             <Text style={styles.clearIcon}>✕</Text>
           </TouchableOpacity>
         )}
       </View>
 
-      <FlatList
-        data={filteredGovernorates}
-        keyExtractor={g => g.id}
-        contentContainerStyle={styles.listContent}
-        keyboardShouldPersistTaps="handled"
-        ListHeaderComponent={
-          loadingGov ? <ActivityIndicator color="#0284c7" style={{ marginVertical: 20 }} /> : null
-        }
-        ListEmptyComponent={
-          !loadingGov ? (
+      {loadingList ? (
+        <View style={styles.center}>
+          <ActivityIndicator size="large" color="#0284c7" />
+        </View>
+      ) : (
+        <FlatList
+          data={cfg.data as any[]}
+          keyExtractor={item => item.id}
+          contentContainerStyle={styles.listContent}
+          keyboardShouldPersistTaps="handled"
+          ListEmptyComponent={
             <View style={styles.center}>
-              <Text style={styles.emptyText}>
-                {governorates.length === 0 ? 'No governorates available' : 'No results'}
-              </Text>
+              <Text style={styles.emptyText}>No results</Text>
             </View>
-          ) : null
-        }
-        renderItem={({ item: g }) => (
-          <TouchableOpacity
-            style={[styles.item, selectedGovernorate?.id === g.id && styles.itemSelected]}
-            onPress={() => handleSelectGovernorate(g)}
-            activeOpacity={0.7}
-          >
-            <Text style={styles.itemTitle}>{g.nameGovernorate}</Text>
-            {selectedGovernorate?.id === g.id && <Text style={styles.checkmark}>✓</Text>}
-          </TouchableOpacity>
-        )}
-        ListFooterComponent={
-          selectedGovernorate ? (
-            <View style={{ marginTop: 20 }}>
-              <Text style={styles.sectionLabel}>Delegation</Text>
-
-              {/* Delegation search */}
-              <View style={[styles.searchContainer, { marginHorizontal: 0, marginBottom: 10 }]}>
-                <Text style={styles.searchIcon}>🔍</Text>
-                <TextInput
-                  style={styles.searchInput}
-                  placeholder="Search delegation..."
-                  placeholderTextColor="#9ca3af"
-                  value={delSearch}
-                  onChangeText={setDelSearch}
-                  autoCorrect={false}
-                />
-                {delSearch.length > 0 && (
-                  <TouchableOpacity onPress={() => setDelSearch('')}>
-                    <Text style={styles.clearIcon}>✕</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-
-              {loadingDel ? (
-                <ActivityIndicator color="#0284c7" style={{ marginVertical: 12 }} />
-              ) : (
-                filteredDelegations.map(d => (
-                  <TouchableOpacity
-                    key={d.id}
-                    style={[styles.item, selectedDelegation?.id === d.id && styles.itemSelected]}
-                    onPress={() => setSelectedDelegation(d)}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={styles.itemTitle}>{d.nameDelegation}</Text>
-                    {selectedDelegation?.id === d.id && <Text style={styles.checkmark}>✓</Text>}
-                  </TouchableOpacity>
-                ))
-              )}
-
-              {selectedDelegation && (
-                <>
-                  <Text style={[styles.sectionLabel, { marginTop: 20 }]}>Street (optional)</Text>
-                  <TextInput
-                    style={styles.streetInput}
-                    placeholder="e.g. 12 Avenue Habib Bourguiba"
-                    placeholderTextColor="#9ca3af"
-                    value={street}
-                    onChangeText={setStreet}
-                  />
-                </>
-              )}
-            </View>
-          ) : null
-        }
-      />
+          }
+          renderItem={({ item }) => {
+            const isSelected = cfg.selected?.id === item.id;
+            return (
+              <TouchableOpacity
+                style={[styles.item, isSelected && styles.itemSelected]}
+                onPress={() => cfg.onSelect(item)}
+                activeOpacity={0.7}
+              >
+                <View style={styles.itemLeft}>
+                  <Text style={styles.itemTitle}>{item[cfg.labelKey]}</Text>
+                  {cfg.subKey && <Text style={styles.itemSub}>{cfg.subKey(item)}</Text>}
+                </View>
+                {isSelected && <Text style={styles.checkmark}>✓</Text>}
+              </TouchableOpacity>
+            );
+          }}
+        />
+      )}
 
       {error && <Text style={styles.errorText}>{error}</Text>}
 
       <View style={styles.footer}>
         <TouchableOpacity
-          style={styles.btnSecondary}
-          onPress={handleSubmit}
-          disabled={submitting}
+          style={[styles.btn, cfg.nextDisabled && styles.btnDisabled]}
+          onPress={handleNext}
+          disabled={cfg.nextDisabled}
           activeOpacity={0.8}
         >
-          {submitting
-            ? <ActivityIndicator color="#0284c7" />
-            : <Text style={styles.btnSecondaryText}>Skip & Finish</Text>}
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.btn, submitting && styles.btnDisabled]}
-          onPress={handleSubmit}
-          disabled={submitting}
-          activeOpacity={0.8}
-        >
-          {submitting
-            ? <ActivityIndicator color="#fff" />
-            : <Text style={styles.btnText}>Finish Setup</Text>}
+          <Text style={styles.btnText}>Next →</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -343,7 +307,6 @@ const styles = StyleSheet.create({
   backText: { color: '#0284c7', fontSize: 16, fontWeight: '500' },
   title: { fontSize: 26, fontWeight: 'bold', color: '#111827', marginBottom: 4 },
   subtitle: { fontSize: 14, color: '#6b7280' },
-
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -359,26 +322,11 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   searchIcon: { fontSize: 16 },
-  searchInput: {
-    flex: 1,
-    fontSize: 15,
-    color: '#111827',
-    padding: 0,
-  },
+  searchInput: { flex: 1, fontSize: 15, color: '#111827', padding: 0 },
   clearIcon: { fontSize: 14, color: '#9ca3af', paddingHorizontal: 4 },
-
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingVertical: 40 },
   emptyText: { color: '#9ca3af', fontSize: 15 },
-
-  listContent: { padding: 16, gap: 8, paddingBottom: 20 },
-  sectionLabel: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#6b7280',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    marginBottom: 8,
-  },
+  listContent: { padding: 16, paddingBottom: 20 },
   item: {
     backgroundColor: '#fff',
     borderRadius: 12,
@@ -391,11 +339,11 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   itemSelected: { borderColor: '#0284c7', backgroundColor: '#f0f9ff' },
-  itemLeft: { gap: 2 },
+  itemLeft: { gap: 2, flex: 1 },
   itemTitle: { fontSize: 16, fontWeight: '600', color: '#111827' },
   itemSub: { fontSize: 13, color: '#6b7280' },
-  checkmark: { fontSize: 18, color: '#0284c7', fontWeight: 'bold' },
-
+  checkmark: { fontSize: 18, color: '#0284c7', fontWeight: 'bold', marginLeft: 8 },
+  streetContainer: { flex: 1, padding: 24 },
   streetInput: {
     backgroundColor: '#fff',
     borderWidth: 1.5,
@@ -405,8 +353,8 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     fontSize: 16,
     color: '#111827',
-    marginBottom: 8,
   },
+  streetHint: { fontSize: 13, color: '#9ca3af', marginTop: 8 },
   errorText: {
     color: '#dc2626',
     fontSize: 14,
@@ -415,15 +363,12 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
   },
   footer: {
-    flexDirection: 'row',
-    gap: 12,
     padding: 16,
     backgroundColor: '#fff',
     borderTopWidth: 1,
     borderTopColor: '#f3f4f6',
   },
   btn: {
-    flex: 1,
     backgroundColor: '#0284c7',
     paddingVertical: 16,
     borderRadius: 12,
@@ -431,12 +376,4 @@ const styles = StyleSheet.create({
   },
   btnDisabled: { backgroundColor: '#9ca3af' },
   btnText: { color: '#fff', fontSize: 16, fontWeight: '700' },
-  btnSecondary: {
-    flex: 1,
-    backgroundColor: '#f3f4f6',
-    paddingVertical: 16,
-    borderRadius: 12,
-    alignItems: 'center',
-  },
-  btnSecondaryText: { color: '#374151', fontSize: 16, fontWeight: '600' },
 });

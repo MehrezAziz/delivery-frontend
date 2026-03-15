@@ -2,7 +2,8 @@ import {
   View, Text, TouchableOpacity, ScrollView,
   StyleSheet, ActivityIndicator, TextInput, Alert, Modal,
 } from 'react-native';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { walletService } from '../../services/api';
 import type { Wallet, WalletTransaction, WithdrawalRequest } from '../../services/api';
 
@@ -30,6 +31,7 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 export default function WalletScreen() {
+  const router = useRouter();
   const [activeTab, setActiveTab] = useState<Tab>('overview');
   const [wallet, setWallet] = useState<Wallet | null>(null);
   const [transactions, setTransactions] = useState<WalletTransaction[]>([]);
@@ -82,7 +84,9 @@ export default function WalletScreen() {
     }
   }, []);
 
-  useEffect(() => { loadWallet(); }, []);
+  // Reload wallet every time this screen comes into focus (e.g. returning from setup)
+  useFocusEffect(useCallback(() => { loadWallet(); }, []));
+
   useEffect(() => { if (activeTab === 'transactions') loadTransactions(); }, [activeTab]);
   useEffect(() => { if (activeTab === 'withdrawals') loadWithdrawals(); }, [activeTab]);
 
@@ -133,9 +137,9 @@ export default function WalletScreen() {
       <View style={styles.container}>
         <View style={styles.header}><Text style={styles.headerTitle}>My Wallet</Text></View>
         <View style={styles.center}>
-          <Text style={styles.errorText}>{error || 'Wallet not found'}</Text>
-          <TouchableOpacity style={styles.retryBtn} onPress={loadWallet}>
-            <Text style={styles.retryBtnText}>Retry</Text>
+          <Text style={styles.errorText}>Wallet not found</Text>
+          <TouchableOpacity style={styles.setupBtn} onPress={() => router.push('/(auth)/customer-setup')}>
+            <Text style={styles.setupBtnText}>Add address to get a wallet</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -353,9 +357,9 @@ const styles = StyleSheet.create({
   },
   headerTitle: { fontSize: 32, fontWeight: 'bold', color: '#111827' },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 16 },
-  errorText: { color: '#dc2626', fontSize: 16, textAlign: 'center' },
-  retryBtn: { backgroundColor: '#0284c7', paddingHorizontal: 24, paddingVertical: 12, borderRadius: 8 },
-  retryBtnText: { color: '#fff', fontWeight: '600' },
+  errorText: { color: '#6b7280', fontSize: 16, textAlign: 'center' },
+  setupBtn: { backgroundColor: '#0284c7', paddingHorizontal: 24, paddingVertical: 12, borderRadius: 8 },
+  setupBtnText: { color: '#fff', fontWeight: '600', fontSize: 15 },
 
   balanceCard: {
     margin: 20,
