@@ -177,6 +177,21 @@ export default function DriverHome() {
         </View>
       )}
 
+      {(driver?.status === 'SUSPENDED' || driver?.status === 'REJECTED') && (
+        <TouchableOpacity
+          style={[styles.alertBox, { backgroundColor: '#fef2f2' }]}
+          onPress={() => router.push('/(driver)/restrictions')}
+        >
+          <Ionicons name="alert-circle" size={24} color="#dc2626" />
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.alertText, { color: '#991b1b' }]}>
+              Your account is {driver.status.toLowerCase()}. Tap to see the reason.
+            </Text>
+          </View>
+          <Ionicons name="chevron-forward" size={20} color="#dc2626" />
+        </TouchableOpacity>
+      )}
+
       <View style={styles.actionsContainer}>
         {driver?.status === 'VERIFIED' && (
           <TouchableOpacity
@@ -193,14 +208,28 @@ export default function DriverHome() {
           <Text style={styles.actionButtonText}>Edit Profile</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.actionButton}>
+        <TouchableOpacity
+          style={styles.actionButton}
+          onPress={() => router.push('/(driver)/documents')}
+        >
           <Ionicons name="document-text" size={24} color="#007AFF" />
           <Text style={styles.actionButtonText}>My Documents</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.actionButton}>
+        <TouchableOpacity
+          style={styles.actionButton}
+          onPress={() => router.push('/(driver)/addresses')}
+        >
           <Ionicons name="location" size={24} color="#007AFF" />
-          <Text style={styles.actionButtonText}>Update Location</Text>
+          <Text style={styles.actionButtonText}>My Addresses</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.actionButton}
+          onPress={() => router.push('/(driver)/restrictions')}
+        >
+          <Ionicons name="warning" size={24} color="#007AFF" />
+          <Text style={styles.actionButtonText}>My Restrictions</Text>
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.actionButton}>

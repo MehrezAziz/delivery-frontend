@@ -647,9 +647,21 @@ export default function CustomerProfileScreen() {
             <Text style={styles.menuArrow}>→</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.menuItem}>
+          <TouchableOpacity
+            style={styles.menuItem}
+            onPress={() => router.push('/(customer)/addresses')}
+          >
             <Text style={styles.menuIcon}>📍</Text>
             <Text style={styles.menuText}>My Addresses</Text>
+            <Text style={styles.menuArrow}>→</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.menuItem}
+            onPress={() => router.push('/(customer)/restrictions')}
+          >
+            <Text style={styles.menuIcon}>⚠️</Text>
+            <Text style={styles.menuText}>My Restrictions</Text>
             <Text style={styles.menuArrow}>→</Text>
           </TouchableOpacity>
 

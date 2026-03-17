@@ -39,6 +39,18 @@ export default function CustomerLayout() {
           title: 'Profile',
         }}
       />
+      <Tabs.Screen
+        name="addresses"
+        options={{
+          href: null,
+        }}
+      />
+      <Tabs.Screen
+        name="restrictions"
+        options={{
+          href: null,
+        }}
+      />
     </Tabs>
   );
 }

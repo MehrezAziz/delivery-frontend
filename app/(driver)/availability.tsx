@@ -68,7 +68,13 @@ export default function DriverAvailability() {
       setSelectedCells(cells);
     } catch (error: any) {
       console.error('Load availability error:', error);
-      Alert.alert('Error', 'Failed to load availability');
+      if (error.response?.status === 404) {
+        // Availability not initialized yet - show empty grid
+        setSelectedCells({});
+        setAvailabilityStatus('ACTIVE');
+      } else {
+        Alert.alert('Error', 'Failed to load availability');
+      }
     } finally {
       setLoading(false);
     }
