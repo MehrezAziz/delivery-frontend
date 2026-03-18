@@ -8,6 +8,8 @@ export default function DriverLayout() {
       }}
     >
       <Stack.Screen name="home" />
+      <Stack.Screen name="support" />
+      <Stack.Screen name="support-chat" />
     </Stack>
   );
 }

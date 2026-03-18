@@ -1,8 +1,10 @@
-import { View, Text, ScrollView, StyleSheet } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity } from 'react-native';
+import { useRouter } from 'expo-router';
 import { useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function CustomerHomeScreen() {
+  const router = useRouter();
   const [userName, setUserName] = useState('Customer');
 
   useEffect(() => {
@@ -52,6 +54,17 @@ export default function CustomerHomeScreen() {
             <View style={styles.actionCard}>
               <Text style={styles.actionIcon}>💳</Text>
               <Text style={styles.actionTitle}>My Wallet</Text>
+            </View>
+          </View>
+
+          <View style={[styles.actionRow, { marginTop: 16 }]}>
+            <TouchableOpacity style={styles.actionCard} onPress={() => router.push('/(customer)/support')}>
+              <Text style={styles.actionIcon}>💬</Text>
+              <Text style={styles.actionTitle}>Support</Text>
+            </TouchableOpacity>
+            <View style={styles.actionCard}>
+              <Text style={styles.actionIcon}>⚙️</Text>
+              <Text style={styles.actionTitle}>Settings</Text>
             </View>
           </View>
         </View>

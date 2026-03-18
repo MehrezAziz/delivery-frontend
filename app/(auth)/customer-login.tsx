@@ -3,6 +3,7 @@ import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useGoogleAuth } from '../../hooks/useGoogleAuth';
+import { saveLoginTimestamp } from '../../services/auth-session';
 
 // For Android emulator, use 10.0.2.2 instead of localhost
 // For physical device with USB + ADB reverse, use localhost
@@ -76,6 +77,8 @@ export default function CustomerLoginScreen() {
       if (data.refreshToken) {
         await AsyncStorage.setItem('refreshToken', data.refreshToken);
       }
+      await AsyncStorage.setItem('userRole', 'CUSTOMER');
+      await saveLoginTimestamp();
 
       // Fetch user profile to store user and customer data
       const profileResponse = await fetch(`${API_BASE_URL}/customers/me`, {

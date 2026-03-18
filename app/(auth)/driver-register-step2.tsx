@@ -7,6 +7,7 @@ import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import axios from 'axios';
+import { saveLoginTimestamp } from '../../services/auth-session';
 
 const API_BASE = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api';
 const API_URL = API_BASE.replace(/\/api$/, '');
@@ -147,6 +148,7 @@ export default function DriverRegisterStep2() {
       await AsyncStorage.setItem('accessToken', response.data.accessToken);
       await AsyncStorage.setItem('userRole', 'DRIVER');
       await AsyncStorage.setItem('driverId', response.data.driver.id);
+      await saveLoginTimestamp();
       await AsyncStorage.removeItem('driverPendingToken');
 
       router.push('/(auth)/driver-register-step3');

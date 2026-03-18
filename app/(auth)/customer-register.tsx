@@ -3,6 +3,7 @@ import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useGoogleAuth } from '../../hooks/useGoogleAuth';
+import { saveLoginTimestamp } from '../../services/auth-session';
 
 // For Android emulator, use 10.0.2.2 instead of localhost
 // For physical device with USB + ADB reverse, use localhost
@@ -182,6 +183,8 @@ export default function CustomerRegisterScreen() {
       // Store user and customer data
       await AsyncStorage.setItem('user', JSON.stringify(data.user));
       await AsyncStorage.setItem('customer', JSON.stringify(data.customer));
+      await AsyncStorage.setItem('userRole', 'CUSTOMER');
+      await saveLoginTimestamp();
 
       // Navigate to customer home (setup country/wallet is optional, done from profile)
       router.replace('/(customer)/home');

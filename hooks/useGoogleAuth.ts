@@ -3,6 +3,7 @@ import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import { Platform } from 'react-native';
+import { saveLoginTimestamp } from '../services/auth-session';
 
 // Use environment variable for API URL
 // For physical device with USB + ADB reverse, use localhost
@@ -93,6 +94,8 @@ export const useGoogleAuth = (role: 'CUSTOMER' | 'DRIVER', referralCode?: string
       if (data.refreshToken) {
         await AsyncStorage.setItem('refreshToken', data.refreshToken);
       }
+      await AsyncStorage.setItem('userRole', role);
+      await saveLoginTimestamp();
 
       // Store user and customer/driver data if provided (new registration)
       if (data.user && data.customer) {

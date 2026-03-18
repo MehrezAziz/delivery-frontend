@@ -295,6 +295,12 @@ export default function CustomerProfileScreen() {
           <ActivityIndicator size="large" color="#0284c7" />
           <Text style={styles.loadingText}>Loading profile...</Text>
         </View>
+        <View style={{ paddingHorizontal: 24, paddingBottom: 40 }}>
+          <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+            <Text style={styles.menuIcon}>🚪</Text>
+            <Text style={styles.logoutText}>Logout</Text>
+          </TouchableOpacity>
+        </View>
       </View>
     );
   }
@@ -310,6 +316,10 @@ export default function CustomerProfileScreen() {
           <Text style={styles.errorText}>{error || 'Failed to load profile'}</Text>
           <TouchableOpacity style={styles.retryButton} onPress={loadUserData}>
             <Text style={styles.retryButtonText}>Retry</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={[styles.logoutButton, { marginTop: 24, width: '100%' }]} onPress={handleLogout}>
+            <Text style={styles.menuIcon}>🚪</Text>
+            <Text style={styles.logoutText}>Logout</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -677,7 +687,10 @@ export default function CustomerProfileScreen() {
             <Text style={styles.menuArrow}>→</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.menuItem}>
+          <TouchableOpacity
+            style={styles.menuItem}
+            onPress={() => router.push('/(customer)/support')}
+          >
             <Text style={styles.menuIcon}>❓</Text>
             <Text style={styles.menuText}>Help & Support</Text>
             <Text style={styles.menuArrow}>→</Text>

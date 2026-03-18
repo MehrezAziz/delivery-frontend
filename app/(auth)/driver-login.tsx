@@ -14,6 +14,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import axios from 'axios';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
+import { saveLoginTimestamp } from '../../services/auth-session';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
 
@@ -50,6 +51,7 @@ export default function DriverLogin() {
       await AsyncStorage.setItem('accessToken', response.data.accessToken);
       await AsyncStorage.setItem('refreshToken', response.data.refreshToken);
       await AsyncStorage.setItem('userRole', 'DRIVER');
+      await saveLoginTimestamp();
 
       // Get driver profile to extract IDs
       const profileResponse = await axios.get(`${API_URL}/drivers/me`, {
@@ -102,6 +104,7 @@ export default function DriverLogin() {
       await AsyncStorage.setItem('accessToken', backendResponse.data.accessToken);
       await AsyncStorage.setItem('refreshToken', backendResponse.data.refreshToken);
       await AsyncStorage.setItem('userRole', 'DRIVER');
+      await saveLoginTimestamp();
 
       // Get driver profile to extract IDs
       const profileResponse = await axios.get(`${API_URL}/drivers/me`, {

@@ -232,7 +232,10 @@ export default function DriverHome() {
           <Text style={styles.actionButtonText}>My Restrictions</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.actionButton}>
+        <TouchableOpacity
+          style={styles.actionButton}
+          onPress={() => router.push('/(driver)/support')}
+        >
           <Ionicons name="help-circle" size={24} color="#007AFF" />
           <Text style={styles.actionButtonText}>Help & Support</Text>
         </TouchableOpacity>

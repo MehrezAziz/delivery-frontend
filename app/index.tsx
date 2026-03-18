@@ -1,8 +1,52 @@
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useEffect, useState } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { isSessionValid, clearSession } from '../services/auth-session';
 
 export default function RoleSelectionScreen() {
   const router = useRouter();
+  const [checking, setChecking] = useState(true);
+
+  useEffect(() => {
+    checkExistingSession();
+  }, []);
+
+  async function checkExistingSession() {
+    try {
+      const valid = await isSessionValid();
+      if (valid) {
+        // Session is still valid — redirect to the right home screen
+        const userRole = await AsyncStorage.getItem('userRole');
+        const customer = await AsyncStorage.getItem('customer');
+        const driver = await AsyncStorage.getItem('driver');
+
+        if (userRole === 'DRIVER' || driver) {
+          router.replace('/(driver)/home');
+          return;
+        }
+        if (userRole === 'CUSTOMER' || customer) {
+          router.replace('/(customer)/home');
+          return;
+        }
+      } else {
+        // Session expired or no token — clear stale data
+        await clearSession();
+      }
+    } catch (e) {
+      console.error('Session check error:', e);
+      await clearSession();
+    }
+    setChecking(false);
+  }
+
+  if (checking) {
+    return (
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator size="large" color="#0284c7" />
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -66,7 +110,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#f9fafb',
-    
   },
   content: {
     flex: 1,

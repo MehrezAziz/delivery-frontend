@@ -51,6 +51,18 @@ export default function CustomerLayout() {
           href: null,
         }}
       />
+      <Tabs.Screen
+        name="support"
+        options={{
+          href: null,
+        }}
+      />
+      <Tabs.Screen
+        name="support-chat"
+        options={{
+          href: null,
+        }}
+      />
     </Tabs>
   );
 }
