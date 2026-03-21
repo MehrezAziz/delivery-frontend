@@ -1,273 +1,251 @@
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity } from 'react-native';
+import { useEffect, useState, useCallback } from 'react';
+import {
+  View, Text, ScrollView, StyleSheet, TouchableOpacity,
+  ActivityIndicator, RefreshControl,
+} from 'react-native';
 import { useRouter } from 'expo-router';
-import { useState, useEffect } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
+import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { orderService, Order } from '../../services/api/order.service';
+
+const ACTIVE_STATUSES = [
+  'SEARCHING_DRIVER', 'DRIVER_ASSIGNED', 'DRIVER_ARRIVED', 'PICKED_UP', 'DELIVERING',
+];
+
+const STATUS_META: Record<string, { icon: string; color: string; bg: string; label: string }> = {
+  SEARCHING_DRIVER: { icon: 'search-outline', color: '#ca8a04', bg: '#fef9c3', label: 'Searching' },
+  DRIVER_ASSIGNED:  { icon: 'person-outline', color: '#2563eb', bg: '#dbeafe', label: 'Assigned' },
+  DRIVER_ARRIVED:   { icon: 'flag-outline',   color: '#7c3aed', bg: '#ede9fe', label: 'Arrived' },
+  PICKED_UP:        { icon: 'cube-outline',   color: '#ea580c', bg: '#ffedd5', label: 'Picked Up' },
+  DELIVERING:       { icon: 'bicycle-outline', color: '#4f46e5', bg: '#e0e7ff', label: 'On the Way' },
+};
 
 export default function CustomerHomeScreen() {
   const router = useRouter();
-  const [userName, setUserName] = useState('Customer');
+  const [userName, setUserName] = useState('');
+  const [activeOrders, setActiveOrders] = useState<Order[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
-    loadUserName();
+    AsyncStorage.getItem('user').then(u => {
+      if (u) {
+        const user = JSON.parse(u);
+        setUserName(user.firstName || user.secondName || '');
+      }
+    });
   }, []);
 
-  const loadUserName = async () => {
+  const loadOrders = useCallback(async () => {
     try {
-      const userJson = await AsyncStorage.getItem('user');
-      if (userJson) {
-        const user = JSON.parse(userJson);
-        const name = user.firstName || user.secondName || 'Customer';
-        setUserName(name);
-      }
-    } catch (error) {
-      console.error('Error loading user name:', error);
+      const orders = await orderService.getMyOrders();
+      setActiveOrders(orders.filter(o => ACTIVE_STATUSES.includes(o.status)));
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
     }
-  };
+  }, []);
+
+  useFocusEffect(useCallback(() => { loadOrders(); }, [loadOrders]));
+
+  useEffect(() => {
+    const interval = setInterval(loadOrders, 10000);
+    return () => clearInterval(interval);
+  }, [loadOrders]);
 
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.greeting}>Hello, {userName}! 👋</Text>
-        <Text style={styles.subtitle}>Where would you like to send your package?</Text>
+    <View style={s.container}>
+      {/* Header */}
+      <View style={s.header}>
+        <View style={s.headerContent}>
+          <View>
+            <Text style={s.greeting}>Hello{userName ? `, ${userName}` : ''} 👋</Text>
+            <Text style={s.subtitle}>Where should we deliver today?</Text>
+          </View>
+          <TouchableOpacity style={s.notifBtn} onPress={() => router.push('/(customer)/support')}>
+            <Ionicons name="chatbubble-ellipses-outline" size={22} color="#fff" />
+          </TouchableOpacity>
+        </View>
       </View>
 
-      <ScrollView style={styles.content}>
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Quick Actions</Text>
-          
-          <TouchableOpacity style={styles.quickActionCard} onPress={() => router.push('/(customer)/create-order')}>
-            <View style={styles.quickActionIcon}>
-              <Text style={styles.iconText}>📦</Text>
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 60 }}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); loadOrders(); }} />}>
+
+        {/* Create Order CTA */}
+        <View style={s.section}>
+          <TouchableOpacity style={s.ctaCard} onPress={() => router.push('/(customer)/create-order')} activeOpacity={0.85}>
+            <View style={s.ctaIconWrap}>
+              <Ionicons name="add-circle" size={32} color="#fff" />
             </View>
-            <View style={styles.quickActionContent}>
-              <Text style={styles.quickActionTitle}>Create New Order</Text>
-              <Text style={styles.quickActionSubtitle}>Send a package now</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={s.ctaTitle}>Create New Order</Text>
+              <Text style={s.ctaSub}>Send a package anywhere</Text>
             </View>
-            <Text style={styles.arrow}>→</Text>
+            <Ionicons name="chevron-forward" size={22} color="rgba(255,255,255,0.7)" />
           </TouchableOpacity>
+        </View>
 
-          <View style={styles.actionRow}>
-            <View style={styles.actionCard}>
-              <Text style={styles.actionIcon}>📍</Text>
-              <Text style={styles.actionTitle}>My Addresses</Text>
-            </View>
-            <View style={styles.actionCard}>
-              <Text style={styles.actionIcon}>💳</Text>
-              <Text style={styles.actionTitle}>My Wallet</Text>
-            </View>
-          </View>
-
-          <View style={[styles.actionRow, { marginTop: 16 }]}>
-            <TouchableOpacity style={styles.actionCard} onPress={() => router.push('/(customer)/support')}>
-              <Text style={styles.actionIcon}>💬</Text>
-              <Text style={styles.actionTitle}>Support</Text>
+        {/* Quick Actions */}
+        <View style={s.section}>
+          <Text style={s.sectionTitle}>Quick Actions</Text>
+          <View style={s.actionsGrid}>
+            <TouchableOpacity style={s.actionCard} onPress={() => router.push('/(customer)/orders')}>
+              <View style={[s.actionIconWrap, { backgroundColor: '#dbeafe' }]}>
+                <Ionicons name="receipt-outline" size={22} color="#2563eb" />
+              </View>
+              <Text style={s.actionLabel}>My Orders</Text>
             </TouchableOpacity>
-            <View style={styles.actionCard}>
-              <Text style={styles.actionIcon}>⚙️</Text>
-              <Text style={styles.actionTitle}>Settings</Text>
-            </View>
+            <TouchableOpacity style={s.actionCard} onPress={() => router.push('/(customer)/addresses')}>
+              <View style={[s.actionIconWrap, { backgroundColor: '#dcfce7' }]}>
+                <Ionicons name="location-outline" size={22} color="#16a34a" />
+              </View>
+              <Text style={s.actionLabel}>Addresses</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={s.actionCard} onPress={() => router.push('/(customer)/wallet')}>
+              <View style={[s.actionIconWrap, { backgroundColor: '#fef9c3' }]}>
+                <Ionicons name="wallet-outline" size={22} color="#ca8a04" />
+              </View>
+              <Text style={s.actionLabel}>Wallet</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={s.actionCard} onPress={() => router.push('/(customer)/support')}>
+              <View style={[s.actionIconWrap, { backgroundColor: '#ede9fe' }]}>
+                <Ionicons name="headset-outline" size={22} color="#7c3aed" />
+              </View>
+              <Text style={s.actionLabel}>Support</Text>
+            </TouchableOpacity>
           </View>
         </View>
 
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Active Orders</Text>
-          
-          <View style={styles.orderCard}>
-            <View style={styles.orderHeader}>
-              <View>
-                <Text style={styles.orderTitle}>Order #12345</Text>
-                <Text style={styles.orderStatus}>Searching for driver...</Text>
-              </View>
-              <View style={styles.statusBadge}>
-                <Text style={styles.statusText}>SEARCHING</Text>
-              </View>
-            </View>
-
-            <View style={styles.orderAddresses}>
-              <View style={styles.addressRow}>
-                <Text style={styles.addressIcon}>📍</Text>
-                <Text style={styles.addressText}>Avenue Habib Bourguiba</Text>
-              </View>
-              <View style={styles.addressRow}>
-                <Text style={styles.addressIcon}>📍</Text>
-                <Text style={styles.addressText}>Avenue de la Liberté</Text>
-              </View>
-            </View>
-
-            <View style={styles.orderFooter}>
-              <Text style={styles.orderPrice}>25.00 TND</Text>
-              <View style={styles.viewButton}>
-                <Text style={styles.viewButtonText}>View Details</Text>
-              </View>
-            </View>
+        {/* Active Orders */}
+        <View style={s.section}>
+          <View style={s.sectionHeader}>
+            <Text style={s.sectionTitle}>Active Orders</Text>
+            {activeOrders.length > 0 && (
+              <TouchableOpacity onPress={() => router.push('/(customer)/orders')}>
+                <Text style={s.seeAll}>See All</Text>
+              </TouchableOpacity>
+            )}
           </View>
+
+          {loading ? (
+            <ActivityIndicator size="small" color="#0284c7" style={{ marginTop: 20 }} />
+          ) : activeOrders.length === 0 ? (
+            <View style={s.emptyCard}>
+              <Ionicons name="cube-outline" size={40} color="#d1d5db" />
+              <Text style={s.emptyText}>No active orders</Text>
+              <Text style={s.emptySub}>Create an order to get started</Text>
+            </View>
+          ) : (
+            activeOrders.slice(0, 3).map(order => {
+              const meta = STATUS_META[order.status] || STATUS_META.SEARCHING_DRIVER;
+              return (
+                <TouchableOpacity key={order.id} style={s.orderCard}
+                  onPress={() => router.push(`/(customer)/order-detail?orderId=${order.id}`)} activeOpacity={0.8}>
+                  <View style={s.orderTop}>
+                    <View style={[s.orderStatusBadge, { backgroundColor: meta.bg }]}>
+                      <Ionicons name={meta.icon as any} size={14} color={meta.color} />
+                      <Text style={[s.orderStatusText, { color: meta.color }]}>{meta.label}</Text>
+                    </View>
+                    <Text style={s.orderPrice}>{order.price.toFixed(2)} TND</Text>
+                  </View>
+                  <View style={s.orderRoute}>
+                    <View style={s.orderRouteIcons}>
+                      <View style={[s.miniDot, { backgroundColor: '#22c55e' }]} />
+                      <View style={s.miniLine} />
+                      <View style={[s.miniDot, { backgroundColor: '#ef4444' }]} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={s.orderAddr} numberOfLines={1}>
+                        {order.pickupAddress?.street || order.pickupAddress?.delegation?.nameDelegation || 'Pickup'}
+                      </Text>
+                      <Text style={s.orderAddr} numberOfLines={1}>
+                        {order.dropoffAddress?.street || order.dropoffAddress?.delegation?.nameDelegation || 'Delivery'}
+                      </Text>
+                    </View>
+                    <Ionicons name="chevron-forward" size={18} color="#d1d5db" />
+                  </View>
+                </TouchableOpacity>
+              );
+            })
+          )}
         </View>
       </ScrollView>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f9fafb',
-    marginBottom:40,
-  },
+const s = StyleSheet.create({
+  container: { flex: 1, backgroundColor: '#f8fafc' },
   header: {
-    backgroundColor: 'white',
-    paddingHorizontal: 24,
-    paddingTop: 56,
-    paddingBottom: 24,
+    backgroundColor: '#0284c7', paddingTop: 52, paddingBottom: 24,
+    borderBottomLeftRadius: 28, borderBottomRightRadius: 28,
   },
-  greeting: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#111827',
-    marginBottom: 8,
+  headerContent: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 24,
   },
-  subtitle: {
-    fontSize: 16,
-    color: '#6b7280',
+  greeting: { fontSize: 26, fontWeight: '800', color: '#fff', marginBottom: 4 },
+  subtitle: { fontSize: 14, color: 'rgba(255,255,255,0.75)', fontWeight: '500' },
+  notifBtn: {
+    width: 42, height: 42, borderRadius: 21, backgroundColor: 'rgba(255,255,255,0.2)',
+    alignItems: 'center', justifyContent: 'center',
   },
-  content: {
-    flex: 1,
+
+  section: { paddingHorizontal: 20, marginTop: 20 },
+  sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2 },
+  sectionTitle: { fontSize: 17, fontWeight: '700', color: '#111827', marginBottom: 14 },
+  seeAll: { fontSize: 14, fontWeight: '600', color: '#0284c7' },
+
+  // CTA
+  ctaCard: {
+    backgroundColor: '#0284c7', borderRadius: 18, padding: 20,
+    flexDirection: 'row', alignItems: 'center', gap: 14,
+    shadowColor: '#0284c7', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 10, elevation: 6,
   },
-  section: {
-    paddingHorizontal: 24,
-    paddingVertical: 24,
+  ctaIconWrap: {
+    width: 52, height: 52, borderRadius: 26, backgroundColor: 'rgba(255,255,255,0.2)',
+    alignItems: 'center', justifyContent: 'center',
   },
-  sectionTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#111827',
-    marginBottom: 16,
-  },
-  quickActionCard: {
-    backgroundColor: '#0284c7',
-    padding: 24,
-    borderRadius: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  quickActionIcon: {
-    width: 48,
-    height: 48,
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    borderRadius: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 16,
-  },
-  iconText: {
-    fontSize: 24,
-  },
-  quickActionContent: {
-    flex: 1,
-  },
-  quickActionTitle: {
-    color: 'white',
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: 4,
-  },
-  quickActionSubtitle: {
-    color: 'rgba(255,255,255,0.8)',
-  },
-  arrow: {
-    color: 'white',
-    fontSize: 24,
-  },
-  actionRow: {
-    flexDirection: 'row',
-    gap: 16,
-  },
+  ctaTitle: { fontSize: 18, fontWeight: '700', color: '#fff' },
+  ctaSub: { fontSize: 13, color: 'rgba(255,255,255,0.7)', marginTop: 2 },
+
+  // Actions grid
+  actionsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
   actionCard: {
-    flex: 1,
-    backgroundColor: 'white',
-    padding: 16,
-    borderRadius: 12,
-    alignItems: 'center',
+    width: '47%' as any, backgroundColor: '#fff', borderRadius: 16, padding: 18,
+    alignItems: 'center', gap: 10,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 6, elevation: 2,
   },
-  actionIcon: {
-    fontSize: 28,
-    marginBottom: 8,
+  actionIconWrap: {
+    width: 46, height: 46, borderRadius: 23, alignItems: 'center', justifyContent: 'center',
   },
-  actionTitle: {
-    color: '#111827',
-    fontWeight: '600',
+  actionLabel: { fontSize: 14, fontWeight: '600', color: '#374151' },
+
+  // Empty
+  emptyCard: {
+    backgroundColor: '#fff', borderRadius: 16, padding: 32, alignItems: 'center', gap: 8,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 6, elevation: 2,
   },
+  emptyText: { fontSize: 16, fontWeight: '600', color: '#6b7280' },
+  emptySub: { fontSize: 13, color: '#9ca3af' },
+
+  // Order cards
   orderCard: {
-    backgroundColor: 'white',
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 16,
+    backgroundColor: '#fff', borderRadius: 16, padding: 16, marginBottom: 12,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 6, elevation: 2,
   },
-  orderHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 12,
+  orderTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
+  orderStatusBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20,
   },
-  orderTitle: {
-    color: '#111827',
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: 4,
-  },
-  orderStatus: {
-    color: '#6b7280',
-  },
-  statusBadge: {
-    backgroundColor: '#fef3c7',
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 16,
-  },
-  statusText: {
-    color: '#92400e',
-    fontSize: 12,
-    fontWeight: '500',
-  },
-  orderAddresses: {
-    borderTopWidth: 1,
-    borderTopColor: '#f3f4f6',
-    paddingTop: 12,
-    marginBottom: 12,
-  },
-  addressRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  addressIcon: {
-    marginRight: 8,
-  },
-  addressText: {
-    color: '#374151',
-    flex: 1,
-  },
-  orderFooter: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    borderTopWidth: 1,
-    borderTopColor: '#f3f4f6',
-    paddingTop: 12,
-  },
-  orderPrice: {
-    color: '#111827',
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  viewButton: {
-    backgroundColor: '#0284c7',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 8,
-  },
-  viewButtonText: {
-    color: 'white',
-    fontWeight: '500',
-  },
+  orderStatusText: { fontSize: 12, fontWeight: '700' },
+  orderPrice: { fontSize: 16, fontWeight: '800', color: '#111827' },
+  orderRoute: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  orderRouteIcons: { alignItems: 'center', gap: 3 },
+  miniDot: { width: 8, height: 8, borderRadius: 4 },
+  miniLine: { width: 2, height: 16, backgroundColor: '#e5e7eb', borderRadius: 1 },
+  orderAddr: { fontSize: 13, color: '#6b7280', lineHeight: 20 },
 });

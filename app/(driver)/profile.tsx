@@ -1,101 +1,229 @@
-import { View, Text, TouchableOpacity, ScrollView } from 'react-native';
-import { StatusBar } from 'expo-status-bar';
+import { useEffect, useState } from 'react';
+import {
+  View, Text, TouchableOpacity, ScrollView, StyleSheet,
+  ActivityIndicator, Alert,
+} from 'react-native';
 import { useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import axios from 'axios';
+
+const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
 
 export default function DriverProfileScreen() {
   const router = useRouter();
+  const [driver, setDriver] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
 
-  const handleLogout = () => {
-    // TODO: Implement logout logic
-    router.replace('/');
+  useEffect(() => {
+    loadProfile();
+  }, []);
+
+  const loadProfile = async () => {
+    try {
+      const token = await AsyncStorage.getItem('accessToken');
+      if (!token) { router.replace('/(auth)/driver-login'); return; }
+      const res = await axios.get(`${API_URL}/drivers/me`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      setDriver(res.data);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
+    }
   };
 
+  const handleLogout = () => {
+    Alert.alert('Logout', 'Are you sure you want to logout?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Logout', style: 'destructive',
+        onPress: async () => {
+          await AsyncStorage.clear();
+          router.replace('/(auth)/driver-login');
+        },
+      },
+    ]);
+  };
+
+  if (loading) {
+    return (
+      <View style={s.loadingContainer}>
+        <ActivityIndicator size="large" color="#0284c7" />
+      </View>
+    );
+  }
+
+  const firstName = driver?.user?.firstName || '';
+  const secondName = driver?.user?.secondName || '';
+  const initials = (firstName.charAt(0) + secondName.charAt(0)).toUpperCase() || 'D';
+  const statusColor = driver?.status === 'VERIFIED' ? '#16a34a'
+    : driver?.status === 'PENDING_REVIEW' ? '#ca8a04'
+    : driver?.status === 'SUSPENDED' ? '#dc2626' : '#6b7280';
+  const statusLabel = driver?.status === 'VERIFIED' ? 'Verified'
+    : driver?.status === 'PENDING_REVIEW' ? 'Pending Review'
+    : driver?.status === 'INCOMPLETE' ? 'Incomplete'
+    : driver?.status === 'SUSPENDED' ? 'Suspended'
+    : driver?.status || 'Unknown';
+
+  const menuItems = [
+    { icon: 'document-text-outline', label: 'My Documents', route: '/(driver)/documents', color: '#2563eb' },
+    { icon: 'location-outline', label: 'My Addresses', route: '/(driver)/addresses', color: '#16a34a' },
+    { icon: 'calendar-outline', label: 'Availability', route: '/(driver)/availability', color: '#7c3aed' },
+    { icon: 'warning-outline', label: 'Restrictions', route: '/(driver)/restrictions', color: '#ea580c' },
+    { icon: 'headset-outline', label: 'Help & Support', route: '/(driver)/support', color: '#0284c7' },
+  ];
+
   return (
-    <View className="flex-1 bg-gray-50">
-      <StatusBar style="dark" />
-      
+    <View style={s.container}>
       {/* Header */}
-      <View className="bg-white px-6 pt-14 pb-6 shadow-sm">
-        <Text className="text-3xl font-bold text-gray-900">
-          Profile
-        </Text>
+      <View style={s.header}>
+        <TouchableOpacity onPress={() => router.back()} style={s.headerBtn}>
+          <Ionicons name="chevron-back" size={22} color="#fff" />
+        </TouchableOpacity>
+        <Text style={s.headerTitle}>Profile</Text>
+        <View style={{ width: 38 }} />
       </View>
 
-      <ScrollView className="flex-1">
-        {/* Profile Info */}
-        <View className="bg-white mx-6 mt-6 p-6 rounded-2xl shadow-sm">
-          <View className="items-center mb-6">
-            <View className="w-24 h-24 bg-secondary-500 rounded-full items-center justify-center mb-4">
-              <Text className="text-white text-4xl font-bold">M</Text>
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={s.content}>
+        {/* Profile Card */}
+        <View style={s.profileCard}>
+          <View style={s.avatarWrap}>
+            <View style={s.avatar}>
+              <Text style={s.avatarText}>{initials}</Text>
             </View>
-            <Text className="text-2xl font-bold text-gray-900 mb-1">
-              Mohamed Trabelsi
-            </Text>
-            <Text className="text-gray-600 mb-2">
-              +216 23 456 789
-            </Text>
-            <View className="bg-green-100 px-4 py-2 rounded-full">
-              <Text className="text-green-800 font-bold">✓ VERIFIED</Text>
-            </View>
+            <View style={[s.statusDot, { backgroundColor: statusColor }]} />
+          </View>
+          <Text style={s.name}>{firstName} {secondName}</Text>
+          <Text style={s.phone}>{driver?.user?.phone || ''}</Text>
+          <View style={[s.statusBadge, { backgroundColor: statusColor + '18' }]}>
+            <View style={[s.statusDotSmall, { backgroundColor: statusColor }]} />
+            <Text style={[s.statusText, { color: statusColor }]}>{statusLabel}</Text>
           </View>
 
-          <View className="border-t border-gray-100 pt-4">
-            <View className="flex-row justify-between py-3">
-              <Text className="text-gray-600">Vehicle Type</Text>
-              <Text className="text-gray-900 font-medium">Motorcycle</Text>
-            </View>
-            <View className="flex-row justify-between py-3">
-              <Text className="text-gray-600">Rating</Text>
-              <Text className="text-gray-900 font-medium">4.8 ⭐</Text>
-            </View>
-            <View className="flex-row justify-between py-3">
-              <Text className="text-gray-600">Total Deliveries</Text>
-              <Text className="text-gray-900 font-medium">45</Text>
-            </View>
+          {/* Info rows */}
+          <View style={s.infoSection}>
+            {driver?.vehicleType && (
+              <View style={s.infoRow}>
+                <View style={[s.infoIconWrap, { backgroundColor: '#dbeafe' }]}>
+                  <Ionicons name="car-outline" size={18} color="#2563eb" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={s.infoLabel}>Vehicle</Text>
+                  <Text style={s.infoValue}>{driver.vehicleType}</Text>
+                </View>
+              </View>
+            )}
+            {driver?.description && (
+              <View style={s.infoRow}>
+                <View style={[s.infoIconWrap, { backgroundColor: '#ede9fe' }]}>
+                  <Ionicons name="information-circle-outline" size={18} color="#7c3aed" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={s.infoLabel}>Description</Text>
+                  <Text style={s.infoValue}>{driver.description}</Text>
+                </View>
+              </View>
+            )}
           </View>
         </View>
 
-        {/* Menu Items */}
-        <View className="px-6 py-4">
-          <TouchableOpacity className="bg-white p-4 rounded-xl shadow-sm mb-3 flex-row items-center">
-            <Text className="text-2xl mr-4">📄</Text>
-            <Text className="flex-1 text-gray-900 font-medium text-lg">My Documents</Text>
-            <Text className="text-gray-400">→</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity className="bg-white p-4 rounded-xl shadow-sm mb-3 flex-row items-center">
-            <Text className="text-2xl mr-4">📍</Text>
-            <Text className="flex-1 text-gray-900 font-medium text-lg">My Location</Text>
-            <Text className="text-gray-400">→</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity className="bg-white p-4 rounded-xl shadow-sm mb-3 flex-row items-center">
-            <Text className="text-2xl mr-4">📅</Text>
-            <Text className="flex-1 text-gray-900 font-medium text-lg">Availability</Text>
-            <Text className="text-gray-400">→</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity className="bg-white p-4 rounded-xl shadow-sm mb-3 flex-row items-center">
-            <Text className="text-2xl mr-4">⚙️</Text>
-            <Text className="flex-1 text-gray-900 font-medium text-lg">Settings</Text>
-            <Text className="text-gray-400">→</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity className="bg-white p-4 rounded-xl shadow-sm mb-3 flex-row items-center">
-            <Text className="text-2xl mr-4">❓</Text>
-            <Text className="flex-1 text-gray-900 font-medium text-lg">Help & Support</Text>
-            <Text className="text-gray-400">→</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity 
-            className="bg-red-50 p-4 rounded-xl shadow-sm mt-4 flex-row items-center"
-            onPress={handleLogout}
-          >
-            <Text className="text-2xl mr-4">🚪</Text>
-            <Text className="flex-1 text-red-600 font-medium text-lg">Logout</Text>
-          </TouchableOpacity>
+        {/* Menu */}
+        <View style={s.menuCard}>
+          {menuItems.map((item, i) => (
+            <TouchableOpacity
+              key={item.label}
+              style={[s.menuItem, i < menuItems.length - 1 && s.menuItemBorder]}
+              onPress={() => router.push(item.route as any)}
+              activeOpacity={0.7}
+            >
+              <View style={[s.menuIconWrap, { backgroundColor: item.color + '15' }]}>
+                <Ionicons name={item.icon as any} size={20} color={item.color} />
+              </View>
+              <Text style={s.menuLabel}>{item.label}</Text>
+              <Ionicons name="chevron-forward" size={18} color="#d1d5db" />
+            </TouchableOpacity>
+          ))}
         </View>
+
+        {/* Logout */}
+        <TouchableOpacity style={s.logoutBtn} onPress={handleLogout} activeOpacity={0.8}>
+          <Ionicons name="log-out-outline" size={20} color="#dc2626" />
+          <Text style={s.logoutText}>Logout</Text>
+        </TouchableOpacity>
       </ScrollView>
     </View>
   );
 }
+
+const s = StyleSheet.create({
+  container: { flex: 1, backgroundColor: '#f8fafc' },
+  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f8fafc' },
+
+  header: {
+    backgroundColor: '#0284c7', paddingTop: 50, paddingBottom: 18, paddingHorizontal: 20,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    borderBottomLeftRadius: 20, borderBottomRightRadius: 20,
+  },
+  headerBtn: {
+    width: 38, height: 38, borderRadius: 19, backgroundColor: 'rgba(255,255,255,0.2)',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  headerTitle: { color: '#fff', fontSize: 18, fontWeight: '700' },
+
+  content: { padding: 20, paddingBottom: 40 },
+
+  profileCard: {
+    backgroundColor: '#fff', borderRadius: 20, padding: 24, alignItems: 'center', marginBottom: 16,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 10, elevation: 3,
+  },
+  avatarWrap: { position: 'relative', marginBottom: 14 },
+  avatar: {
+    width: 80, height: 80, borderRadius: 40, backgroundColor: '#0284c7',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  avatarText: { color: '#fff', fontSize: 28, fontWeight: '800' },
+  statusDot: {
+    position: 'absolute', bottom: 2, right: 2, width: 18, height: 18, borderRadius: 9,
+    borderWidth: 3, borderColor: '#fff',
+  },
+  name: { fontSize: 22, fontWeight: '800', color: '#111827', marginBottom: 4 },
+  phone: { fontSize: 14, color: '#6b7280', marginBottom: 12 },
+  statusBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    paddingHorizontal: 14, paddingVertical: 6, borderRadius: 20,
+  },
+  statusDotSmall: { width: 8, height: 8, borderRadius: 4 },
+  statusText: { fontSize: 13, fontWeight: '700' },
+
+  infoSection: { width: '100%', marginTop: 18, gap: 12 },
+  infoRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    backgroundColor: '#f8fafc', borderRadius: 12, padding: 12,
+  },
+  infoIconWrap: {
+    width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center',
+  },
+  infoLabel: { fontSize: 11, color: '#9ca3af', fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5 },
+  infoValue: { fontSize: 14, color: '#374151', fontWeight: '600', marginTop: 1 },
+
+  menuCard: {
+    backgroundColor: '#fff', borderRadius: 18, overflow: 'hidden', marginBottom: 16,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 6, elevation: 2,
+  },
+  menuItem: {
+    flexDirection: 'row', alignItems: 'center', padding: 16, gap: 14,
+  },
+  menuItemBorder: { borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
+  menuIconWrap: {
+    width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center',
+  },
+  menuLabel: { flex: 1, fontSize: 15, fontWeight: '600', color: '#374151' },
+
+  logoutBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    backgroundColor: '#fef2f2', borderRadius: 16, paddingVertical: 16,
+  },
+  logoutText: { fontSize: 16, fontWeight: '700', color: '#dc2626' },
+});

@@ -1,383 +1,319 @@
-import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
+import { useEffect, useState, useCallback } from 'react';
+import {
+  View, Text, StyleSheet, TouchableOpacity, Alert,
+  ActivityIndicator, ScrollView, RefreshControl,
+} from 'react-native';
 import { useRouter } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import axios from 'axios';
+import { orderService, Order } from '../../services/api/order.service';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
+
+const ACTIVE_STATUSES = [
+  'DRIVER_ASSIGNED', 'DRIVER_ARRIVED', 'PICKED_UP', 'DELIVERING',
+];
+
+const STATUS_META: Record<string, { icon: string; color: string; bg: string; label: string }> = {
+  DRIVER_ASSIGNED: { icon: 'person-outline', color: '#2563eb', bg: '#dbeafe', label: 'Assigned' },
+  DRIVER_ARRIVED:  { icon: 'flag-outline',   color: '#7c3aed', bg: '#ede9fe', label: 'Arrived' },
+  PICKED_UP:       { icon: 'cube-outline',   color: '#ea580c', bg: '#ffedd5', label: 'Picked Up' },
+  DELIVERING:      { icon: 'bicycle-outline', color: '#4f46e5', bg: '#e0e7ff', label: 'Delivering' },
+};
 
 export default function DriverHome() {
   const router = useRouter();
   const [driver, setDriver] = useState<any>(null);
+  const [activeOrders, setActiveOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
-  useEffect(() => {
-    loadDriverProfile();
-  }, []);
-
-  const loadDriverProfile = async () => {
+  const loadData = useCallback(async () => {
     try {
       const token = await AsyncStorage.getItem('accessToken');
-      
-      if (!token) {
-        router.replace('/(auth)/driver-login');
-        return;
-      }
+      if (!token) { router.replace('/(auth)/driver-login'); return; }
 
-      const response = await axios.get(`${API_URL}/drivers/me`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      setDriver(response.data);
+      const [profileRes, orders] = await Promise.all([
+        axios.get(`${API_URL}/drivers/me`, { headers: { Authorization: `Bearer ${token}` } }),
+        orderService.getDriverMyOrders().catch(() => [] as Order[]),
+      ]);
+      setDriver(profileRes.data);
+      setActiveOrders(orders.filter(o => ACTIVE_STATUSES.includes(o.status)));
     } catch (error: any) {
-      console.error('Profile error:', error);
       if (error.response?.status === 401) {
         await AsyncStorage.clear();
         router.replace('/(auth)/driver-login');
       }
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
-  };
+  }, []);
 
-  const handleLogout = async () => {
-    Alert.alert(
-      'Logout',
-      'Are you sure you want to logout?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Logout',
-          style: 'destructive',
-          onPress: async () => {
-            await AsyncStorage.clear();
-            router.replace('/(auth)/driver-login');
-          },
-        },
-      ]
-    );
+  useFocusEffect(useCallback(() => { loadData(); }, [loadData]));
+
+  useEffect(() => {
+    const interval = setInterval(loadData, 15000);
+    return () => clearInterval(interval);
+  }, [loadData]);
+
+  const handleLogout = () => {
+    Alert.alert('Logout', 'Are you sure?', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Logout', style: 'destructive', onPress: async () => {
+        await AsyncStorage.clear();
+        router.replace('/(auth)/driver-login');
+      }},
+    ]);
   };
 
   if (loading) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#007AFF" />
-      </View>
-    );
+    return <View style={s.loadingContainer}><ActivityIndicator size="large" color="#0284c7" /></View>;
   }
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'VERIFIED':
-        return '#34C759';
-      case 'PENDING_REVIEW':
-        return '#FF9500';
-      case 'INCOMPLETE':
-        return '#FF3B30';
-      case 'REJECTED':
-        return '#FF3B30';
-      default:
-        return '#999';
-    }
-  };
-
-  const getStatusText = (status: string) => {
-    switch (status) {
-      case 'VERIFIED':
-        return 'Verified ✓';
-      case 'PENDING_REVIEW':
-        return 'Pending Review';
-      case 'INCOMPLETE':
-        return 'Incomplete';
-      case 'REJECTED':
-        return 'Rejected';
-      default:
-        return status;
-    }
-  };
+  const firstName = driver?.user?.firstName || 'Driver';
+  const statusColor = driver?.status === 'VERIFIED' ? '#16a34a'
+    : driver?.status === 'PENDING_REVIEW' ? '#ca8a04' : '#dc2626';
+  const statusLabel = driver?.status === 'VERIFIED' ? 'Verified'
+    : driver?.status === 'PENDING_REVIEW' ? 'Pending'
+    : driver?.status === 'INCOMPLETE' ? 'Incomplete'
+    : driver?.status || '';
+  const isVerified = driver?.status === 'VERIFIED';
 
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Driver Dashboard</Text>
-        <TouchableOpacity onPress={handleLogout}>
-          <Ionicons name="log-out-outline" size={28} color="#FF3B30" />
-        </TouchableOpacity>
-      </View>
-
-      <View style={styles.profileCard}>
-        <View style={styles.profileHeader}>
-          <View>
-            <Text style={styles.profileName}>
-              {driver?.user?.firstName} {driver?.user?.secondName}
-            </Text>
-            <Text style={styles.profilePhone}>{driver?.user?.phone}</Text>
-          </View>
-          <View
-            style={[
-              styles.statusBadge,
-              { backgroundColor: getStatusColor(driver?.status) },
-            ]}
-          >
-            <Text style={styles.statusText}>{getStatusText(driver?.status)}</Text>
-          </View>
-        </View>
-
-        {driver?.vehicleType && (
-          <View style={styles.infoRow}>
-            <Ionicons name="car" size={20} color="#666" />
-            <Text style={styles.infoText}>{driver.vehicleType}</Text>
-          </View>
-        )}
-
-        {driver?.description && (
-          <View style={styles.infoRow}>
-            <Ionicons name="information-circle" size={20} color="#666" />
-            <Text style={styles.infoText}>{driver.description}</Text>
-          </View>
-        )}
-      </View>
-
-      {driver?.status === 'PENDING_REVIEW' && (
-        <View style={styles.alertBox}>
-          <Ionicons name="time" size={24} color="#FF9500" />
-          <Text style={styles.alertText}>
-            Your documents are being reviewed. You'll be notified once verified.
-          </Text>
-        </View>
-      )}
-
-      {driver?.status === 'INCOMPLETE' && (
-        <View style={styles.alertBox}>
-          <Ionicons name="warning" size={24} color="#FF3B30" />
+    <View style={s.container}>
+      {/* Header */}
+      <View style={s.header}>
+        <View style={s.headerContent}>
           <View style={{ flex: 1 }}>
-            <Text style={styles.alertText}>
-              Please complete your document verification to start accepting orders.
-            </Text>
-            <TouchableOpacity
-              style={styles.completeVerificationButton}
-              onPress={() => router.push('/(driver)/verification')}
-            >
-              <Text style={styles.completeVerificationText}>Complete Verification</Text>
-              <Ionicons name="arrow-forward" size={16} color="#007AFF" />
-            </TouchableOpacity>
+            <Text style={s.greeting}>Hello, {firstName} 👋</Text>
+            <View style={s.statusRow}>
+              <View style={[s.statusDot, { backgroundColor: statusColor }]} />
+              <Text style={s.statusLabel}>{statusLabel}</Text>
+            </View>
           </View>
+          <TouchableOpacity onPress={handleLogout} style={s.logoutBtn}>
+            <Ionicons name="log-out-outline" size={20} color="#fff" />
+          </TouchableOpacity>
         </View>
-      )}
-
-      {driver?.status === 'VERIFIED' && (
-        <View style={[styles.alertBox, { backgroundColor: '#e8f5e9' }]}>
-          <Ionicons name="checkmark-circle" size={24} color="#34C759" />
-          <Text style={[styles.alertText, { color: '#2e7d32' }]}>
-            You're verified! You can now start accepting delivery orders.
-          </Text>
-        </View>
-      )}
-
-      {(driver?.status === 'SUSPENDED' || driver?.status === 'REJECTED') && (
-        <TouchableOpacity
-          style={[styles.alertBox, { backgroundColor: '#fef2f2' }]}
-          onPress={() => router.push('/(driver)/restrictions')}
-        >
-          <Ionicons name="alert-circle" size={24} color="#dc2626" />
-          <View style={{ flex: 1 }}>
-            <Text style={[styles.alertText, { color: '#991b1b' }]}>
-              Your account is {driver.status.toLowerCase()}. Tap to see the reason.
-            </Text>
-          </View>
-          <Ionicons name="chevron-forward" size={20} color="#dc2626" />
-        </TouchableOpacity>
-      )}
-
-      <View style={styles.actionsContainer}>
-        {(driver?.status === 'VERIFIED' || driver?.status === 'INCOMPLETE' || driver?.status === 'PENDING_REVIEW') && (
-          <TouchableOpacity
-            style={[styles.actionButton, { backgroundColor: '#e0f2fe' }]}
-            onPress={() => router.push('/(driver)/available-orders')}
-          >
-            <Ionicons name="list" size={24} color="#0284c7" />
-            <Text style={[styles.actionButtonText, { color: '#0284c7' }]}>Available Orders</Text>
-          </TouchableOpacity>
-        )}
-
-        {driver?.status === 'VERIFIED' && (
-          <TouchableOpacity
-            style={[styles.actionButton, { backgroundColor: '#dcfce7' }]}
-            onPress={() => router.push('/(driver)/my-orders')}
-          >
-            <Ionicons name="cube" size={24} color="#16a34a" />
-            <Text style={[styles.actionButtonText, { color: '#16a34a' }]}>My Orders</Text>
-          </TouchableOpacity>
-        )}
-
-        {driver?.status === 'VERIFIED' && (
-          <TouchableOpacity
-            style={styles.actionButton}
-            onPress={() => router.push('/(driver)/availability')}
-          >
-            <Ionicons name="calendar" size={24} color="#007AFF" />
-            <Text style={styles.actionButtonText}>My Availability</Text>
-          </TouchableOpacity>
-        )}
-
-        <TouchableOpacity style={styles.actionButton}>
-          <Ionicons name="person" size={24} color="#007AFF" />
-          <Text style={styles.actionButtonText}>Edit Profile</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.actionButton}
-          onPress={() => router.push('/(driver)/documents')}
-        >
-          <Ionicons name="document-text" size={24} color="#007AFF" />
-          <Text style={styles.actionButtonText}>My Documents</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.actionButton}
-          onPress={() => router.push('/(driver)/addresses')}
-        >
-          <Ionicons name="location" size={24} color="#007AFF" />
-          <Text style={styles.actionButtonText}>My Addresses</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.actionButton}
-          onPress={() => router.push('/(driver)/restrictions')}
-        >
-          <Ionicons name="warning" size={24} color="#007AFF" />
-          <Text style={styles.actionButtonText}>My Restrictions</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.actionButton}
-          onPress={() => router.push('/(driver)/support')}
-        >
-          <Ionicons name="help-circle" size={24} color="#007AFF" />
-          <Text style={styles.actionButtonText}>Help & Support</Text>
-        </TouchableOpacity>
       </View>
+
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 60 }}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); loadData(); }} />}>
+
+        {/* Status Alerts */}
+        {driver?.status === 'INCOMPLETE' && (
+          <TouchableOpacity style={s.alertCard} onPress={() => router.push('/(driver)/verification')} activeOpacity={0.8}>
+            <View style={[s.alertIconWrap, { backgroundColor: '#fef3c7' }]}>
+              <Ionicons name="warning" size={22} color="#ca8a04" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={s.alertTitle}>Complete Verification</Text>
+              <Text style={s.alertSub}>Upload your documents to start delivering</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color="#ca8a04" />
+          </TouchableOpacity>
+        )}
+        {driver?.status === 'PENDING_REVIEW' && (
+          <View style={[s.alertCard, { borderLeftColor: '#ca8a04' }]}>
+            <View style={[s.alertIconWrap, { backgroundColor: '#fef3c7' }]}>
+              <Ionicons name="time" size={22} color="#ca8a04" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={s.alertTitle}>Under Review</Text>
+              <Text style={s.alertSub}>Your documents are being reviewed</Text>
+            </View>
+          </View>
+        )}
+        {(driver?.status === 'SUSPENDED' || driver?.status === 'REJECTED') && (
+          <TouchableOpacity style={[s.alertCard, { borderLeftColor: '#dc2626' }]}
+            onPress={() => router.push('/(driver)/restrictions')} activeOpacity={0.8}>
+            <View style={[s.alertIconWrap, { backgroundColor: '#fee2e2' }]}>
+              <Ionicons name="alert-circle" size={22} color="#dc2626" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={[s.alertTitle, { color: '#dc2626' }]}>Account {driver.status.toLowerCase()}</Text>
+              <Text style={s.alertSub}>Tap to see the reason</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color="#dc2626" />
+          </TouchableOpacity>
+        )}
+
+        {/* Main Actions */}
+        {isVerified && (
+          <View style={s.section}>
+            <View style={s.mainActionsRow}>
+              <TouchableOpacity style={[s.mainAction, { backgroundColor: '#0284c7' }]}
+                onPress={() => router.push('/(driver)/available-orders')} activeOpacity={0.85}>
+                <View style={s.mainActionIcon}>
+                  <Ionicons name="list" size={26} color="#fff" />
+                </View>
+                <Text style={s.mainActionTitle}>Available</Text>
+                <Text style={s.mainActionSub}>Find orders</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[s.mainAction, { backgroundColor: '#16a34a' }]}
+                onPress={() => router.push('/(driver)/my-orders')} activeOpacity={0.85}>
+                <View style={s.mainActionIcon}>
+                  <Ionicons name="cube" size={26} color="#fff" />
+                </View>
+                <Text style={s.mainActionTitle}>My Orders</Text>
+                <Text style={s.mainActionSub}>Track deliveries</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+
+        {/* Active Orders */}
+        {activeOrders.length > 0 && (
+          <View style={s.section}>
+            <View style={s.sectionHeader}>
+              <Text style={s.sectionTitle}>Active Deliveries</Text>
+              <TouchableOpacity onPress={() => router.push('/(driver)/my-orders')}>
+                <Text style={s.seeAll}>See All</Text>
+              </TouchableOpacity>
+            </View>
+            {activeOrders.slice(0, 3).map(order => {
+              const meta = STATUS_META[order.status] || STATUS_META.DRIVER_ASSIGNED;
+              return (
+                <TouchableOpacity key={order.id} style={s.orderCard}
+                  onPress={() => router.push(`/(driver)/my-orders`)} activeOpacity={0.8}>
+                  <View style={s.orderTop}>
+                    <View style={[s.orderBadge, { backgroundColor: meta.bg }]}>
+                      <Ionicons name={meta.icon as any} size={14} color={meta.color} />
+                      <Text style={[s.orderBadgeText, { color: meta.color }]}>{meta.label}</Text>
+                    </View>
+                    <Text style={s.orderPrice}>{order.price.toFixed(2)} TND</Text>
+                  </View>
+                  <View style={s.orderRoute}>
+                    <View style={s.routeIcons}>
+                      <View style={[s.dot, { backgroundColor: '#22c55e' }]} />
+                      <View style={s.line} />
+                      <View style={[s.dot, { backgroundColor: '#ef4444' }]} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={s.routeAddr} numberOfLines={1}>
+                        {order.pickupAddress?.street || order.pickupAddress?.delegation?.nameDelegation || 'Pickup'}
+                      </Text>
+                      <Text style={s.routeAddr} numberOfLines={1}>
+                        {order.dropoffAddress?.street || order.dropoffAddress?.delegation?.nameDelegation || 'Delivery'}
+                      </Text>
+                    </View>
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        )}
+
+        {/* Quick Menu */}
+        <View style={s.section}>
+          <Text style={s.sectionTitle}>Quick Menu</Text>
+          <View style={s.menuCard}>
+            {[
+              { icon: 'calendar-outline', label: 'Availability', route: '/(driver)/availability', color: '#7c3aed' },
+              { icon: 'person-outline', label: 'Profile', route: '/(driver)/profile', color: '#0284c7' },
+              { icon: 'document-text-outline', label: 'Documents', route: '/(driver)/documents', color: '#2563eb' },
+              { icon: 'location-outline', label: 'Addresses', route: '/(driver)/addresses', color: '#16a34a' },
+              { icon: 'warning-outline', label: 'Restrictions', route: '/(driver)/restrictions', color: '#ea580c' },
+              { icon: 'headset-outline', label: 'Support', route: '/(driver)/support', color: '#0284c7' },
+            ].map((item, i, arr) => (
+              <TouchableOpacity key={item.label}
+                style={[s.menuItem, i < arr.length - 1 && s.menuItemBorder]}
+                onPress={() => router.push(item.route as any)} activeOpacity={0.7}>
+                <View style={[s.menuIconWrap, { backgroundColor: item.color + '15' }]}>
+                  <Ionicons name={item.icon as any} size={20} color={item.color} />
+                </View>
+                <Text style={s.menuLabel}>{item.label}</Text>
+                <Ionicons name="chevron-forward" size={18} color="#d1d5db" />
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+      </ScrollView>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f5f5f5',
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
+const s = StyleSheet.create({
+  container: { flex: 1, backgroundColor: '#f8fafc' },
+  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f8fafc' },
+
   header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 20,
-    paddingTop: 60,
-    backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    backgroundColor: '#0284c7', paddingTop: 52, paddingBottom: 24,
+    borderBottomLeftRadius: 28, borderBottomRightRadius: 28,
   },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#333',
+  headerContent: {
+    flexDirection: 'row', alignItems: 'center', paddingHorizontal: 24,
   },
-  profileCard: {
-    backgroundColor: '#fff',
-    margin: 20,
-    padding: 20,
-    borderRadius: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+  greeting: { fontSize: 24, fontWeight: '800', color: '#fff', marginBottom: 4 },
+  statusRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  statusDot: { width: 8, height: 8, borderRadius: 4 },
+  statusLabel: { fontSize: 13, color: 'rgba(255,255,255,0.8)', fontWeight: '600' },
+  logoutBtn: {
+    width: 42, height: 42, borderRadius: 21, backgroundColor: 'rgba(255,255,255,0.15)',
+    alignItems: 'center', justifyContent: 'center',
   },
-  profileHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 16,
+
+  section: { paddingHorizontal: 20, marginTop: 20 },
+  sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2 },
+  sectionTitle: { fontSize: 17, fontWeight: '700', color: '#111827', marginBottom: 14 },
+  seeAll: { fontSize: 14, fontWeight: '600', color: '#0284c7' },
+
+  // Alerts
+  alertCard: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    backgroundColor: '#fff', marginHorizontal: 20, marginTop: 16, padding: 16, borderRadius: 16,
+    borderLeftWidth: 4, borderLeftColor: '#ca8a04',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 6, elevation: 2,
   },
-  profileName: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 4,
+  alertIconWrap: {
+    width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center',
   },
-  profilePhone: {
-    fontSize: 14,
-    color: '#666',
+  alertTitle: { fontSize: 15, fontWeight: '700', color: '#111827' },
+  alertSub: { fontSize: 12, color: '#6b7280', marginTop: 2 },
+
+  // Main actions
+  mainActionsRow: { flexDirection: 'row', gap: 12 },
+  mainAction: {
+    flex: 1, borderRadius: 18, padding: 20, alignItems: 'center', gap: 8,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.15, shadowRadius: 8, elevation: 5,
   },
-  statusBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 12,
+  mainActionIcon: {
+    width: 52, height: 52, borderRadius: 26, backgroundColor: 'rgba(255,255,255,0.2)',
+    alignItems: 'center', justifyContent: 'center',
   },
-  statusText: {
-    color: '#fff',
-    fontSize: 12,
-    fontWeight: '600',
+  mainActionTitle: { fontSize: 16, fontWeight: '700', color: '#fff' },
+  mainActionSub: { fontSize: 12, color: 'rgba(255,255,255,0.7)' },
+
+  // Order cards
+  orderCard: {
+    backgroundColor: '#fff', borderRadius: 16, padding: 16, marginBottom: 12,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 6, elevation: 2,
   },
-  infoRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 12,
-    gap: 8,
+  orderTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
+  orderBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20,
   },
-  infoText: {
-    fontSize: 16,
-    color: '#666',
+  orderBadgeText: { fontSize: 12, fontWeight: '700' },
+  orderPrice: { fontSize: 16, fontWeight: '800', color: '#111827' },
+  orderRoute: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  routeIcons: { alignItems: 'center', gap: 3 },
+  dot: { width: 8, height: 8, borderRadius: 4 },
+  line: { width: 2, height: 16, backgroundColor: '#e5e7eb', borderRadius: 1 },
+  routeAddr: { fontSize: 13, color: '#6b7280', lineHeight: 20 },
+
+  // Menu
+  menuCard: {
+    backgroundColor: '#fff', borderRadius: 18, overflow: 'hidden',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 6, elevation: 2,
   },
-  alertBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#fff3cd',
-    padding: 16,
-    marginHorizontal: 20,
-    borderRadius: 8,
-    gap: 12,
+  menuItem: { flexDirection: 'row', alignItems: 'center', padding: 16, gap: 14 },
+  menuItemBorder: { borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
+  menuIconWrap: {
+    width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center',
   },
-  alertText: {
-    flex: 1,
-    fontSize: 14,
-    color: '#856404',
-    lineHeight: 20,
-  },
-  completeVerificationButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 12,
-    gap: 4,
-  },
-  completeVerificationText: {
-    fontSize: 14,
-    color: '#007AFF',
-    fontWeight: '600',
-  },
-  actionsContainer: {
-    marginTop: 20,
-    paddingHorizontal: 20,
-  },
-  actionButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#fff',
-    padding: 16,
-    borderRadius: 8,
-    marginBottom: 12,
-    gap: 12,
-  },
-  actionButtonText: {
-    fontSize: 16,
-    color: '#333',
-    fontWeight: '500',
-  },
+  menuLabel: { flex: 1, fontSize: 15, fontWeight: '600', color: '#374151' },
 });
