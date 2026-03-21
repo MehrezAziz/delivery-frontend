@@ -11,58 +11,22 @@ export default function CustomerLayout() {
           height: 60,
           paddingBottom: 8,
           paddingTop: 8,
-          marginBottom:45,
+          marginBottom: 45,
         },
       }}
     >
-      <Tabs.Screen
-        name="home"
-        options={{
-          title: 'Home',
-        }}
-      />
-      <Tabs.Screen
-        name="orders"
-        options={{
-          title: 'Orders',
-        }}
-      />
-      <Tabs.Screen
-        name="wallet"
-        options={{
-          title: 'Wallet',
-        }}
-      />
-      <Tabs.Screen
-        name="profile"
-        options={{
-          title: 'Profile',
-        }}
-      />
-      <Tabs.Screen
-        name="addresses"
-        options={{
-          href: null,
-        }}
-      />
-      <Tabs.Screen
-        name="restrictions"
-        options={{
-          href: null,
-        }}
-      />
-      <Tabs.Screen
-        name="support"
-        options={{
-          href: null,
-        }}
-      />
-      <Tabs.Screen
-        name="support-chat"
-        options={{
-          href: null,
-        }}
-      />
+      <Tabs.Screen name="home" options={{ title: 'Home' }} />
+      <Tabs.Screen name="orders" options={{ title: 'Orders' }} />
+      <Tabs.Screen name="wallet" options={{ title: 'Wallet' }} />
+      <Tabs.Screen name="profile" options={{ title: 'Profile' }} />
+      <Tabs.Screen name="addresses" options={{ href: null }} />
+      <Tabs.Screen name="restrictions" options={{ href: null }} />
+      <Tabs.Screen name="support" options={{ href: null }} />
+      <Tabs.Screen name="support-chat" options={{ href: null }} />
+      <Tabs.Screen name="create-order" options={{ href: null }} />
+      <Tabs.Screen name="pick-location" options={{ href: null }} />
+      <Tabs.Screen name="order-detail" options={{ href: null }} />
+      <Tabs.Screen name="order-chat" options={{ href: null }} />
     </Tabs>
   );
 }

@@ -35,7 +35,7 @@ export default function CustomerHomeScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Quick Actions</Text>
           
-          <View style={styles.quickActionCard}>
+          <TouchableOpacity style={styles.quickActionCard} onPress={() => router.push('/(customer)/create-order')}>
             <View style={styles.quickActionIcon}>
               <Text style={styles.iconText}>📦</Text>
             </View>
@@ -44,7 +44,7 @@ export default function CustomerHomeScreen() {
               <Text style={styles.quickActionSubtitle}>Send a package now</Text>
             </View>
             <Text style={styles.arrow}>→</Text>
-          </View>
+          </TouchableOpacity>
 
           <View style={styles.actionRow}>
             <View style={styles.actionCard}>

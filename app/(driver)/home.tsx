@@ -193,6 +193,26 @@ export default function DriverHome() {
       )}
 
       <View style={styles.actionsContainer}>
+        {(driver?.status === 'VERIFIED' || driver?.status === 'INCOMPLETE' || driver?.status === 'PENDING_REVIEW') && (
+          <TouchableOpacity
+            style={[styles.actionButton, { backgroundColor: '#e0f2fe' }]}
+            onPress={() => router.push('/(driver)/available-orders')}
+          >
+            <Ionicons name="list" size={24} color="#0284c7" />
+            <Text style={[styles.actionButtonText, { color: '#0284c7' }]}>Available Orders</Text>
+          </TouchableOpacity>
+        )}
+
+        {driver?.status === 'VERIFIED' && (
+          <TouchableOpacity
+            style={[styles.actionButton, { backgroundColor: '#dcfce7' }]}
+            onPress={() => router.push('/(driver)/my-orders')}
+          >
+            <Ionicons name="cube" size={24} color="#16a34a" />
+            <Text style={[styles.actionButtonText, { color: '#16a34a' }]}>My Orders</Text>
+          </TouchableOpacity>
+        )}
+
         {driver?.status === 'VERIFIED' && (
           <TouchableOpacity
             style={styles.actionButton}

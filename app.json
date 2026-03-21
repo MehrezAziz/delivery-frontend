@@ -27,7 +27,12 @@
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "com.delivery.app"
+      "package": "com.delivery.app",
+      "config": {
+        "googleMaps": {
+          "apiKey": "AIzaSyAJTEpyqeC0Pz0zTDAC8_BY8VncZwRCbHY"
+        }
+      }
     },
     "web": {
       "favicon": "./assets/favicon.png"
