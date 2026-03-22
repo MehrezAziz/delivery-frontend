@@ -48,7 +48,7 @@ export interface Order {
   dropoffAddress: OrderAddress | null;
   driverAssignment: DriverAssignment | null;
   chatRoom: { id: string; status: string } | null;
-  dispute: { id: string; status: string; reason: string } | null;
+  dispute: { id: string; status: string; reason: string; resolution: string | null } | null;
 }
 
 export interface AvailableOrders {
@@ -110,6 +110,8 @@ export const orderService = {
   getDriverLocation: (id: string) => api.get(`/orders/${id}/driver-location`),
 
   createDispute: (id: string, reason: string) => api.post(`/orders/${id}/dispute`, { reason }),
+
+  cancelDispute: (id: string) => api.delete(`/orders/${id}/dispute`),
 
   requestAssistance: (id: string, message?: string) => api.post(`/orders/${id}/assistance`, { message }),
 

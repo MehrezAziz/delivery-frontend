@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, ActivityIndicator,
-  Alert, RefreshControl, StyleSheet,
+  Alert, RefreshControl, StyleSheet, TextInput, Modal,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -31,6 +31,8 @@ export default function OrderDetailScreen() {
   const [order, setOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [disputeModalVisible, setDisputeModalVisible] = useState(false);
+  const [disputeReason, setDisputeReason] = useState('');
 
   const loadOrder = useCallback(async () => {
     try {
@@ -73,18 +75,36 @@ export default function OrderDetailScreen() {
 
   const handleAssistance = async () => {
     try {
-      await orderService.requestAssistance(orderId, 'I need help with this order');
-      Alert.alert('Success', 'Support ticket created. Check your support messages.');
-      router.push('/(customer)/support');
+      const ticket = await orderService.requestAssistance(orderId, 'I need help with this order');
+      // Navigate directly to the support chat for this ticket
+      router.push(`/(customer)/support-chat?ticketId=${(ticket as any).id}`);
     } catch (e: any) { Alert.alert('Error', e.message); }
   };
 
   const handleDispute = () => {
-    Alert.alert('Report Issue', 'This will create a dispute for this order. Continue?', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Report', style: 'destructive', onPress: async () => {
+    setDisputeReason('');
+    setDisputeModalVisible(true);
+  };
+
+  const submitDispute = async () => {
+    if (!disputeReason.trim()) {
+      Alert.alert('Error', 'Please provide a reason for the dispute');
+      return;
+    }
+    setDisputeModalVisible(false);
+    try {
+      await orderService.createDispute(orderId, disputeReason.trim());
+      Alert.alert('Dispute Created', 'A customer service agent will review your case.');
+      loadOrder();
+    } catch (e: any) { Alert.alert('Error', e.message); }
+  };
+
+  const handleCancelDispute = () => {
+    Alert.alert('Cancel Dispute', 'Are you sure you want to cancel this dispute?', [
+      { text: 'No', style: 'cancel' },
+      { text: 'Yes, Cancel', style: 'destructive', onPress: async () => {
         try {
-          await orderService.createDispute(orderId, 'Customer reported an issue');
+          await orderService.cancelDispute(orderId);
           loadOrder();
         } catch (e: any) { Alert.alert('Error', e.message); }
       }},
@@ -103,7 +123,7 @@ export default function OrderDetailScreen() {
   const canCancel = ['SEARCHING_DRIVER', 'DRAFT'].includes(order.status);
   const canChangePayment = ['SEARCHING_DRIVER', 'DRIVER_ASSIGNED', 'DRIVER_ARRIVED'].includes(order.status);
   const hasChat = !!order.chatRoom && order.chatRoom.status === 'ACTIVE';
-  const canTrack = ['DRIVER_ASSIGNED', 'DRIVER_ARRIVED', 'PICKED_UP', 'DELIVERING'].includes(order.status);
+  const canTrack = order.status === 'DELIVERING';
   const isActive = STATUS_FLOW.includes(order.status) && order.status !== 'DELIVERED';
   const currentStepIndex = STATUS_FLOW.indexOf(order.status);
   const createdDate = new Date(order.createdAt);
@@ -185,12 +205,7 @@ export default function OrderDetailScreen() {
             )}
             {canTrack && (
               <TouchableOpacity style={[s.quickAction, { backgroundColor: '#6366f1' }]}
-                onPress={async () => {
-                  try {
-                    const loc = await orderService.getDriverLocation(orderId);
-                    Alert.alert('Driver Location', loc ? `Lat: ${(loc as any).latitude}, Lng: ${(loc as any).longitude}` : 'Location not available yet');
-                  } catch (e: any) { Alert.alert('Error', e.message); }
-                }} activeOpacity={0.8}>
+                onPress={() => router.push(`/(customer)/track-driver?orderId=${order.id}`)} activeOpacity={0.8}>
                 <Ionicons name="navigate" size={20} color="#fff" />
                 <Text style={s.quickActionText}>Track</Text>
               </TouchableOpacity>
@@ -330,6 +345,33 @@ export default function OrderDetailScreen() {
           </View>
         )}
 
+        {/* ── Dispute Info ── */}
+        {order.dispute && (
+          <View style={[s.card, { borderLeftWidth: 4, borderLeftColor: '#dc2626' }]}>
+            <Text style={s.cardTitle}>Dispute</Text>
+            <View style={{ gap: 8 }}>
+              <View style={s.priceRow}>
+                <Text style={s.priceLabel}>Status</Text>
+                <View style={[s.chip, { backgroundColor: order.dispute.status === 'OPEN' ? '#fee2e2' : order.dispute.status === 'RESOLVED' ? '#dcfce7' : '#fef9c3' }]}>
+                  <Text style={[s.chipText, { color: order.dispute.status === 'OPEN' ? '#dc2626' : order.dispute.status === 'RESOLVED' ? '#16a34a' : '#ca8a04' }]}>
+                    {order.dispute.status}
+                  </Text>
+                </View>
+              </View>
+              <View>
+                <Text style={s.priceLabel}>Reason</Text>
+                <Text style={[s.descriptionText, { marginTop: 4 }]}>{order.dispute.reason}</Text>
+              </View>
+              {order.dispute.resolution && (
+                <View>
+                  <Text style={s.priceLabel}>Resolution</Text>
+                  <Text style={[s.descriptionText, { marginTop: 4 }]}>{order.dispute.resolution}</Text>
+                </View>
+              )}
+            </View>
+          </View>
+        )}
+
         {/* ── Actions ── */}
         <View style={{ gap: 10, marginTop: 4 }}>
           {canChangePayment && (
@@ -371,8 +413,50 @@ export default function OrderDetailScreen() {
               <Ionicons name="chevron-forward" size={18} color="#fdba74" />
             </TouchableOpacity>
           )}
+          {order.dispute && (order.dispute.status === 'OPEN' || order.dispute.status === 'INVESTIGATING') && (
+            <TouchableOpacity style={[s.actionBtn, { borderColor: '#e5e7eb' }]}
+              onPress={handleCancelDispute} activeOpacity={0.8}>
+              <View style={[s.actionIconCircle, { backgroundColor: '#f3f4f6' }]}>
+                <Ionicons name="arrow-undo" size={18} color="#6b7280" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={s.actionTitle}>Cancel Dispute</Text>
+                <Text style={s.actionSub}>Withdraw your dispute</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color="#d1d5db" />
+            </TouchableOpacity>
+          )}
         </View>
       </ScrollView>
+
+      {/* ── Dispute Reason Modal ── */}
+      <Modal visible={disputeModalVisible} transparent animationType="fade">
+        <View style={s.modalOverlay}>
+          <View style={s.modalCard}>
+            <Text style={s.modalTitle}>Report an Issue</Text>
+            <Text style={s.modalSub}>Please describe what went wrong with this order</Text>
+            <TextInput
+              style={s.modalInput}
+              value={disputeReason}
+              onChangeText={setDisputeReason}
+              placeholder="Describe the issue..."
+              placeholderTextColor="#9ca3af"
+              multiline
+              numberOfLines={4}
+              textAlignVertical="top"
+            />
+            <View style={s.modalActions}>
+              <TouchableOpacity style={s.modalCancelBtn} onPress={() => setDisputeModalVisible(false)}>
+                <Text style={s.modalCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[s.modalSubmitBtn, !disputeReason.trim() && { opacity: 0.5 }]}
+                onPress={submitDispute} disabled={!disputeReason.trim()}>
+                <Text style={s.modalSubmitText}>Submit</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -510,4 +594,28 @@ const s = StyleSheet.create({
   },
   actionTitle: { fontSize: 15, fontWeight: '700', color: '#111827' },
   actionSub: { fontSize: 12, color: '#9ca3af', marginTop: 1 },
+
+  // Modal
+  modalOverlay: {
+    flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 24,
+  },
+  modalCard: {
+    backgroundColor: '#fff', borderRadius: 20, padding: 24, width: '100%',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 12, elevation: 8,
+  },
+  modalTitle: { fontSize: 20, fontWeight: '800', color: '#111827', marginBottom: 6 },
+  modalSub: { fontSize: 14, color: '#6b7280', marginBottom: 16 },
+  modalInput: {
+    backgroundColor: '#f8fafc', borderRadius: 14, padding: 14, fontSize: 15, color: '#111827',
+    borderWidth: 1, borderColor: '#e5e7eb', minHeight: 100,
+  },
+  modalActions: { flexDirection: 'row', gap: 12, marginTop: 18 },
+  modalCancelBtn: {
+    flex: 1, paddingVertical: 14, borderRadius: 14, backgroundColor: '#f3f4f6', alignItems: 'center',
+  },
+  modalCancelText: { fontSize: 15, fontWeight: '600', color: '#6b7280' },
+  modalSubmitBtn: {
+    flex: 1, paddingVertical: 14, borderRadius: 14, backgroundColor: '#ea580c', alignItems: 'center',
+  },
+  modalSubmitText: { fontSize: 15, fontWeight: '700', color: '#fff' },
 });
