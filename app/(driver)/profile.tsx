@@ -68,6 +68,7 @@ export default function DriverProfileScreen() {
     : driver?.status || 'Unknown';
 
   const menuItems = [
+    { icon: 'receipt-outline', label: 'Transaction History', route: '/(driver)/transactions', color: '#0284c7' },
     { icon: 'document-text-outline', label: 'My Documents', route: '/(driver)/documents', color: '#2563eb' },
     { icon: 'location-outline', label: 'My Addresses', route: '/(driver)/addresses', color: '#16a34a' },
     { icon: 'calendar-outline', label: 'Availability', route: '/(driver)/availability', color: '#7c3aed' },
@@ -104,6 +105,23 @@ export default function DriverProfileScreen() {
 
           {/* Info rows */}
           <View style={s.infoSection}>
+            {driver?.account && (
+              <View style={s.infoRow}>
+                <View style={[s.infoIconWrap, { backgroundColor: driver.account.balance < 0 ? '#fee2e2' : '#dcfce7' }]}>
+                  <Ionicons name="wallet-outline" size={18} color={driver.account.balance < 0 ? '#dc2626' : '#16a34a'} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={s.infoLabel}>Account Balance</Text>
+                  <Text style={[s.infoValue, { color: driver.account.balance < 0 ? '#dc2626' : '#16a34a' }]}>
+                    {driver.account.balance.toFixed(2)} {driver.account.currency}
+                  </Text>
+                </View>
+                <View style={{ alignItems: 'flex-end' }}>
+                  <Text style={s.infoLabel}>Deliveries</Text>
+                  <Text style={s.infoValue}>{driver.account.completedDeliveries}</Text>
+                </View>
+              </View>
+            )}
             {driver?.vehicleType && (
               <View style={s.infoRow}>
                 <View style={[s.infoIconWrap, { backgroundColor: '#dbeafe' }]}>
