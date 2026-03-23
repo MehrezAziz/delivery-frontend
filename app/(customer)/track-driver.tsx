@@ -47,19 +47,16 @@ export default function TrackDriverScreen() {
     return () => clearInterval(interval);
   }, [orderId]);
 
-  // Fit map to show all markers
+  // Center map on driver position (or fallback to pickup)
   useEffect(() => {
     if (!mapRef.current || !order) return;
-    const coords: { latitude: number; longitude: number }[] = [];
-    if (driverLoc) coords.push(driverLoc);
-    if (order.pickupAddress?.latitude && order.pickupAddress?.longitude) {
-      coords.push({ latitude: order.pickupAddress.latitude, longitude: order.pickupAddress.longitude });
-    }
-    if (order.dropoffAddress?.latitude && order.dropoffAddress?.longitude) {
-      coords.push({ latitude: order.dropoffAddress.latitude, longitude: order.dropoffAddress.longitude });
-    }
-    if (coords.length >= 2) {
-      mapRef.current.fitToCoordinates(coords, { edgePadding: { top: 80, right: 60, bottom: 200, left: 60 }, animated: true });
+    const center = driverLoc || (order.pickupAddress?.latitude && order.pickupAddress?.longitude
+      ? { latitude: order.pickupAddress.latitude, longitude: order.pickupAddress.longitude }
+      : null);
+    if (center) {
+      mapRef.current.animateToRegion({
+        ...center, latitudeDelta: 0.01, longitudeDelta: 0.01,
+      }, 600);
     }
   }, [driverLoc, order]);
 
@@ -113,7 +110,18 @@ export default function TrackDriverScreen() {
           <Ionicons name="chevron-back" size={22} color="#111" />
         </TouchableOpacity>
         <Text style={s.headerTitle}>Track Driver</Text>
-        <View style={{ width: 42 }} />
+        <TouchableOpacity onPress={() => {
+          if (!mapRef.current) return;
+          const coords: { latitude: number; longitude: number }[] = [];
+          if (driverLoc) coords.push(driverLoc);
+          if (pickupCoord) coords.push(pickupCoord);
+          if (dropoffCoord) coords.push(dropoffCoord);
+          if (coords.length >= 2) {
+            mapRef.current.fitToCoordinates(coords, { edgePadding: { top: 80, right: 60, bottom: 200, left: 60 }, animated: true });
+          }
+        }} style={s.headerBtn}>
+          <Ionicons name="expand-outline" size={20} color="#111" />
+        </TouchableOpacity>
       </View>
 
       {/* Bottom info card */}

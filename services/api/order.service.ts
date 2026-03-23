@@ -53,10 +53,16 @@ export interface Order {
 
 export interface AvailableOrders {
   canAccept: boolean;
+  isAvailable?: boolean;
   sameDelegation: Order[];
   sameGovernorate: Order[];
   differentGovernorate: Order[];
   differentCountry: Order[];
+}
+
+export interface FilteredOrders {
+  canAccept: boolean;
+  orders: Order[];
 }
 
 export interface ChatMessage {
@@ -121,7 +127,14 @@ export const orderService = {
     api.post<ChatMessage>(`/orders/${orderId}/chat/messages`, { content, image }),
 
   // Driver endpoints
-  getAvailableOrders: () => api.get<AvailableOrders>('/driver/orders/available'),
+  getAvailableOrders: (filters?: { countryId?: string; governorateId?: string; delegationId?: string }) => {
+    const params = new URLSearchParams();
+    if (filters?.countryId) params.set('countryId', filters.countryId);
+    if (filters?.governorateId) params.set('governorateId', filters.governorateId);
+    if (filters?.delegationId) params.set('delegationId', filters.delegationId);
+    const qs = params.toString();
+    return api.get<AvailableOrders | FilteredOrders>(`/driver/orders/available${qs ? `?${qs}` : ''}`);
+  },
 
   getDriverMyOrders: () => api.get<Order[]>('/driver/orders/my-orders'),
 

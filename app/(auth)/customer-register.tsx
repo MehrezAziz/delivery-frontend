@@ -1,6 +1,7 @@
 import { View, Text, TouchableOpacity, TextInput, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, ActivityIndicator, Modal } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
+import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useGoogleAuth } from '../../hooks/useGoogleAuth';
 import { saveLoginTimestamp } from '../../services/auth-session';
@@ -252,10 +253,10 @@ export default function CustomerRegisterScreen() {
         <View style={styles.content}>
           {/* Back Button */}
           <TouchableOpacity 
-            onPress={() => router.back()}
-            style={styles.backButton}
+            onPress={() => router.canGoBack() ? router.back() : router.replace('/')}
+            style={styles.backBtn}
           >
-            <Text style={styles.backText}>← Back</Text>
+            <Ionicons name="chevron-back" size={22} color="#111" />
           </TouchableOpacity>
 
           {/* Header */}
@@ -522,13 +523,9 @@ const styles = StyleSheet.create({
     paddingTop: 64,
     paddingBottom: 32,
   },
-  backButton: {
-    marginBottom: 32,
-  },
-  backText: {
-    color: '#0284c7',
-    fontSize: 18,
-    fontWeight: '500',
+  backBtn: {
+    width: 42, height: 42, borderRadius: 21, backgroundColor: '#f3f4f6',
+    alignItems: 'center', justifyContent: 'center', marginBottom: 24,
   },
   header: {
     marginBottom: 32,

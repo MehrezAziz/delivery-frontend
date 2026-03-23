@@ -139,6 +139,9 @@ export default function DriverLogin() {
   return (
     <ScrollView style={styles.container}>
       <View style={styles.header}>
+        <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace('/')} style={styles.backBtn}>
+          <Ionicons name="chevron-back" size={22} color="#111" />
+        </TouchableOpacity>
         <Text style={styles.title}>Driver Login</Text>
         <Text style={styles.subtitle}>Welcome back!</Text>
       </View>
@@ -233,6 +236,10 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#fff',
     padding: 20,
+  },
+  backBtn: {
+    width: 42, height: 42, borderRadius: 21, backgroundColor: '#f3f4f6',
+    alignItems: 'center', justifyContent: 'center', marginBottom: 24,
   },
   header: {
     marginBottom: 40,

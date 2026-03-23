@@ -88,7 +88,7 @@ export default function CustomerOrdersScreen() {
       </View>
 
       {/* Filter chips */}
-      <ScrollView horizontal showsHorizontalScrollIndicator={false}
+      <ScrollView horizontal  showsHorizontalScrollIndicator={false}
         contentContainerStyle={st.filterRow}>
         {ALL_STATUSES.map(s => {
           const active = filter === s;

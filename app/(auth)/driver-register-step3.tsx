@@ -189,14 +189,14 @@ export default function DriverRegisterStep3() {
   };
 
   const handleBack = () => {
-    router.back();
+    router.canGoBack() ? router.back() : router.replace('/');
   };
 
   return (
     <ScrollView style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={handleBack} style={styles.backButton}>
-          <Ionicons name="arrow-back" size={24} color="#007AFF" />
+        <TouchableOpacity onPress={handleBack} style={styles.backBtn}>
+          <Ionicons name="chevron-back" size={22} color="#111" />
         </TouchableOpacity>
         <Text style={styles.title}>Driver Registration</Text>
         <Text style={styles.subtitle}>Step 3 of 3: Document Verification</Text>
@@ -333,8 +333,9 @@ const styles = StyleSheet.create({
     marginBottom: 20,
     marginTop: 20,
   },
-  backButton: {
-    marginBottom: 16,
+  backBtn: {
+    width: 42, height: 42, borderRadius: 21, backgroundColor: '#f3f4f6',
+    alignItems: 'center', justifyContent: 'center', marginBottom: 16,
   },
   title: {
     fontSize: 28,

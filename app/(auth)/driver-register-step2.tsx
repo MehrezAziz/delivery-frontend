@@ -166,8 +166,8 @@ export default function DriverRegisterStep2() {
   return (
     <ScrollView style={styles.container} keyboardShouldPersistTaps="handled">
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <Ionicons name="arrow-back" size={24} color="#007AFF" />
+        <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace('/')} style={styles.backBtn}>
+          <Ionicons name="chevron-back" size={22} color="#111" />
         </TouchableOpacity>
         <Text style={styles.title}>Driver Registration</Text>
         <Text style={styles.subtitle}>Step 2 of 3: Vehicle & Address</Text>
@@ -273,7 +273,10 @@ export default function DriverRegisterStep2() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#fff', padding: 20 },
   header: { marginBottom: 20, marginTop: 20 },
-  backButton: { marginBottom: 16 },
+  backBtn: {
+    width: 42, height: 42, borderRadius: 21, backgroundColor: '#f3f4f6',
+    alignItems: 'center', justifyContent: 'center', marginBottom: 16,
+  },
   title: { fontSize: 28, fontWeight: 'bold', color: '#333', marginBottom: 8 },
   subtitle: { fontSize: 16, color: '#666' },
   progressContainer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginBottom: 30 },

@@ -28,7 +28,7 @@ export default function DriverRegisterScreen() {
         <View style={styles.content}>
           {/* Back Button */}
           <TouchableOpacity 
-            onPress={() => router.back()}
+            onPress={() => router.canGoBack() ? router.back() : router.replace('/')}
             style={styles.backButton}
           >
             <Text style={styles.backText}>← Back</Text>

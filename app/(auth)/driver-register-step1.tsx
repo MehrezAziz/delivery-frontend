@@ -110,6 +110,9 @@ export default function DriverRegisterStep1() {
   return (
     <ScrollView style={styles.container}>
       <View style={styles.header}>
+        <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace('/')} style={styles.backBtn}>
+          <Ionicons name="chevron-back" size={22} color="#111" />
+        </TouchableOpacity>
         <Text style={styles.title}>Driver Registration</Text>
         <Text style={styles.subtitle}>Step 1 of 3: Personal Information</Text>
       </View>
@@ -209,6 +212,10 @@ export default function DriverRegisterStep1() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#fff', padding: 20, marginBottom: 60 },
+  backBtn: {
+    width: 42, height: 42, borderRadius: 21, backgroundColor: '#f3f4f6',
+    alignItems: 'center', justifyContent: 'center', marginBottom: 24,
+  },
   header: { marginBottom: 30, marginTop: 20 },
   title: { fontSize: 28, fontWeight: 'bold', color: '#333', marginBottom: 8 },
   subtitle: { fontSize: 16, color: '#666' },

@@ -27,6 +27,7 @@ export default function CustomerLayout() {
       <Tabs.Screen name="pick-location" options={{ href: null }} />
       <Tabs.Screen name="order-detail" options={{ href: null }} />
       <Tabs.Screen name="order-chat" options={{ href: null }} />
+      <Tabs.Screen name="track-driver" options={{ href: null }} />
     </Tabs>
   );
 }
