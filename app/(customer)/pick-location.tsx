@@ -168,7 +168,7 @@ export default function PickLocationScreen() {
       timestamp: Date.now(),
     };
     await AsyncStorage.setItem(`picked_${params.type}`, JSON.stringify(data));
-    router.back();
+    router.replace('/(customer)/create-order');
   };
 
   const accentColor = isPickup ? '#22c55e' : '#ef4444';

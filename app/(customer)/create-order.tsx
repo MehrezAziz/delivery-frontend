@@ -77,8 +77,8 @@ export default function CreateOrderScreen() {
         governorate: { id: string; nameGovernorate: string; country: { id: string; name: string } };
       }>(`/geography/delegations/by-coordinates?lat=${lat}&lng=${lng}`);
 
-      // Create address record
-      const address = await api.post<{ id: string }>('/addresses', {
+      // Create address record (order address — no userId)
+      const address = await api.post<{ id: string }>('/addresses/order', {
         latitude: lat, longitude: lng,
         street: label,
         delegationId: delegation.id,

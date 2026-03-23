@@ -12,11 +12,13 @@ import { GoogleSignin } from '@react-native-google-signin/google-signin';
 
 const API_BASE = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api';
 
-GoogleSignin.configure({
-  webClientId: '295733709390-cmkprqadbcrannp1l4gl3drlab8b37r9.apps.googleusercontent.com',
-  iosClientId: '295733709390-cmkprqadbcrannp1l4gl3drlab8b37r9.apps.googleusercontent.com',
-  offlineAccess: true,
-});
+try {
+  GoogleSignin.configure({
+    webClientId: '295733709390-cmkprqadbcrannp1l4gl3drlab8b37r9.apps.googleusercontent.com',
+    iosClientId: '295733709390-cmkprqadbcrannp1l4gl3drlab8b37r9.apps.googleusercontent.com',
+    offlineAccess: true,
+  });
+} catch {}
 
 export default function DriverRegisterStep1() {
   const router = useRouter();
@@ -65,7 +67,7 @@ export default function DriverRegisterStep1() {
     } catch (error: any) {
       let msg = 'Failed to sign in with Google';
       if (error.code === 'SIGN_IN_CANCELLED') msg = 'Sign-in was cancelled';
-      else if (error.response?.data?.message) msg = error.response.data.message;
+      else if (error.response?.data?.message) msg = Array.isArray(error.response.data.message) ? error.response.data.message.join('\n') : error.response.data.message;
       else if (error.message) msg = error.message;
       Alert.alert('Google Sign-In Failed', msg);
     } finally { setLoading(false); }
@@ -103,7 +105,9 @@ export default function DriverRegisterStep1() {
       await AsyncStorage.setItem('driverPendingToken', response.data.pendingToken);
       router.push('/(auth)/driver-register-step2');
     } catch (error: any) {
-      Alert.alert('Registration Failed', error.response?.data?.message || 'An error occurred');
+      const rawMsg = error.response?.data?.message;
+      const msg = Array.isArray(rawMsg) ? rawMsg.join('\n') : (rawMsg || error.message || 'An error occurred');
+      Alert.alert('Registration Failed', String(msg));
     } finally { setLoading(false); }
   };
 

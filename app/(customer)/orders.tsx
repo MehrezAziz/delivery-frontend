@@ -1,16 +1,19 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, ActivityIndicator,
-  RefreshControl, Alert, StyleSheet,
+  RefreshControl, Alert, StyleSheet, Animated, Dimensions, Pressable,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import { orderService, Order } from '../../services/api/order.service';
 
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const SIDEBAR_WIDTH = SCREEN_WIDTH * 0.65;
+
 const ALL_STATUSES = [
   'ALL', 'SEARCHING_DRIVER', 'DRIVER_ASSIGNED', 'DRIVER_ARRIVED',
-  'PICKED_UP', 'DELIVERING', 'DELIVERED', 'CANCELLED', 'DISPUTED',
+  'PICKED_UP', 'DELIVERING', 'DELIVERED', 'CANCELLED', 'DISPUTED', 'REFUNDED',
 ];
 
 const STATUS_CONFIG: Record<string, { bg: string; text: string; label: string }> = {
@@ -34,6 +37,29 @@ export default function CustomerOrdersScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [filter, setFilter] = useState('ALL');
   const [togglingPayment, setTogglingPayment] = useState<string | null>(null);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const slideAnim = useRef(new Animated.Value(SIDEBAR_WIDTH)).current;
+  const overlayAnim = useRef(new Animated.Value(0)).current;
+
+  const openSidebar = () => {
+    setSidebarOpen(true);
+    Animated.parallel([
+      Animated.timing(slideAnim, { toValue: 0, duration: 250, useNativeDriver: true }),
+      Animated.timing(overlayAnim, { toValue: 1, duration: 250, useNativeDriver: true }),
+    ]).start();
+  };
+
+  const closeSidebar = () => {
+    Animated.parallel([
+      Animated.timing(slideAnim, { toValue: SIDEBAR_WIDTH, duration: 200, useNativeDriver: true }),
+      Animated.timing(overlayAnim, { toValue: 0, duration: 200, useNativeDriver: true }),
+    ]).start(() => setSidebarOpen(false));
+  };
+
+  const selectFilter = (s: string) => {
+    setFilter(s);
+    closeSidebar();
+  };
 
   const loadOrders = useCallback(async () => {
     try {
@@ -83,29 +109,15 @@ export default function CustomerOrdersScreen() {
       <StatusBar style="dark" />
       {/* Header */}
       <View style={st.header}>
-        <Text style={st.headerTitle}>My Orders</Text>
-        <Text style={st.headerCount}>{orders.length} total</Text>
+        <View>
+          <Text style={st.headerTitle}>My Orders</Text>
+          <Text style={st.headerCount}>{orders.length} total</Text>
+        </View>
+        <TouchableOpacity style={[st.filterBtn, filter !== 'ALL' && { backgroundColor: '#0284c7' }]} onPress={openSidebar} activeOpacity={0.7}>
+          <Ionicons name="filter" size={20} color={filter !== 'ALL' ? '#fff' : '#374151'} />
+          {filter !== 'ALL' && <View style={st.filterDot} />}
+        </TouchableOpacity>
       </View>
-
-      {/* Filter chips */}
-      <ScrollView horizontal  showsHorizontalScrollIndicator={false}
-        contentContainerStyle={st.filterRow}>
-        {ALL_STATUSES.map(s => {
-          const active = filter === s;
-          return (
-            <TouchableOpacity
-              key={s}
-              style={[st.filterChip, active && st.filterChipActive]}
-              onPress={() => setFilter(s)}
-              activeOpacity={0.7}
-            >
-              <Text style={[st.filterChipText, active && st.filterChipTextActive]}>
-                {s === 'ALL' ? 'All' : (STATUS_CONFIG[s]?.label || s.replace(/_/g, ' '))}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
-      </ScrollView>
 
       {/* Orders list */}
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 40 }}
@@ -188,6 +200,35 @@ export default function CustomerOrdersScreen() {
           );
         })}
       </ScrollView>
+
+      {/* Sidebar overlay + drawer */}
+      {sidebarOpen && (
+        <>
+          <Animated.View style={[st.overlay, { opacity: overlayAnim }]}>
+            <Pressable style={StyleSheet.absoluteFill} onPress={closeSidebar} />
+          </Animated.View>
+          <Animated.View style={[st.sidebar, { transform: [{ translateX: slideAnim }] }]}>
+            <Text style={st.sidebarTitle}>Filter by Status</Text>
+            <ScrollView showsVerticalScrollIndicator={false}>
+              {ALL_STATUSES.map(s => {
+                const active = filter === s;
+                const cfg = STATUS_CONFIG[s];
+                const label = s === 'ALL' ? 'All Orders' : (cfg?.label || s.replace(/_/g, ' '));
+                const count = s === 'ALL' ? orders.length : orders.filter(o => o.status === s).length;
+                return (
+                  <TouchableOpacity key={s} style={[st.sidebarItem, active && st.sidebarItemActive]}
+                    onPress={() => selectFilter(s)} activeOpacity={0.7}>
+                    {cfg && <View style={[st.sidebarDot, { backgroundColor: cfg.text }]} />}
+                    {!cfg && <Ionicons name="list" size={14} color="#374151" />}
+                    <Text style={[st.sidebarItemText, active && st.sidebarItemTextActive]}>{label}</Text>
+                    <Text style={st.sidebarCount}>{count}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </Animated.View>
+        </>
+      )}
     </View>
   );
 }
@@ -202,16 +243,15 @@ const st = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#e5e7eb',
   },
   headerTitle: { fontSize: 28, fontWeight: '800', color: '#111827' },
-  headerCount: { fontSize: 14, color: '#9ca3af', fontWeight: '500' },
-
-  filterRow: { paddingHorizontal: 16, paddingVertical: 12, gap: 8 },
-  filterChip: {
-    paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20,
-    backgroundColor: '#fff', borderWidth: 1, borderColor: '#e5e7eb',
+  headerCount: { fontSize: 14, color: '#9ca3af', fontWeight: '500', marginTop: 2 },
+  filterBtn: {
+    width: 42, height: 42, borderRadius: 21, backgroundColor: '#f3f4f6',
+    alignItems: 'center', justifyContent: 'center',
   },
-  filterChipActive: { backgroundColor: '#0284c7', borderColor: '#0284c7' },
-  filterChipText: { fontSize: 13, fontWeight: '600', color: '#6b7280' },
-  filterChipTextActive: { color: '#fff' },
+  filterDot: {
+    position: 'absolute', top: 8, right: 8, width: 8, height: 8,
+    borderRadius: 4, backgroundColor: '#0284c7',
+  },
 
   empty: { alignItems: 'center', paddingTop: 80 },
   emptyText: { color: '#9ca3af', fontSize: 16, marginTop: 12 },
@@ -251,4 +291,24 @@ const st = StyleSheet.create({
     paddingTop: 10, marginTop: 10,
   },
   driverText: { fontSize: 13, color: '#6b7280' },
+
+  // Sidebar
+  overlay: {
+    ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.35)', zIndex: 10,
+  },
+  sidebar: {
+    position: 'absolute', top: 0, right: 0, bottom: 0, width: SIDEBAR_WIDTH,
+    backgroundColor: '#fff', zIndex: 11, paddingTop: 60, paddingHorizontal: 20,
+    shadowColor: '#000', shadowOffset: { width: -2, height: 0 }, shadowOpacity: 0.15, shadowRadius: 10, elevation: 10,
+  },
+  sidebarTitle: { fontSize: 18, fontWeight: '700', color: '#111827', marginBottom: 20 },
+  sidebarItem: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    paddingVertical: 14, paddingHorizontal: 12, borderRadius: 12, marginBottom: 4,
+  },
+  sidebarItemActive: { backgroundColor: '#e0f2fe' },
+  sidebarDot: { width: 10, height: 10, borderRadius: 5 },
+  sidebarItemText: { flex: 1, fontSize: 15, fontWeight: '500', color: '#374151' },
+  sidebarItemTextActive: { color: '#0284c7', fontWeight: '700' },
+  sidebarCount: { fontSize: 13, fontWeight: '600', color: '#9ca3af' },
 });
