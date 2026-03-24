@@ -46,6 +46,21 @@ export default function DriverMyOrdersScreen() {
   useEffect(() => { const i = setInterval(load, 10000); return () => clearInterval(i); }, [load]);
 
   const handleStatusUpdate = async (orderId: string, status: string) => {
+    // If marking as delivered, check if proof is uploaded first
+    if (status === 'DELIVERED') {
+      const order = orders.find(o => o.id === orderId);
+      if (order && !order.driverAssignment?.image1Proof) {
+        Alert.alert(
+          'Proof Required',
+          'You must upload at least the first proof image before marking the order as delivered.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Upload Now', onPress: () => router.push(`/(driver)/upload-proofs?orderId=${orderId}`) },
+          ],
+        );
+        return;
+      }
+    }
     setUpdatingStatus(orderId);
     try { await orderService.updateOrderStatus(orderId, status); load(); }
     catch (e: any) { Alert.alert('Error', e.message); }
@@ -184,9 +199,26 @@ export default function DriverMyOrdersScreen() {
                 <>
                   <Ionicons name={action.icon as any} size={18} color="#fff" />
                   <Text style={s.actionBtnText}>{action.label}</Text>
+                  {action.next === 'DELIVERED' && !order.driverAssignment?.image1Proof && (
+                    <Ionicons name="alert-circle" size={16} color="#fbbf24" />
+                  )}
                 </>
               )}
             </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Proof status indicator for DELIVERING */}
+        {order.status === 'DELIVERING' && (
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8, paddingHorizontal: 4 }}>
+            <Ionicons
+              name={order.driverAssignment?.image1Proof ? 'checkmark-circle' : 'alert-circle-outline'}
+              size={16}
+              color={order.driverAssignment?.image1Proof ? '#16a34a' : '#f59e0b'}
+            />
+            <Text style={{ fontSize: 12, color: order.driverAssignment?.image1Proof ? '#16a34a' : '#f59e0b', fontWeight: '500' }}>
+              {order.driverAssignment?.image1Proof ? 'Proof uploaded' : 'Proof required before delivery'}
+            </Text>
           </View>
         )}
 

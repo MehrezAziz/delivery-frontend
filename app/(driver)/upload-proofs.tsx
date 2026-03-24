@@ -1,27 +1,76 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import {
-  View, Text, TouchableOpacity, Alert, TextInput,
+  View, Text, TouchableOpacity, Alert, Image,
   ActivityIndicator, StyleSheet, ScrollView,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
+import { CameraView, useCameraPermissions } from 'expo-camera';
 import { orderService } from '../../services/api/order.service';
 
 export default function UploadProofsScreen() {
   const router = useRouter();
   const { orderId } = useLocalSearchParams<{ orderId: string }>();
-  const [image1, setImage1] = useState('');
-  const [image2, setImage2] = useState('');
+  const [image1, setImage1] = useState<string | null>(null);
+  const [image2, setImage2] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [cameraOpen, setCameraOpen] = useState(false);
+  const [cameraTarget, setCameraTarget] = useState<1 | 2>(1);
+  const [permission, requestPermission] = useCameraPermissions();
+  const cameraRef = useRef<any>(null);
+
+  const pickFromGallery = async (target: 1 | 2) => {
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      quality: 0.7,
+      base64: true,
+    });
+    if (!result.canceled && result.assets[0]) {
+      const uri = result.assets[0].base64
+        ? `data:image/jpeg;base64,${result.assets[0].base64}`
+        : result.assets[0].uri;
+      if (target === 1) setImage1(uri);
+      else setImage2(uri);
+    }
+  };
+
+  const openCamera = async (target: 1 | 2) => {
+    if (!permission?.granted) {
+      const res = await requestPermission();
+      if (!res.granted) {
+        Alert.alert('Permission Required', 'Camera access is needed to take photos.');
+        return;
+      }
+    }
+    setCameraTarget(target);
+    setCameraOpen(true);
+  };
+
+  const takePicture = async () => {
+    if (!cameraRef.current) return;
+    try {
+      const photo = await cameraRef.current.takePictureAsync({ base64: true, quality: 0.7 });
+      const uri = photo.base64
+        ? `data:image/jpeg;base64,${photo.base64}`
+        : photo.uri;
+      if (cameraTarget === 1) setImage1(uri);
+      else setImage2(uri);
+      setCameraOpen(false);
+    } catch (e) {
+      console.error(e);
+      Alert.alert('Error', 'Failed to take picture');
+    }
+  };
 
   const handleSubmit = async () => {
     if (!image1) {
-      Alert.alert('Error', 'Please provide at least one proof image URL');
+      Alert.alert('Required', 'Please provide the first proof image');
       return;
     }
     setSubmitting(true);
     try {
-      await orderService.uploadProofs(orderId, image1 || undefined, image2 || undefined);
+      await orderService.uploadProofs(orderId, image1, image2 || undefined);
       Alert.alert('Success', 'Proofs uploaded successfully', [
         { text: 'OK', onPress: () => router.back() },
       ]);
@@ -32,9 +81,69 @@ export default function UploadProofsScreen() {
     }
   };
 
+  // Camera fullscreen view
+  if (cameraOpen) {
+    return (
+      <View style={{ flex: 1, backgroundColor: '#000' }}>
+        <CameraView
+          ref={cameraRef}
+          style={{ flex: 1 }}
+          facing="back"
+        />
+        <View style={s.cameraOverlay}>
+          <TouchableOpacity style={s.cameraCancelBtn} onPress={() => setCameraOpen(false)}>
+            <Ionicons name="close" size={28} color="#fff" />
+          </TouchableOpacity>
+          <TouchableOpacity style={s.cameraShutterBtn} onPress={takePicture} activeOpacity={0.7}>
+            <View style={s.cameraShutterInner} />
+          </TouchableOpacity>
+          <View style={{ width: 50 }} />
+        </View>
+      </View>
+    );
+  }
+
+  const renderImageSlot = (
+    imageNum: 1 | 2,
+    imageUri: string | null,
+    setImageUri: (v: string | null) => void,
+    required: boolean,
+  ) => (
+    <View style={s.fieldCard}>
+      <View style={s.fieldHeader}>
+        <Ionicons name="camera-outline" size={20} color={required ? '#16a34a' : '#6b7280'} />
+        <Text style={s.fieldLabel}>Proof Image {imageNum}</Text>
+        <View style={required ? s.requiredBadge : s.optionalBadge}>
+          <Text style={required ? s.requiredText : s.optionalText}>
+            {required ? 'Required' : 'Optional'}
+          </Text>
+        </View>
+      </View>
+
+      {imageUri ? (
+        <View style={s.previewContainer}>
+          <Image source={{ uri: imageUri }} style={s.previewImage} resizeMode="cover" />
+          <TouchableOpacity style={s.removeBtn} onPress={() => setImageUri(null)}>
+            <Ionicons name="close-circle" size={28} color="#dc2626" />
+          </TouchableOpacity>
+        </View>
+      ) : (
+        <View style={s.actionRow}>
+          <TouchableOpacity style={s.pickBtn} onPress={() => pickFromGallery(imageNum)} activeOpacity={0.7}>
+            <Ionicons name="images-outline" size={24} color="#0284c7" />
+            <Text style={s.pickBtnText}>Gallery</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={s.pickBtn} onPress={() => openCamera(imageNum)} activeOpacity={0.7}>
+            <Ionicons name="camera-outline" size={24} color="#16a34a" />
+            <Text style={[s.pickBtnText, { color: '#16a34a' }]}>Camera</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+    </View>
+  );
+
   return (
     <View style={s.container}>
-      {/* Header */}
       <View style={s.header}>
         <TouchableOpacity onPress={() => router.back()} style={s.headerBtn}>
           <Ionicons name="chevron-back" size={22} color="#fff" />
@@ -44,55 +153,18 @@ export default function UploadProofsScreen() {
       </View>
 
       <ScrollView style={{ flex: 1 }} contentContainerStyle={s.content}>
-        {/* Info card */}
         <View style={s.infoCard}>
           <View style={s.infoIconWrap}>
             <Ionicons name="shield-checkmark" size={24} color="#0284c7" />
           </View>
           <Text style={s.infoText}>
-            Upload delivery proof images to protect yourself from false claims. At least one image is required.
+            Upload delivery proof images. The first image is required before you can mark the order as delivered.
           </Text>
         </View>
 
-        {/* Image 1 */}
-        <View style={s.fieldCard}>
-          <View style={s.fieldHeader}>
-            <Ionicons name="camera-outline" size={20} color="#16a34a" />
-            <Text style={s.fieldLabel}>Proof Image 1</Text>
-            <View style={s.requiredBadge}>
-              <Text style={s.requiredText}>Required</Text>
-            </View>
-          </View>
-          <TextInput
-            style={s.input}
-            value={image1}
-            onChangeText={setImage1}
-            placeholder="Paste image URL or base64..."
-            placeholderTextColor="#9ca3af"
-            multiline
-          />
-        </View>
+        {renderImageSlot(1, image1, setImage1, true)}
+        {renderImageSlot(2, image2, setImage2, false)}
 
-        {/* Image 2 */}
-        <View style={s.fieldCard}>
-          <View style={s.fieldHeader}>
-            <Ionicons name="camera-outline" size={20} color="#6b7280" />
-            <Text style={s.fieldLabel}>Proof Image 2</Text>
-            <View style={s.optionalBadge}>
-              <Text style={s.optionalText}>Optional</Text>
-            </View>
-          </View>
-          <TextInput
-            style={s.input}
-            value={image2}
-            onChangeText={setImage2}
-            placeholder="Paste image URL or base64..."
-            placeholderTextColor="#9ca3af"
-            multiline
-          />
-        </View>
-
-        {/* Submit */}
         <TouchableOpacity
           style={[s.submitBtn, !image1 && s.submitBtnDisabled]}
           onPress={handleSubmit}
@@ -125,9 +197,7 @@ const s = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
   },
   headerTitle: { color: '#fff', fontSize: 18, fontWeight: '700' },
-
   content: { padding: 20, paddingBottom: 40 },
-
   infoCard: {
     backgroundColor: '#eff6ff', borderRadius: 14, padding: 16,
     flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 20,
@@ -137,7 +207,6 @@ const s = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
   },
   infoText: { flex: 1, fontSize: 13, color: '#1e40af', lineHeight: 19 },
-
   fieldCard: {
     backgroundColor: '#fff', borderRadius: 16, padding: 16, marginBottom: 14,
     shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 6, elevation: 2,
@@ -148,11 +217,18 @@ const s = StyleSheet.create({
   requiredText: { fontSize: 11, fontWeight: '600', color: '#16a34a' },
   optionalBadge: { backgroundColor: '#f3f4f6', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 },
   optionalText: { fontSize: 11, fontWeight: '600', color: '#9ca3af' },
-  input: {
-    backgroundColor: '#f8fafc', borderRadius: 12, padding: 14, fontSize: 14,
-    color: '#111827', borderWidth: 1, borderColor: '#e5e7eb', minHeight: 60, textAlignVertical: 'top',
+  actionRow: {
+    flexDirection: 'row', gap: 12,
   },
-
+  pickBtn: {
+    flex: 1, alignItems: 'center', justifyContent: 'center', gap: 6,
+    paddingVertical: 24, borderRadius: 14, backgroundColor: '#f8fafc',
+    borderWidth: 2, borderColor: '#e5e7eb', borderStyle: 'dashed',
+  },
+  pickBtnText: { fontSize: 13, fontWeight: '600', color: '#0284c7' },
+  previewContainer: { position: 'relative', borderRadius: 14, overflow: 'hidden' },
+  previewImage: { width: '100%', height: 200, borderRadius: 14 },
+  removeBtn: { position: 'absolute', top: 8, right: 8 },
   submitBtn: {
     backgroundColor: '#16a34a', borderRadius: 16, paddingVertical: 16,
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, marginTop: 10,
@@ -160,4 +236,22 @@ const s = StyleSheet.create({
   },
   submitBtnDisabled: { backgroundColor: '#9ca3af', shadowOpacity: 0 },
   submitText: { color: '#fff', fontSize: 17, fontWeight: '700' },
+  // Camera
+  cameraOverlay: {
+    position: 'absolute', bottom: 0, left: 0, right: 0,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 30, paddingBottom: 50, paddingTop: 20,
+    backgroundColor: 'rgba(0,0,0,0.3)',
+  },
+  cameraCancelBtn: {
+    width: 50, height: 50, borderRadius: 25, backgroundColor: 'rgba(255,255,255,0.2)',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  cameraShutterBtn: {
+    width: 72, height: 72, borderRadius: 36, borderWidth: 4, borderColor: '#fff',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  cameraShutterInner: {
+    width: 58, height: 58, borderRadius: 29, backgroundColor: '#fff',
+  },
 });
