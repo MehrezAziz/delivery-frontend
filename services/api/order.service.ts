@@ -27,6 +27,8 @@ export interface DriverAssignment {
   driver: {
     userId: string;
     user: { firstName: string | null; secondName: string | null; phone: string; image: string | null };
+    avgRating: number | null;
+    completedOrders: number;
   } | null;
 }
 
@@ -49,6 +51,7 @@ export interface Order {
   driverAssignment: DriverAssignment | null;
   chatRoom: { id: string; status: string } | null;
   dispute: { id: string; status: string; reason: string; resolution: string | null } | null;
+  rating: { id: string; score: number; comment: string | null; createdAt: string } | null;
 }
 
 export interface AvailableOrders {
@@ -164,4 +167,30 @@ export const orderService = {
 
   driverSendChatMessage: (orderId: string, content: string, image?: string) =>
     api.post<ChatMessage>(`/driver/orders/${orderId}/chat/messages`, { content, image }),
+
+  // Rating
+  rateOrder: (orderId: string, score: number, comment?: string) =>
+    api.post(`/orders/${orderId}/rate`, { score, comment }),
+
+  // Customer reject driver
+  rejectDriver: (orderId: string, reason?: string) =>
+    api.post(`/orders/${orderId}/reject-driver`, { reason }),
+
+  // Driver revert status
+  revertOrderStatus: (orderId: string) =>
+    api.post(`/driver/orders/${orderId}/revert-status`),
+
+  // Driver rejected orders
+  getDriverRejectedOrders: () => api.get<{
+    rejectionId: string; rejectedAt: string; reason: string | null;
+    order: Order;
+  }[]>('/driver/orders/rejected'),
+
+  // Driver ratings
+  getDriverRatings: () => api.get<{
+    avgRating: number | null;
+    totalRatings: number;
+    completedOrders: number;
+    ratings: { id: string; score: number; comment: string | null; createdAt: string; customerName: string; orderId: string | null }[];
+  }>('/drivers/me/ratings'),
 };

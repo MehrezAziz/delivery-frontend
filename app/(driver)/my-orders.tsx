@@ -23,6 +23,12 @@ const STATUS_ACTIONS: Record<string, { next: string; label: string; color: strin
   DELIVERING:      { next: 'DELIVERED',     label: 'Mark Delivered',    color: '#16a34a', icon: 'checkmark-circle' },
 };
 
+const STATUS_REVERT: Record<string, { prev: string; label: string }> = {
+  DRIVER_ARRIVED: { prev: 'DRIVER_ASSIGNED', label: 'Back to Assigned' },
+  PICKED_UP:      { prev: 'DRIVER_ARRIVED',  label: 'Back to Arrived' },
+  DELIVERING:     { prev: 'PICKED_UP',       label: 'Back to Picked Up' },
+};
+
 export default function DriverMyOrdersScreen() {
   const router = useRouter();
   const [orders, setOrders] = useState<Order[]>([]);
@@ -44,6 +50,18 @@ export default function DriverMyOrdersScreen() {
     try { await orderService.updateOrderStatus(orderId, status); load(); }
     catch (e: any) { Alert.alert('Error', e.message); }
     finally { setUpdatingStatus(null); }
+  };
+
+  const handleRevertStatus = (orderId: string) => {
+    Alert.alert('Go Back', 'Revert to the previous status?', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Yes, Go Back', onPress: async () => {
+        setUpdatingStatus(orderId);
+        try { await orderService.revertOrderStatus(orderId); load(); }
+        catch (e: any) { Alert.alert('Error', e.message); }
+        finally { setUpdatingStatus(null); }
+      }},
+    ]);
   };
 
   const handleCancel = (orderId: string) => {
@@ -141,23 +159,35 @@ export default function DriverMyOrdersScreen() {
           </View>
         )}
 
-        {/* Main action button */}
+        {/* Main action button + revert */}
         {action && (
-          <TouchableOpacity
-            style={[s.actionBtn, { backgroundColor: action.color }]}
-            onPress={() => handleStatusUpdate(order.id, action.next)}
-            disabled={isUpdating}
-            activeOpacity={0.8}
-          >
-            {isUpdating ? (
-              <ActivityIndicator size="small" color="#fff" />
-            ) : (
-              <>
-                <Ionicons name={action.icon as any} size={18} color="#fff" />
-                <Text style={s.actionBtnText}>{action.label}</Text>
-              </>
+          <View style={{ flexDirection: 'row', gap: 8, marginBottom: 8 }}>
+            {STATUS_REVERT[order.status] && (
+              <TouchableOpacity
+                style={[s.revertBtn]}
+                onPress={() => handleRevertStatus(order.id)}
+                disabled={isUpdating}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="arrow-undo" size={18} color="#6b7280" />
+              </TouchableOpacity>
             )}
-          </TouchableOpacity>
+            <TouchableOpacity
+              style={[s.actionBtn, { backgroundColor: action.color, flex: 1, marginBottom: 0 }]}
+              onPress={() => handleStatusUpdate(order.id, action.next)}
+              disabled={isUpdating}
+              activeOpacity={0.8}
+            >
+              {isUpdating ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <>
+                  <Ionicons name={action.icon as any} size={18} color="#fff" />
+                  <Text style={s.actionBtnText}>{action.label}</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          </View>
         )}
 
         {/* Secondary actions */}
@@ -288,6 +318,10 @@ const s = StyleSheet.create({
     shadowColor: '#000', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.2, shadowRadius: 6, elevation: 4,
   },
   actionBtnText: { color: '#fff', fontSize: 15, fontWeight: '700' },
+  revertBtn: {
+    width: 48, height: 48, borderRadius: 14, backgroundColor: '#f3f4f6',
+    alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#e5e7eb',
+  },
 
   // Secondary
   secondaryRow: { flexDirection: 'row', gap: 8 },

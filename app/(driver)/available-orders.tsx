@@ -72,6 +72,7 @@ export default function AvailableOrdersScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [accepting, setAccepting] = useState<string | null>(null);
   const [initDone, setInitDone] = useState(false);
+  const [rejectedOrders, setRejectedOrders] = useState<any[]>([]);
 
   // "I'm available now" state — default TRUE
   const [availableNow, setAvailableNow] = useState(true);
@@ -284,6 +285,13 @@ export default function AvailableOrdersScreen() {
   }, [filterActive, advSelectedCountry, advSelectedGovernorate, advSelectedDelegation,
       quickFilterLevel, selectedDelegationIds, selectedGovernorateIds, selectedCountryIds,
       availableNow, driverGeo]);
+
+  // Load rejected orders once
+  useEffect(() => {
+    orderService.getDriverRejectedOrders()
+      .then(data => setRejectedOrders(data || []))
+      .catch(() => {});
+  }, []);
 
   useEffect(() => { if (initDone) load(); }, [load, initDone]);
   useEffect(() => { if (!initDone) return; const i = setInterval(load, 10000); return () => clearInterval(i); }, [load, initDone]);
@@ -540,6 +548,56 @@ export default function AvailableOrdersScreen() {
             {renderSection('Different Governorate', data?.differentGovernorate || [])}
             {renderSection('Different Country', data?.differentCountry || [])}
           </>
+        )}
+
+        {/* Rejected orders section */}
+        {rejectedOrders.length > 0 && (
+          <View style={{ marginTop: 20 }}>
+            <View style={s.sectionHeader}>
+              <View style={[s.sectionIcon, { backgroundColor: '#fee2e2' }]}>
+                <Ionicons name="ban" size={14} color="#dc2626" />
+              </View>
+              <Text style={[s.sectionTitle, { color: '#dc2626' }]}>Rejected by Customer</Text>
+              <View style={[s.sectionBadge, { backgroundColor: '#fee2e2' }]}>
+                <Text style={[s.sectionBadgeText, { color: '#dc2626' }]}>{rejectedOrders.length}</Text>
+              </View>
+            </View>
+            {rejectedOrders.map((r: any) => (
+              <View key={r.rejectionId} style={[s.card, { borderLeftWidth: 4, borderLeftColor: '#dc2626', opacity: 0.7 }]}>
+                <View style={s.cardTop}>
+                  <Text style={s.orderId}>#{r.order.id.slice(0, 8)}</Text>
+                  <View style={[s.priceTag, { backgroundColor: '#fee2e2' }]}>
+                    <Text style={[s.priceText, { color: '#dc2626', fontSize: 14 }]}>Rejected</Text>
+                  </View>
+                </View>
+                <View style={s.routeSection}>
+                  <View style={s.routeIconCol}>
+                    <View style={[s.routeDot, { backgroundColor: '#22c55e' }]} />
+                    <View style={s.routeLine} />
+                    <View style={[s.routeDot, { backgroundColor: '#ef4444' }]} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={s.routeText} numberOfLines={1}>
+                      {r.order.pickupAddress?.street || r.order.pickupAddress?.delegation?.nameDelegation || 'Pickup'}
+                    </Text>
+                    <View style={{ height: 14 }} />
+                    <Text style={s.routeText} numberOfLines={1}>
+                      {r.order.dropoffAddress?.street || r.order.dropoffAddress?.delegation?.nameDelegation || 'Dropoff'}
+                    </Text>
+                  </View>
+                </View>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 }}>
+                  <Ionicons name="information-circle-outline" size={16} color="#dc2626" />
+                  <Text style={{ fontSize: 13, color: '#dc2626', fontWeight: '500' }}>
+                    The customer declined working with you on this order
+                  </Text>
+                </View>
+                <Text style={{ fontSize: 11, color: '#9ca3af', marginTop: 4 }}>
+                  {new Date(r.rejectedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                </Text>
+              </View>
+            ))}
+          </View>
         )}
       </ScrollView>
 

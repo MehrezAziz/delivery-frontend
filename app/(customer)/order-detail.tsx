@@ -25,6 +25,8 @@ const STATUS_META: Record<string, { icon: string; color: string; bg: string; lab
   FAILED:           { icon: 'alert-circle-outline', color: '#dc2626', bg: '#fee2e2', label: 'Failed' },
 };
 
+const STAR_LABELS = ['Terrible', 'Very Bad', 'Bad', 'Poor', 'Below Average', 'Average', 'Above Average', 'Good', 'Very Good', 'Excellent', 'Perfect'];
+
 export default function OrderDetailScreen() {
   const router = useRouter();
   const { orderId } = useLocalSearchParams<{ orderId: string }>();
@@ -33,6 +35,9 @@ export default function OrderDetailScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [disputeModalVisible, setDisputeModalVisible] = useState(false);
   const [disputeReason, setDisputeReason] = useState('');
+  const [ratingScore, setRatingScore] = useState<number | null>(null);
+  const [ratingComment, setRatingComment] = useState('');
+  const [ratingSubmitting, setRatingSubmitting] = useState(false);
 
   const loadOrder = useCallback(async () => {
     try {
@@ -99,6 +104,23 @@ export default function OrderDetailScreen() {
     } catch (e: any) { Alert.alert('Error', e.message); }
   };
 
+  const submitRating = async () => {
+    if (ratingScore === null) {
+      Alert.alert('Error', 'Please select a score');
+      return;
+    }
+    setRatingSubmitting(true);
+    try {
+      await orderService.rateOrder(orderId, ratingScore, ratingComment.trim() || undefined);
+      Alert.alert('Thank you!', 'Your rating has been submitted.');
+      loadOrder();
+    } catch (e: any) {
+      Alert.alert('Error', e.message || 'Failed to submit rating');
+    } finally {
+      setRatingSubmitting(false);
+    }
+  };
+
   const handleCancelDispute = () => {
     Alert.alert('Cancel Dispute', 'Are you sure you want to cancel this dispute?', [
       { text: 'No', style: 'cancel' },
@@ -109,6 +131,22 @@ export default function OrderDetailScreen() {
         } catch (e: any) { Alert.alert('Error', e.message); }
       }},
     ]);
+  };
+
+  const handleRejectDriver = () => {
+    Alert.alert(
+      'Reject Driver',
+      'Are you sure you want to reject this driver? The order will go back to searching for a new driver. This driver will not be able to accept this order again.',
+      [
+        { text: 'No', style: 'cancel' },
+        { text: 'Yes, Reject', style: 'destructive', onPress: async () => {
+          try {
+            await orderService.rejectDriver(orderId);
+            loadOrder();
+          } catch (e: any) { Alert.alert('Error', e.message); }
+        }},
+      ],
+    );
   };
 
   if (loading || !order) {
@@ -308,6 +346,17 @@ export default function OrderDetailScreen() {
                   {order.driverAssignment.driver.user.firstName} {order.driverAssignment.driver.user.secondName}
                 </Text>
                 <Text style={s.driverPhone}>{order.driverAssignment.driver.user.phone}</Text>
+                {order.driverAssignment.driver.avgRating !== null && order.driverAssignment.driver.avgRating !== undefined && (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 }}>
+                    <Ionicons name="star" size={14} color="#f59e0b" />
+                    <Text style={{ fontSize: 13, fontWeight: '600', color: '#f59e0b' }}>
+                      {order.driverAssignment.driver.avgRating.toFixed(1)}/10
+                    </Text>
+                    <Text style={{ fontSize: 12, color: '#9ca3af' }}>
+                      · {order.driverAssignment.driver.completedOrders} deliveries
+                    </Text>
+                  </View>
+                )}
               </View>
               {hasChat && (
                 <TouchableOpacity style={s.driverChatBtn}
@@ -342,6 +391,76 @@ export default function OrderDetailScreen() {
           <View style={s.card}>
             <Text style={s.cardTitle}>Package Description</Text>
             <Text style={s.descriptionText}>{order.description}</Text>
+          </View>
+        )}
+
+        {/* ── Rating (already submitted) ── */}
+        {order.rating && (
+          <View style={[s.card, { borderLeftWidth: 4, borderLeftColor: '#f59e0b' }]}>
+            <Text style={s.cardTitle}>Your Rating</Text>
+            <View style={{ alignItems: 'center', gap: 8 }}>
+              <View style={{ flexDirection: 'row', gap: 4 }}>
+                {Array.from({ length: 10 }, (_, i) => (
+                  <Ionicons key={i} name={i < order.rating!.score ? 'star' : 'star-outline'} size={20}
+                    color={i < order.rating!.score ? '#f59e0b' : '#d1d5db'} />
+                ))}
+              </View>
+              <Text style={{ fontSize: 16, fontWeight: '700', color: '#111827' }}>
+                {order.rating.score}/10 — {STAR_LABELS[order.rating.score]}
+              </Text>
+              {order.rating.comment && (
+                <Text style={{ fontSize: 14, color: '#6b7280', textAlign: 'center' }}>"{order.rating.comment}"</Text>
+              )}
+            </View>
+          </View>
+        )}
+
+        {/* ── Rate Driver (not yet rated, delivered) ── */}
+        {order.status === 'DELIVERED' && !order.rating && (
+          <View style={[s.card, { borderLeftWidth: 4, borderLeftColor: '#f59e0b' }]}>
+            <Text style={s.cardTitle}>Rate Your Driver</Text>
+            <View style={{ alignItems: 'center', gap: 12 }}>
+              <View style={{ flexDirection: 'row', gap: 6 }}>
+                {Array.from({ length: 10 }, (_, i) => (
+                  <TouchableOpacity key={i} onPress={() => setRatingScore(i + 1)} activeOpacity={0.7}>
+                    <Ionicons name={ratingScore !== null && i < ratingScore ? 'star' : 'star-outline'} size={26}
+                      color={ratingScore !== null && i < ratingScore ? '#f59e0b' : '#d1d5db'} />
+                  </TouchableOpacity>
+                ))}
+              </View>
+              {ratingScore !== null && (
+                <Text style={{ fontSize: 14, fontWeight: '600', color: '#f59e0b' }}>
+                  {ratingScore}/10 — {STAR_LABELS[ratingScore]}
+                </Text>
+              )}
+              <TextInput
+                style={{
+                  width: '100%', backgroundColor: '#f8fafc', borderRadius: 12, padding: 12,
+                  fontSize: 14, color: '#111827', borderWidth: 1, borderColor: '#e5e7eb', minHeight: 60,
+                }}
+                value={ratingComment}
+                onChangeText={setRatingComment}
+                placeholder="Leave a comment (optional)"
+                placeholderTextColor="#9ca3af"
+                multiline
+                textAlignVertical="top"
+              />
+              <TouchableOpacity
+                style={{
+                  backgroundColor: ratingScore !== null ? '#f59e0b' : '#d1d5db',
+                  paddingVertical: 12, paddingHorizontal: 32, borderRadius: 12,
+                }}
+                onPress={submitRating}
+                disabled={ratingScore === null || ratingSubmitting}
+                activeOpacity={0.8}
+              >
+                {ratingSubmitting ? (
+                  <ActivityIndicator color="#fff" size="small" />
+                ) : (
+                  <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700' }}>Submit Rating</Text>
+                )}
+              </TouchableOpacity>
+            </View>
           </View>
         )}
 
@@ -396,6 +515,19 @@ export default function OrderDetailScreen() {
               <View style={{ flex: 1 }}>
                 <Text style={[s.actionTitle, { color: '#dc2626' }]}>Cancel Order</Text>
                 <Text style={s.actionSub}>This action cannot be undone</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color="#fca5a5" />
+            </TouchableOpacity>
+          )}
+          {order.status === 'DRIVER_ASSIGNED' && order.driverAssignment && (
+            <TouchableOpacity style={[s.actionBtn, { borderColor: '#fecaca' }]}
+              onPress={handleRejectDriver} activeOpacity={0.8}>
+              <View style={[s.actionIconCircle, { backgroundColor: '#fef2f2' }]}>
+                <Ionicons name="person-remove" size={18} color="#dc2626" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[s.actionTitle, { color: '#dc2626' }]}>Reject This Driver</Text>
+                <Text style={s.actionSub}>Search for another driver</Text>
               </View>
               <Ionicons name="chevron-forward" size={18} color="#fca5a5" />
             </TouchableOpacity>

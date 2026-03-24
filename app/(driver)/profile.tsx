@@ -68,6 +68,7 @@ export default function DriverProfileScreen() {
     : driver?.status || 'Unknown';
 
   const menuItems = [
+    { icon: 'star-outline', label: 'My Ratings', route: '/(driver)/my-ratings', color: '#f59e0b' },
     { icon: 'receipt-outline', label: 'Transaction History', route: '/(driver)/transactions', color: '#0284c7' },
     { icon: 'document-text-outline', label: 'My Documents', route: '/(driver)/documents', color: '#2563eb' },
     { icon: 'location-outline', label: 'My Addresses', route: '/(driver)/addresses', color: '#16a34a' },
