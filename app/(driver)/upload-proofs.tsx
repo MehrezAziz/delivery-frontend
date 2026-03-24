@@ -14,11 +14,32 @@ export default function UploadProofsScreen() {
   const { orderId } = useLocalSearchParams<{ orderId: string }>();
   const [image1, setImage1] = useState<string | null>(null);
   const [image2, setImage2] = useState<string | null>(null);
+  const [existingImage1, setExistingImage1] = useState(false);
+  const [existingImage2, setExistingImage2] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [loadingOrder, setLoadingOrder] = useState(true);
   const [cameraOpen, setCameraOpen] = useState(false);
   const [cameraTarget, setCameraTarget] = useState<1 | 2>(1);
   const [permission, requestPermission] = useCameraPermissions();
   const cameraRef = useRef<any>(null);
+
+  // Load existing proofs from order
+  useEffect(() => {
+    (async () => {
+      try {
+        const order = await orderService.getOrder(orderId);
+        if (order.driverAssignment?.image1Proof) {
+          setImage1(order.driverAssignment.image1Proof);
+          setExistingImage1(true);
+        }
+        if (order.driverAssignment?.image2Proof) {
+          setImage2(order.driverAssignment.image2Proof);
+          setExistingImage2(true);
+        }
+      } catch (e) { console.error(e); }
+      finally { setLoadingOrder(false); }
+    })();
+  }, [orderId]);
 
   const pickFromGallery = async (target: 1 | 2) => {
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -51,15 +72,17 @@ export default function UploadProofsScreen() {
     if (!cameraRef.current) return;
     try {
       const photo = await cameraRef.current.takePictureAsync({ base64: true, quality: 0.7 });
+      // Close camera after capture completes
+      setCameraOpen(false);
       const uri = photo.base64
         ? `data:image/jpeg;base64,${photo.base64}`
         : photo.uri;
       if (cameraTarget === 1) setImage1(uri);
       else setImage2(uri);
-      setCameraOpen(false);
     } catch (e) {
       console.error(e);
-      Alert.alert('Error', 'Failed to take picture');
+      setCameraOpen(false);
+      Alert.alert('Error', 'Failed to take picture. Please try again.');
     }
   };
 
@@ -68,9 +91,16 @@ export default function UploadProofsScreen() {
       Alert.alert('Required', 'Please provide the first proof image');
       return;
     }
+    // Only send images that are new (not already uploaded)
+    const sendImage1 = existingImage1 ? undefined : image1;
+    const sendImage2 = existingImage2 ? undefined : (image2 || undefined);
+    if (!sendImage1 && !sendImage2) {
+      Alert.alert('No Changes', 'All images are already uploaded');
+      return;
+    }
     setSubmitting(true);
     try {
-      await orderService.uploadProofs(orderId, image1, image2 || undefined);
+      await orderService.uploadProofs(orderId, sendImage1 || image1, sendImage2);
       Alert.alert('Success', 'Proofs uploaded successfully', [
         { text: 'OK', onPress: () => router.back() },
       ]);
@@ -108,39 +138,52 @@ export default function UploadProofsScreen() {
     imageUri: string | null,
     setImageUri: (v: string | null) => void,
     required: boolean,
-  ) => (
-    <View style={s.fieldCard}>
-      <View style={s.fieldHeader}>
-        <Ionicons name="camera-outline" size={20} color={required ? '#16a34a' : '#6b7280'} />
-        <Text style={s.fieldLabel}>Proof Image {imageNum}</Text>
-        <View style={required ? s.requiredBadge : s.optionalBadge}>
-          <Text style={required ? s.requiredText : s.optionalText}>
-            {required ? 'Required' : 'Optional'}
-          </Text>
+  ) => {
+    const isExisting = imageNum === 1 ? existingImage1 : existingImage2;
+    return (
+      <View style={s.fieldCard}>
+        <View style={s.fieldHeader}>
+          <Ionicons name="camera-outline" size={20} color={required ? '#16a34a' : '#6b7280'} />
+          <Text style={s.fieldLabel}>Proof Image {imageNum}</Text>
+          <View style={isExisting ? s.uploadedBadge : required ? s.requiredBadge : s.optionalBadge}>
+            <Text style={isExisting ? s.uploadedText : required ? s.requiredText : s.optionalText}>
+              {isExisting ? 'Uploaded' : required ? 'Required' : 'Optional'}
+            </Text>
+          </View>
         </View>
-      </View>
 
-      {imageUri ? (
-        <View style={s.previewContainer}>
-          <Image source={{ uri: imageUri }} style={s.previewImage} resizeMode="cover" />
-          <TouchableOpacity style={s.removeBtn} onPress={() => setImageUri(null)}>
-            <Ionicons name="close-circle" size={28} color="#dc2626" />
-          </TouchableOpacity>
-        </View>
-      ) : (
-        <View style={s.actionRow}>
-          <TouchableOpacity style={s.pickBtn} onPress={() => pickFromGallery(imageNum)} activeOpacity={0.7}>
-            <Ionicons name="images-outline" size={24} color="#0284c7" />
-            <Text style={s.pickBtnText}>Gallery</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={s.pickBtn} onPress={() => openCamera(imageNum)} activeOpacity={0.7}>
-            <Ionicons name="camera-outline" size={24} color="#16a34a" />
-            <Text style={[s.pickBtnText, { color: '#16a34a' }]}>Camera</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-    </View>
-  );
+        {imageUri ? (
+          <View style={s.previewContainer}>
+            <Image source={{ uri: imageUri }} style={s.previewImage} resizeMode="cover" />
+            {!isExisting && (
+              <TouchableOpacity style={s.removeBtn} onPress={() => setImageUri(null)}>
+                <Ionicons name="close-circle" size={28} color="#dc2626" />
+              </TouchableOpacity>
+            )}
+          </View>
+        ) : (
+          <View style={s.actionRow}>
+            <TouchableOpacity style={s.pickBtn} onPress={() => pickFromGallery(imageNum)} activeOpacity={0.7}>
+              <Ionicons name="images-outline" size={24} color="#0284c7" />
+              <Text style={s.pickBtnText}>Gallery</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={s.pickBtn} onPress={() => openCamera(imageNum)} activeOpacity={0.7}>
+              <Ionicons name="camera-outline" size={24} color="#16a34a" />
+              <Text style={[s.pickBtnText, { color: '#16a34a' }]}>Camera</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+      </View>
+    );
+  };
+
+  if (loadingOrder) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f8fafc' }}>
+        <ActivityIndicator size="large" color="#16a34a" />
+      </View>
+    );
+  }
 
   return (
     <View style={s.container}>
@@ -166,9 +209,9 @@ export default function UploadProofsScreen() {
         {renderImageSlot(2, image2, setImage2, false)}
 
         <TouchableOpacity
-          style={[s.submitBtn, !image1 && s.submitBtnDisabled]}
+          style={[s.submitBtn, (!image1 || (existingImage1 && existingImage2)) && s.submitBtnDisabled]}
           onPress={handleSubmit}
-          disabled={submitting || !image1}
+          disabled={submitting || !image1 || (existingImage1 && existingImage2)}
           activeOpacity={0.85}
         >
           {submitting ? (
@@ -176,7 +219,9 @@ export default function UploadProofsScreen() {
           ) : (
             <>
               <Ionicons name="cloud-upload-outline" size={20} color="#fff" />
-              <Text style={s.submitText}>Upload Proofs</Text>
+              <Text style={s.submitText}>
+                {existingImage1 && existingImage2 ? 'All Uploaded' : existingImage1 ? 'Upload Image 2' : 'Upload Proofs'}
+              </Text>
             </>
           )}
         </TouchableOpacity>
@@ -217,6 +262,8 @@ const s = StyleSheet.create({
   requiredText: { fontSize: 11, fontWeight: '600', color: '#16a34a' },
   optionalBadge: { backgroundColor: '#f3f4f6', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 },
   optionalText: { fontSize: 11, fontWeight: '600', color: '#9ca3af' },
+  uploadedBadge: { backgroundColor: '#dbeafe', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 },
+  uploadedText: { fontSize: 11, fontWeight: '600', color: '#2563eb' },
   actionRow: {
     flexDirection: 'row', gap: 12,
   },

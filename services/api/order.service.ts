@@ -29,6 +29,10 @@ export interface DriverAssignment {
     user: { firstName: string | null; secondName: string | null; phone: string; image: string | null };
     avgRating: number | null;
     completedOrders: number;
+    totalOrders: number;
+    cancelledOrders: number;
+    completionRate: number | null;
+    avgDeliveryTimeMinutes: number | null;
   } | null;
 }
 

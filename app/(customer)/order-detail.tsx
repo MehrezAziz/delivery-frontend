@@ -365,6 +365,27 @@ export default function OrderDetailScreen() {
                 </TouchableOpacity>
               )}
             </View>
+            {/* Performance metrics */}
+            {(order.driverAssignment.driver.completionRate !== null || order.driverAssignment.driver.avgDeliveryTimeMinutes !== null) && (
+              <View style={{ flexDirection: 'row', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
+                {order.driverAssignment.driver.completionRate !== null && (
+                  <View style={{ backgroundColor: '#f0fdf4', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10, flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                    <Ionicons name="checkmark-done" size={14} color="#16a34a" />
+                    <Text style={{ fontSize: 12, fontWeight: '600', color: '#16a34a' }}>{order.driverAssignment.driver.completionRate.toFixed(0)}% completion</Text>
+                  </View>
+                )}
+                {order.driverAssignment.driver.avgDeliveryTimeMinutes !== null && (
+                  <View style={{ backgroundColor: '#eff6ff', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10, flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                    <Ionicons name="time-outline" size={14} color="#2563eb" />
+                    <Text style={{ fontSize: 12, fontWeight: '600', color: '#2563eb' }}>~{order.driverAssignment.driver.avgDeliveryTimeMinutes} min avg</Text>
+                  </View>
+                )}
+                <View style={{ backgroundColor: '#f3f4f6', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10, flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                  <Ionicons name="stats-chart-outline" size={14} color="#6b7280" />
+                  <Text style={{ fontSize: 12, fontWeight: '600', color: '#6b7280' }}>{order.driverAssignment.driver.totalOrders} total orders</Text>
+                </View>
+              </View>
+            )}
             {/* Timeline */}
             {(order.driverAssignment.acceptedAt || order.driverAssignment.arrivedAt ||
               order.driverAssignment.pickedUpAt || order.driverAssignment.deliveredAt) && (

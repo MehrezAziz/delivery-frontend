@@ -103,7 +103,8 @@ export default function DriverMyOrdersScreen() {
     const isUpdating = updatingStatus === order.id;
 
     return (
-      <View key={order.id} style={s.card}>
+      <TouchableOpacity key={order.id} style={s.card} activeOpacity={0.7}
+        onPress={() => router.push(`/(driver)/order-detail?orderId=${order.id}`)}>
         {/* Header: status badge + price */}
         <View style={s.cardTop}>
           <View style={{ flex: 1 }}>
@@ -231,14 +232,17 @@ export default function DriverMyOrdersScreen() {
             </TouchableOpacity>
           )}
           {['PICKED_UP', 'DELIVERING', 'DELIVERED'].includes(order.status) && (
-            <TouchableOpacity style={s.proofBtn}
+            <TouchableOpacity style={[s.proofBtn, order.driverAssignment?.image1Proof && { backgroundColor: '#dcfce7' }]}
               onPress={() => router.push(`/(driver)/upload-proofs?orderId=${order.id}`)} activeOpacity={0.7}>
-              <Ionicons name="camera-outline" size={16} color="#374151" />
-              <Text style={s.proofBtnText}>Upload Proofs</Text>
+              <Ionicons name={order.driverAssignment?.image1Proof ? 'checkmark-circle' : 'camera-outline'} size={16}
+                color={order.driverAssignment?.image1Proof ? '#16a34a' : '#374151'} />
+              <Text style={[s.proofBtnText, order.driverAssignment?.image1Proof && { color: '#16a34a' }]}>
+                {order.driverAssignment?.image1Proof ? 'Image Uploaded' : 'Upload Proofs'}
+              </Text>
             </TouchableOpacity>
           )}
         </View>
-      </View>
+      </TouchableOpacity>
     );
   };
 
@@ -246,10 +250,17 @@ export default function DriverMyOrdersScreen() {
     <View style={s.container}>
       {/* Header */}
       <View style={s.header}>
-        <Text style={s.headerTitle}>My Deliveries</Text>
-        <Text style={s.headerSub}>
-          {activeOrders.length} active · {pastOrders.length} completed
-        </Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+          <TouchableOpacity onPress={() => router.back()} style={s.backBtn}>
+            <Ionicons name="chevron-back" size={22} color="#111827" />
+          </TouchableOpacity>
+          <View>
+            <Text style={s.headerTitle}>My Deliveries</Text>
+            <Text style={s.headerSub}>
+              {activeOrders.length} active · {pastOrders.length} completed
+            </Text>
+          </View>
+        </View>
       </View>
 
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 40 }}
@@ -297,7 +308,11 @@ const s = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#e5e7eb',
   },
   headerTitle: { fontSize: 28, fontWeight: '800', color: '#111827' },
-  headerSub: { fontSize: 14, color: '#9ca3af', marginTop: 4 },
+  headerSub: { fontSize: 14, color: '#9ca3af', marginTop: 2 },
+  backBtn: {
+    width: 38, height: 38, borderRadius: 19, backgroundColor: '#f3f4f6',
+    alignItems: 'center', justifyContent: 'center',
+  },
 
   // Section
   sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },

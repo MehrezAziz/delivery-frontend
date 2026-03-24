@@ -7,6 +7,7 @@ export default function DriverLayout() {
       <Stack.Screen name="my-orders" />
       <Stack.Screen name="available-orders" />
       <Stack.Screen name="order-chat" />
+      <Stack.Screen name="order-detail" />
       <Stack.Screen name="upload-proofs" />
       <Stack.Screen name="support" />
       <Stack.Screen name="support-chat" />
