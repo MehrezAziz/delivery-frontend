@@ -5,6 +5,7 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { orderService, AvailableOrders, FilteredOrders, Order } from '../../services/api/order.service';
 import { api } from '../../services/api/client';
 
@@ -15,9 +16,23 @@ const ZONE_META: Record<string, { icon: string; color: string; bg: string }> = {
   'Different Country':      { icon: 'airplane-outline', color: '#dc2626', bg: '#fee2e2' },
 };
 
-interface GeoCountry { id: string; name: string; isoCode: string; currencyCode: string; }
+type QuickFilterLevel = 'delegation' | 'governorate' | 'country' | null;
+
+const STORAGE_KEY_FILTER_LEVEL = 'avail_quick_filter_level';
+const STORAGE_KEY_SELECTED_DELEGATIONS = 'avail_selected_delegations';
+const STORAGE_KEY_SELECTED_GOVERNORATES = 'avail_selected_governorates';
+const STORAGE_KEY_SELECTED_COUNTRIES = 'avail_selected_countries';
+
+interface GeoCountry { id: string; name: string; isoCode?: string; currencyCode?: string; }
 interface GeoGovernorate { id: string; nameGovernorate: string; }
 interface GeoDelegation { id: string; nameDelegation: string; }
+interface DriverGeoData {
+  isAvailable: boolean;
+  addresses: { id: string; street: string | null; delegation: GeoDelegation; governorate: GeoGovernorate; country: GeoCountry }[];
+  delegations: GeoDelegation[];
+  governorates: GeoGovernorate[];
+  countries: GeoCountry[];
+}
 
 function SearchPicker({ visible, title, data, onSelect, onClose, search, setSearch, labelKey }: any) {
   return (
@@ -35,10 +50,7 @@ function SearchPicker({ visible, title, data, onSelect, onClose, search, setSear
             <TouchableOpacity onPress={() => setSearch('')}><Text style={s.clearIcon}>✕</Text></TouchableOpacity>
           )}
         </View>
-        <FlatList
-          data={data}
-          keyExtractor={(item: any) => item.id}
-          keyboardShouldPersistTaps="handled"
+        <FlatList data={data} keyExtractor={(item: any) => item.id} keyboardShouldPersistTaps="handled"
           renderItem={({ item }: any) => (
             <TouchableOpacity style={s.pickerItem} onPress={() => onSelect(item)}>
               <Text style={s.pickerItemText}>{item[labelKey]}</Text>
@@ -59,19 +71,33 @@ export default function AvailableOrdersScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [accepting, setAccepting] = useState<string | null>(null);
+  const [initDone, setInitDone] = useState(false);
 
-  // Filter state
+  // "I'm available now" state — default TRUE
+  const [availableNow, setAvailableNow] = useState(true);
+
+  // Driver geography data
+  const [driverGeo, setDriverGeo] = useState<DriverGeoData | null>(null);
+
+  // Quick filter: which level is active (null = none, show all driver delegations)
+  const [quickFilterLevel, setQuickFilterLevel] = useState<QuickFilterLevel>(null);
+  // Multi-select sets for each level
+  const [selectedDelegationIds, setSelectedDelegationIds] = useState<Set<string>>(new Set());
+  const [selectedGovernorateIds, setSelectedGovernorateIds] = useState<Set<string>>(new Set());
+  const [selectedCountryIds, setSelectedCountryIds] = useState<Set<string>>(new Set());
+
+  // Advanced filter state
   const [showFilter, setShowFilter] = useState(false);
-  const [countries, setCountries] = useState<GeoCountry[]>([]);
-  const [governorates, setGovernorates] = useState<GeoGovernorate[]>([]);
-  const [delegations, setDelegations] = useState<GeoDelegation[]>([]);
-  const [selectedCountry, setSelectedCountry] = useState<GeoCountry | null>(null);
-  const [selectedGovernorate, setSelectedGovernorate] = useState<GeoGovernorate | null>(null);
-  const [selectedDelegation, setSelectedDelegation] = useState<GeoDelegation | null>(null);
+  const [allCountries, setAllCountries] = useState<(GeoCountry & { isoCode: string; currencyCode: string })[]>([]);
+  const [advGovernorates, setAdvGovernorates] = useState<GeoGovernorate[]>([]);
+  const [advDelegations, setAdvDelegations] = useState<GeoDelegation[]>([]);
+  const [advSelectedCountry, setAdvSelectedCountry] = useState<GeoCountry | null>(null);
+  const [advSelectedGovernorate, setAdvSelectedGovernorate] = useState<GeoGovernorate | null>(null);
+  const [advSelectedDelegation, setAdvSelectedDelegation] = useState<GeoDelegation | null>(null);
   const [filterActive, setFilterActive] = useState(false);
   const [geoLoading, setGeoLoading] = useState(false);
 
-  // Picker sub-modals
+  // Picker sub-modals for advanced filter
   const [showCountryPicker, setShowCountryPicker] = useState(false);
   const [showGovPicker, setShowGovPicker] = useState(false);
   const [showDelPicker, setShowDelPicker] = useState(false);
@@ -80,106 +106,193 @@ export default function AvailableOrdersScreen() {
   const [delSearch, setDelSearch] = useState('');
 
   const filteredCountries = useMemo(() =>
-    countries.filter(c => c.name.toLowerCase().includes(countrySearch.toLowerCase()) ||
-      c.isoCode.toLowerCase().includes(countrySearch.toLowerCase())),
-    [countries, countrySearch]);
-
+    allCountries.filter(c => c.name.toLowerCase().includes(countrySearch.toLowerCase()) ||
+      (c.isoCode || '').toLowerCase().includes(countrySearch.toLowerCase())),
+    [allCountries, countrySearch]);
   const filteredGov = useMemo(() =>
-    governorates.filter(g => g.nameGovernorate.toLowerCase().includes(govSearch.toLowerCase())),
-    [governorates, govSearch]);
-
+    advGovernorates.filter(g => g.nameGovernorate.toLowerCase().includes(govSearch.toLowerCase())),
+    [advGovernorates, govSearch]);
   const filteredDel = useMemo(() =>
-    delegations.filter(d => d.nameDelegation.toLowerCase().includes(delSearch.toLowerCase())),
-    [delegations, delSearch]);
+    advDelegations.filter(d => d.nameDelegation.toLowerCase().includes(delSearch.toLowerCase())),
+    [advDelegations, delSearch]);
 
-  // Load geography data
-  const loadCountries = useCallback(async () => {
+  // ── Persist & restore quick filter selections ──
+  const saveSelections = useCallback(async (
+    level: QuickFilterLevel,
+    delIds: Set<string>,
+    govIds: Set<string>,
+    cIds: Set<string>,
+  ) => {
     try {
-      const data = await api.get<GeoCountry[]>('/geography/countries');
-      setCountries(Array.isArray(data) ? data : []);
-    } catch { setCountries([]); }
+      await AsyncStorage.setItem(STORAGE_KEY_FILTER_LEVEL, level || '');
+      await AsyncStorage.setItem(STORAGE_KEY_SELECTED_DELEGATIONS, JSON.stringify([...delIds]));
+      await AsyncStorage.setItem(STORAGE_KEY_SELECTED_GOVERNORATES, JSON.stringify([...govIds]));
+      await AsyncStorage.setItem(STORAGE_KEY_SELECTED_COUNTRIES, JSON.stringify([...cIds]));
+    } catch {}
   }, []);
 
-  const handleSelectCountry = async (c: GeoCountry) => {
-    setSelectedCountry(c);
-    setSelectedGovernorate(null);
-    setSelectedDelegation(null);
-    setGovernorates([]); setDelegations([]);
-    setShowCountryPicker(false);
-    setGeoLoading(true);
+  const restoreSelections = useCallback(async () => {
+    try {
+      const level = await AsyncStorage.getItem(STORAGE_KEY_FILTER_LEVEL);
+      const delIds = await AsyncStorage.getItem(STORAGE_KEY_SELECTED_DELEGATIONS);
+      const govIds = await AsyncStorage.getItem(STORAGE_KEY_SELECTED_GOVERNORATES);
+      const cIds = await AsyncStorage.getItem(STORAGE_KEY_SELECTED_COUNTRIES);
+      if (level) setQuickFilterLevel(level as QuickFilterLevel);
+      if (delIds) setSelectedDelegationIds(new Set(JSON.parse(delIds)));
+      if (govIds) setSelectedGovernorateIds(new Set(JSON.parse(govIds)));
+      if (cIds) setSelectedCountryIds(new Set(JSON.parse(cIds)));
+    } catch {}
+  }, []);
+
+  // ── Load driver geography + restore persisted selections ──
+  useEffect(() => {
+    (async () => {
+      const restoredLevel = await AsyncStorage.getItem(STORAGE_KEY_FILTER_LEVEL).catch(() => null);
+      if (restoredLevel) {
+        // Restore persisted selections
+        await restoreSelections();
+      }
+      try {
+        const geo = await api.get<DriverGeoData>('/drivers/me/geography');
+        setDriverGeo(geo);
+        // If no persisted level, default to delegation with all delegations selected
+        if (!restoredLevel) {
+          setQuickFilterLevel('delegation');
+          setSelectedDelegationIds(new Set(geo.delegations.map(d => d.id)));
+        }
+      } catch (e) { console.error('Failed to load driver geography:', e); }
+      setInitDone(true);
+    })();
+  }, []);
+
+  // Save whenever selections change (after init)
+  useEffect(() => {
+    if (!initDone) return;
+    saveSelections(quickFilterLevel, selectedDelegationIds, selectedGovernorateIds, selectedCountryIds);
+  }, [quickFilterLevel, selectedDelegationIds, selectedGovernorateIds, selectedCountryIds, initDone]);
+
+  // ── Advanced filter helpers ──
+  const loadCountries = useCallback(async () => {
+    try {
+      const data = await api.get<(GeoCountry & { isoCode: string; currencyCode: string })[]>('/geography/countries');
+      setAllCountries(Array.isArray(data) ? data : []);
+    } catch { setAllCountries([]); }
+  }, []);
+
+  const handleAdvSelectCountry = async (c: GeoCountry & { isoCode: string }) => {
+    setAdvSelectedCountry(c); setAdvSelectedGovernorate(null); setAdvSelectedDelegation(null);
+    setAdvGovernorates([]); setAdvDelegations([]); setShowCountryPicker(false); setGeoLoading(true);
     try {
       const data = await api.get<GeoGovernorate[]>(`/geography/countries/${c.id}/governorates`);
-      setGovernorates(Array.isArray(data) ? data : []);
+      setAdvGovernorates(Array.isArray(data) ? data : []);
     } catch {} finally { setGeoLoading(false); }
   };
-
-  const handleSelectGovernorate = async (g: GeoGovernorate) => {
-    setSelectedGovernorate(g);
-    setSelectedDelegation(null);
-    setDelegations([]);
-    setShowGovPicker(false);
-    setGeoLoading(true);
+  const handleAdvSelectGovernorate = async (g: GeoGovernorate) => {
+    setAdvSelectedGovernorate(g); setAdvSelectedDelegation(null); setAdvDelegations([]);
+    setShowGovPicker(false); setGeoLoading(true);
     try {
       const data = await api.get<GeoDelegation[]>(`/geography/governorates/${g.id}/delegations`);
-      setDelegations(Array.isArray(data) ? data : []);
+      setAdvDelegations(Array.isArray(data) ? data : []);
     } catch {} finally { setGeoLoading(false); }
   };
+  const handleAdvSelectDelegation = (d: GeoDelegation) => { setAdvSelectedDelegation(d); setShowDelPicker(false); };
 
-  const handleSelectDelegation = (d: GeoDelegation) => {
-    setSelectedDelegation(d);
-    setShowDelPicker(false);
+  const applyAdvFilter = () => {
+    if (!advSelectedCountry) { Alert.alert('Select Location', 'Please select at least a country.'); return; }
+    setShowFilter(false); setFilterActive(true); setLoading(true);
+  };
+  const clearAdvFilter = () => {
+    setFilterActive(false); setAdvSelectedCountry(null); setAdvSelectedGovernorate(null);
+    setAdvSelectedDelegation(null); setAdvGovernorates([]); setAdvDelegations([]); setLoading(true);
   };
 
-  // Load orders
+  // ── Quick filter toggle helpers ──
+  const toggleQuickLevel = (level: QuickFilterLevel) => {
+    if (quickFilterLevel === level) {
+      // Deselect → back to default (all driver delegations)
+      setQuickFilterLevel(null);
+    } else {
+      setQuickFilterLevel(level);
+    }
+    setLoading(true);
+  };
+
+  const toggleItem = (level: QuickFilterLevel, id: string) => {
+    if (level === 'delegation') {
+      setSelectedDelegationIds(prev => {
+        const next = new Set(prev);
+        next.has(id) ? next.delete(id) : next.add(id);
+        return next;
+      });
+    } else if (level === 'governorate') {
+      setSelectedGovernorateIds(prev => {
+        const next = new Set(prev);
+        next.has(id) ? next.delete(id) : next.add(id);
+        return next;
+      });
+    } else if (level === 'country') {
+      setSelectedCountryIds(prev => {
+        const next = new Set(prev);
+        next.has(id) ? next.delete(id) : next.add(id);
+        return next;
+      });
+    }
+    setLoading(true);
+  };
+
+  // ── Load orders ──
   const load = useCallback(async () => {
     try {
       if (filterActive) {
+        // Advanced filter
         const filters: any = {};
-        if (selectedDelegation) filters.delegationId = selectedDelegation.id;
-        else if (selectedGovernorate) filters.governorateId = selectedGovernorate.id;
-        else if (selectedCountry) filters.countryId = selectedCountry.id;
+        if (advSelectedDelegation) filters.delegationId = advSelectedDelegation.id;
+        else if (advSelectedGovernorate) filters.governorateId = advSelectedGovernorate.id;
+        else if (advSelectedCountry) filters.countryId = advSelectedCountry.id;
         const result = await orderService.getAvailableOrders(filters);
-        setFilteredData(result as FilteredOrders);
-        setData(null);
+        setFilteredData(result as FilteredOrders); setData(null);
+      } else if (quickFilterLevel && driverGeo) {
+        // Quick filter active — send selected IDs (or all if none selected)
+        const filters: any = { availableNow: availableNow || undefined };
+        if (quickFilterLevel === 'delegation') {
+          const ids = selectedDelegationIds.size > 0
+            ? [...selectedDelegationIds]
+            : driverGeo.delegations.map(d => d.id);
+          filters.delegationIds = ids;
+        } else if (quickFilterLevel === 'governorate') {
+          const ids = selectedGovernorateIds.size > 0
+            ? [...selectedGovernorateIds]
+            : driverGeo.governorates.map(g => g.id);
+          filters.governorateIds = ids;
+        } else if (quickFilterLevel === 'country') {
+          const ids = selectedCountryIds.size > 0
+            ? [...selectedCountryIds]
+            : driverGeo.countries.map(c => c.id);
+          filters.countryIds = ids;
+        }
+        const result = await orderService.getAvailableOrders(filters);
+        setFilteredData(result as FilteredOrders); setData(null);
       } else {
-        const result = await orderService.getAvailableOrders();
-        setData(result as AvailableOrders);
-        setFilteredData(null);
+        // Default: all orders for driver's delegations (normal endpoint)
+        const result = await orderService.getAvailableOrders(
+          availableNow ? { availableNow: true } : undefined,
+        );
+        setData(result as AvailableOrders); setFilteredData(null);
       }
     } catch (e: any) { console.error(e); }
     finally { setLoading(false); setRefreshing(false); }
-  }, [filterActive, selectedCountry, selectedGovernorate, selectedDelegation]);
+  }, [filterActive, advSelectedCountry, advSelectedGovernorate, advSelectedDelegation,
+      quickFilterLevel, selectedDelegationIds, selectedGovernorateIds, selectedCountryIds,
+      availableNow, driverGeo]);
 
-  useEffect(() => { load(); }, [load]);
-  useEffect(() => { const i = setInterval(load, 10000); return () => clearInterval(i); }, [load]);
+  useEffect(() => { if (initDone) load(); }, [load, initDone]);
+  useEffect(() => { if (!initDone) return; const i = setInterval(load, 10000); return () => clearInterval(i); }, [load, initDone]);
 
-  // Apply filter
-  const applyFilter = () => {
-    if (!selectedCountry) {
-      Alert.alert('Select Location', 'Please select at least a country to filter.');
-      return;
-    }
-    setShowFilter(false);
-    setFilterActive(true);
-    setLoading(true);
-  };
-
-  // Clear filter
-  const clearFilter = () => {
-    setFilterActive(false);
-    setSelectedCountry(null);
-    setSelectedGovernorate(null);
-    setSelectedDelegation(null);
-    setGovernorates([]); setDelegations([]);
-    setLoading(true);
-  };
+  const toggleAvailableNow = () => { setAvailableNow(prev => !prev); setLoading(true); };
 
   const handleAccept = async (orderId: string) => {
-    const canAccept = filterActive ? filteredData?.canAccept : data?.canAccept;
-    if (!canAccept) {
-      Alert.alert('Not Verified', 'Your account must be verified before you can accept orders.');
-      return;
-    }
+    const ca = filterActive || quickFilterLevel ? filteredData?.canAccept : data?.canAccept;
+    if (!ca) { Alert.alert('Not Verified', 'Your account must be verified before you can accept orders.'); return; }
     Alert.alert('Accept Order', 'Take this delivery?', [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Accept', onPress: async () => {
@@ -191,8 +304,9 @@ export default function AvailableOrdersScreen() {
     ]);
   };
 
-  const canAccept = filterActive ? filteredData?.canAccept : data?.canAccept;
+  const canAccept = (filterActive || quickFilterLevel) ? filteredData?.canAccept : data?.canAccept;
 
+  // ── Render helpers ──
   const renderOrderCard = (order: Order) => {
     const isAccepting = accepting === order.id;
     return (
@@ -271,28 +385,40 @@ export default function AvailableOrdersScreen() {
             <Ionicons name={meta.icon as any} size={14} color={meta.color} />
           </View>
           <Text style={s.sectionTitle}>{title}</Text>
-          <View style={s.sectionBadge}>
-            <Text style={s.sectionBadgeText}>{orders.length}</Text>
-          </View>
+          <View style={s.sectionBadge}><Text style={s.sectionBadgeText}>{orders.length}</Text></View>
         </View>
         {orders.map(renderOrderCard)}
       </View>
     );
   };
 
-  if (loading) {
+  // ── Quick filter chip items for the active level ──
+  const quickChipItems = useMemo(() => {
+    if (!driverGeo || !quickFilterLevel) return [];
+    if (quickFilterLevel === 'delegation')
+      return driverGeo.delegations.map(d => ({ id: d.id, label: d.nameDelegation }));
+    if (quickFilterLevel === 'governorate')
+      return driverGeo.governorates.map(g => ({ id: g.id, label: g.nameGovernorate }));
+    return driverGeo.countries.map(c => ({ id: c.id, label: c.name }));
+  }, [driverGeo, quickFilterLevel]);
+
+  const activeIds = quickFilterLevel === 'delegation' ? selectedDelegationIds
+    : quickFilterLevel === 'governorate' ? selectedGovernorateIds
+    : selectedCountryIds;
+
+  if (loading || !initDone) {
     return <View style={s.center}><ActivityIndicator size="large" color="#0284c7" /></View>;
   }
 
-  const totalOrders = filterActive
+  // Compute total
+  const isFlat = filterActive || !!quickFilterLevel;
+  const totalOrders = isFlat
     ? (filteredData?.orders.length || 0)
     : (data?.sameDelegation.length || 0) + (data?.sameGovernorate.length || 0) +
       (data?.differentGovernorate.length || 0) + (data?.differentCountry.length || 0);
 
-  // Build filter label
-  const filterLabel = selectedDelegation?.nameDelegation
-    || selectedGovernorate?.nameGovernorate
-    || selectedCountry?.name || '';
+  const advFilterLabel = advSelectedDelegation?.nameDelegation
+    || advSelectedGovernorate?.nameGovernorate || advSelectedCountry?.name || '';
 
   return (
     <View style={s.container}>
@@ -305,21 +431,73 @@ export default function AvailableOrdersScreen() {
           <Text style={s.headerTitle}>Available Orders</Text>
           <TouchableOpacity
             style={[s.headerBtn, filterActive && { backgroundColor: '#fff' }]}
-            onPress={() => { if (countries.length === 0) loadCountries(); setShowFilter(true); }}
+            onPress={() => { if (allCountries.length === 0) loadCountries(); setShowFilter(true); }}
           >
             <Ionicons name="filter" size={20} color={filterActive ? '#0284c7' : '#fff'} />
           </TouchableOpacity>
         </View>
         <Text style={s.headerSub}>
-          {filterActive ? `${totalOrders} order${totalOrders !== 1 ? 's' : ''} in ${filterLabel}` : `${totalOrders} order${totalOrders !== 1 ? 's' : ''} near you`}
+          {filterActive
+            ? `${totalOrders} order${totalOrders !== 1 ? 's' : ''} in ${advFilterLabel}`
+            : `${totalOrders} order${totalOrders !== 1 ? 's' : ''} near you`}
         </Text>
       </View>
 
-      {/* Unavailability banner */}
-      {!filterActive && data?.isAvailable === false && (
-        <View style={s.unavailBanner}>
-          <Ionicons name="time-outline" size={18} color="#7c2d12" />
-          <Text style={s.unavailText}>You are currently outside your availability schedule. Orders are hidden.</Text>
+      {/* "I'm available now" toggle — only shown when driver is outside their schedule */}
+      {driverGeo && !driverGeo.isAvailable && (
+        <TouchableOpacity
+          style={[s.availableToggle, availableNow ? s.availableToggleOn : s.availableToggleOff]}
+          onPress={toggleAvailableNow} activeOpacity={0.8}
+        >
+          <Ionicons name={availableNow ? 'radio-button-on' : 'radio-button-off'} size={20}
+            color={availableNow ? '#16a34a' : '#9ca3af'} />
+          <Text style={[s.availableToggleText, { color: availableNow ? '#16a34a' : '#6b7280' }]}>
+            {availableNow ? "I'm available now" : "I'm not available"}
+          </Text>
+          <View style={[s.availableDot, { backgroundColor: availableNow ? '#16a34a' : '#d1d5db' }]} />
+        </TouchableOpacity>
+      )}
+
+      {/* Quick filter level buttons */}
+      {!filterActive && (
+        <View style={s.quickFilterContainer}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.quickFilterRow}>
+            {(['delegation', 'governorate', 'country'] as ('delegation' | 'governorate' | 'country')[]).map((level) => {
+              const isActive = quickFilterLevel === level;
+              const label = level === 'delegation' ? 'Delegation' : level === 'governorate' ? 'Governorate' : 'Country';
+              const icon = level === 'delegation' ? 'location' : level === 'governorate' ? 'map' : 'globe-outline';
+              return (
+                <TouchableOpacity key={level}
+                  style={[s.quickFilterBtn, isActive && s.quickFilterBtnActive]}
+                  onPress={() => toggleQuickLevel(level)} activeOpacity={0.7}
+                >
+                  <Ionicons name={icon as any} size={14} color={isActive ? '#fff' : '#6b7280'} />
+                  <Text style={[s.quickFilterBtnText, isActive && s.quickFilterBtnTextActive]}>{label}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+
+          {/* Multi-select chips for the active level */}
+          {quickFilterLevel && quickChipItems.length > 0 && (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}
+              contentContainerStyle={s.chipSelectRow}>
+              {quickChipItems.map(item => {
+                const selected = activeIds.has(item.id);
+                return (
+                  <TouchableOpacity key={item.id}
+                    style={[s.chipSelect, selected && s.chipSelectActive]}
+                    onPress={() => toggleItem(quickFilterLevel, item.id)} activeOpacity={0.7}
+                  >
+                    <Ionicons name={selected ? 'checkmark-circle' : 'ellipse-outline'} size={14}
+                      color={selected ? '#fff' : '#6b7280'} />
+                    <Text style={[s.chipSelectText, selected && s.chipSelectTextActive]}
+                      numberOfLines={1}>{item.label}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          )}
         </View>
       )}
 
@@ -331,19 +509,20 @@ export default function AvailableOrdersScreen() {
         </View>
       )}
 
-      {/* Filter active chip */}
+      {/* Advanced filter active chip */}
       {filterActive && (
         <View style={s.filterChipRow}>
           <View style={s.filterChip}>
             <Ionicons name="funnel" size={14} color="#0284c7" />
-            <Text style={s.filterChipText}>{filterLabel}</Text>
-            <TouchableOpacity onPress={clearFilter} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <Text style={s.filterChipText}>{advFilterLabel}</Text>
+            <TouchableOpacity onPress={clearAdvFilter} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
               <Ionicons name="close-circle" size={18} color="#6b7280" />
             </TouchableOpacity>
           </View>
         </View>
       )}
 
+      {/* Orders list */}
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 40 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} />}>
         {totalOrders === 0 ? (
@@ -352,11 +531,8 @@ export default function AvailableOrdersScreen() {
             <Text style={s.emptyTitle}>{filterActive ? 'No orders in this area' : 'No orders available'}</Text>
             <Text style={s.emptySub}>{filterActive ? 'Try a different location' : 'Pull down to refresh'}</Text>
           </View>
-        ) : filterActive ? (
-          /* Flat list for filtered results */
-          <>
-            {filteredData?.orders.map(renderOrderCard)}
-          </>
+        ) : isFlat ? (
+          <>{filteredData?.orders.map(renderOrderCard)}</>
         ) : (
           <>
             {renderSection('Same Delegation', data?.sameDelegation || [])}
@@ -367,7 +543,7 @@ export default function AvailableOrdersScreen() {
         )}
       </ScrollView>
 
-      {/* Filter Modal */}
+      {/* Advanced Filter Modal */}
       <Modal visible={showFilter} animationType="slide" onRequestClose={() => setShowFilter(false)}>
         <View style={s.filterModal}>
           <View style={s.filterModalHeader}>
@@ -376,74 +552,65 @@ export default function AvailableOrdersScreen() {
               <Ionicons name="close" size={24} color="#374151" />
             </TouchableOpacity>
           </View>
-
           <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 20 }}>
             <Text style={s.filterHint}>
               Search for orders in a specific location. This ignores your availability and address — useful when traveling or on break.
             </Text>
-
-            {/* Country */}
             <Text style={s.filterLabel}>Country</Text>
             <TouchableOpacity style={s.filterPicker} onPress={() => setShowCountryPicker(true)}>
-              <Text style={selectedCountry ? s.filterPickerText : s.filterPickerPlaceholder}>
-                {selectedCountry ? `${selectedCountry.name} (${selectedCountry.isoCode})` : 'Select Country'}
+              <Text style={advSelectedCountry ? s.filterPickerText : s.filterPickerPlaceholder}>
+                {advSelectedCountry ? advSelectedCountry.name : 'Select Country'}
               </Text>
               <Ionicons name="chevron-down" size={18} color="#9ca3af" />
             </TouchableOpacity>
-
-            {/* Governorate */}
-            {selectedCountry && (
+            {advSelectedCountry && (
               <>
                 <Text style={s.filterLabel}>Governorate (optional)</Text>
                 <TouchableOpacity style={s.filterPicker} onPress={() => setShowGovPicker(true)} disabled={geoLoading}>
-                  {geoLoading && !selectedGovernorate
+                  {geoLoading && !advSelectedGovernorate
                     ? <ActivityIndicator size="small" color="#0284c7" />
-                    : <Text style={selectedGovernorate ? s.filterPickerText : s.filterPickerPlaceholder}>
-                        {selectedGovernorate ? selectedGovernorate.nameGovernorate : 'All Governorates'}
+                    : <Text style={advSelectedGovernorate ? s.filterPickerText : s.filterPickerPlaceholder}>
+                        {advSelectedGovernorate ? advSelectedGovernorate.nameGovernorate : 'All Governorates'}
                       </Text>}
                   <Ionicons name="chevron-down" size={18} color="#9ca3af" />
                 </TouchableOpacity>
               </>
             )}
-
-            {/* Delegation */}
-            {selectedGovernorate && (
+            {advSelectedGovernorate && (
               <>
                 <Text style={s.filterLabel}>Delegation (optional)</Text>
                 <TouchableOpacity style={s.filterPicker} onPress={() => setShowDelPicker(true)} disabled={geoLoading}>
-                  {geoLoading && !selectedDelegation
+                  {geoLoading && !advSelectedDelegation
                     ? <ActivityIndicator size="small" color="#0284c7" />
-                    : <Text style={selectedDelegation ? s.filterPickerText : s.filterPickerPlaceholder}>
-                        {selectedDelegation ? selectedDelegation.nameDelegation : 'All Delegations'}
+                    : <Text style={advSelectedDelegation ? s.filterPickerText : s.filterPickerPlaceholder}>
+                        {advSelectedDelegation ? advSelectedDelegation.nameDelegation : 'All Delegations'}
                       </Text>}
                   <Ionicons name="chevron-down" size={18} color="#9ca3af" />
                 </TouchableOpacity>
               </>
             )}
           </ScrollView>
-
           <View style={s.filterActions}>
             {filterActive && (
-              <TouchableOpacity style={s.filterClearBtn} onPress={() => { clearFilter(); setShowFilter(false); }}>
+              <TouchableOpacity style={s.filterClearBtn} onPress={() => { clearAdvFilter(); setShowFilter(false); }}>
                 <Text style={s.filterClearBtnText}>Clear Filter</Text>
               </TouchableOpacity>
             )}
-            <TouchableOpacity style={[s.filterApplyBtn, !selectedCountry && { opacity: 0.5 }]} onPress={applyFilter} disabled={!selectedCountry}>
+            <TouchableOpacity style={[s.filterApplyBtn, !advSelectedCountry && { opacity: 0.5 }]}
+              onPress={applyAdvFilter} disabled={!advSelectedCountry}>
               <Ionicons name="search" size={18} color="#fff" />
               <Text style={s.filterApplyBtnText}>Search Orders</Text>
             </TouchableOpacity>
           </View>
         </View>
-
-        {/* Sub-pickers */}
         <SearchPicker visible={showCountryPicker} title="Select Country" data={filteredCountries}
-          onSelect={handleSelectCountry} onClose={() => setShowCountryPicker(false)}
+          onSelect={handleAdvSelectCountry} onClose={() => setShowCountryPicker(false)}
           search={countrySearch} setSearch={setCountrySearch} labelKey="name" />
         <SearchPicker visible={showGovPicker} title="Select Governorate" data={filteredGov}
-          onSelect={handleSelectGovernorate} onClose={() => setShowGovPicker(false)}
+          onSelect={handleAdvSelectGovernorate} onClose={() => setShowGovPicker(false)}
           search={govSearch} setSearch={setGovSearch} labelKey="nameGovernorate" />
         <SearchPicker visible={showDelPicker} title="Select Delegation" data={filteredDel}
-          onSelect={handleSelectDelegation} onClose={() => setShowDelPicker(false)}
+          onSelect={handleAdvSelectDelegation} onClose={() => setShowDelPicker(false)}
           search={delSearch} setSearch={setDelSearch} labelKey="nameDelegation" />
       </Modal>
     </View>
@@ -453,8 +620,6 @@ export default function AvailableOrdersScreen() {
 const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f8fafc' },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f8fafc' },
-
-  // Header
   header: {
     backgroundColor: '#0284c7', paddingTop: 50, paddingBottom: 20, paddingHorizontal: 20,
     borderBottomLeftRadius: 24, borderBottomRightRadius: 24,
@@ -467,23 +632,53 @@ const s = StyleSheet.create({
   headerTitle: { color: '#fff', fontSize: 20, fontWeight: '700' },
   headerSub: { color: 'rgba(255,255,255,0.75)', fontSize: 14, textAlign: 'center' },
 
-  // Unavailability banner
+  // Available toggle
+  availableToggle: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    marginHorizontal: 16, marginTop: 12, paddingHorizontal: 16, paddingVertical: 12,
+    borderRadius: 14, borderWidth: 1.5,
+  },
+  availableToggleOn: { backgroundColor: '#f0fdf4', borderColor: '#bbf7d0' },
+  availableToggleOff: { backgroundColor: '#f9fafb', borderColor: '#e5e7eb' },
+  availableToggleText: { flex: 1, fontSize: 15, fontWeight: '700' },
+  availableDot: { width: 10, height: 10, borderRadius: 5 },
+
+  // Quick filter
+  quickFilterContainer: { paddingTop: 10, paddingBottom: 4 },
+  quickFilterRow: { flexDirection: 'row', gap: 8, paddingHorizontal: 16 },
+  quickFilterBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20,
+    backgroundColor: '#f3f4f6', borderWidth: 1.5, borderColor: '#e5e7eb',
+  },
+  quickFilterBtnActive: { backgroundColor: '#0284c7', borderColor: '#0284c7' },
+  quickFilterBtnText: { fontSize: 13, fontWeight: '600', color: '#6b7280' },
+  quickFilterBtnTextActive: { color: '#fff' },
+
+  // Multi-select chips
+  chipSelectRow: { flexDirection: 'row', gap: 8, paddingHorizontal: 16, paddingTop: 10 },
+  chipSelect: {
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    paddingHorizontal: 12, paddingVertical: 7, borderRadius: 18,
+    backgroundColor: '#f3f4f6', borderWidth: 1.5, borderColor: '#e5e7eb',
+  },
+  chipSelectActive: { backgroundColor: '#0ea5e9', borderColor: '#0ea5e9' },
+  chipSelectText: { fontSize: 13, fontWeight: '600', color: '#6b7280', maxWidth: 140 },
+  chipSelectTextActive: { color: '#fff' },
+
+  // Banners
   unavailBanner: {
     flexDirection: 'row', alignItems: 'center', gap: 10,
     backgroundColor: '#fff7ed', paddingHorizontal: 16, paddingVertical: 12,
     borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#fed7aa',
   },
   unavailText: { flex: 1, fontSize: 13, color: '#7c2d12', lineHeight: 18 },
-
-  // Warning
   warningBanner: {
     flexDirection: 'row', alignItems: 'center', gap: 10,
     backgroundColor: '#fffbeb', paddingHorizontal: 16, paddingVertical: 12,
     borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#fde68a',
   },
   warningText: { flex: 1, fontSize: 13, color: '#92400e', lineHeight: 18 },
-
-  // Filter chip
   filterChipRow: { flexDirection: 'row', paddingHorizontal: 16, paddingTop: 12, paddingBottom: 4 },
   filterChip: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
@@ -508,23 +703,17 @@ const s = StyleSheet.create({
   priceTag: { flexDirection: 'row', alignItems: 'baseline', gap: 3 },
   priceText: { fontSize: 20, fontWeight: '800', color: '#0284c7' },
   priceCurrency: { fontSize: 12, fontWeight: '600', color: '#6b7280' },
-
-  // Route
   routeSection: { flexDirection: 'row', marginBottom: 14 },
   routeIconCol: { alignItems: 'center', marginRight: 12, paddingTop: 3 },
   routeDot: { width: 10, height: 10, borderRadius: 5 },
   routeLine: { width: 2, flex: 1, backgroundColor: '#e5e7eb', marginVertical: 3 },
   routeText: { fontSize: 14, color: '#374151', fontWeight: '500' },
-
-  // Chips
   chipsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 14 },
   chip: {
     flexDirection: 'row', alignItems: 'center', gap: 4,
     backgroundColor: '#f3f4f6', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 16,
   },
   chipText: { fontSize: 12, fontWeight: '600', color: '#6b7280' },
-
-  // Accept button
   acceptBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
     backgroundColor: '#22c55e', height: 46, borderRadius: 14,
@@ -532,8 +721,6 @@ const s = StyleSheet.create({
   },
   acceptBtnDisabled: { backgroundColor: '#94a3b8', shadowOpacity: 0 },
   acceptBtnText: { color: '#fff', fontSize: 15, fontWeight: '700' },
-
-  // Empty
   empty: { alignItems: 'center', paddingTop: 80 },
   emptyTitle: { fontSize: 18, fontWeight: '600', color: '#9ca3af', marginTop: 16 },
   emptySub: { fontSize: 14, color: '#d1d5db', marginTop: 4 },
