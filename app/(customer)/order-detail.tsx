@@ -179,7 +179,7 @@ export default function OrderDetailScreen() {
   const canCancel = ['SEARCHING_DRIVER', 'DRAFT'].includes(order.status);
   const canChangePayment = ['SEARCHING_DRIVER', 'PENDING_CUSTOMER_APPROVAL', 'DRIVER_ASSIGNED', 'DRIVER_ARRIVED'].includes(order.status);
   const hasChat = !!order.chatRoom && order.chatRoom.status === 'ACTIVE';
-  const canTrack = order.status === 'DELIVERING';
+  const canTrack = ['PICKED_UP', 'DELIVERING'].includes(order.status);
   const isActive = STATUS_FLOW.includes(order.status) && order.status !== 'DELIVERED';
   const currentStepIndex = STATUS_FLOW.indexOf(order.status);
   const createdDate = new Date(order.createdAt);

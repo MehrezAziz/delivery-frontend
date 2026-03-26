@@ -20,8 +20,12 @@ export default function DriverOrderChatScreen() {
   const flatListRef = useRef<FlatList>(null);
 
   useEffect(() => {
+    // Try 'user' JSON first (customer), then 'userId' (driver)
     AsyncStorage.getItem('user').then(u => {
-      if (u) setMyUserId(JSON.parse(u).id || '');
+      if (u) { setMyUserId(JSON.parse(u).id || ''); }
+      else {
+        AsyncStorage.getItem('userId').then(id => { if (id) setMyUserId(id); });
+      }
     });
   }, []);
 

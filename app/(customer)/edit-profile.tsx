@@ -23,6 +23,9 @@ export default function CustomerEditProfileScreen() {
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
   const [gender, setGender] = useState<string | null>(null);
+  const [referralCodeInput, setReferralCodeInput] = useState('');
+  const [hasReferralCode, setHasReferralCode] = useState(false);
+  const [referralApplying, setReferralApplying] = useState(false);
 
   useEffect(() => { loadProfile(); }, []);
 
@@ -38,6 +41,7 @@ export default function CustomerEditProfileScreen() {
       setPhone(d.user?.phone || '');
       setEmail(d.user?.myEmail || '');
       setGender(d.user?.userGender || null);
+      setHasReferralCode(!!d.referredByCodeId);
       if (!d.user?.hasPassword) {
         setIsGoogleUser(true);
         setVerified(true);
@@ -63,11 +67,31 @@ export default function CustomerEditProfileScreen() {
     } finally { setVerifying(false); }
   };
 
+  const handleApplyReferralCode = async () => {
+    if (!referralCodeInput.trim()) return;
+    setReferralApplying(true);
+    try {
+      const token = await AsyncStorage.getItem('accessToken');
+      const res = await fetch(`${API_URL.replace('/api', '')}/api/referral/apply`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ code: referralCodeInput.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || 'Failed to apply referral code');
+      setHasReferralCode(true);
+      setReferralCodeInput('');
+      Alert.alert('Success', 'Referral code applied successfully');
+    } catch (e: any) {
+      Alert.alert('Error', e.message || 'Failed to apply referral code');
+    } finally { setReferralApplying(false); }
+  };
+
   const handleSave = async () => {
     setSaving(true);
     try {
       const token = await AsyncStorage.getItem('accessToken');
-      await fetch(`${API_URL}/customers/me`, {
+      const res = await fetch(`${API_URL}/customers/me`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({
@@ -75,11 +99,14 @@ export default function CustomerEditProfileScreen() {
           secondName: secondName.trim() || undefined,
           myEmail: email.trim() || undefined,
           userGender: gender || undefined,
+          phone: phone.trim() || undefined,
         }),
       });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || 'Failed to update profile');
       Alert.alert('Success', 'Profile updated', [{ text: 'OK', onPress: () => router.back() }]);
     } catch (e: any) {
-      Alert.alert('Error', 'Failed to update');
+      Alert.alert('Error', 'Failed to update, phone number exists!');
     } finally { setSaving(false); }
   };
 
@@ -124,7 +151,7 @@ export default function CustomerEditProfileScreen() {
       <ScrollView style={{ flex: 1 }} contentContainerStyle={s.content}>
         <Field label="First Name" value={firstName} onChange={setFirstName} />
         <Field label="Last Name" value={secondName} onChange={setSecondName} />
-        <Field label="Phone" value={phone} onChange={setPhone} keyboardType="phone-pad" editable={false} />
+        <Field label="Phone" value={phone} onChange={setPhone} keyboardType="phone-pad" />
         <Field label="Email" value={email} onChange={setEmail} keyboardType="email-address" />
 
         <Text style={s.fieldLabel}>Gender</Text>
@@ -136,6 +163,39 @@ export default function CustomerEditProfileScreen() {
             </TouchableOpacity>
           ))}
         </View>
+
+        {/* Referral Code Section */}
+        {!hasReferralCode && (
+          <View style={{ marginBottom: 16 }}>
+            <Text style={s.fieldLabel}>Referral Code</Text>
+            <View style={{ flexDirection: 'row', gap: 10 }}>
+              <TextInput
+                style={[s.input, { flex: 1 }]}
+                value={referralCodeInput}
+                onChangeText={setReferralCodeInput}
+                placeholder="Enter a referral code"
+                placeholderTextColor="#9ca3af"
+                autoCapitalize="characters"
+              />
+              <TouchableOpacity
+                style={[s.saveBtn, { flex: 0, paddingHorizontal: 20, marginTop: 0 }, (!referralCodeInput.trim() || referralApplying) && { opacity: 0.5 }]}
+                onPress={handleApplyReferralCode}
+                disabled={!referralCodeInput.trim() || referralApplying}
+              >
+                {referralApplying ? <ActivityIndicator color="#fff" size="small" /> : <Text style={s.saveBtnText}>Apply</Text>}
+              </TouchableOpacity>
+            </View>
+            <Text style={{ fontSize: 12, color: '#9ca3af', marginTop: 4 }}>
+              You can only add a referral code once. It cannot be changed later.
+            </Text>
+          </View>
+        )}
+        {hasReferralCode && (
+          <View style={{ marginBottom: 16 }}>
+            <Text style={s.fieldLabel}>Referral Code</Text>
+            <Text style={{ fontSize: 14, color: '#10b981', fontWeight: '600' }}>✓ Referral code already applied</Text>
+          </View>
+        )}
 
         <TouchableOpacity style={s.saveBtn} onPress={handleSave} disabled={saving}>
           {saving ? <ActivityIndicator color="#fff" /> : <Text style={s.saveBtnText}>Save Changes</Text>}

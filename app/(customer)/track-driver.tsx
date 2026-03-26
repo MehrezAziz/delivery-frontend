@@ -47,20 +47,16 @@ export default function TrackDriverScreen() {
     return () => clearInterval(interval);
   }, [orderId]);
 
-  // Center map on driver position (or fallback to pickup)
+  // Track whether we've centered on driver
+  const [mapRegion, setMapRegion] = useState<any>(null);
+  const hasCentered = useRef(false);
   useEffect(() => {
-    if (!mapRef.current || !order) return;
-    const center = driverLoc || (order.pickupAddress?.latitude && order.pickupAddress?.longitude
-      ? { latitude: order.pickupAddress.latitude, longitude: order.pickupAddress.longitude }
-      : null);
-    if (center) {
-      mapRef.current.animateToRegion({
-        ...center, latitudeDelta: 0.01, longitudeDelta: 0.01,
-      }, 600);
-    }
-  }, [driverLoc, order]);
+    if (hasCentered.current || !driverLoc) return;
+    hasCentered.current = true;
+    setMapRegion({ ...driverLoc, latitudeDelta: 0.008, longitudeDelta: 0.008 });
+  }, [driverLoc]);
 
-  if (loading) {
+  if (loading || !order) {
     return (
       <View style={s.loadingContainer}>
         <ActivityIndicator size="large" color="#0284c7" />
@@ -68,12 +64,13 @@ export default function TrackDriverScreen() {
     );
   }
 
-  const pickupCoord = order?.pickupAddress?.latitude && order?.pickupAddress?.longitude
+  const pickupCoord = order.pickupAddress?.latitude && order.pickupAddress?.longitude
     ? { latitude: order.pickupAddress.latitude, longitude: order.pickupAddress.longitude } : null;
-  const dropoffCoord = order?.dropoffAddress?.latitude && order?.dropoffAddress?.longitude
+  const dropoffCoord = order.dropoffAddress?.latitude && order.dropoffAddress?.longitude
     ? { latitude: order.dropoffAddress.latitude, longitude: order.dropoffAddress.longitude } : null;
 
-  const initialRegion = driverLoc || pickupCoord || dropoffCoord || { latitude: 36.8, longitude: 10.18 };
+  const centerCoord = driverLoc || pickupCoord || dropoffCoord || { latitude: 36.8, longitude: 10.18 };
+  const zoomDelta = driverLoc ? 0.008 : 0.04;
 
   const driverName = order?.driverAssignment?.driver
     ? `${order.driverAssignment.driver.user.firstName || ''} ${order.driverAssignment.driver.user.secondName || ''}`.trim()
@@ -86,7 +83,8 @@ export default function TrackDriverScreen() {
         ref={mapRef}
         style={s.map}
         provider={PROVIDER_GOOGLE}
-        initialRegion={{ ...initialRegion, latitudeDelta: 0.05, longitudeDelta: 0.05 }}
+        region={mapRegion || { ...centerCoord, latitudeDelta: zoomDelta, longitudeDelta: zoomDelta }}
+        onRegionChangeComplete={(r) => { if (hasCentered.current) setMapRegion(r); }}
         showsUserLocation
       >
         {driverLoc && (

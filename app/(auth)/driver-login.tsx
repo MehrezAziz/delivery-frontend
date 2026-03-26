@@ -284,6 +284,7 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 12,
     fontSize: 16,
+    color: '#000000',
   },
   eyeIcon: {
     padding: 12,

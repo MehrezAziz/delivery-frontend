@@ -10,6 +10,7 @@ import { orderService, Order } from '../../services/api/order.service';
 const STATUS_META: Record<string, { icon: string; color: string; bg: string; label: string }> = {
   DRAFT:            { icon: 'document-outline',    color: '#6b7280', bg: '#f3f4f6', label: 'Draft' },
   SEARCHING_DRIVER: { icon: 'search-outline',      color: '#ca8a04', bg: '#fef9c3', label: 'Searching' },
+  PENDING_CUSTOMER_APPROVAL: { icon: 'hourglass-outline', color: '#ea580c', bg: '#ffedd5', label: 'Waiting for Customer' },
   DRIVER_ASSIGNED:  { icon: 'person-outline',      color: '#2563eb', bg: '#dbeafe', label: 'Assigned' },
   DRIVER_ARRIVED:   { icon: 'flag-outline',        color: '#7c3aed', bg: '#ede9fe', label: 'Arrived' },
   PICKED_UP:        { icon: 'cube-outline',        color: '#ea580c', bg: '#ffedd5', label: 'Picked Up' },
