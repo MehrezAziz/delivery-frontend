@@ -60,11 +60,13 @@ export default function DriverProfileScreen() {
   const initials = (firstName.charAt(0) + secondName.charAt(0)).toUpperCase() || 'D';
   const statusColor = driver?.status === 'VERIFIED' ? '#16a34a'
     : driver?.status === 'PENDING_REVIEW' ? '#ca8a04'
-    : driver?.status === 'SUSPENDED' ? '#dc2626' : '#6b7280';
+    : driver?.status === 'SUSPENDED' ? '#dc2626'
+    : driver?.status === 'PAUSED' ? '#ea580c' : '#6b7280';
   const statusLabel = driver?.status === 'VERIFIED' ? 'Verified'
     : driver?.status === 'PENDING_REVIEW' ? 'Pending Review'
     : driver?.status === 'INCOMPLETE' ? 'Incomplete'
     : driver?.status === 'SUSPENDED' ? 'Suspended'
+    : driver?.status === 'PAUSED' ? 'Paused'
     : driver?.status || 'Unknown';
 
   const menuItems = [
@@ -120,6 +122,40 @@ export default function DriverProfileScreen() {
                 <View style={{ alignItems: 'flex-end' }}>
                   <Text style={s.infoLabel}>Deliveries</Text>
                   <Text style={s.infoValue}>{driver.account.completedDeliveries}</Text>
+                </View>
+              </View>
+            )}
+
+            {/* Negative balance warning */}
+            {driver?.account?.balance < 0 && driver?.account?.daysRemainingToPay !== undefined && (
+              <View style={{
+                backgroundColor: driver.account.daysRemainingToPay <= 0 ? '#fee2e2' : '#fff7ed',
+                borderRadius: 12, padding: 14, flexDirection: 'row', alignItems: 'center', gap: 10,
+                borderWidth: 1, borderColor: driver.account.daysRemainingToPay <= 0 ? '#fecaca' : '#fed7aa',
+              }}>
+                <Ionicons
+                  name={driver.account.daysRemainingToPay <= 0 ? 'alert-circle' : 'warning'}
+                  size={24}
+                  color={driver.account.daysRemainingToPay <= 0 ? '#dc2626' : '#ea580c'}
+                />
+                <View style={{ flex: 1 }}>
+                  {driver.account.daysRemainingToPay <= 0 ? (
+                    <>
+                      <Text style={{ fontSize: 14, fontWeight: '700', color: '#dc2626' }}>Account Paused</Text>
+                      <Text style={{ fontSize: 12, color: '#991b1b', marginTop: 2 }}>
+                        Your account has been paused due to unpaid fees. Please pay your balance to resume.
+                      </Text>
+                    </>
+                  ) : (
+                    <>
+                      <Text style={{ fontSize: 14, fontWeight: '700', color: '#ea580c' }}>
+                        {driver.account.daysRemainingToPay} day{driver.account.daysRemainingToPay !== 1 ? 's' : ''} remaining
+                      </Text>
+                      <Text style={{ fontSize: 12, color: '#9a3412', marginTop: 2 }}>
+                        Pay your fees ({Math.abs(driver.account.balance).toFixed(2)} {driver.account.currency}) or your account will be paused.
+                      </Text>
+                    </>
+                  )}
                 </View>
               </View>
             )}
