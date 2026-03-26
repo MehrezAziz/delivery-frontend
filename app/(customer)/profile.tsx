@@ -650,6 +650,15 @@ export default function CustomerProfileScreen() {
         <View style={styles.menuContainer}>
           <TouchableOpacity
             style={styles.menuItem}
+            onPress={() => router.push('/(customer)/edit-profile')}
+          >
+            <Text style={styles.menuIcon}>✏️</Text>
+            <Text style={styles.menuText}>Edit Profile</Text>
+            <Text style={styles.menuArrow}>→</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.menuItem}
             onPress={() => router.push('/(auth)/customer-setup')}
           >
             <Text style={styles.menuIcon}>🌍</Text>

@@ -306,7 +306,21 @@ export default function AvailableOrdersScreen() {
       { text: 'Accept', onPress: async () => {
         setAccepting(orderId);
         try { await orderService.acceptOrder(orderId); Alert.alert('Success', 'Order accepted!'); router.replace('/(driver)/my-orders'); }
-        catch (e: any) { Alert.alert('Error', e.message); }
+        catch (e: any) {
+          const msg = e.message || '';
+          if (msg.toLowerCase().includes('phone number')) {
+            Alert.alert(
+              'Phone Number Required',
+              'You must add a phone number to your profile before accepting orders. Customers need to be able to contact you.',
+              [
+                { text: 'Later', style: 'cancel' },
+                { text: 'Add Phone Number', onPress: () => router.push('/(driver)/edit-profile') },
+              ],
+            );
+          } else {
+            Alert.alert('Error', msg);
+          }
+        }
         finally { setAccepting(null); }
       }},
     ]);

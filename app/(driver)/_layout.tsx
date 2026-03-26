@@ -17,6 +17,7 @@ export default function DriverLayout() {
       <Stack.Screen name="earnings" />
       <Stack.Screen name="transactions" />
       <Stack.Screen name="profile" />
+      <Stack.Screen name="edit-profile" />
       <Stack.Screen name="restrictions" />
       <Stack.Screen name="verification" />
     </Stack>

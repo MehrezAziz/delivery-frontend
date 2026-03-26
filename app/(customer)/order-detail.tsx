@@ -1,19 +1,20 @@
 import { useEffect, useState, useCallback } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, ActivityIndicator,
-  Alert, RefreshControl, StyleSheet, TextInput, Modal,
+  Alert, RefreshControl, StyleSheet, TextInput, Modal, Image,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { orderService, Order } from '../../services/api/order.service';
 
 const STATUS_FLOW = [
-  'SEARCHING_DRIVER', 'DRIVER_ASSIGNED', 'DRIVER_ARRIVED', 'PICKED_UP', 'DELIVERING', 'DELIVERED',
+  'SEARCHING_DRIVER', 'PENDING_CUSTOMER_APPROVAL', 'DRIVER_ASSIGNED', 'DRIVER_ARRIVED', 'PICKED_UP', 'DELIVERING', 'DELIVERED',
 ];
 
 const STATUS_META: Record<string, { icon: string; color: string; bg: string; label: string }> = {
   DRAFT:            { icon: 'document-outline',   color: '#6b7280', bg: '#f3f4f6', label: 'Draft' },
   SEARCHING_DRIVER: { icon: 'search-outline',     color: '#ca8a04', bg: '#fef9c3', label: 'Searching Driver' },
+  PENDING_CUSTOMER_APPROVAL: { icon: 'hourglass-outline', color: '#ea580c', bg: '#ffedd5', label: 'Awaiting Your Approval' },
   DRIVER_ASSIGNED:  { icon: 'person-outline',     color: '#2563eb', bg: '#dbeafe', label: 'Driver Assigned' },
   DRIVER_ARRIVED:   { icon: 'flag-outline',       color: '#7c3aed', bg: '#ede9fe', label: 'Driver Arrived' },
   PICKED_UP:        { icon: 'cube-outline',       color: '#ea580c', bg: '#ffedd5', label: 'Picked Up' },
@@ -38,6 +39,8 @@ export default function OrderDetailScreen() {
   const [ratingScore, setRatingScore] = useState<number | null>(null);
   const [ratingComment, setRatingComment] = useState('');
   const [ratingSubmitting, setRatingSubmitting] = useState(false);
+  const [reviewsModalVisible, setReviewsModalVisible] = useState(false);
+  const [driverReviews, setDriverReviews] = useState<{ id: string; score: number; comment: string | null; createdAt: string; customerName: string }[]>([]);
 
   const loadOrder = useCallback(async () => {
     try {
@@ -149,6 +152,21 @@ export default function OrderDetailScreen() {
     );
   };
 
+  const handleApproveDriver = async () => {
+    try {
+      await orderService.approveDriver(orderId);
+      loadOrder();
+    } catch (e: any) { Alert.alert('Error', e.message); }
+  };
+
+  const handleShowReviews = async () => {
+    try {
+      const data = await orderService.getDriverReviews(orderId);
+      setDriverReviews(data.reviews);
+      setReviewsModalVisible(true);
+    } catch (e: any) { Alert.alert('Error', e.message || 'Failed to load reviews'); }
+  };
+
   if (loading || !order) {
     return (
       <View style={s.loadingContainer}>
@@ -159,7 +177,7 @@ export default function OrderDetailScreen() {
 
   const meta = STATUS_META[order.status] || STATUS_META.DRAFT;
   const canCancel = ['SEARCHING_DRIVER', 'DRAFT'].includes(order.status);
-  const canChangePayment = ['SEARCHING_DRIVER', 'DRIVER_ASSIGNED', 'DRIVER_ARRIVED'].includes(order.status);
+  const canChangePayment = ['SEARCHING_DRIVER', 'PENDING_CUSTOMER_APPROVAL', 'DRIVER_ASSIGNED', 'DRIVER_ARRIVED'].includes(order.status);
   const hasChat = !!order.chatRoom && order.chatRoom.status === 'ACTIVE';
   const canTrack = order.status === 'DELIVERING';
   const isActive = STATUS_FLOW.includes(order.status) && order.status !== 'DELIVERED';
@@ -222,6 +240,7 @@ export default function OrderDetailScreen() {
             </View>
             <View style={s.stepsLabels}>
               <Text style={[s.stepLabel, { color: meta.color }]}>Search</Text>
+              <Text style={s.stepLabel}>Approve</Text>
               <Text style={s.stepLabel}>Assign</Text>
               <Text style={s.stepLabel}>Arrive</Text>
               <Text style={s.stepLabel}>Pickup</Text>
@@ -338,16 +357,21 @@ export default function OrderDetailScreen() {
           <View style={s.card}>
             <Text style={s.cardTitle}>Your Driver</Text>
             <View style={s.driverRow}>
-              <View style={s.driverAvatar}>
-                <Ionicons name="person" size={24} color="#fff" />
-              </View>
+              {order.driverAssignment.driver.user.image ? (
+                <Image source={{ uri: order.driverAssignment.driver.user.image }} style={s.driverAvatar} />
+              ) : (
+                <View style={s.driverAvatar}>
+                  <Ionicons name="person" size={24} color="#fff" />
+                </View>
+              )}
               <View style={{ flex: 1 }}>
                 <Text style={s.driverName}>
                   {order.driverAssignment.driver.user.firstName} {order.driverAssignment.driver.user.secondName}
                 </Text>
                 <Text style={s.driverPhone}>{order.driverAssignment.driver.user.phone}</Text>
                 {order.driverAssignment.driver.avgRating !== null && order.driverAssignment.driver.avgRating !== undefined && (
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 }}>
+                  <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 }}
+                    onPress={handleShowReviews} activeOpacity={0.7}>
                     <Ionicons name="star" size={14} color="#f59e0b" />
                     <Text style={{ fontSize: 13, fontWeight: '600', color: '#f59e0b' }}>
                       {order.driverAssignment.driver.avgRating.toFixed(1)}/10
@@ -355,7 +379,8 @@ export default function OrderDetailScreen() {
                     <Text style={{ fontSize: 12, color: '#9ca3af' }}>
                       · {order.driverAssignment.driver.completedOrders} deliveries
                     </Text>
-                  </View>
+                    <Ionicons name="chevron-forward" size={12} color="#9ca3af" />
+                  </TouchableOpacity>
                 )}
               </View>
               {hasChat && (
@@ -553,6 +578,32 @@ export default function OrderDetailScreen() {
               <Ionicons name="chevron-forward" size={18} color="#fca5a5" />
             </TouchableOpacity>
           )}
+          {order.status === 'PENDING_CUSTOMER_APPROVAL' && order.driverAssignment && (
+            <>
+              <TouchableOpacity style={[s.actionBtn, { borderColor: '#bbf7d0', backgroundColor: '#f0fdf4' }]}
+                onPress={handleApproveDriver} activeOpacity={0.8}>
+                <View style={[s.actionIconCircle, { backgroundColor: '#dcfce7' }]}>
+                  <Ionicons name="checkmark-circle" size={18} color="#16a34a" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={[s.actionTitle, { color: '#16a34a' }]}>Accept This Driver</Text>
+                  <Text style={s.actionSub}>Approve and start delivery</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color="#86efac" />
+              </TouchableOpacity>
+              <TouchableOpacity style={[s.actionBtn, { borderColor: '#fecaca' }]}
+                onPress={handleRejectDriver} activeOpacity={0.8}>
+                <View style={[s.actionIconCircle, { backgroundColor: '#fef2f2' }]}>
+                  <Ionicons name="person-remove" size={18} color="#dc2626" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={[s.actionTitle, { color: '#dc2626' }]}>Reject This Driver</Text>
+                  <Text style={s.actionSub}>Search for another driver</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color="#fca5a5" />
+              </TouchableOpacity>
+            </>
+          )}
           {order.status === 'DELIVERED' && !order.dispute && (
             <TouchableOpacity style={[s.actionBtn, { borderColor: '#fed7aa' }]}
               onPress={handleDispute} activeOpacity={0.8}>
@@ -609,6 +660,43 @@ export default function OrderDetailScreen() {
             </View>
           </View>
         </View>
+      </Modal>
+
+      {/* ── Driver Reviews Modal ── */}
+      <Modal visible={reviewsModalVisible} transparent animationType="fade">
+        <TouchableOpacity style={s.modalOverlay} activeOpacity={1} onPress={() => setReviewsModalVisible(false)}>
+          <TouchableOpacity activeOpacity={1} style={[s.modalCard, { maxHeight: '70%' }]}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <Text style={s.modalTitle}>Driver Reviews</Text>
+              <TouchableOpacity onPress={() => setReviewsModalVisible(false)}>
+                <Ionicons name="close-circle" size={28} color="#9ca3af" />
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={{ maxHeight: 400 }} showsVerticalScrollIndicator={false}>
+              {driverReviews.length === 0 ? (
+                <Text style={{ textAlign: 'center', color: '#9ca3af', paddingVertical: 20 }}>No reviews yet</Text>
+              ) : (
+                driverReviews.map(r => (
+                  <View key={r.id} style={{ borderBottomWidth: 1, borderBottomColor: '#f3f4f6', paddingVertical: 12 }}>
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <Text style={{ fontSize: 14, fontWeight: '600', color: '#111827' }}>{r.customerName}</Text>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                        <Ionicons name="star" size={12} color="#f59e0b" />
+                        <Text style={{ fontSize: 13, fontWeight: '700', color: '#f59e0b' }}>{r.score}/10</Text>
+                      </View>
+                    </View>
+                    {r.comment && (
+                      <Text style={{ fontSize: 13, color: '#6b7280', marginTop: 4, lineHeight: 18 }}>"{r.comment}"</Text>
+                    )}
+                    <Text style={{ fontSize: 11, color: '#d1d5db', marginTop: 4 }}>
+                      {new Date(r.createdAt).toLocaleDateString()}
+                    </Text>
+                  </View>
+                ))
+              )}
+            </ScrollView>
+          </TouchableOpacity>
+        </TouchableOpacity>
       </Modal>
     </View>
   );

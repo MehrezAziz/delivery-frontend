@@ -10,11 +10,12 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { orderService, Order } from '../../services/api/order.service';
 
 const ACTIVE_STATUSES = [
-  'SEARCHING_DRIVER', 'DRIVER_ASSIGNED', 'DRIVER_ARRIVED', 'PICKED_UP', 'DELIVERING',
+  'SEARCHING_DRIVER', 'PENDING_CUSTOMER_APPROVAL', 'DRIVER_ASSIGNED', 'DRIVER_ARRIVED', 'PICKED_UP', 'DELIVERING',
 ];
 
 const STATUS_META: Record<string, { icon: string; color: string; bg: string; label: string }> = {
   SEARCHING_DRIVER: { icon: 'search-outline', color: '#ca8a04', bg: '#fef9c3', label: 'Searching' },
+  PENDING_CUSTOMER_APPROVAL: { icon: 'hourglass-outline', color: '#ea580c', bg: '#ffedd5', label: 'Approve Driver' },
   DRIVER_ASSIGNED:  { icon: 'person-outline', color: '#2563eb', bg: '#dbeafe', label: 'Assigned' },
   DRIVER_ARRIVED:   { icon: 'flag-outline',   color: '#7c3aed', bg: '#ede9fe', label: 'Arrived' },
   PICKED_UP:        { icon: 'cube-outline',   color: '#ea580c', bg: '#ffedd5', label: 'Picked Up' },

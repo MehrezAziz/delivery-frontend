@@ -180,6 +180,14 @@ export const orderService = {
   rejectDriver: (orderId: string, reason?: string) =>
     api.post(`/orders/${orderId}/reject-driver`, { reason }),
 
+  // Customer approve driver
+  approveDriver: (orderId: string) =>
+    api.post(`/orders/${orderId}/approve-driver`),
+
+  // Get driver reviews for an order
+  getDriverReviews: (orderId: string) =>
+    api.get<{ reviews: { id: string; score: number; comment: string | null; createdAt: string; customerName: string }[] }>(`/orders/${orderId}/driver-reviews`),
+
   // Driver revert status
   revertOrderStatus: (orderId: string) =>
     api.post(`/driver/orders/${orderId}/revert-status`),

@@ -8,6 +8,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { orderService, Order } from '../../services/api/order.service';
 
 const STATUS_META: Record<string, { color: string; bg: string; label: string; icon: string }> = {
+  PENDING_CUSTOMER_APPROVAL: { color: '#ea580c', bg: '#ffedd5', label: 'Waiting for Customer', icon: 'hourglass-outline' },
   DRIVER_ASSIGNED: { color: '#2563eb', bg: '#dbeafe', label: 'Assigned',    icon: 'person-outline' },
   DRIVER_ARRIVED:  { color: '#7c3aed', bg: '#ede9fe', label: 'Arrived',     icon: 'flag-outline' },
   PICKED_UP:       { color: '#ea580c', bg: '#ffedd5', label: 'Picked Up',   icon: 'cube-outline' },

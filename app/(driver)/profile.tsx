@@ -1,11 +1,14 @@
 import { useEffect, useState } from 'react';
 import {
   View, Text, TouchableOpacity, ScrollView, StyleSheet,
-  ActivityIndicator, Alert,
+  ActivityIndicator, Alert, Image,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
+import { useCallback } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as ImagePicker from 'expo-image-picker';
 import axios from 'axios';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
@@ -18,6 +21,8 @@ export default function DriverProfileScreen() {
   useEffect(() => {
     loadProfile();
   }, []);
+
+  useFocusEffect(useCallback(() => { loadProfile(); }, []));
 
   const loadProfile = async () => {
     try {
@@ -32,6 +37,44 @@ export default function DriverProfileScreen() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleChangePhoto = async () => {
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      quality: 0.7,
+      base64: true,
+      allowsEditing: true,
+      aspect: [1, 1],
+    });
+    if (result.canceled || !result.assets[0]) return;
+    const uri = result.assets[0].base64
+      ? `data:image/jpeg;base64,${result.assets[0].base64}`
+      : result.assets[0].uri;
+    try {
+      const token = await AsyncStorage.getItem('accessToken');
+      await axios.patch(`${API_URL}/auth/user/complete-profile`, { image: uri }, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      loadProfile();
+    } catch (e: any) {
+      Alert.alert('Error', 'Failed to update photo');
+    }
+  };
+
+  const handleRemovePhoto = () => {
+    Alert.alert('Remove Photo', 'Are you sure?', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Remove', style: 'destructive', onPress: async () => {
+        try {
+          const token = await AsyncStorage.getItem('accessToken');
+          await axios.patch(`${API_URL}/auth/user/complete-profile`, { image: null }, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          loadProfile();
+        } catch (e) { Alert.alert('Error', 'Failed to remove photo'); }
+      }},
+    ]);
   };
 
   const handleLogout = () => {
@@ -70,6 +113,7 @@ export default function DriverProfileScreen() {
     : driver?.status || 'Unknown';
 
   const menuItems = [
+    { icon: 'create-outline', label: 'Edit Profile', route: '/(driver)/edit-profile', color: '#0284c7' },
     { icon: 'star-outline', label: 'My Ratings', route: '/(driver)/my-ratings', color: '#f59e0b' },
     { icon: 'receipt-outline', label: 'Transaction History', route: '/(driver)/transactions', color: '#0284c7' },
     { icon: 'document-text-outline', label: 'My Documents', route: '/(driver)/documents', color: '#2563eb' },
@@ -94,10 +138,27 @@ export default function DriverProfileScreen() {
         {/* Profile Card */}
         <View style={s.profileCard}>
           <View style={s.avatarWrap}>
-            <View style={s.avatar}>
-              <Text style={s.avatarText}>{initials}</Text>
-            </View>
+            {driver?.user?.image ? (
+              <Image source={{ uri: driver.user.image }} style={s.avatar} />
+            ) : (
+              <View style={s.avatar}>
+                <Text style={s.avatarText}>{initials}</Text>
+              </View>
+            )}
             <View style={[s.statusDot, { backgroundColor: statusColor }]} />
+            <TouchableOpacity style={s.cameraBtn} onPress={() => {
+              if (driver?.user?.image) {
+                Alert.alert('Profile Photo', 'What would you like to do?', [
+                  { text: 'Change Photo', onPress: handleChangePhoto },
+                  { text: 'Remove Photo', onPress: handleRemovePhoto, style: 'destructive' },
+                  { text: 'Cancel', style: 'cancel' },
+                ]);
+              } else {
+                handleChangePhoto();
+              }
+            }}>
+              <Ionicons name="camera" size={14} color="#fff" />
+            </TouchableOpacity>
           </View>
           <Text style={s.name}>{firstName} {secondName}</Text>
           <Text style={s.phone}>{driver?.user?.phone || ''}</Text>
@@ -242,6 +303,11 @@ const s = StyleSheet.create({
   statusDot: {
     position: 'absolute', bottom: 2, right: 2, width: 18, height: 18, borderRadius: 9,
     borderWidth: 3, borderColor: '#fff',
+  },
+  cameraBtn: {
+    position: 'absolute', bottom: -2, left: -2, width: 28, height: 28, borderRadius: 14,
+    backgroundColor: '#374151', alignItems: 'center', justifyContent: 'center',
+    borderWidth: 2, borderColor: '#fff',
   },
   name: { fontSize: 22, fontWeight: '800', color: '#111827', marginBottom: 4 },
   phone: { fontSize: 14, color: '#6b7280', marginBottom: 12 },
