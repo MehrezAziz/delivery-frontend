@@ -4,6 +4,7 @@ import {
   Alert, TextInput, KeyboardAvoidingView, Platform, StyleSheet,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { api } from '../../services/api/client';
@@ -47,6 +48,8 @@ export default function CreateOrderScreen() {
   const [resolvingPickup, setResolvingPickup] = useState(false);
   const [resolvingDropoff, setResolvingDropoff] = useState(false);
   const [activeOrders, setActiveOrders] = useState<Order[]>([]);
+  const [cancelAfterMinutes, setCancelAfterMinutes] = useState(15);
+  const [walletBalance, setWalletBalance] = useState(0);
 
   const ACTIVE_STATUSES = ['SEARCHING_DRIVER', 'DRIVER_ASSIGNED', 'DRIVER_ARRIVED', 'PICKED_UP', 'DELIVERING'];
 
@@ -62,6 +65,20 @@ export default function CreateOrderScreen() {
     const interval = setInterval(loadActiveOrders, 15000);
     return () => clearInterval(interval);
   }, []);
+
+  // Fetch wallet balance
+  const fetchWalletBalance = useCallback(async () => {
+    try {
+      const wallet = await api.get<{ id: string; balance: number; currency: string; discount: number }>('/wallet/me');
+      setWalletBalance(wallet.balance ?? 0);
+    } catch {
+      setWalletBalance(0);
+    }
+  }, []);
+
+  // Fetch wallet balance on mount and when screen regains focus
+  useEffect(() => { fetchWalletBalance(); }, [fetchWalletBalance]);
+  useFocusEffect(useCallback(() => { fetchWalletBalance(); }, [fetchWalletBalance]));
 
   // Resolve address from map picker params
   const resolveAddress = useCallback(async (
@@ -153,6 +170,10 @@ export default function CreateOrderScreen() {
       Alert.alert('Invalid Weight', 'Please enter a valid package weight.');
       return;
     }
+    if (cancelAfterMinutes < 5 || cancelAfterMinutes > 60) {
+      Alert.alert('Invalid Timer', 'Auto-cancel time must be between 5 and 60 minutes.');
+      return;
+    }
     setLoading(true);
     try {
       const result = await orderService.previewOrder({
@@ -179,6 +200,7 @@ export default function CreateOrderScreen() {
         dropoffAddressId: dropoffAddress.addressId,
         paymentType, weight: parseFloat(weight),
         description: description || undefined,
+        cancelAfterMinutes,
       });
       // Reset form for next order
       setPickupAddress(null);
@@ -186,6 +208,7 @@ export default function CreateOrderScreen() {
       setPaymentType('COD');
       setWeight('1');
       setDescription('');
+      setCancelAfterMinutes(15);
       setPreview(null);
       setStep('form');
       // Refresh active orders
@@ -201,6 +224,23 @@ export default function CreateOrderScreen() {
       Alert.alert('Error', e.message || 'Failed to create order');
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  // Switch to Cash handler for insufficient wallet balance
+  const handleSwitchToCash = async () => {
+    if (!pickupAddress || !dropoffAddress) return;
+    setPaymentType('COD');
+    try {
+      const result = await orderService.previewOrder({
+        pickupAddressId: pickupAddress.addressId,
+        dropoffAddressId: dropoffAddress.addressId,
+        paymentType: 'COD',
+        weight: parseFloat(weight),
+      });
+      setPreview(result);
+    } catch (e: any) {
+      Alert.alert('Error', e.message || 'Failed to recalculate price');
     }
   };
 
@@ -285,7 +325,7 @@ export default function CreateOrderScreen() {
             </View>
           </View>
 
-          {/* Wallet balance warning */}
+          {/* Wallet balance warning / Insufficient balance prompt */}
           {!isCash && preview.walletBalance !== null && (
             <View style={[s.walletBanner, insufficientWallet ? s.walletBannerDanger : s.walletBannerOk]}>
               <Ionicons name="wallet-outline" size={18} color={insufficientWallet ? '#dc2626' : '#16a34a'} />
@@ -293,6 +333,28 @@ export default function CreateOrderScreen() {
                 Balance: {preview.walletBalance.toFixed(2)} coins
                 {insufficientWallet ? ' — Insufficient funds' : ''}
               </Text>
+            </View>
+          )}
+
+          {/* Insufficient balance action buttons */}
+          {insufficientWallet && (
+            <View style={s.insufficientActions}>
+              <TouchableOpacity
+                style={[s.insufficientBtn, { backgroundColor: '#dbeafe' }]}
+                onPress={() => Alert.alert('Coming Soon', 'The Add Coins feature will be available soon.')}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="add-circle-outline" size={18} color="#1e40af" />
+                <Text style={[s.insufficientBtnText, { color: '#1e40af' }]}>Add Coins</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[s.insufficientBtn, { backgroundColor: '#dcfce7' }]}
+                onPress={handleSwitchToCash}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="cash-outline" size={18} color="#166534" />
+                <Text style={[s.insufficientBtnText, { color: '#166534' }]}>Switch to Cash</Text>
+              </TouchableOpacity>
             </View>
           )}
 
@@ -432,6 +494,7 @@ export default function CreateOrderScreen() {
                 <Text style={s.paymentEmoji}>💰</Text>
                 <Text style={[s.paymentLabel, paymentType === 'WALLET' && { color: '#fff' }]}>Wallet</Text>
                 <Text style={[s.paymentSub, paymentType === 'WALLET' && { color: 'rgba(255,255,255,0.8)' }]}>Use coins</Text>
+                <Text style={[s.paymentSub, paymentType === 'WALLET' && { color: 'rgba(255,255,255,0.8)' }]}>{walletBalance} coins</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -474,6 +537,37 @@ export default function CreateOrderScreen() {
               numberOfLines={3}
               textAlignVertical="top"
             />
+          </View>
+
+          {/* ── Auto-Cancel Timer ── */}
+          <View style={s.card}>
+            <Text style={s.cardTitle}>Auto-Cancel Timer</Text>
+            <Text style={s.inputLabel}>Cancel if no driver responds (minutes)</Text>
+            <View style={s.weightRow}>
+              <TouchableOpacity style={s.weightBtn} onPress={() => {
+                setCancelAfterMinutes(prev => Math.max(5, prev - 1));
+              }}>
+                <Ionicons name="remove" size={20} color="#374151" />
+              </TouchableOpacity>
+              <TextInput
+                style={s.weightInput}
+                value={String(cancelAfterMinutes)}
+                onChangeText={(text) => {
+                  const num = parseInt(text, 10);
+                  setCancelAfterMinutes(isNaN(num) ? 0 : num);
+                }}
+                keyboardType="numeric"
+                textAlign="center"
+              />
+              <TouchableOpacity style={s.weightBtn} onPress={() => {
+                setCancelAfterMinutes(prev => Math.min(60, prev + 1));
+              }}>
+                <Ionicons name="add" size={20} color="#374151" />
+              </TouchableOpacity>
+            </View>
+            {(cancelAfterMinutes < 5 || cancelAfterMinutes > 60) && (
+              <Text style={s.validationError}>Must be between 5 and 60 minutes</Text>
+            )}
           </View>
 
           {/* ── Calculate Price Button ── */}
@@ -610,6 +704,11 @@ const s = StyleSheet.create({
   walletBannerDanger: { backgroundColor: '#fef2f2' },
   walletText: { fontSize: 14, fontWeight: '600' },
 
+  // Insufficient balance actions
+  insufficientActions: { flexDirection: 'row', gap: 10, marginBottom: 16 },
+  insufficientBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 12, borderRadius: 12 },
+  insufficientBtnText: { fontSize: 14, fontWeight: '700' },
+
   // Active orders
   activeOrdersCard: {
     backgroundColor: '#fffbeb', borderRadius: 14, padding: 14, marginBottom: 16,
@@ -623,4 +722,7 @@ const s = StyleSheet.create({
   activeOrderDot: { width: 8, height: 8, borderRadius: 4 },
   activeOrderText: { fontSize: 13, color: '#78350f', fontWeight: '500' },
   activeOrderPrice: { fontSize: 13, fontWeight: '700', color: '#92400e' },
+
+  // Validation
+  validationError: { color: '#dc2626', fontSize: 12, fontWeight: '600', marginTop: 6 },
 });

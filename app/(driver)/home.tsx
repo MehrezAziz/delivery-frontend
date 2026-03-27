@@ -29,6 +29,7 @@ export default function DriverHome() {
   const [activeOrders, setActiveOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [hasAvailableOrders, setHasAvailableOrders] = useState(false);
 
   const loadData = useCallback(async () => {
     try {
@@ -41,6 +42,16 @@ export default function DriverHome() {
       ]);
       setDriver(profileRes.data);
       setActiveOrders(orders.filter(o => ACTIVE_STATUSES.includes(o.status)));
+
+      // Fetch order availability indicator for driver
+      try {
+        const availRes = await axios.get(`${API_URL}/driver/orders/has-available`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        setHasAvailableOrders(availRes.data?.hasAvailableOrders ?? false);
+      } catch {
+        setHasAvailableOrders(false);
+      }
     } catch (error: any) {
       if (error.response?.status === 401) {
         await AsyncStorage.clear();
@@ -150,7 +161,13 @@ export default function DriverHome() {
                 <View style={s.mainActionIcon}>
                   <Ionicons name="list" size={26} color="#fff" />
                 </View>
-                <Text style={s.mainActionTitle}>Available</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <Text style={s.mainActionTitle}>Available</Text>
+                  <View style={{
+                    width: 10, height: 10, borderRadius: 5,
+                    backgroundColor: hasAvailableOrders ? '#22c55e' : '#9ca3af',
+                  }} />
+                </View>
                 <Text style={s.mainActionSub}>Find orders</Text>
               </TouchableOpacity>
               <TouchableOpacity style={[s.mainAction, { backgroundColor: '#16a34a' }]}

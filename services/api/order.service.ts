@@ -92,7 +92,7 @@ export interface ChatRoom {
 
 export const orderService = {
   // Customer endpoints
-  createOrder: (data: { pickupAddressId: string; dropoffAddressId: string; paymentType: 'COD' | 'WALLET'; weight: number; description?: string }) =>
+  createOrder: (data: { pickupAddressId: string; dropoffAddressId: string; paymentType: 'COD' | 'WALLET'; weight: number; description?: string; cancelAfterMinutes?: number }) =>
     api.post<Order>('/orders', data),
 
   previewOrder: (data: { pickupAddressId: string; dropoffAddressId: string; paymentType: 'COD' | 'WALLET'; weight: number }) =>
