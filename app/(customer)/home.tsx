@@ -7,7 +7,9 @@ import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { orderService, Order } from '../../services/api/order.service';
+import { notificationService } from '../../services/api/notification.service';
 
 const ACTIVE_STATUSES = [
   'SEARCHING_DRIVER', 'PENDING_CUSTOMER_APPROVAL', 'DRIVER_ASSIGNED', 'DRIVER_ARRIVED', 'PICKED_UP', 'DELIVERING',
@@ -24,10 +26,12 @@ const STATUS_META: Record<string, { icon: string; color: string; bg: string; lab
 
 export default function CustomerHomeScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const [userName, setUserName] = useState('');
   const [activeOrders, setActiveOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
 
   useEffect(() => {
     AsyncStorage.getItem('user').then(u => {
@@ -40,8 +44,12 @@ export default function CustomerHomeScreen() {
 
   const loadOrders = useCallback(async () => {
     try {
-      const orders = await orderService.getMyOrders();
+      const [orders, notifCount] = await Promise.all([
+        orderService.getMyOrders(),
+        notificationService.getUnreadCount().catch(() => ({ count: 0 })),
+      ]);
       setActiveOrders(orders.filter(o => ACTIVE_STATUSES.includes(o.status)));
+      setUnreadCount(notifCount.count);
     } catch (e) {
       console.error(e);
     } finally {
@@ -59,6 +67,8 @@ export default function CustomerHomeScreen() {
 
   return (
     <View style={s.container}>
+      {/* Status bar background */}
+      <View style={{ backgroundColor: '#0284c7', height: insets.top }} />
       {/* Header */}
       <View style={s.header}>
         <View style={s.headerContent}>
@@ -66,8 +76,13 @@ export default function CustomerHomeScreen() {
             <Text style={s.greeting}>Hello{userName ? `, ${userName}` : ''} 👋</Text>
             <Text style={s.subtitle}>Where should we deliver today?</Text>
           </View>
-          <TouchableOpacity style={s.notifBtn} onPress={() => router.push('/(customer)/support')}>
-            <Ionicons name="chatbubble-ellipses-outline" size={22} color="#fff" />
+          <TouchableOpacity style={s.notifBtn} onPress={() => router.push('/(customer)/notifications')}>
+            <Ionicons name="notifications-outline" size={22} color="#fff" />
+            {unreadCount > 0 && (
+              <View style={s.badge}>
+                <Text style={s.badgeText}>{unreadCount > 99 ? '99+' : unreadCount}</Text>
+              </View>
+            )}
           </TouchableOpacity>
         </View>
       </View>
@@ -181,7 +196,7 @@ export default function CustomerHomeScreen() {
 const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f8fafc' },
   header: {
-    backgroundColor: '#0284c7', paddingTop: 52, paddingBottom: 24,
+    backgroundColor: '#0284c7', paddingTop: 16, paddingBottom: 24,
     borderBottomLeftRadius: 28, borderBottomRightRadius: 28,
   },
   headerContent: {
@@ -193,6 +208,12 @@ const s = StyleSheet.create({
     width: 42, height: 42, borderRadius: 21, backgroundColor: 'rgba(255,255,255,0.2)',
     alignItems: 'center', justifyContent: 'center',
   },
+  badge: {
+    position: 'absolute', top: -4, right: -4, backgroundColor: '#ef4444',
+    borderRadius: 10, minWidth: 20, height: 20, justifyContent: 'center',
+    alignItems: 'center', paddingHorizontal: 4,
+  },
+  badgeText: { color: '#fff', fontSize: 11, fontWeight: '700' },
 
   section: { paddingHorizontal: 20, marginTop: 20 },
   sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2 },

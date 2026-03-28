@@ -20,6 +20,8 @@ export default function DriverLayout() {
       <Stack.Screen name="edit-profile" />
       <Stack.Screen name="restrictions" />
       <Stack.Screen name="verification" />
+      <Stack.Screen name="notifications" />
+      <Stack.Screen name="my-ratings" />
     </Stack>
   );
 }

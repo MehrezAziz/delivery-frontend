@@ -13,7 +13,14 @@
       "backgroundColor": "#ffffff"
     },
     "plugins": [
-      "@react-native-google-signin/google-signin"
+      "@react-native-google-signin/google-signin",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/icon.png",
+          "color": "#0284c7"
+        }
+      ]
     ],
     "ios": {
       "supportsTablet": true,
@@ -28,6 +35,7 @@
       },
       "predictiveBackGestureEnabled": false,
       "package": "com.delivery.app",
+      "googleServicesFile": "./google-services.json",
       "config": {
         "googleMaps": {
           "apiKey": "AIzaSyAJTEpyqeC0Pz0zTDAC8_BY8VncZwRCbHY"

@@ -7,8 +7,10 @@ import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import axios from 'axios';
 import { orderService, Order } from '../../services/api/order.service';
+import { notificationService } from '../../services/api/notification.service';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
 
@@ -25,11 +27,13 @@ const STATUS_META: Record<string, { icon: string; color: string; bg: string; lab
 
 export default function DriverHome() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const [driver, setDriver] = useState<any>(null);
   const [activeOrders, setActiveOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [hasAvailableOrders, setHasAvailableOrders] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
 
   const loadData = useCallback(async () => {
     try {
@@ -51,6 +55,14 @@ export default function DriverHome() {
         setHasAvailableOrders(availRes.data?.hasAvailableOrders ?? false);
       } catch {
         setHasAvailableOrders(false);
+      }
+
+      // Fetch unread notification count
+      try {
+        const notifCount = await notificationService.getUnreadCount();
+        setUnreadCount(notifCount.count);
+      } catch {
+        setUnreadCount(0);
       }
     } catch (error: any) {
       if (error.response?.status === 401) {
@@ -95,6 +107,8 @@ export default function DriverHome() {
 
   return (
     <View style={s.container}>
+      {/* Status bar background */}
+      <View style={{ backgroundColor: '#0284c7', height: insets.top }} />
       {/* Header */}
       <View style={s.header}>
         <View style={s.headerContent}>
@@ -105,9 +119,19 @@ export default function DriverHome() {
               <Text style={s.statusLabel}>{statusLabel}</Text>
             </View>
           </View>
-          <TouchableOpacity onPress={handleLogout} style={s.logoutBtn}>
-            <Ionicons name="log-out-outline" size={20} color="#fff" />
-          </TouchableOpacity>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <TouchableOpacity onPress={() => router.push('/(driver)/notifications')} style={s.logoutBtn}>
+              <Ionicons name="notifications-outline" size={20} color="#fff" />
+              {unreadCount > 0 && (
+                <View style={s.badge}>
+                  <Text style={s.badgeText}>{unreadCount > 99 ? '99+' : unreadCount}</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+            <TouchableOpacity onPress={handleLogout} style={s.logoutBtn}>
+              <Ionicons name="log-out-outline" size={20} color="#fff" />
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
 
@@ -258,7 +282,7 @@ const s = StyleSheet.create({
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f8fafc' },
 
   header: {
-    backgroundColor: '#0284c7', paddingTop: 52, paddingBottom: 24,
+    backgroundColor: '#0284c7', paddingTop: 16, paddingBottom: 24,
     borderBottomLeftRadius: 28, borderBottomRightRadius: 28,
   },
   headerContent: {
@@ -272,6 +296,12 @@ const s = StyleSheet.create({
     width: 42, height: 42, borderRadius: 21, backgroundColor: 'rgba(255,255,255,0.15)',
     alignItems: 'center', justifyContent: 'center',
   },
+  badge: {
+    position: 'absolute', top: -4, right: -4, backgroundColor: '#ef4444',
+    borderRadius: 10, minWidth: 20, height: 20, justifyContent: 'center',
+    alignItems: 'center', paddingHorizontal: 4,
+  },
+  badgeText: { color: '#fff', fontSize: 11, fontWeight: '700' },
 
   section: { paddingHorizontal: 20, marginTop: 20 },
   sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2 },
