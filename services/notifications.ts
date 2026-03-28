@@ -11,6 +11,8 @@ Notifications.setNotificationHandler({
     shouldShowAlert: true,
     shouldPlaySound: true,
     shouldSetBadge: true,
+    shouldShowBanner: true,
+    shouldShowList: true,
   }),
 });
 
@@ -56,10 +58,9 @@ export async function registerForPushNotifications(): Promise<string | null> {
       return null;
     }
 
-    // Get the push token
-    const tokenData = await Notifications.getExpoPushTokenAsync({
-      projectId: undefined, // Uses the project ID from app.json
-    });
+    // Get the native device push token (FCM for Android, APNs for iOS)
+    // We use the native token because our backend sends via Firebase Admin SDK directly
+    const tokenData = await Notifications.getDevicePushTokenAsync();
     const token = tokenData.data;
 
     // Send token to backend
@@ -102,7 +103,8 @@ export function setupNotificationReceivedListener(
 /**
  * Handle notification tap — navigate to relevant screen
  */
-function handleNotificationTap(data: Record<string, any>) {
+function handleNotificationTap(data: Record<string, any> | undefined) {
+  if (!data) return;
   const { relatedEntityType, relatedEntityId, type } = data;
 
   if (!relatedEntityType || !relatedEntityId) return;
