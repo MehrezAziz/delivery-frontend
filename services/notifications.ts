@@ -1,82 +1,64 @@
-import * as Notifications from 'expo-notifications';
-import * as Device from 'expo-device';
+import notifee, {
+  AndroidImportance,
+  AndroidCategory,
+  EventType,
+} from '@notifee/react-native';
+import messaging from '@react-native-firebase/messaging';
 import { Platform } from 'react-native';
 import { router } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { notificationService } from './api/notification.service';
 
-// Configure notification handler for foreground
-Notifications.setNotificationHandler({
-  handleNotification: async (notification) => {
-    // Check if this is a data-only message that we scheduled locally
-    const data = notification.request.content.data;
-    return {
-      shouldShowAlert: true,
-      shouldPlaySound: true,
-      shouldSetBadge: true,
-      shouldShowBanner: true,
-      shouldShowList: true,
-    };
-  },
-});
+// Channel IDs
+const CHANNEL_ORDER = 'order-updates';
+const CHANNEL_DEFAULT = 'default';
 
-// Set up Android notification channels
-if (Platform.OS === 'android') {
-  Notifications.setNotificationChannelAsync('default', {
-    name: 'Default',
-    importance: Notifications.AndroidImportance.HIGH,
-    vibrationPattern: [0, 250, 250, 250],
-    lightColor: '#0284c7',
-  });
-
-  Notifications.setNotificationChannelAsync('order-updates', {
-    name: 'Order Updates',
-    importance: Notifications.AndroidImportance.HIGH,
-    vibrationPattern: [0, 250, 250, 250],
-    lightColor: '#0284c7',
-  });
+// Fixed notification ID for the active order (one per order)
+function getOrderNotifId(orderId: string) {
+  return `order_${orderId}`;
 }
 
 /**
- * Handle incoming data-only FCM messages and display as local notifications.
- * This is a fallback for when the app is in foreground and receives data-only messages.
+ * Create Android notification channels
  */
-export async function handleDataMessage(data: Record<string, string>) {
-  // No longer needed — we now send notification+data hybrid messages
-  // Android handles display natively via the notification field
+export async function createNotificationChannels() {
+  if (Platform.OS !== 'android') return;
+
+  await notifee.createChannel({
+    id: CHANNEL_ORDER,
+    name: 'Order Updates',
+    importance: AndroidImportance.HIGH,
+    vibration: true,
+  });
+
+  await notifee.createChannel({
+    id: CHANNEL_DEFAULT,
+    name: 'General',
+    importance: AndroidImportance.DEFAULT,
+  });
 }
 
 /**
- * Register for push notifications and send token to backend
+ * Register for push notifications and send FCM token to backend
  */
 export async function registerForPushNotifications(): Promise<string | null> {
-  if (!Device.isDevice) {
-    console.log('Push notifications require a physical device');
-    return null;
-  }
-
   try {
-    // Check existing permissions
-    const { status: existingStatus } = await Notifications.getPermissionsAsync();
-    let finalStatus = existingStatus;
+    // Request permission
+    const authStatus = await messaging().requestPermission();
+    const enabled =
+      authStatus === messaging.AuthorizationStatus.AUTHORIZED ||
+      authStatus === messaging.AuthorizationStatus.PROVISIONAL;
 
-    // Request permissions if not granted
-    if (existingStatus !== 'granted') {
-      const { status } = await Notifications.requestPermissionsAsync();
-      finalStatus = status;
-    }
-
-    if (finalStatus !== 'granted') {
+    if (!enabled) {
       console.log('Push notification permission not granted');
       return null;
     }
 
-    // Get the native device push token (FCM for Android, APNs for iOS)
-    // We use the native token because our backend sends via Firebase Admin SDK directly
-    const tokenData = await Notifications.getDevicePushTokenAsync();
-    const token = tokenData.data;
+    // Get FCM token
+    const token = await messaging().getToken();
+    if (!token) return null;
 
-    // Send token to backend
+    // Send to backend
     const platform = Platform.OS as 'android' | 'ios';
     try {
       await notificationService.registerToken(token, platform);
@@ -84,6 +66,14 @@ export async function registerForPushNotifications(): Promise<string | null> {
     } catch (error) {
       console.error('Failed to register push token with backend:', error);
     }
+
+    // Listen for token refresh
+    messaging().onTokenRefresh(async (newToken) => {
+      try {
+        await notificationService.registerToken(newToken, platform);
+        await AsyncStorage.setItem('pushToken', newToken);
+      } catch {}
+    });
 
     return token;
   } catch (error) {
@@ -93,38 +83,127 @@ export async function registerForPushNotifications(): Promise<string | null> {
 }
 
 /**
- * Set up notification response listener (when user taps a notification)
+ * Display or update the persistent order notification using Notifee.
+ * Uses a fixed ID per order so it replaces itself on every status update.
  */
-export function setupNotificationResponseListener() {
-  return Notifications.addNotificationResponseReceivedListener((response) => {
-    const data = response.notification.request.content.data;
-    handleNotificationTap(data);
+async function displayOrderNotification(data: Record<string, string>) {
+  const { title, body, groupKey, ongoing, orderId } = data;
+  if (!title || !body) return;
+
+  const id = orderId ? getOrderNotifId(orderId) : groupKey || 'order';
+  const isOngoing = ongoing === 'true';
+
+  await notifee.displayNotification({
+    id,
+    title,
+    body,
+    android: {
+      channelId: CHANNEL_ORDER,
+      importance: AndroidImportance.HIGH,
+      ongoing: isOngoing,
+      asForegroundService: false,
+      pressAction: { id: 'default' },
+      actions: [
+        { title: 'View Order', pressAction: { id: 'view_order' } },
+      ],
+    },
+    ios: {
+      sound: 'default',
+      threadId: groupKey,
+    },
+    data,
   });
 }
 
 /**
- * Set up foreground notification listener
+ * Display a regular (non-order) notification
  */
-export function setupNotificationReceivedListener(
-  callback?: (notification: Notifications.Notification) => void,
-) {
-  return Notifications.addNotificationReceivedListener((notification) => {
-    callback?.(notification);
+async function displayRegularNotification(data: Record<string, string>) {
+  const { title, body } = data;
+  if (!title || !body) return;
+
+  await notifee.displayNotification({
+    title,
+    body,
+    android: {
+      channelId: CHANNEL_DEFAULT,
+      importance: AndroidImportance.DEFAULT,
+      pressAction: { id: 'default' },
+    },
+    ios: { sound: 'default' },
+    data,
+  });
+}
+
+/**
+ * Handle incoming FCM data message — display via Notifee
+ */
+export async function handleFCMMessage(remoteMessage: any) {
+  const data = remoteMessage?.data as Record<string, string> | undefined;
+  if (!data) return;
+
+  const { groupKey } = data;
+
+  // Order notifications use persistent single notification
+  if (groupKey?.startsWith('order:')) {
+    await displayOrderNotification(data);
+  } else {
+    await displayRegularNotification(data);
+  }
+}
+
+/**
+ * Set up all notification listeners (foreground + background + tap)
+ */
+export function setupNotificationListeners() {
+  // Foreground FCM messages
+  const unsubscribeForeground = messaging().onMessage(async (remoteMessage) => {
+    await handleFCMMessage(remoteMessage);
+  });
+
+  // Notifee foreground events (button presses, taps)
+  const unsubscribeNotifee = notifee.onForegroundEvent(({ type, detail }) => {
+    if (type === EventType.PRESS || type === EventType.ACTION_PRESS) {
+      const data = detail.notification?.data as Record<string, string> | undefined;
+      if (data) handleNotificationTap(data);
+    }
+  });
+
+  return () => {
+    unsubscribeForeground();
+    unsubscribeNotifee();
+  };
+}
+
+/**
+ * Set up background message handler (must be called outside component)
+ */
+export function setupBackgroundHandler() {
+  // FCM background messages
+  messaging().setBackgroundMessageHandler(async (remoteMessage) => {
+    await handleFCMMessage(remoteMessage);
+  });
+
+  // Notifee background events
+  notifee.onBackgroundEvent(async ({ type, detail }) => {
+    if (type === EventType.PRESS || type === EventType.ACTION_PRESS) {
+      const data = detail.notification?.data as Record<string, string> | undefined;
+      if (data) handleNotificationTap(data);
+    }
   });
 }
 
 /**
  * Handle notification tap — navigate to relevant screen
  */
-function handleNotificationTap(data: Record<string, any> | undefined) {
+function handleNotificationTap(data: Record<string, string> | undefined) {
   if (!data) return;
   const { relatedEntityType, relatedEntityId, type } = data;
 
   if (!relatedEntityType || !relatedEntityId) return;
 
   switch (relatedEntityType) {
-    case 'Order':
-      // Determine if customer or driver based on notification type
+    case 'Order': {
       const driverTypes = [
         'NEW_ORDER_AVAILABLE', 'ORDER_EXPIRED', 'ORDER_CANCELLED_BY_CUSTOMER',
         'PICKUP_REMINDER', 'PAYMENT_RECEIVED_COD', 'PAYMENT_CREDITED_WALLET',
@@ -136,9 +215,8 @@ function handleNotificationTap(data: Record<string, any> | undefined) {
         router.push(`/(customer)/order-detail?orderId=${relatedEntityId}`);
       }
       break;
-
+    }
     case 'ChatRoom':
-      // Navigate directly to chat screen
       AsyncStorage.getItem('user').then((u) => {
         if (u) {
           const user = JSON.parse(u);
@@ -150,9 +228,7 @@ function handleNotificationTap(data: Record<string, any> | undefined) {
         }
       });
       break;
-
     case 'SupportTicket':
-      // Navigate to support chat
       AsyncStorage.getItem('user').then((u) => {
         if (u) {
           const user = JSON.parse(u);
@@ -164,46 +240,25 @@ function handleNotificationTap(data: Record<string, any> | undefined) {
         }
       });
       break;
-
-    case 'Dispute':
-      router.push(`/(customer)/order-detail?orderId=${relatedEntityId}`);
-      break;
-
     case 'Rating':
       router.push('/(driver)/my-ratings');
       break;
-
     default:
       break;
   }
 }
 
-/**
- * Register driver notification action categories
- */
-export async function registerDriverActionCategories() {
-  if (Platform.OS === 'android') {
-    await Notifications.setNotificationCategoryAsync('driver-order-actions', [
-      {
-        identifier: 'MARK_ARRIVED',
-        buttonTitle: 'Mark Arrived',
-        options: { opensAppToForeground: true },
-      },
-      {
-        identifier: 'PICKED_UP',
-        buttonTitle: 'Picked Up',
-        options: { opensAppToForeground: true },
-      },
-      {
-        identifier: 'START_DELIVERING',
-        buttonTitle: 'Start Delivering',
-        options: { opensAppToForeground: true },
-      },
-      {
-        identifier: 'MARK_DELIVERED',
-        buttonTitle: 'Mark Delivered',
-        options: { opensAppToForeground: true },
-      },
-    ]);
-  }
+// Legacy exports for compatibility
+export function setupNotificationResponseListener(callback?: any) {
+  return { remove: () => {} };
 }
+
+export function setupNotificationReceivedListener(callback?: any) {
+  return { remove: () => {} };
+}
+
+export async function handleDataMessage(data: Record<string, string>) {
+  await handleFCMMessage({ data });
+}
+
+export async function registerDriverActionCategories() {}
