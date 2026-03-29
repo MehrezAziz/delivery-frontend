@@ -9,6 +9,7 @@ import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { api } from '../../services/api/client';
 import { orderService, Order } from '../../services/api/order.service';
+import { startOrderTracking } from '../../services/notifications';
 
 interface SavedAddress {
   addressId: string;
@@ -220,6 +221,9 @@ export default function CreateOrderScreen() {
         { text: 'View Order', onPress: () => router.push(`/(customer)/order-detail?orderId=${order.id}`) },
         { text: 'New Order', style: 'cancel' },
       ]);
+
+      // Start the foreground service for order tracking
+      startOrderTracking(order.id, '📦 Order Confirmed', 'Searching for a driver near you...');
     } catch (e: any) {
       Alert.alert('Error', e.message || 'Failed to create order');
     } finally {

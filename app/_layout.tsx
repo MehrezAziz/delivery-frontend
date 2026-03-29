@@ -8,10 +8,15 @@ import {
   setupNotificationListeners,
   setupBackgroundHandler,
   createNotificationChannels,
+  registerOrderForegroundService,
 } from '../services/notifications';
 
 // Register background handler at module level (required by React Native Firebase)
 setupBackgroundHandler();
+
+// Register the foreground service handler at module level
+// This only registers the task runner — does NOT start the service
+registerOrderForegroundService();
 
 export default function RootLayout() {
   const cleanupRef = useRef<(() => void) | null>(null);
