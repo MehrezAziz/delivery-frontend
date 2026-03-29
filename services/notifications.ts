@@ -1,6 +1,5 @@
 import notifee, {
   AndroidImportance,
-  AndroidCategory,
   EventType,
 } from '@notifee/react-native';
 import messaging from '@react-native-firebase/messaging';
@@ -12,11 +11,6 @@ import { notificationService } from './api/notification.service';
 // Channel IDs
 const CHANNEL_ORDER = 'order-updates';
 const CHANNEL_DEFAULT = 'default';
-
-// Fixed notification ID for the active order (one per order)
-function getOrderNotifId(orderId: string) {
-  return `order_${orderId}`;
-}
 
 /**
  * Create Android notification channels
@@ -43,7 +37,6 @@ export async function createNotificationChannels() {
  */
 export async function registerForPushNotifications(): Promise<string | null> {
   try {
-    // Request permission
     const authStatus = await messaging().requestPermission();
     const enabled =
       authStatus === messaging.AuthorizationStatus.AUTHORIZED ||
@@ -54,11 +47,9 @@ export async function registerForPushNotifications(): Promise<string | null> {
       return null;
     }
 
-    // Get FCM token
     const token = await messaging().getToken();
     if (!token) return null;
 
-    // Send to backend
     const platform = Platform.OS as 'android' | 'ios';
     try {
       await notificationService.registerToken(token, platform);
@@ -67,7 +58,6 @@ export async function registerForPushNotifications(): Promise<string | null> {
       console.error('Failed to register push token with backend:', error);
     }
 
-    // Listen for token refresh
     messaging().onTokenRefresh(async (newToken) => {
       try {
         await notificationService.registerToken(newToken, platform);
@@ -82,51 +72,9 @@ export async function registerForPushNotifications(): Promise<string | null> {
   }
 }
 
-/**
- * Display or update the persistent order notification using Notifee.
- * Uses a fixed ID per order so it replaces itself on every status update.
- */
-async function displayOrderNotification(data: Record<string, string>) {
-  const { title, body, groupKey, ongoing, orderId } = data;
-  if (!title || !body) return;
-
-  // Use consistent ID format: "order_<uuid>"
-  const id = orderId ? `order_${orderId}` : groupKey?.replace('order:', 'order_') || 'order';
-  const isOngoing = ongoing === 'true';
-
-  // Cancel existing notification first to force Android to update ongoing notifications
-  try {
-    await notifee.cancelNotification(id);
-  } catch {}
-
-  // Small delay to ensure cancellation is processed
-  await new Promise((resolve) => setTimeout(resolve, 100));
-
-  await notifee.displayNotification({
-    id,
-    title,
-    body,
-    android: {
-      channelId: CHANNEL_ORDER,
-      importance: AndroidImportance.HIGH,
-      ongoing: isOngoing,
-      autoCancel: !isOngoing,
-      asForegroundService: false,
-      pressAction: { id: 'view_order', launchActivity: 'default' },
-      actions: isOngoing
-        ? [{ title: 'View Order', pressAction: { id: 'view_order', launchActivity: 'default' } }]
-        : [],
-    },
-    ios: {
-      sound: 'default',
-      threadId: groupKey,
-    },
-    data,
-  });
-}
 
 /**
- * Display a regular (non-order) notification
+ * Display a regular (non-order) notification via Notifee
  */
 async function displayRegularNotification(data: Record<string, string>) {
   const { title, body } = data;
@@ -146,27 +94,28 @@ async function displayRegularNotification(data: Record<string, string>) {
 }
 
 /**
- * Handle incoming FCM data message — display via Notifee
- */
-export async function handleFCMMessage(remoteMessage: any) {
-  const data = remoteMessage?.data as Record<string, string> | undefined;
-  if (!data) return;
-
-  const { groupKey } = data;
-
-  // Order notifications use persistent single notification
-  if (groupKey?.startsWith('order:')) {
-    await displayOrderNotification(data);
-  } else {
-    await displayRegularNotification(data);
-  }
-}
-
-/**
  * Set up all notification listeners (foreground + background + tap)
+ * 
+ * STRATEGY for order notifications:
+ * - Backend sends FCM with notification field + android tag
+ * - When app is CLOSED: FCM displays native notification, tag ensures replacement
+ * - When app is OPEN: FCM onMessage fires. We do NOT display via Notifee.
+ *   Instead, we let the FCM notification (which was suppressed in foreground)
+ *   be handled by just doing nothing — the user sees the in-app UI update via websocket.
+ *   BUT we still want a notification in the tray, so we use Notifee but with the
+ *   same tag as FCM to ensure they replace each other.
+ * 
+ * IMPORTANT: The key insight is that when app is in foreground, FCM suppresses
+ * the native notification. So we MUST display via Notifee in foreground.
+ * When app is killed/background, FCM shows native notification with tag.
+ * The problem was mixing Notifee and FCM notifications.
+ * 
+ * SOLUTION: Don't use Notifee for order notifications at all.
+ * Only use FCM native notifications with tag for replacement.
+ * For foreground, we just skip showing notification (user sees in-app updates).
  */
 export function setupNotificationListeners() {
-  // Foreground FCM messages — display via Notifee for better control
+  // Foreground FCM messages
   const unsubscribeForeground = messaging().onMessage(async (remoteMessage) => {
     const data = remoteMessage?.data as Record<string, string> | undefined;
     if (!data) return;
@@ -174,23 +123,22 @@ export function setupNotificationListeners() {
     const { groupKey } = data;
 
     if (groupKey?.startsWith('order:')) {
-      await displayOrderNotification(data);
+      // Order notifications: DO NOT display via Notifee in foreground
+      // The user sees real-time updates via websocket in the app UI
+      // This avoids the dual-notification problem
+      console.log('Order notification received in foreground, skipping display (in-app UI handles it)');
     } else {
+      // Non-order notifications: display via Notifee
       await displayRegularNotification(data);
     }
   });
 
-  // Notifee foreground events (button presses, taps)
+  // Notifee foreground events (for non-order notification taps)
   const unsubscribeNotifee = notifee.onForegroundEvent(({ type, detail }) => {
     if (type === EventType.PRESS || type === EventType.ACTION_PRESS) {
       const data = detail.notification?.data as Record<string, string> | undefined;
       if (data) {
-        // For order notifications, navigate to order detail
-        if (data.relatedEntityType === 'Order' && data.relatedEntityId) {
-          router.push(`/(customer)/order-detail?orderId=${data.relatedEntityId}`);
-        } else {
-          handleNotificationTap(data);
-        }
+        handleNotificationTap(data);
       }
     }
   });
@@ -205,15 +153,19 @@ export function setupNotificationListeners() {
  * Set up background message handler (must be called outside component)
  */
 export function setupBackgroundHandler() {
-  // FCM background messages — display via Notifee
+  // FCM background/killed messages
+  // For order notifications: FCM displays native notification with tag (replacement works)
+  // For non-order: display via Notifee
   messaging().setBackgroundMessageHandler(async (remoteMessage) => {
     const data = remoteMessage?.data as Record<string, string> | undefined;
     if (!data) return;
 
     const { groupKey } = data;
-    
+
     if (groupKey?.startsWith('order:')) {
-      await displayOrderNotification(data);
+      // Order notifications: FCM already displayed native notification with tag
+      // The tag ensures replacement. Nothing to do here.
+      console.log('Order notification received in background, FCM handles display with tag');
     } else {
       await displayRegularNotification(data);
     }
@@ -224,15 +176,12 @@ export function setupBackgroundHandler() {
     if (type === EventType.PRESS || type === EventType.ACTION_PRESS) {
       const data = detail.notification?.data as Record<string, string> | undefined;
       if (data) {
-        if (data.relatedEntityType === 'Order' && data.relatedEntityId) {
-          router.push(`/(customer)/order-detail?orderId=${data.relatedEntityId}`);
-        } else {
-          handleNotificationTap(data);
-        }
+        handleNotificationTap(data);
       }
     }
   });
 }
+
 
 /**
  * Handle notification tap — navigate to relevant screen
@@ -296,6 +245,17 @@ export function setupNotificationResponseListener(callback?: any) {
 
 export function setupNotificationReceivedListener(callback?: any) {
   return { remove: () => {} };
+}
+
+export async function handleFCMMessage(remoteMessage: any) {
+  const data = remoteMessage?.data as Record<string, string> | undefined;
+  if (!data) return;
+  const { groupKey } = data;
+  if (groupKey?.startsWith('order:')) {
+    // Handled by FCM native notification with tag
+  } else {
+    await displayRegularNotification(data);
+  }
 }
 
 export async function handleDataMessage(data: Record<string, string>) {
