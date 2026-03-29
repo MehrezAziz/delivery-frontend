@@ -93,6 +93,14 @@ async function displayOrderNotification(data: Record<string, string>) {
   const id = orderId ? getOrderNotifId(orderId) : groupKey || 'order';
   const isOngoing = ongoing === 'true';
 
+  // Cancel existing notification first to force Android to update ongoing notifications
+  try {
+    await notifee.cancelNotification(id);
+  } catch {}
+
+  // Small delay to ensure cancellation is processed
+  await new Promise((resolve) => setTimeout(resolve, 100));
+
   await notifee.displayNotification({
     id,
     title,
@@ -101,11 +109,12 @@ async function displayOrderNotification(data: Record<string, string>) {
       channelId: CHANNEL_ORDER,
       importance: AndroidImportance.HIGH,
       ongoing: isOngoing,
+      autoCancel: !isOngoing,
       asForegroundService: false,
-      pressAction: { id: 'default' },
-      actions: [
-        { title: 'View Order', pressAction: { id: 'view_order' } },
-      ],
+      pressAction: { id: 'view_order', launchActivity: 'default' },
+      actions: isOngoing
+        ? [{ title: 'View Order', pressAction: { id: 'view_order', launchActivity: 'default' } }]
+        : [],
     },
     ios: {
       sound: 'default',
@@ -156,16 +165,41 @@ export async function handleFCMMessage(remoteMessage: any) {
  * Set up all notification listeners (foreground + background + tap)
  */
 export function setupNotificationListeners() {
-  // Foreground FCM messages
+  // Foreground FCM messages — cancel FCM notification and re-display via Notifee for better control
   const unsubscribeForeground = messaging().onMessage(async (remoteMessage) => {
-    await handleFCMMessage(remoteMessage);
+    const data = remoteMessage?.data as Record<string, string> | undefined;
+    if (!data) return;
+
+    const { groupKey } = data;
+
+    // Cancel the FCM-displayed notification (uses tag as identifier on Android)
+    // The tag format is "order_<uuid>" for order notifications
+    if (groupKey?.startsWith('order:')) {
+      const tag = groupKey.replace('order:', 'order_');
+      try {
+        await notifee.cancelNotification(tag);
+      } catch {}
+    }
+
+    if (groupKey?.startsWith('order:')) {
+      await displayOrderNotification(data);
+    } else {
+      await displayRegularNotification(data);
+    }
   });
 
   // Notifee foreground events (button presses, taps)
   const unsubscribeNotifee = notifee.onForegroundEvent(({ type, detail }) => {
     if (type === EventType.PRESS || type === EventType.ACTION_PRESS) {
       const data = detail.notification?.data as Record<string, string> | undefined;
-      if (data) handleNotificationTap(data);
+      if (data) {
+        // For order notifications, navigate to order detail
+        if (data.relatedEntityType === 'Order' && data.relatedEntityId) {
+          router.push(`/(customer)/order-detail?orderId=${data.relatedEntityId}`);
+        } else {
+          handleNotificationTap(data);
+        }
+      }
     }
   });
 
@@ -179,16 +213,36 @@ export function setupNotificationListeners() {
  * Set up background message handler (must be called outside component)
  */
 export function setupBackgroundHandler() {
-  // FCM background messages
+  // FCM background messages — when app is in background but not killed,
+  // we can still display via Notifee for better control
   messaging().setBackgroundMessageHandler(async (remoteMessage) => {
-    await handleFCMMessage(remoteMessage);
+    const data = remoteMessage?.data as Record<string, string> | undefined;
+    if (!data) return;
+
+    const { groupKey } = data;
+    
+    // For order notifications, cancel FCM's notification and display via Notifee
+    if (groupKey?.startsWith('order:')) {
+      const tag = groupKey.replace('order:', 'order_');
+      try {
+        await notifee.cancelNotification(tag);
+      } catch {}
+      await displayOrderNotification(data);
+    }
+    // For non-order notifications, let FCM handle it natively
   });
 
   // Notifee background events
   notifee.onBackgroundEvent(async ({ type, detail }) => {
     if (type === EventType.PRESS || type === EventType.ACTION_PRESS) {
       const data = detail.notification?.data as Record<string, string> | undefined;
-      if (data) handleNotificationTap(data);
+      if (data) {
+        if (data.relatedEntityType === 'Order' && data.relatedEntityId) {
+          router.push(`/(customer)/order-detail?orderId=${data.relatedEntityId}`);
+        } else {
+          handleNotificationTap(data);
+        }
+      }
     }
   });
 }
