@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useGoogleAuth } from '../../hooks/useGoogleAuth';
 import { saveLoginTimestamp } from '../../services/auth-session';
+import { registerForPushNotifications } from '../../services/notifications';
 
 // For Android emulator, use 10.0.2.2 instead of localhost
 // For physical device with USB + ADB reverse, use localhost
@@ -119,6 +120,9 @@ export default function CustomerLoginScreen() {
       } else {
         console.error('Failed to fetch profile:', await profileResponse.text());
       }
+
+      // Register for push notifications after successful login
+      await registerForPushNotifications();
 
       // Navigate to customer home screen
       router.replace('/(customer)/home');

@@ -90,7 +90,8 @@ async function displayOrderNotification(data: Record<string, string>) {
   const { title, body, groupKey, ongoing, orderId } = data;
   if (!title || !body) return;
 
-  const id = orderId ? getOrderNotifId(orderId) : groupKey || 'order';
+  // Use consistent ID format: "order_<uuid>"
+  const id = orderId ? `order_${orderId}` : groupKey?.replace('order:', 'order_') || 'order';
   const isOngoing = ongoing === 'true';
 
   // Cancel existing notification first to force Android to update ongoing notifications
@@ -165,21 +166,12 @@ export async function handleFCMMessage(remoteMessage: any) {
  * Set up all notification listeners (foreground + background + tap)
  */
 export function setupNotificationListeners() {
-  // Foreground FCM messages — cancel FCM notification and re-display via Notifee for better control
+  // Foreground FCM messages — display via Notifee for better control
   const unsubscribeForeground = messaging().onMessage(async (remoteMessage) => {
     const data = remoteMessage?.data as Record<string, string> | undefined;
     if (!data) return;
 
     const { groupKey } = data;
-
-    // Cancel the FCM-displayed notification (uses tag as identifier on Android)
-    // The tag format is "order_<uuid>" for order notifications
-    if (groupKey?.startsWith('order:')) {
-      const tag = groupKey.replace('order:', 'order_');
-      try {
-        await notifee.cancelNotification(tag);
-      } catch {}
-    }
 
     if (groupKey?.startsWith('order:')) {
       await displayOrderNotification(data);
@@ -213,23 +205,18 @@ export function setupNotificationListeners() {
  * Set up background message handler (must be called outside component)
  */
 export function setupBackgroundHandler() {
-  // FCM background messages — when app is in background but not killed,
-  // we can still display via Notifee for better control
+  // FCM background messages — display via Notifee
   messaging().setBackgroundMessageHandler(async (remoteMessage) => {
     const data = remoteMessage?.data as Record<string, string> | undefined;
     if (!data) return;
 
     const { groupKey } = data;
     
-    // For order notifications, cancel FCM's notification and display via Notifee
     if (groupKey?.startsWith('order:')) {
-      const tag = groupKey.replace('order:', 'order_');
-      try {
-        await notifee.cancelNotification(tag);
-      } catch {}
       await displayOrderNotification(data);
+    } else {
+      await displayRegularNotification(data);
     }
-    // For non-order notifications, let FCM handle it natively
   });
 
   // Notifee background events
