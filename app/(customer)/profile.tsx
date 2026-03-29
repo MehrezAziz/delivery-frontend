@@ -3,6 +3,7 @@ import { useRouter } from 'expo-router';
 import { useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Clipboard from 'expo-clipboard';
+import { clearPushToken } from '../../services/api/notification.service';
 
 // Get API URL from environment variable
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api';
@@ -133,6 +134,8 @@ export default function CustomerProfileScreen() {
 
   const handleLogout = async () => {
     try {
+      // Clear FCM token on backend before logout
+      await clearPushToken();
       // Clear all stored data
       await AsyncStorage.removeItem('accessToken');
       await AsyncStorage.removeItem('user');

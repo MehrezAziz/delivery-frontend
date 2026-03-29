@@ -8,6 +8,7 @@ import {
   registerForPushNotifications,
   setupNotificationResponseListener,
   setupNotificationReceivedListener,
+  handleDataMessage,
 } from '../services/notifications';
 
 export default function RootLayout() {

@@ -78,6 +78,8 @@ export default function CustomerNotifications() {
     }
     if (item.relatedEntityType === 'Order' && item.relatedEntityId) {
       router.push(`/(customer)/order-detail?orderId=${item.relatedEntityId}`);
+    } else if (item.relatedEntityType === 'ChatRoom' && item.relatedEntityId) {
+      router.push(`/(customer)/order-chat?orderId=${item.relatedEntityId}`);
     } else if (item.relatedEntityType === 'SupportTicket' && item.relatedEntityId) {
       router.push(`/(customer)/support-chat?ticketId=${item.relatedEntityId}`);
     } else if (item.relatedEntityType === 'Wallet') {

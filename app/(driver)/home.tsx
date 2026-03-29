@@ -11,6 +11,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import axios from 'axios';
 import { orderService, Order } from '../../services/api/order.service';
 import { notificationService } from '../../services/api/notification.service';
+import { clearPushToken } from '../../services/api/notification.service';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
 
@@ -86,6 +87,7 @@ export default function DriverHome() {
     Alert.alert('Logout', 'Are you sure?', [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Logout', style: 'destructive', onPress: async () => {
+        await clearPushToken();
         await AsyncStorage.clear();
         router.replace('/(auth)/driver-login');
       }},

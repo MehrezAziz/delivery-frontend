@@ -43,3 +43,12 @@ export const notificationService = {
   markAllAsRead: () =>
     api.patch('/notifications/read-all'),
 };
+
+// Clear FCM token on logout (call before clearing AsyncStorage)
+export async function clearPushToken() {
+  try {
+    await notificationService.registerToken('', 'android');
+  } catch {
+    // Ignore errors during logout
+  }
+}

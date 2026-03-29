@@ -7,13 +7,17 @@ import { notificationService } from './api/notification.service';
 
 // Configure notification handler for foreground
 Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: true,
-    shouldShowBanner: true,
-    shouldShowList: true,
-  }),
+  handleNotification: async (notification) => {
+    // Check if this is a data-only message that we scheduled locally
+    const data = notification.request.content.data;
+    return {
+      shouldShowAlert: true,
+      shouldPlaySound: true,
+      shouldSetBadge: true,
+      shouldShowBanner: true,
+      shouldShowList: true,
+    };
+  },
 });
 
 // Set up Android notification channels
@@ -31,6 +35,15 @@ if (Platform.OS === 'android') {
     vibrationPattern: [0, 250, 250, 250],
     lightColor: '#0284c7',
   });
+}
+
+/**
+ * Handle incoming data-only FCM messages and display as local notifications.
+ * This is a fallback for when the app is in foreground and receives data-only messages.
+ */
+export async function handleDataMessage(data: Record<string, string>) {
+  // No longer needed — we now send notification+data hybrid messages
+  // Android handles display natively via the notification field
 }
 
 /**
@@ -122,6 +135,20 @@ function handleNotificationTap(data: Record<string, any> | undefined) {
       } else {
         router.push(`/(customer)/order-detail?orderId=${relatedEntityId}`);
       }
+      break;
+
+    case 'ChatRoom':
+      // Navigate directly to chat screen
+      AsyncStorage.getItem('user').then((u) => {
+        if (u) {
+          const user = JSON.parse(u);
+          if (user.role === 'DRIVER') {
+            router.push(`/(driver)/order-chat?orderId=${relatedEntityId}`);
+          } else {
+            router.push(`/(customer)/order-chat?orderId=${relatedEntityId}`);
+          }
+        }
+      });
       break;
 
     case 'SupportTicket':

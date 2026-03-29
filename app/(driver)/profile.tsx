@@ -6,6 +6,7 @@ import {
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { useCallback } from 'react';
+import { clearPushToken } from '../../services/api/notification.service';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
@@ -83,6 +84,7 @@ export default function DriverProfileScreen() {
       {
         text: 'Logout', style: 'destructive',
         onPress: async () => {
+          await clearPushToken();
           await AsyncStorage.clear();
           router.replace('/(auth)/driver-login');
         },
