@@ -224,8 +224,8 @@ export default function CreateOrderScreen() {
         { text: 'New Order', style: 'cancel' },
       ]);
 
-      // Start the foreground service for order tracking
-      startOrderTracking(order.id, '📦 Order Confirmed', 'Searching for a driver near you...');
+      // Start the foreground service for order tracking with progress bar
+      startOrderTracking(order.id, '📦 Order Confirmed — Searching for a driver...', '⛟———⌖———⌖———⌖———⌖———⌖———⌖');
     } catch (e: any) {
       Alert.alert('Error', e.message || 'Failed to create order');
     } finally {
