@@ -7,6 +7,7 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
+import { useTheme } from '../../contexts/ThemeContext';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
 
@@ -32,6 +33,7 @@ interface Transaction {
 
 export default function DriverTransactionsScreen() {
   const router = useRouter();
+  const { colors, isDark } = useTheme();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [balance, setBalance] = useState(0);
   const [currency, setCurrency] = useState('TND');
@@ -83,16 +85,16 @@ export default function DriverTransactionsScreen() {
   };
 
   const renderItem = ({ item }: { item: Transaction }) => {
-    const colors = TYPE_COLORS[item.type] || { bg: '#f3f4f6', text: '#6b7280', icon: 'ellipse-outline' };
+    const colors_ = TYPE_COLORS[item.type] || { bg: '#f3f4f6', text: '#6b7280', icon: 'ellipse-outline' };
     const isPositive = item.amount > 0;
     return (
-      <View style={s.txRow}>
-        <View style={[s.txIcon, { backgroundColor: colors.bg }]}>
-          <Ionicons name={colors.icon as any} size={20} color={colors.text} />
+      <View style={[s.txRow, { backgroundColor: colors.card }]}>
+        <View style={[s.txIcon, { backgroundColor: colors_.bg }]}>
+          <Ionicons name={colors_.icon as any} size={20} color={colors_.text} />
         </View>
         <View style={{ flex: 1 }}>
-          <Text style={s.txType}>{item.type.replace(/_/g, ' ')}</Text>
-          {item.description ? <Text style={s.txDesc} numberOfLines={1}>{item.description}</Text> : null}
+          <Text style={[s.txType, { color: colors.text }]}>{item.type.replace(/_/g, ' ')}</Text>
+          {item.description ? <Text style={[s.txDesc, { color: colors.textTertiary }]} numberOfLines={1}>{item.description}</Text> : null}
           <Text style={s.txDate}>
             {new Date(item.createdAt).toLocaleDateString()} {new Date(item.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
           </Text>
@@ -101,7 +103,7 @@ export default function DriverTransactionsScreen() {
           <Text style={[s.txAmount, { color: isPositive ? '#16a34a' : '#dc2626' }]}>
             {isPositive ? '+' : ''}{item.amount.toFixed(2)}
           </Text>
-          <Text style={s.txBalance}>{item.balanceAfter.toFixed(2)}</Text>
+          <Text style={[s.txBalance, { color: colors.textTertiary }]}>{item.balanceAfter.toFixed(2)}</Text>
         </View>
       </View>
     );
@@ -109,15 +111,15 @@ export default function DriverTransactionsScreen() {
 
   if (loading) {
     return (
-      <View style={s.loadingContainer}>
-        <ActivityIndicator size="large" color="#0284c7" />
+      <View style={[s.loadingContainer, { backgroundColor: colors.background }]}>
+        <ActivityIndicator size="large" color={colors.primary} />
       </View>
     );
   }
 
   return (
-    <View style={s.container}>
-      <View style={s.header}>
+    <View style={[s.container, { backgroundColor: colors.background }]}>
+      <View style={[s.header, { backgroundColor: colors.headerBg }]}>
         <TouchableOpacity onPress={() => router.back()} style={s.headerBtn}>
           <Ionicons name="chevron-back" size={22} color="#fff" />
         </TouchableOpacity>
@@ -126,8 +128,8 @@ export default function DriverTransactionsScreen() {
       </View>
 
       {/* Balance card */}
-      <View style={s.balanceCard}>
-        <Text style={s.balanceLabel}>Current Balance</Text>
+      <View style={[s.balanceCard, { backgroundColor: colors.card }]}>
+        <Text style={[s.balanceLabel, { color: colors.textTertiary }]}>Current Balance</Text>
         <Text style={[s.balanceValue, { color: balance < 0 ? '#dc2626' : '#16a34a' }]}>
           {balance.toFixed(2)} {currency}
         </Text>

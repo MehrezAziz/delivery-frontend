@@ -7,10 +7,12 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { orderService, ChatMessage, ChatRoom } from '../../services/api/order.service';
+import { useTheme } from '../../contexts/ThemeContext';
 
 export default function DriverOrderChatScreen() {
   const router = useRouter();
   const { orderId } = useLocalSearchParams<{ orderId: string }>();
+  const { colors, isDark } = useTheme();
   const [chatRoom, setChatRoom] = useState<ChatRoom | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
@@ -63,7 +65,7 @@ export default function DriverOrderChatScreen() {
 
   if (loading) {
     return (
-      <View style={s.loadingContainer}>
+      <View style={[s.loadingContainer, { backgroundColor: colors.background }]}>
         <ActivityIndicator size="large" color="#16a34a" />
       </View>
     );
@@ -75,10 +77,10 @@ export default function DriverOrderChatScreen() {
     const isMe = item.senderId === myUserId;
     return (
       <View style={[s.msgRow, isMe ? s.msgRowMe : s.msgRowOther]}>
-        <View style={[s.bubble, isMe ? s.bubbleMe : s.bubbleOther]}>
-          <Text style={[s.bubbleText, isMe ? s.bubbleTextMe : s.bubbleTextOther]}>{item.content}</Text>
+        <View style={[s.bubble, isMe ? s.bubbleMe : [s.bubbleOther, { backgroundColor: colors.card, borderColor: colors.border }]]}>
+          <Text style={[s.bubbleText, isMe ? s.bubbleTextMe : [s.bubbleTextOther, { color: colors.text }]]}>{item.content}</Text>
         </View>
-        <Text style={[s.msgTime, isMe && s.msgTimeMe]}>
+        <Text style={[s.msgTime, { color: colors.textTertiary }, isMe && s.msgTimeMe]}>
           {new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
         </Text>
       </View>
@@ -86,7 +88,7 @@ export default function DriverOrderChatScreen() {
   };
 
   return (
-    <KeyboardAvoidingView style={s.container} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+    <KeyboardAvoidingView style={[s.container, { backgroundColor: colors.background }]} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       {/* Header */}
       <View style={s.header}>
         <TouchableOpacity onPress={() => router.back()} style={s.headerBtn}>
@@ -121,18 +123,18 @@ export default function DriverOrderChatScreen() {
 
       {/* Input */}
       {isClosed ? (
-        <View style={s.closedBar}>
-          <Ionicons name="lock-closed-outline" size={16} color="#9ca3af" />
-          <Text style={s.closedText}>Chat is closed</Text>
+        <View style={[s.closedBar, { backgroundColor: colors.surfaceVariant }]}>
+          <Ionicons name="lock-closed-outline" size={16} color={colors.textTertiary} />
+          <Text style={[s.closedText, { color: colors.textTertiary }]}>Chat is closed</Text>
         </View>
       ) : (
-        <View style={s.inputBar}>
+        <View style={[s.inputBar, { backgroundColor: colors.card, borderTopColor: colors.border }]}>
           <TextInput
-            style={s.textInput}
+            style={[s.textInput, { backgroundColor: colors.surfaceVariant, color: colors.text }]}
             value={input}
             onChangeText={setInput}
             placeholder="Type a message..."
-            placeholderTextColor="#9ca3af"
+            placeholderTextColor={colors.textTertiary}
             multiline
           />
           <TouchableOpacity

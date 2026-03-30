@@ -15,6 +15,7 @@ import { Camera } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 import axios from 'axios';
+import { useTheme } from '../../contexts/ThemeContext';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api';
 
@@ -26,6 +27,7 @@ const DOCUMENT_TYPES = [
 
 export default function DriverRegisterStep3() {
   const router = useRouter();
+  const { colors, isDark } = useTheme();
   const [documentType, setDocumentType] = useState('');
   const [selfieImage, setSelfieImage] = useState<string | null>(null);
   const [docImageTop, setDocImageTop] = useState<string | null>(null);
@@ -193,40 +195,42 @@ export default function DriverRegisterStep3() {
   };
 
   return (
-    <ScrollView style={styles.container}>
+    <ScrollView style={[styles.container, { backgroundColor: colors.card }]}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={handleBack} style={styles.backBtn}>
-          <Ionicons name="chevron-back" size={22} color="#111" />
+        <TouchableOpacity onPress={handleBack} style={[styles.backBtn, { backgroundColor: colors.surfaceVariant }]}>
+          <Ionicons name="chevron-back" size={22} color={colors.text} />
         </TouchableOpacity>
-        <Text style={styles.title}>Driver Registration</Text>
-        <Text style={styles.subtitle}>Step 3 of 3: Document Verification</Text>
+        <Text style={[styles.title, { color: colors.text }]}>Driver Registration</Text>
+        <Text style={[styles.subtitle, { color: colors.textSecondary }]}>Step 3 of 3: Document Verification</Text>
       </View>
 
       {/* Progress Indicator */}
       <View style={styles.progressContainer}>
         <View style={[styles.progressDot, styles.progressDotComplete]} />
-        <View style={styles.progressLine} />
+        <View style={[styles.progressLine, { backgroundColor: colors.border }]} />
         <View style={[styles.progressDot, styles.progressDotComplete]} />
-        <View style={styles.progressLine} />
-        <View style={[styles.progressDot, styles.progressDotActive]} />
+        <View style={[styles.progressLine, { backgroundColor: colors.border }]} />
+        <View style={[styles.progressDot, styles.progressDotActive, { backgroundColor: colors.primary }]} />
       </View>
 
       {/* Document Type Selection */}
       <View style={styles.inputGroup}>
-        <Text style={styles.label}>Document Type *</Text>
+        <Text style={[styles.label, { color: colors.text }]}>Document Type *</Text>
         <View style={styles.documentTypeContainer}>
           {DOCUMENT_TYPES.map((type) => (
             <TouchableOpacity
               key={type.value}
               style={[
                 styles.documentTypeButton,
-                documentType === type.value && styles.documentTypeButtonActive,
+                { borderColor: colors.inputBorder, backgroundColor: colors.inputBg },
+                documentType === type.value && { backgroundColor: colors.primary, borderColor: colors.primary },
               ]}
               onPress={() => setDocumentType(type.value)}
             >
               <Text
                 style={[
                   styles.documentTypeText,
+                  { color: colors.text },
                   documentType === type.value && styles.documentTypeTextActive,
                 ]}
               >
@@ -239,15 +243,15 @@ export default function DriverRegisterStep3() {
 
       {/* Selfie */}
       <View style={styles.inputGroup}>
-        <Text style={styles.label}>Selfie Photo *</Text>
-        <Text style={styles.hint}>Take a clear photo of your face</Text>
+        <Text style={[styles.label, { color: colors.text }]}>Selfie Photo *</Text>
+        <Text style={[styles.hint, { color: colors.textTertiary }]}>Take a clear photo of your face</Text>
         <TouchableOpacity style={styles.photoButton} onPress={takeSelfie}>
           {selfieImage ? (
             <Image source={{ uri: selfieImage }} style={styles.photoPreview} />
           ) : (
-            <View style={styles.photoPlaceholder}>
-              <Ionicons name="camera" size={40} color="#007AFF" />
-              <Text style={styles.photoPlaceholderText}>Take Selfie</Text>
+            <View style={[styles.photoPlaceholder, { backgroundColor: isDark ? colors.primaryLight : '#f0f9ff', borderColor: colors.primary }]}>
+              <Ionicons name="camera" size={40} color={colors.primary} />
+              <Text style={[styles.photoPlaceholderText, { color: colors.primary }]}>Take Selfie</Text>
             </View>
           )}
         </TouchableOpacity>
@@ -255,8 +259,8 @@ export default function DriverRegisterStep3() {
 
       {/* Document Front */}
       <View style={styles.inputGroup}>
-        <Text style={styles.label}>Document Front *</Text>
-        <Text style={styles.hint}>Capture the front side of your document</Text>
+        <Text style={[styles.label, { color: colors.text }]}>Document Front *</Text>
+        <Text style={[styles.hint, { color: colors.textTertiary }]}>Capture the front side of your document</Text>
         <TouchableOpacity
           style={styles.photoButton}
           onPress={() => takeDocumentPhoto('top')}
@@ -264,9 +268,9 @@ export default function DriverRegisterStep3() {
           {docImageTop ? (
             <Image source={{ uri: docImageTop }} style={styles.photoPreview} />
           ) : (
-            <View style={styles.photoPlaceholder}>
-              <Ionicons name="document" size={40} color="#007AFF" />
-              <Text style={styles.photoPlaceholderText}>Capture Front</Text>
+            <View style={[styles.photoPlaceholder, { backgroundColor: isDark ? colors.primaryLight : '#f0f9ff', borderColor: colors.primary }]}>
+              <Ionicons name="document" size={40} color={colors.primary} />
+              <Text style={[styles.photoPlaceholderText, { color: colors.primary }]}>Capture Front</Text>
             </View>
           )}
         </TouchableOpacity>
@@ -274,8 +278,8 @@ export default function DriverRegisterStep3() {
 
       {/* Document Back */}
       <View style={styles.inputGroup}>
-        <Text style={styles.label}>Document Back (Optional)</Text>
-        <Text style={styles.hint}>Capture the back side if applicable</Text>
+        <Text style={[styles.label, { color: colors.text }]}>Document Back (Optional)</Text>
+        <Text style={[styles.hint, { color: colors.textTertiary }]}>Capture the back side if applicable</Text>
         <TouchableOpacity
           style={styles.photoButton}
           onPress={() => takeDocumentPhoto('bottom')}
@@ -283,9 +287,9 @@ export default function DriverRegisterStep3() {
           {docImageBottom ? (
             <Image source={{ uri: docImageBottom }} style={styles.photoPreview} />
           ) : (
-            <View style={styles.photoPlaceholder}>
-              <Ionicons name="document-outline" size={40} color="#007AFF" />
-              <Text style={styles.photoPlaceholderText}>Capture Back</Text>
+            <View style={[styles.photoPlaceholder, { backgroundColor: isDark ? colors.primaryLight : '#f0f9ff', borderColor: colors.primary }]}>
+              <Ionicons name="document-outline" size={40} color={colors.primary} />
+              <Text style={[styles.photoPlaceholderText, { color: colors.primary }]}>Capture Back</Text>
             </View>
           )}
         </TouchableOpacity>
@@ -293,7 +297,7 @@ export default function DriverRegisterStep3() {
 
       {/* Submit Button */}
       <TouchableOpacity
-        style={[styles.submitButton, loading && styles.submitButtonDisabled]}
+        style={[styles.submitButton, { backgroundColor: colors.primary }, loading && styles.submitButtonDisabled]}
         onPress={handleSubmit}
         disabled={loading}
       >
@@ -306,16 +310,16 @@ export default function DriverRegisterStep3() {
 
       {/* Skip Button */}
       <TouchableOpacity
-        style={styles.skipButton}
+        style={[styles.skipButton, { borderColor: colors.primary }]}
         onPress={handleSkip}
         disabled={loading}
       >
-        <Text style={styles.skipButtonText}>Skip for Now</Text>
+        <Text style={[styles.skipButtonText, { color: colors.primary }]}>Skip for Now</Text>
       </TouchableOpacity>
 
-      <View style={styles.infoBox}>
-        <Ionicons name="information-circle" size={24} color="#007AFF" />
-        <Text style={styles.infoText}>
+      <View style={[styles.infoBox, { backgroundColor: isDark ? colors.primaryLight : '#f0f9ff' }]}>
+        <Ionicons name="information-circle" size={24} color={colors.primary} />
+        <Text style={[styles.infoText, { color: colors.textSecondary }]}>
           Your documents will be reviewed by our team. You'll be notified once verified.
         </Text>
       </View>
@@ -326,7 +330,6 @@ export default function DriverRegisterStep3() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
     padding: 20,
   },
   header: {
@@ -334,18 +337,16 @@ const styles = StyleSheet.create({
     marginTop: 20,
   },
   backBtn: {
-    width: 42, height: 42, borderRadius: 21, backgroundColor: '#f3f4f6',
+    width: 42, height: 42, borderRadius: 21,
     alignItems: 'center', justifyContent: 'center', marginBottom: 16,
   },
   title: {
     fontSize: 28,
     fontWeight: 'bold',
-    color: '#333',
     marginBottom: 8,
   },
   subtitle: {
     fontSize: 16,
-    color: '#666',
   },
   progressContainer: {
     flexDirection: 'row',
@@ -357,10 +358,8 @@ const styles = StyleSheet.create({
     width: 12,
     height: 12,
     borderRadius: 6,
-    backgroundColor: '#ddd',
   },
   progressDotActive: {
-    backgroundColor: '#007AFF',
     width: 16,
     height: 16,
     borderRadius: 8,
@@ -371,7 +370,6 @@ const styles = StyleSheet.create({
   progressLine: {
     width: 40,
     height: 2,
-    backgroundColor: '#ddd',
     marginHorizontal: 8,
   },
   inputGroup: {
@@ -380,12 +378,10 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#333',
     marginBottom: 4,
   },
   hint: {
     fontSize: 14,
-    color: '#999',
     marginBottom: 12,
   },
   documentTypeContainer: {
@@ -397,17 +393,10 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 20,
     borderWidth: 1,
-    borderColor: '#ddd',
     borderRadius: 8,
-    backgroundColor: '#f9f9f9',
-  },
-  documentTypeButtonActive: {
-    backgroundColor: '#007AFF',
-    borderColor: '#007AFF',
   },
   documentTypeText: {
     fontSize: 16,
-    color: '#333',
   },
   documentTypeTextActive: {
     color: '#fff',
@@ -426,21 +415,17 @@ const styles = StyleSheet.create({
   photoPlaceholder: {
     width: '100%',
     height: '100%',
-    backgroundColor: '#f0f9ff',
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 2,
-    borderColor: '#007AFF',
     borderStyle: 'dashed',
   },
   photoPlaceholderText: {
     marginTop: 12,
     fontSize: 16,
-    color: '#007AFF',
     fontWeight: '600',
   },
   submitButton: {
-    backgroundColor: '#007AFF',
     padding: 16,
     borderRadius: 8,
     alignItems: 'center',
@@ -461,17 +446,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 12,
     borderWidth: 1,
-    borderColor: '#007AFF',
   },
   skipButtonText: {
-    color: '#007AFF',
     fontSize: 16,
     fontWeight: '600',
   },
   infoBox: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#f0f9ff',
     padding: 16,
     borderRadius: 8,
     marginTop: 20,
@@ -481,7 +463,6 @@ const styles = StyleSheet.create({
   infoText: {
     flex: 1,
     fontSize: 14,
-    color: '#666',
     lineHeight: 20,
   },
 });

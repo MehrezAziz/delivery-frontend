@@ -4,12 +4,14 @@ import { useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Clipboard from 'expo-clipboard';
 import { clearPushToken } from '../../services/api/notification.service';
+import { useTheme } from '../../contexts/ThemeContext';
 
 // Get API URL from environment variable
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api';
 
 export default function CustomerProfileScreen() {
   const router = useRouter();
+  const { colors, isDark, toggleTheme } = useTheme();
   
   // State for user data
   const [user, setUser] = useState<any | null>(null);
@@ -290,18 +292,18 @@ export default function CustomerProfileScreen() {
   // Show loading state
   if (loading) {
     return (
-      <View style={styles.container}>
-        <View style={styles.header}>
-          <Text style={styles.headerTitle}>Profile</Text>
+      <View style={[styles.container, { backgroundColor: colors.background }]}>
+        <View style={[styles.header, { backgroundColor: colors.card }]}>
+          <Text style={[styles.headerTitle, { color: colors.text }]}>Profile</Text>
         </View>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#0284c7" />
-          <Text style={styles.loadingText}>Loading profile...</Text>
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={[styles.loadingText, { color: colors.textSecondary }]}>Loading profile...</Text>
         </View>
         <View style={{ paddingHorizontal: 24, paddingBottom: 40 }}>
-          <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+          <TouchableOpacity style={[styles.logoutButton, { backgroundColor: colors.dangerBg }]} onPress={handleLogout}>
             <Text style={styles.menuIcon}>🚪</Text>
-            <Text style={styles.logoutText}>Logout</Text>
+            <Text style={[styles.logoutText, { color: colors.danger }]}>Logout</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -311,18 +313,18 @@ export default function CustomerProfileScreen() {
   // Show error state
   if (error || !user || !customer) {
     return (
-      <View style={styles.container}>
-        <View style={styles.header}>
-          <Text style={styles.headerTitle}>Profile</Text>
+      <View style={[styles.container, { backgroundColor: colors.background }]}>
+        <View style={[styles.header, { backgroundColor: colors.card }]}>
+          <Text style={[styles.headerTitle, { color: colors.text }]}>Profile</Text>
         </View>
         <View style={styles.errorContainer}>
-          <Text style={styles.errorText}>{error || 'Failed to load profile'}</Text>
-          <TouchableOpacity style={styles.retryButton} onPress={loadUserData}>
+          <Text style={[styles.errorText, { color: colors.danger }]}>{error || 'Failed to load profile'}</Text>
+          <TouchableOpacity style={[styles.retryButton, { backgroundColor: colors.primary }]} onPress={loadUserData}>
             <Text style={styles.retryButtonText}>Retry</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={[styles.logoutButton, { marginTop: 24, width: '100%' }]} onPress={handleLogout}>
+          <TouchableOpacity style={[styles.logoutButton, { marginTop: 24, width: '100%', backgroundColor: colors.dangerBg }]} onPress={handleLogout}>
             <Text style={styles.menuIcon}>🚪</Text>
-            <Text style={styles.logoutText}>Logout</Text>
+            <Text style={[styles.logoutText, { color: colors.danger }]}>Logout</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -330,63 +332,63 @@ export default function CustomerProfileScreen() {
   }
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
       {/* Header */}
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>Profile</Text>
+      <View style={[styles.header, { backgroundColor: colors.card }]}>
+        <Text style={[styles.headerTitle, { color: colors.text }]}>Profile</Text>
       </View>
 
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
         {/* Profile Info */}
-        <View style={styles.profileCard}>
+        <View style={[styles.profileCard, { backgroundColor: colors.card }]}>
           <View style={styles.profileHeader}>
-            <View style={styles.avatar}>
+            <View style={[styles.avatar, { backgroundColor: colors.primary }]}>
               <Text style={styles.avatarText}>{getInitials()}</Text>
             </View>
-            <Text style={styles.name}>{getFullName()}</Text>
-            <Text style={styles.phone}>{user.phone}</Text>
+            <Text style={[styles.name, { color: colors.text }]}>{getFullName()}</Text>
+            <Text style={[styles.phone, { color: colors.textSecondary }]}>{user.phone}</Text>
             {user.myEmail && (
-              <Text style={styles.email}>{user.myEmail}</Text>
+              <Text style={[styles.email, { color: colors.textSecondary }]}>{user.myEmail}</Text>
             )}
           </View>
 
-          <View style={styles.profileDetails}>
+          <View style={[styles.profileDetails, { borderTopColor: colors.border }]}>
             {/* Gender Field */}
             {editingField === 'userGender' ? (
-              <View style={styles.editFieldContainer}>
-                <Text style={styles.detailLabel}>Gender</Text>
+              <View style={[styles.editFieldContainer, { borderBottomColor: colors.border }]}>
+                <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>Gender</Text>
                 <View style={styles.genderEditContainer}>
                   <TouchableOpacity
                     style={[
-                      styles.genderEditButton,
+                      styles.genderEditButton, { backgroundColor: colors.inputBg, borderColor: colors.inputBorder },
                       editValue === 'MALE' && styles.genderEditButtonActive
                     ]}
                     onPress={() => setEditValue('MALE')}
                   >
                     <Text style={[
-                      styles.genderEditButtonText,
+                      styles.genderEditButtonText, { color: colors.textSecondary },
                       editValue === 'MALE' && styles.genderEditButtonTextActive
                     ]}>Male</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={[
-                      styles.genderEditButton,
+                      styles.genderEditButton, { backgroundColor: colors.inputBg, borderColor: colors.inputBorder },
                       editValue === 'FEMALE' && styles.genderEditButtonActive
                     ]}
                     onPress={() => setEditValue('FEMALE')}
                   >
                     <Text style={[
-                      styles.genderEditButtonText,
+                      styles.genderEditButtonText, { color: colors.textSecondary },
                       editValue === 'FEMALE' && styles.genderEditButtonTextActive
                     ]}>Female</Text>
                   </TouchableOpacity>
                 </View>
                 <View style={styles.editButtonsRow}>
-                  <TouchableOpacity style={styles.cancelButton} onPress={handleCancelEdit}>
-                    <Text style={styles.cancelButtonText}>Cancel</Text>
+                  <TouchableOpacity style={[styles.cancelButton, { backgroundColor: colors.surfaceVariant }]} onPress={handleCancelEdit}>
+                    <Text style={[styles.cancelButtonText, { color: colors.textSecondary }]}>Cancel</Text>
                   </TouchableOpacity>
                   <TouchableOpacity 
-                    style={[styles.saveButton, !editValue && styles.saveButtonDisabled]} 
+                    style={[styles.saveButton, { backgroundColor: colors.primary }, !editValue && styles.saveButtonDisabled]} 
                     onPress={handleSaveField}
                     disabled={!editValue || isSaving}
                   >
@@ -400,41 +402,41 @@ export default function CustomerProfileScreen() {
               </View>
             ) : user.userGender ? (
               <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>Gender</Text>
-                <Text style={styles.detailValue}>{user.userGender}</Text>
+                <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>Gender</Text>
+                <Text style={[styles.detailValue, { color: colors.text }]}>{user.userGender}</Text>
               </View>
             ) : (
               <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>Gender</Text>
+                <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>Gender</Text>
                 <TouchableOpacity 
-                  style={styles.addButton}
+                  style={[styles.addButton, { borderColor: colors.primary }]}
                   onPress={() => handleEditField('userGender')}
                 >
-                  <Text style={styles.addButtonText}>+ Add Gender {user.userGender}</Text>
+                  <Text style={[styles.addButtonText, { color: colors.primary }]}>+ Add Gender {user.userGender}</Text>
                 </TouchableOpacity>
               </View>
             )}
             
             {/* Email Field */}
             {editingField === 'myEmail' ? (
-              <View style={styles.editFieldContainer}>
-                <Text style={styles.detailLabel}>Email</Text>
+              <View style={[styles.editFieldContainer, { borderBottomColor: colors.border }]}>
+                <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>Email</Text>
                 <TextInput
-                  style={styles.editInput}
+                  style={[styles.editInput, { backgroundColor: colors.inputBg, borderColor: colors.inputBorder, color: colors.text }]}
                   value={editValue}
                   onChangeText={setEditValue}
                   placeholder="Enter email"
-                  placeholderTextColor="#9ca3af"
+                  placeholderTextColor={colors.textTertiary}
                   keyboardType="email-address"
                   autoCapitalize="none"
                   autoFocus
                 />
                 <View style={styles.editButtonsRow}>
-                  <TouchableOpacity style={styles.cancelButton} onPress={handleCancelEdit}>
-                    <Text style={styles.cancelButtonText}>Cancel</Text>
+                  <TouchableOpacity style={[styles.cancelButton, { backgroundColor: colors.surfaceVariant }]} onPress={handleCancelEdit}>
+                    <Text style={[styles.cancelButtonText, { color: colors.textSecondary }]}>Cancel</Text>
                   </TouchableOpacity>
                   <TouchableOpacity 
-                    style={[styles.saveButton, !editValue.trim() && styles.saveButtonDisabled]} 
+                    style={[styles.saveButton, { backgroundColor: colors.primary }, !editValue.trim() && styles.saveButtonDisabled]} 
                     onPress={handleSaveField}
                     disabled={!editValue.trim() || isSaving}
                   >
@@ -448,39 +450,39 @@ export default function CustomerProfileScreen() {
               </View>
             ) : user.myEmail ? (
               <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>Email</Text>
-                <Text style={styles.detailValue}>{user.myEmail}</Text>
+                <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>Email</Text>
+                <Text style={[styles.detailValue, { color: colors.text }]}>{user.myEmail}</Text>
               </View>
             ) : (
               <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>Email</Text>
+                <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>Email</Text>
                 <TouchableOpacity 
-                  style={styles.addButton}
+                  style={[styles.addButton, { borderColor: colors.primary }]}
                   onPress={() => handleEditField('myEmail')}
                 >
-                  <Text style={styles.addButtonText}>+ Add Email</Text>
+                  <Text style={[styles.addButtonText, { color: colors.primary }]}>+ Add Email</Text>
                 </TouchableOpacity>
               </View>
             )}
             
             {/* First Name Field */}
             {editingField === 'firstName' ? (
-              <View style={styles.editFieldContainer}>
-                <Text style={styles.detailLabel}>First Name</Text>
+              <View style={[styles.editFieldContainer, { borderBottomColor: colors.border }]}>
+                <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>First Name</Text>
                 <TextInput
-                  style={styles.editInput}
+                  style={[styles.editInput, { backgroundColor: colors.inputBg, borderColor: colors.inputBorder, color: colors.text }]}
                   value={editValue}
                   onChangeText={setEditValue}
                   placeholder="Enter first name"
-                  placeholderTextColor="#9ca3af"
+                  placeholderTextColor={colors.textTertiary}
                   autoFocus
                 />
                 <View style={styles.editButtonsRow}>
-                  <TouchableOpacity style={styles.cancelButton} onPress={handleCancelEdit}>
-                    <Text style={styles.cancelButtonText}>Cancel</Text>
+                  <TouchableOpacity style={[styles.cancelButton, { backgroundColor: colors.surfaceVariant }]} onPress={handleCancelEdit}>
+                    <Text style={[styles.cancelButtonText, { color: colors.textSecondary }]}>Cancel</Text>
                   </TouchableOpacity>
                   <TouchableOpacity 
-                    style={[styles.saveButton, !editValue.trim() && styles.saveButtonDisabled]} 
+                    style={[styles.saveButton, { backgroundColor: colors.primary }, !editValue.trim() && styles.saveButtonDisabled]} 
                     onPress={handleSaveField}
                     disabled={!editValue.trim() || isSaving}
                   >
@@ -494,39 +496,39 @@ export default function CustomerProfileScreen() {
               </View>
             ) : user.firstName ? (
               <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>First Name</Text>
-                <Text style={styles.detailValue}>{user.firstName}</Text>
+                <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>First Name</Text>
+                <Text style={[styles.detailValue, { color: colors.text }]}>{user.firstName}</Text>
               </View>
             ) : (
               <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>First Name</Text>
+                <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>First Name</Text>
                 <TouchableOpacity 
-                  style={styles.addButton}
+                  style={[styles.addButton, { borderColor: colors.primary }]}
                   onPress={() => handleEditField('firstName')}
                 >
-                  <Text style={styles.addButtonText}>+ Add First Name</Text>
+                  <Text style={[styles.addButtonText, { color: colors.primary }]}>+ Add First Name</Text>
                 </TouchableOpacity>
               </View>
             )}
             
             {/* Last Name Field */}
             {editingField === 'secondName' ? (
-              <View style={styles.editFieldContainer}>
-                <Text style={styles.detailLabel}>Last Name</Text>
+              <View style={[styles.editFieldContainer, { borderBottomColor: colors.border }]}>
+                <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>Last Name</Text>
                 <TextInput
-                  style={styles.editInput}
+                  style={[styles.editInput, { backgroundColor: colors.inputBg, borderColor: colors.inputBorder, color: colors.text }]}
                   value={editValue}
                   onChangeText={setEditValue}
                   placeholder="Enter last name"
-                  placeholderTextColor="#9ca3af"
+                  placeholderTextColor={colors.textTertiary}
                   autoFocus
                 />
                 <View style={styles.editButtonsRow}>
-                  <TouchableOpacity style={styles.cancelButton} onPress={handleCancelEdit}>
-                    <Text style={styles.cancelButtonText}>Cancel</Text>
+                  <TouchableOpacity style={[styles.cancelButton, { backgroundColor: colors.surfaceVariant }]} onPress={handleCancelEdit}>
+                    <Text style={[styles.cancelButtonText, { color: colors.textSecondary }]}>Cancel</Text>
                   </TouchableOpacity>
                   <TouchableOpacity 
-                    style={[styles.saveButton, !editValue.trim() && styles.saveButtonDisabled]} 
+                    style={[styles.saveButton, { backgroundColor: colors.primary }, !editValue.trim() && styles.saveButtonDisabled]} 
                     onPress={handleSaveField}
                     disabled={!editValue.trim() || isSaving}
                   >
@@ -540,41 +542,41 @@ export default function CustomerProfileScreen() {
               </View>
             ) : user.secondName ? (
               <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>Last Name</Text>
-                <Text style={styles.detailValue}>{user.secondName}</Text>
+                <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>Last Name</Text>
+                <Text style={[styles.detailValue, { color: colors.text }]}>{user.secondName}</Text>
               </View>
             ) : (
               <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>Last Name</Text>
+                <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>Last Name</Text>
                 <TouchableOpacity 
-                  style={styles.addButton}
+                  style={[styles.addButton, { borderColor: colors.primary }]}
                   onPress={() => handleEditField('secondName')}
                 >
-                  <Text style={styles.addButtonText}>+ Add Last Name</Text>
+                  <Text style={[styles.addButtonText, { color: colors.primary }]}>+ Add Last Name</Text>
                 </TouchableOpacity>
               </View>
             )}
             
             <View style={styles.detailRow}>
-              <Text style={styles.detailLabel}>User ID</Text>
-              <Text style={styles.detailValue}>{user.id.substring(0, 8)}...</Text>
+              <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>User ID</Text>
+              <Text style={[styles.detailValue, { color: colors.text }]}>{user.id.substring(0, 8)}...</Text>
             </View>
             <View style={styles.detailRow}>
-              <Text style={styles.detailLabel}>Role</Text>
-              <Text style={styles.detailValue}>{user.role}</Text>
+              <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>Role</Text>
+              <Text style={[styles.detailValue, { color: colors.text }]}>{user.role}</Text>
             </View>
             <View style={styles.detailRow}>
-              <Text style={styles.detailLabel}>Status</Text>
-              <Text style={styles.detailValue}>{customer.customerStatus}</Text>
+              <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>Status</Text>
+              <Text style={[styles.detailValue, { color: colors.text }]}>{customer.customerStatus}</Text>
             </View>
             <View style={styles.detailRow}>
-              <Text style={styles.detailLabel}>Completed Orders</Text>
-              <Text style={styles.detailValue}>{customer.completedOrders}</Text>
+              <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>Completed Orders</Text>
+              <Text style={[styles.detailValue, { color: colors.text }]}>{customer.completedOrders}</Text>
             </View>
             {user.createdAt && (
               <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>Member Since</Text>
-                <Text style={styles.detailValue}>{formatDate(user.createdAt)}</Text>
+                <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>Member Since</Text>
+                <Text style={[styles.detailValue, { color: colors.text }]}>{formatDate(user.createdAt)}</Text>
               </View>
             )}
           </View>
@@ -582,24 +584,24 @@ export default function CustomerProfileScreen() {
 
         {/* Referral Code Card */}
         {referralCode && referralStats && (
-          <View style={styles.referralCard}>
+          <View style={[styles.referralCard, { backgroundColor: colors.card }]}>
             <View style={styles.referralHeader}>
               <Text style={styles.referralIcon}>🎁</Text>
-              <Text style={styles.referralTitle}>My Referral Code</Text>
+              <Text style={[styles.referralTitle, { color: colors.text }]}>My Referral Code</Text>
             </View>
             
-            <View style={styles.referralCodeContainer}>
+            <View style={[styles.referralCodeContainer, { borderColor: colors.primary }]}>
               <View style={styles.referralCodeRow}>
                 <View style={styles.referralCodeTextContainer}>
-                  <Text style={styles.referralCode}>{referralCode.code}</Text>
-                  <Text style={styles.referralBenefit}>
+                  <Text style={[styles.referralCode, { color: colors.primary }]}>{referralCode.code}</Text>
+                  <Text style={[styles.referralBenefit, { color: colors.primary }]}>
                     {referralCode.type === 'PERCENTAGE' 
                       ? `${referralCode.value}% discount`
                       : `${referralCode.value} TND discount`}
                   </Text>
                 </View>
                 <TouchableOpacity 
-                  style={styles.copyButton}
+                  style={[styles.copyButton, { backgroundColor: colors.primary }]}
                   onPress={handleCopyReferralCode}
                   activeOpacity={0.7}
                 >
@@ -609,42 +611,42 @@ export default function CustomerProfileScreen() {
             </View>
 
             <TouchableOpacity 
-              style={styles.shareButton}
+              style={[styles.shareButton, { backgroundColor: colors.primary }]}
               onPress={handleShareReferralCode}
               activeOpacity={0.7}
             >
               <Text style={styles.shareButtonText}>Share Code</Text>
             </TouchableOpacity>
 
-            <View style={styles.referralStats}>
+            <View style={[styles.referralStats, { backgroundColor: colors.surfaceVariant }]}>
               <View style={styles.statItem}>
-                <Text style={styles.statValue}>{referralStats.totalReferrals}</Text>
-                <Text style={styles.statLabel}>Referrals</Text>
+                <Text style={[styles.statValue, { color: colors.text }]}>{referralStats.totalReferrals}</Text>
+                <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Referrals</Text>
               </View>
-              <View style={styles.statDivider} />
+              <View style={[styles.statDivider, { backgroundColor: colors.border }]} />
               <View style={styles.statItem}>
-                <Text style={styles.statValue}>{referralStats.totalCommission.toFixed(2)} TND</Text>
-                <Text style={styles.statLabel}>Total Earned</Text>
+                <Text style={[styles.statValue, { color: colors.text }]}>{referralStats.totalCommission.toFixed(2)} TND</Text>
+                <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Total Earned</Text>
               </View>
             </View>
 
             <View style={styles.commissionDetails}>
               <View style={styles.commissionRow}>
-                <Text style={styles.commissionLabel}>Pending</Text>
+                <Text style={[styles.commissionLabel, { color: colors.textSecondary }]}>Pending</Text>
                 <Text style={styles.commissionPending}>{referralStats.pendingCommission.toFixed(2)} TND</Text>
               </View>
               <View style={styles.commissionRow}>
-                <Text style={styles.commissionLabel}>Paid</Text>
+                <Text style={[styles.commissionLabel, { color: colors.textSecondary }]}>Paid</Text>
                 <Text style={styles.commissionPaid}>{referralStats.paidCommission.toFixed(2)} TND</Text>
               </View>
             </View>
 
             <TouchableOpacity 
-              style={styles.refreshButton}
+              style={[styles.refreshButton, { borderColor: colors.primary }]}
               onPress={loadReferralData}
               activeOpacity={0.7}
             >
-              <Text style={styles.refreshButtonText}>🔄 Refresh Statistics</Text>
+              <Text style={[styles.refreshButtonText, { color: colors.primary }]}>🔄 Refresh Statistics</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -652,68 +654,74 @@ export default function CustomerProfileScreen() {
         {/* Menu Items */}
         <View style={styles.menuContainer}>
           <TouchableOpacity
-            style={styles.menuItem}
+            style={[styles.menuItem, { backgroundColor: colors.card }]}
             onPress={() => router.push('/(customer)/edit-profile')}
           >
             <Text style={styles.menuIcon}>✏️</Text>
-            <Text style={styles.menuText}>Edit Profile</Text>
-            <Text style={styles.menuArrow}>→</Text>
+            <Text style={[styles.menuText, { color: colors.text }]}>Edit Profile</Text>
+            <Text style={[styles.menuArrow, { color: colors.textTertiary }]}>→</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={styles.menuItem}
+            style={[styles.menuItem, { backgroundColor: colors.card }]}
             onPress={() => router.push('/(auth)/customer-setup')}
           >
             <Text style={styles.menuIcon}>🌍</Text>
-            <Text style={styles.menuText}>Add address</Text>
-            <Text style={styles.menuArrow}>→</Text>
+            <Text style={[styles.menuText, { color: colors.text }]}>Add address</Text>
+            <Text style={[styles.menuArrow, { color: colors.textTertiary }]}>→</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={styles.menuItem}
+            style={[styles.menuItem, { backgroundColor: colors.card }]}
             onPress={() => router.push('/(customer)/addresses')}
           >
             <Text style={styles.menuIcon}>📍</Text>
-            <Text style={styles.menuText}>My Addresses</Text>
-            <Text style={styles.menuArrow}>→</Text>
+            <Text style={[styles.menuText, { color: colors.text }]}>My Addresses</Text>
+            <Text style={[styles.menuArrow, { color: colors.textTertiary }]}>→</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={styles.menuItem}
+            style={[styles.menuItem, { backgroundColor: colors.card }]}
             onPress={() => router.push('/(customer)/restrictions')}
           >
             <Text style={styles.menuIcon}>⚠️</Text>
-            <Text style={styles.menuText}>My Restrictions</Text>
-            <Text style={styles.menuArrow}>→</Text>
+            <Text style={[styles.menuText, { color: colors.text }]}>My Restrictions</Text>
+            <Text style={[styles.menuArrow, { color: colors.textTertiary }]}>→</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.menuItem}>
+          <TouchableOpacity style={[styles.menuItem, { backgroundColor: colors.card }]}>
             <Text style={styles.menuIcon}>💳</Text>
-            <Text style={styles.menuText}>Wallet</Text>
-            <Text style={styles.menuArrow}>→</Text>
+            <Text style={[styles.menuText, { color: colors.text }]}>Wallet</Text>
+            <Text style={[styles.menuArrow, { color: colors.textTertiary }]}>→</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.menuItem}>
+          <TouchableOpacity style={[styles.menuItem, { backgroundColor: colors.card }]}>
             <Text style={styles.menuIcon}>⚙️</Text>
-            <Text style={styles.menuText}>Settings</Text>
-            <Text style={styles.menuArrow}>→</Text>
+            <Text style={[styles.menuText, { color: colors.text }]}>Settings</Text>
+            <Text style={[styles.menuArrow, { color: colors.textTertiary }]}>→</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={styles.menuItem}
+            style={[styles.menuItem, { backgroundColor: colors.card }]}
             onPress={() => router.push('/(customer)/support')}
           >
             <Text style={styles.menuIcon}>❓</Text>
-            <Text style={styles.menuText}>Help & Support</Text>
-            <Text style={styles.menuArrow}>→</Text>
+            <Text style={[styles.menuText, { color: colors.text }]}>Help & Support</Text>
+            <Text style={[styles.menuArrow, { color: colors.textTertiary }]}>→</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity style={[styles.menuItem, { backgroundColor: colors.card }]} onPress={toggleTheme}>
+            <Text style={styles.menuIcon}>{isDark ? '☀️' : '🌙'}</Text>
+            <Text style={[styles.menuText, { color: colors.text }]}>{isDark ? 'Light Mode' : 'Dark Mode'}</Text>
+            <Text style={[styles.menuArrow, { color: colors.textTertiary }]}>→</Text>
           </TouchableOpacity>
 
           <TouchableOpacity 
-            style={styles.logoutButton}
+            style={[styles.logoutButton, { backgroundColor: colors.dangerBg }]}
             onPress={handleLogout}
           >
             <Text style={styles.menuIcon}>🚪</Text>
-            <Text style={styles.logoutText}>Logout</Text>
+            <Text style={[styles.logoutText, { color: colors.danger }]}>Logout</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>

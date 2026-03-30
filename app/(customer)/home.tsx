@@ -8,6 +8,8 @@ import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useTheme } from '../../contexts/ThemeContext';
+import { ThemeToggle } from '../../components/ThemeToggle';
 import { orderService, Order } from '../../services/api/order.service';
 import { notificationService } from '../../services/api/notification.service';
 
@@ -27,6 +29,7 @@ const STATUS_META: Record<string, { icon: string; color: string; bg: string; lab
 export default function CustomerHomeScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { colors, isDark } = useTheme();
   const [userName, setUserName] = useState('');
   const [activeOrders, setActiveOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
@@ -66,24 +69,27 @@ export default function CustomerHomeScreen() {
   }, [loadOrders]);
 
   return (
-    <View style={s.container}>
+    <View style={[s.container, { backgroundColor: colors.background }]}>
       {/* Status bar background */}
-      <View style={{ backgroundColor: '#0284c7', height: insets.top }} />
+      <View style={{ backgroundColor: colors.headerBg, height: insets.top }} />
       {/* Header */}
-      <View style={s.header}>
+      <View style={[s.header, { backgroundColor: colors.headerBg }]}>
         <View style={s.headerContent}>
           <View>
             <Text style={s.greeting}>Hello{userName ? `, ${userName}` : ''} 👋</Text>
             <Text style={s.subtitle}>Where should we deliver today?</Text>
           </View>
-          <TouchableOpacity style={s.notifBtn} onPress={() => router.push('/(customer)/notifications')}>
-            <Ionicons name="notifications-outline" size={22} color="#fff" />
-            {unreadCount > 0 && (
-              <View style={s.badge}>
-                <Text style={s.badgeText}>{unreadCount > 99 ? '99+' : unreadCount}</Text>
-              </View>
-            )}
-          </TouchableOpacity>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <ThemeToggle color="#fff" style={{ backgroundColor: 'rgba(255,255,255,0.2)' }} />
+            <TouchableOpacity style={s.notifBtn} onPress={() => router.push('/(customer)/notifications')}>
+              <Ionicons name="notifications-outline" size={22} color="#fff" />
+              {unreadCount > 0 && (
+                <View style={s.badge}>
+                  <Text style={s.badgeText}>{unreadCount > 99 ? '99+' : unreadCount}</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
 
@@ -92,7 +98,7 @@ export default function CustomerHomeScreen() {
 
         {/* Create Order CTA */}
         <View style={s.section}>
-          <TouchableOpacity style={s.ctaCard} onPress={() => router.push('/(customer)/create-order')} activeOpacity={0.85}>
+          <TouchableOpacity style={[s.ctaCard, { backgroundColor: colors.primary }]} onPress={() => router.push('/(customer)/create-order')} activeOpacity={0.85}>
             <View style={s.ctaIconWrap}>
               <Ionicons name="add-circle" size={32} color="#fff" />
             </View>
@@ -106,31 +112,31 @@ export default function CustomerHomeScreen() {
 
         {/* Quick Actions */}
         <View style={s.section}>
-          <Text style={s.sectionTitle}>Quick Actions</Text>
+          <Text style={[s.sectionTitle, { color: colors.text }]}>Quick Actions</Text>
           <View style={s.actionsGrid}>
-            <TouchableOpacity style={s.actionCard} onPress={() => router.push('/(customer)/orders')}>
-              <View style={[s.actionIconWrap, { backgroundColor: '#dbeafe' }]}>
+            <TouchableOpacity style={[s.actionCard, { backgroundColor: colors.card }]} onPress={() => router.push('/(customer)/orders')}>
+              <View style={[s.actionIconWrap, { backgroundColor: isDark ? '#1e3a5f' : '#dbeafe' }]}>
                 <Ionicons name="receipt-outline" size={22} color="#2563eb" />
               </View>
-              <Text style={s.actionLabel}>My Orders</Text>
+              <Text style={[s.actionLabel, { color: colors.text }]}>My Orders</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={s.actionCard} onPress={() => router.push('/(customer)/addresses')}>
-              <View style={[s.actionIconWrap, { backgroundColor: '#dcfce7' }]}>
+            <TouchableOpacity style={[s.actionCard, { backgroundColor: colors.card }]} onPress={() => router.push('/(customer)/addresses')}>
+              <View style={[s.actionIconWrap, { backgroundColor: isDark ? '#052e16' : '#dcfce7' }]}>
                 <Ionicons name="location-outline" size={22} color="#16a34a" />
               </View>
-              <Text style={s.actionLabel}>Addresses</Text>
+              <Text style={[s.actionLabel, { color: colors.text }]}>Addresses</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={s.actionCard} onPress={() => router.push('/(customer)/wallet')}>
-              <View style={[s.actionIconWrap, { backgroundColor: '#fef9c3' }]}>
+            <TouchableOpacity style={[s.actionCard, { backgroundColor: colors.card }]} onPress={() => router.push('/(customer)/wallet')}>
+              <View style={[s.actionIconWrap, { backgroundColor: isDark ? '#422006' : '#fef9c3' }]}>
                 <Ionicons name="wallet-outline" size={22} color="#ca8a04" />
               </View>
-              <Text style={s.actionLabel}>Wallet</Text>
+              <Text style={[s.actionLabel, { color: colors.text }]}>Wallet</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={s.actionCard} onPress={() => router.push('/(customer)/support')}>
-              <View style={[s.actionIconWrap, { backgroundColor: '#ede9fe' }]}>
+            <TouchableOpacity style={[s.actionCard, { backgroundColor: colors.card }]} onPress={() => router.push('/(customer)/support')}>
+              <View style={[s.actionIconWrap, { backgroundColor: isDark ? '#2e1065' : '#ede9fe' }]}>
                 <Ionicons name="headset-outline" size={22} color="#7c3aed" />
               </View>
-              <Text style={s.actionLabel}>Support</Text>
+              <Text style={[s.actionLabel, { color: colors.text }]}>Support</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -138,50 +144,50 @@ export default function CustomerHomeScreen() {
         {/* Active Orders */}
         <View style={s.section}>
           <View style={s.sectionHeader}>
-            <Text style={s.sectionTitle}>Active Orders</Text>
+            <Text style={[s.sectionTitle, { color: colors.text }]}>Active Orders</Text>
             {activeOrders.length > 0 && (
               <TouchableOpacity onPress={() => router.push('/(customer)/orders')}>
-                <Text style={s.seeAll}>See All</Text>
+                <Text style={[s.seeAll, { color: colors.primary }]}>See All</Text>
               </TouchableOpacity>
             )}
           </View>
 
           {loading ? (
-            <ActivityIndicator size="small" color="#0284c7" style={{ marginTop: 20 }} />
+            <ActivityIndicator size="small" color={colors.primary} style={{ marginTop: 20 }} />
           ) : activeOrders.length === 0 ? (
-            <View style={s.emptyCard}>
-              <Ionicons name="cube-outline" size={40} color="#d1d5db" />
-              <Text style={s.emptyText}>No active orders</Text>
-              <Text style={s.emptySub}>Create an order to get started</Text>
+            <View style={[s.emptyCard, { backgroundColor: colors.card }]}>
+              <Ionicons name="cube-outline" size={40} color={colors.textTertiary} />
+              <Text style={[s.emptyText, { color: colors.textSecondary }]}>No active orders</Text>
+              <Text style={[s.emptySub, { color: colors.textTertiary }]}>Create an order to get started</Text>
             </View>
           ) : (
             activeOrders.slice(0, 3).map(order => {
               const meta = STATUS_META[order.status] || STATUS_META.SEARCHING_DRIVER;
               return (
-                <TouchableOpacity key={order.id} style={s.orderCard}
+                <TouchableOpacity key={order.id} style={[s.orderCard, { backgroundColor: colors.card }]}
                   onPress={() => router.push(`/(customer)/order-detail?orderId=${order.id}`)} activeOpacity={0.8}>
                   <View style={s.orderTop}>
-                    <View style={[s.orderStatusBadge, { backgroundColor: meta.bg }]}>
+                    <View style={[s.orderStatusBadge, { backgroundColor: isDark ? meta.color + '22' : meta.bg }]}>
                       <Ionicons name={meta.icon as any} size={14} color={meta.color} />
                       <Text style={[s.orderStatusText, { color: meta.color }]}>{meta.label}</Text>
                     </View>
-                    <Text style={s.orderPrice}>{order.price.toFixed(2)} TND</Text>
+                    <Text style={[s.orderPrice, { color: colors.text }]}>{order.price.toFixed(2)} TND</Text>
                   </View>
                   <View style={s.orderRoute}>
                     <View style={s.orderRouteIcons}>
                       <View style={[s.miniDot, { backgroundColor: '#22c55e' }]} />
-                      <View style={s.miniLine} />
+                      <View style={[s.miniLine, { backgroundColor: colors.border }]} />
                       <View style={[s.miniDot, { backgroundColor: '#ef4444' }]} />
                     </View>
                     <View style={{ flex: 1 }}>
-                      <Text style={s.orderAddr} numberOfLines={1}>
+                      <Text style={[s.orderAddr, { color: colors.textSecondary }]} numberOfLines={1}>
                         {order.pickupAddress?.street || order.pickupAddress?.delegation?.nameDelegation || 'Pickup'}
                       </Text>
-                      <Text style={s.orderAddr} numberOfLines={1}>
+                      <Text style={[s.orderAddr, { color: colors.textSecondary }]} numberOfLines={1}>
                         {order.dropoffAddress?.street || order.dropoffAddress?.delegation?.nameDelegation || 'Delivery'}
                       </Text>
                     </View>
-                    <Ionicons name="chevron-forward" size={18} color="#d1d5db" />
+                    <Ionicons name="chevron-forward" size={18} color={colors.textTertiary} />
                   </View>
                 </TouchableOpacity>
               );
@@ -194,9 +200,9 @@ export default function CustomerHomeScreen() {
 }
 
 const s = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f8fafc' },
+  container: { flex: 1 },
   header: {
-    backgroundColor: '#0284c7', paddingTop: 16, paddingBottom: 24,
+    paddingTop: 16, paddingBottom: 24,
     borderBottomLeftRadius: 28, borderBottomRightRadius: 28,
   },
   headerContent: {
@@ -217,14 +223,14 @@ const s = StyleSheet.create({
 
   section: { paddingHorizontal: 20, marginTop: 20 },
   sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2 },
-  sectionTitle: { fontSize: 17, fontWeight: '700', color: '#111827', marginBottom: 14 },
-  seeAll: { fontSize: 14, fontWeight: '600', color: '#0284c7' },
+  sectionTitle: { fontSize: 17, fontWeight: '700', marginBottom: 14 },
+  seeAll: { fontSize: 14, fontWeight: '600' },
 
   // CTA
   ctaCard: {
-    backgroundColor: '#0284c7', borderRadius: 18, padding: 20,
+    borderRadius: 18, padding: 20,
     flexDirection: 'row', alignItems: 'center', gap: 14,
-    shadowColor: '#0284c7', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 10, elevation: 6,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 10, elevation: 6,
   },
   ctaIconWrap: {
     width: 52, height: 52, borderRadius: 26, backgroundColor: 'rgba(255,255,255,0.2)',
@@ -236,26 +242,26 @@ const s = StyleSheet.create({
   // Actions grid
   actionsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
   actionCard: {
-    width: '47%' as any, backgroundColor: '#fff', borderRadius: 16, padding: 18,
+    width: '47%' as any, borderRadius: 16, padding: 18,
     alignItems: 'center', gap: 10,
     shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 6, elevation: 2,
   },
   actionIconWrap: {
     width: 46, height: 46, borderRadius: 23, alignItems: 'center', justifyContent: 'center',
   },
-  actionLabel: { fontSize: 14, fontWeight: '600', color: '#374151' },
+  actionLabel: { fontSize: 14, fontWeight: '600' },
 
   // Empty
   emptyCard: {
-    backgroundColor: '#fff', borderRadius: 16, padding: 32, alignItems: 'center', gap: 8,
+    borderRadius: 16, padding: 32, alignItems: 'center', gap: 8,
     shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 6, elevation: 2,
   },
-  emptyText: { fontSize: 16, fontWeight: '600', color: '#6b7280' },
-  emptySub: { fontSize: 13, color: '#9ca3af' },
+  emptyText: { fontSize: 16, fontWeight: '600' },
+  emptySub: { fontSize: 13 },
 
   // Order cards
   orderCard: {
-    backgroundColor: '#fff', borderRadius: 16, padding: 16, marginBottom: 12,
+    borderRadius: 16, padding: 16, marginBottom: 12,
     shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 6, elevation: 2,
   },
   orderTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
@@ -264,10 +270,10 @@ const s = StyleSheet.create({
     paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20,
   },
   orderStatusText: { fontSize: 12, fontWeight: '700' },
-  orderPrice: { fontSize: 16, fontWeight: '800', color: '#111827' },
+  orderPrice: { fontSize: 16, fontWeight: '800' },
   orderRoute: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   orderRouteIcons: { alignItems: 'center', gap: 3 },
   miniDot: { width: 8, height: 8, borderRadius: 4 },
-  miniLine: { width: 2, height: 16, backgroundColor: '#e5e7eb', borderRadius: 1 },
-  orderAddr: { fontSize: 13, color: '#6b7280', lineHeight: 20 },
+  miniLine: { width: 2, height: 16, borderRadius: 1 },
+  orderAddr: { fontSize: 13, lineHeight: 20 },
 });

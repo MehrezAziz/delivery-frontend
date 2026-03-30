@@ -7,11 +7,13 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
+import { useTheme } from '../../contexts/ThemeContext';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
 
 export default function DriverEditProfileScreen() {
   const router = useRouter();
+  const { colors, isDark } = useTheme();
   const [verified, setVerified] = useState(false);
   const [isGoogleUser, setIsGoogleUser] = useState(false);
   const [password, setPassword] = useState('');
@@ -98,14 +100,14 @@ export default function DriverEditProfileScreen() {
   };
 
   if (loading) {
-    return <View style={s.center}><ActivityIndicator size="large" color="#0284c7" /></View>;
+    return <View style={[s.center, { backgroundColor: colors.background }]}><ActivityIndicator size="large" color={colors.primary} /></View>;
   }
 
   // Password gate
   if (!verified) {
     return (
-      <View style={s.container}>
-        <View style={s.header}>
+      <View style={[s.container, { backgroundColor: colors.background }]}>
+        <View style={[s.header, { backgroundColor: colors.headerBg }]}>
           <TouchableOpacity onPress={() => router.back()} style={s.headerBtn}>
             <Ionicons name="chevron-back" size={22} color="#fff" />
           </TouchableOpacity>
@@ -114,16 +116,16 @@ export default function DriverEditProfileScreen() {
         </View>
         <View style={s.gateContainer}>
           <View style={s.gateIconWrap}>
-            <Ionicons name="lock-closed" size={40} color="#0284c7" />
+            <Ionicons name="lock-closed" size={40} color={colors.primary} />
           </View>
-          <Text style={s.gateTitle}>Verify Your Identity</Text>
-          <Text style={s.gateSub}>Enter your password to access profile editing</Text>
+          <Text style={[s.gateTitle, { color: colors.text }]}>Verify Your Identity</Text>
+          <Text style={[s.gateSub, { color: colors.textSecondary }]}>Enter your password to access profile editing</Text>
           <TextInput
-            style={s.gateInput}
+            style={[s.gateInput, { backgroundColor: colors.card, color: colors.text, borderColor: colors.border }]}
             value={password}
             onChangeText={setPassword}
             placeholder="Enter your password"
-            placeholderTextColor="#9ca3af"
+            placeholderTextColor={colors.textTertiary}
             secureTextEntry
             autoFocus
           />
@@ -140,8 +142,8 @@ export default function DriverEditProfileScreen() {
   }
 
   return (
-    <View style={s.container}>
-      <View style={s.header}>
+    <View style={[s.container, { backgroundColor: colors.background }]}>
+      <View style={[s.header, { backgroundColor: colors.headerBg }]}>
         <TouchableOpacity onPress={() => router.back()} style={s.headerBtn}>
           <Ionicons name="chevron-back" size={22} color="#fff" />
         </TouchableOpacity>
@@ -149,19 +151,19 @@ export default function DriverEditProfileScreen() {
         <View style={{ width: 38 }} />
       </View>
       <ScrollView style={{ flex: 1 }} contentContainerStyle={s.content}>
-        <Field label="First Name" value={firstName} onChange={setFirstName} />
-        <Field label="Last Name" value={secondName} onChange={setSecondName} />
-        <Field label="Phone" value={phone} onChange={setPhone} keyboardType="phone-pad" />
-        <Field label="Email" value={email} onChange={setEmail} keyboardType="email-address" />
-        <Field label="Vehicle Type" value={vehicleType} onChange={setVehicleType} />
-        <Field label="Description" value={description} onChange={setDescription} multiline />
+        <Field label="First Name" value={firstName} onChange={setFirstName} colors={colors} />
+        <Field label="Last Name" value={secondName} onChange={setSecondName} colors={colors} />
+        <Field label="Phone" value={phone} onChange={setPhone} keyboardType="phone-pad" colors={colors} />
+        <Field label="Email" value={email} onChange={setEmail} keyboardType="email-address" colors={colors} />
+        <Field label="Vehicle Type" value={vehicleType} onChange={setVehicleType} colors={colors} />
+        <Field label="Description" value={description} onChange={setDescription} multiline colors={colors} />
 
-        <Text style={s.fieldLabel}>Gender</Text>
+        <Text style={[s.fieldLabel, { color: colors.textSecondary }]}>Gender</Text>
         <View style={{ flexDirection: 'row', gap: 10, marginBottom: 16 }}>
           {['MALE', 'FEMALE'].map(g => (
-            <TouchableOpacity key={g} style={[s.genderBtn, gender === g && s.genderBtnActive]}
+            <TouchableOpacity key={g} style={[s.genderBtn, { backgroundColor: colors.surfaceVariant, borderColor: colors.border }, gender === g && s.genderBtnActive]}
               onPress={() => setGender(g)}>
-              <Text style={[s.genderBtnText, gender === g && { color: '#fff' }]}>{g}</Text>
+              <Text style={[s.genderBtnText, { color: colors.text }, gender === g && { color: '#fff' }]}>{g}</Text>
             </TouchableOpacity>
           ))}
         </View>
@@ -174,13 +176,13 @@ export default function DriverEditProfileScreen() {
   );
 }
 
-function Field({ label, value, onChange, keyboardType, multiline }: any) {
+function Field({ label, value, onChange, keyboardType, multiline, colors }: any) {
   return (
     <View style={{ marginBottom: 16 }}>
-      <Text style={s.fieldLabel}>{label}</Text>
-      <TextInput style={[s.input, multiline && { height: 80, textAlignVertical: 'top' }]}
+      <Text style={[s.fieldLabel, { color: colors.textSecondary }]}>{label}</Text>
+      <TextInput style={[s.input, { backgroundColor: colors.card, color: colors.text, borderColor: colors.border }, multiline && { height: 80, textAlignVertical: 'top' }]}
         value={value} onChangeText={onChange} keyboardType={keyboardType}
-        multiline={multiline} placeholderTextColor="#9ca3af" />
+        multiline={multiline} placeholderTextColor={colors.textTertiary} />
     </View>
   );
 }

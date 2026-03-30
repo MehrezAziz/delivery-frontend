@@ -1,7 +1,9 @@
 import { View, Text, ScrollView } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
+import { useTheme } from '../../contexts/ThemeContext';
 
 export default function DriverEarningsScreen() {
+  const { colors, isDark } = useTheme();
   return (
     <View className="flex-1 bg-gray-50">
       <StatusBar style="dark" />

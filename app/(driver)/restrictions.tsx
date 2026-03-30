@@ -11,6 +11,7 @@ import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import axios from 'axios';
+import { useTheme } from '../../contexts/ThemeContext';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api';
 
@@ -25,6 +26,7 @@ interface Restriction {
 
 export default function DriverRestrictionsScreen() {
   const router = useRouter();
+  const { colors, isDark } = useTheme();
   const [restrictions, setRestrictions] = useState<Restriction[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -56,15 +58,15 @@ export default function DriverRestrictionsScreen() {
 
   const formatDate = (d: string) => new Date(d).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
 
-  if (loading) return <View style={s.centered}><ActivityIndicator size="large" color="#007AFF" /></View>;
+  if (loading) return <View style={s.centered}><ActivityIndicator size="large" color={colors.primary} /></View>;
 
   return (
-    <View style={s.container}>
-      <View style={s.header}>
+    <View style={[s.container, { backgroundColor: colors.background }]}>
+      <View style={[s.header, { backgroundColor: colors.card, borderBottomColor: colors.border }]}>
         <TouchableOpacity onPress={() => router.back()} style={s.backBtn}>
-          <Ionicons name="arrow-back" size={24} color="#007AFF" />
+          <Ionicons name="arrow-back" size={24} color={colors.primary} />
         </TouchableOpacity>
-        <Text style={s.title}>My Restrictions</Text>
+        <Text style={[s.title, { color: colors.text }]}>My Restrictions</Text>
       </View>
       <ScrollView style={s.scroll} contentContainerStyle={s.scrollContent}>
         {error && (
@@ -76,20 +78,20 @@ export default function DriverRestrictionsScreen() {
         {restrictions.length === 0 && !error && (
           <View style={s.emptyBox}>
             <Ionicons name="checkmark-circle" size={48} color="#34C759" />
-            <Text style={s.emptyTitle}>No Active Restrictions</Text>
-            <Text style={s.emptyText}>Your account is in good standing.</Text>
+            <Text style={[s.emptyTitle, { color: colors.text }]}>No Active Restrictions</Text>
+            <Text style={[s.emptyText, { color: colors.textSecondary }]}>Your account is in good standing.</Text>
           </View>
         )}
         {restrictions.map((r) => (
-          <View key={r.id} style={s.card}>
+          <View key={r.id} style={[s.card, { backgroundColor: colors.card }]}>
             <View style={[s.typeBadge, { backgroundColor: getTypeColor(r.type) + '20' }]}>
               <Text style={[s.typeText, { color: getTypeColor(r.type) }]}>{r.type}</Text>
             </View>
-            <Text style={s.reasonLabel}>Reason:</Text>
-            <Text style={s.reasonText}>{r.reason}</Text>
+            <Text style={[s.reasonLabel, { color: colors.textSecondary }]}>Reason:</Text>
+            <Text style={[s.reasonText, { color: colors.text }]}>{r.reason}</Text>
             <View style={s.dateRow}>
-              <Text style={s.dateLabel}>Since: {formatDate(r.startDate)}</Text>
-              {r.endDate && <Text style={s.dateLabel}>Until: {formatDate(r.endDate)}</Text>}
+              <Text style={[s.dateLabel, { color: colors.textSecondary }]}>Since: {formatDate(r.startDate)}</Text>
+              {r.endDate && <Text style={[s.dateLabel, { color: colors.textSecondary }]}>Until: {formatDate(r.endDate)}</Text>}
               {!r.endDate && r.type === 'BLOCK' && <Text style={[s.dateLabel, { color: '#dc2626' }]}>Permanent</Text>}
             </View>
           </View>

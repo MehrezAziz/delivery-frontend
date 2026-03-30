@@ -6,6 +6,7 @@ import {
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { orderService, Order } from '../../services/api/order.service';
+import { useTheme } from '../../contexts/ThemeContext';
 
 const STATUS_FLOW = [
   'SEARCHING_DRIVER', 'PENDING_CUSTOMER_APPROVAL', 'DRIVER_ASSIGNED', 'DRIVER_ARRIVED', 'PICKED_UP', 'DELIVERING', 'DELIVERED',
@@ -31,6 +32,7 @@ const STAR_LABELS = ['Terrible', 'Very Bad', 'Bad', 'Poor', 'Below Average', 'Av
 export default function OrderDetailScreen() {
   const router = useRouter();
   const { orderId } = useLocalSearchParams<{ orderId: string }>();
+  const { colors, isDark } = useTheme();
   const [order, setOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -169,8 +171,8 @@ export default function OrderDetailScreen() {
 
   if (loading || !order) {
     return (
-      <View style={s.loadingContainer}>
-        <ActivityIndicator size="large" color="#0284c7" />
+      <View style={[s.loadingContainer, { backgroundColor: colors.background }]}>
+        <ActivityIndicator size="large" color={colors.primary} />
       </View>
     );
   }
@@ -187,7 +189,7 @@ export default function OrderDetailScreen() {
   const timeStr = createdDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
 
   return (
-    <View style={s.container}>
+    <View style={[s.container, { backgroundColor: colors.background }]}>
       {/* ── Header ── */}
       <View style={[s.header, { backgroundColor: meta.color }]}>
         <View style={s.headerTop}>
@@ -214,8 +216,8 @@ export default function OrderDetailScreen() {
 
         {/* ── Progress Steps (only for active orders) ── */}
         {isActive && currentStepIndex >= 0 && (
-          <View style={s.card}>
-            <Text style={s.cardTitle}>Delivery Progress</Text>
+          <View style={[s.card, { backgroundColor: colors.card }]}>
+            <Text style={[s.cardTitle, { color: colors.text }]}>Delivery Progress</Text>
             <View style={s.stepsRow}>
               {STATUS_FLOW.map((step, i) => {
                 const done = i <= currentStepIndex;
@@ -271,8 +273,8 @@ export default function OrderDetailScreen() {
         )}
 
         {/* ── Route Card ── */}
-        <View style={s.card}>
-          <Text style={s.cardTitle}>Route</Text>
+        <View style={[s.card, { backgroundColor: colors.card }]}>
+          <Text style={[s.cardTitle, { color: colors.text }]}>Route</Text>
           <View style={s.routeRow}>
             <View style={s.routeIconCol}>
               <View style={[s.routeDot, { backgroundColor: '#22c55e' }]} />
@@ -282,15 +284,15 @@ export default function OrderDetailScreen() {
             <View style={{ flex: 1 }}>
               <View style={{ marginBottom: 22 }}>
                 <Text style={s.routeLabel}>PICKUP</Text>
-                <Text style={s.routeAddress} numberOfLines={2}>{order.pickupAddress?.street || 'Pickup location'}</Text>
-                <Text style={s.routeSub}>
+                <Text style={[s.routeAddress, { color: colors.text }]} numberOfLines={2}>{order.pickupAddress?.street || 'Pickup location'}</Text>
+                <Text style={[s.routeSub, { color: colors.textSecondary }]}>
                   {order.pickupAddress?.delegation?.nameDelegation}, {order.pickupAddress?.delegation?.governorate?.nameGovernorate}
                 </Text>
               </View>
               <View>
                 <Text style={s.routeLabel}>DELIVERY</Text>
-                <Text style={s.routeAddress} numberOfLines={2}>{order.dropoffAddress?.street || 'Delivery location'}</Text>
-                <Text style={s.routeSub}>
+                <Text style={[s.routeAddress, { color: colors.text }]} numberOfLines={2}>{order.dropoffAddress?.street || 'Delivery location'}</Text>
+                <Text style={[s.routeSub, { color: colors.textSecondary }]}>
                   {order.dropoffAddress?.delegation?.nameDelegation}, {order.dropoffAddress?.delegation?.governorate?.nameGovernorate}
                 </Text>
               </View>
@@ -327,8 +329,8 @@ export default function OrderDetailScreen() {
         </View>
 
         {/* ── Price Breakdown ── */}
-        <View style={s.card}>
-          <Text style={s.cardTitle}>Price Breakdown</Text>
+        <View style={[s.card, { backgroundColor: colors.card }]}>
+          <Text style={[s.cardTitle, { color: colors.text }]}>Price Breakdown</Text>
           <View style={s.priceRow}>
             <Text style={s.priceLabel}>Distance</Text>
             <Text style={s.priceValue}>{order.distanceKm.toFixed(1)} km</Text>
@@ -345,17 +347,17 @@ export default function OrderDetailScreen() {
           )}
           {order.extraWeightFee > 0 && <PriceRow label="Extra Weight Fee" value={order.extraWeightFee} />}
           {order.nightFee > 0 && <PriceRow label="Night Fee 🌙" value={order.nightFee} />}
-          <View style={s.divider} />
+          <View style={[s.divider, { backgroundColor: colors.border }]} />
           <View style={s.priceRow}>
-            <Text style={s.totalLabel}>Total</Text>
-            <Text style={s.totalValue}>{order.price.toFixed(2)} TND</Text>
+            <Text style={[s.totalLabel, { color: colors.text }]}>Total</Text>
+            <Text style={[s.totalValue, { color: colors.primary }]}>{order.price.toFixed(2)} TND</Text>
           </View>
         </View>
 
         {/* ── Driver Card ── */}
         {order.driverAssignment?.driver && (
-          <View style={s.card}>
-            <Text style={s.cardTitle}>Your Driver</Text>
+          <View style={[s.card, { backgroundColor: colors.card }]}>
+            <Text style={[s.cardTitle, { color: colors.text }]}>Your Driver</Text>
             <View style={s.driverRow}>
               {order.driverAssignment.driver.user.image ? (
                 <Image source={{ uri: order.driverAssignment.driver.user.image }} style={s.driverAvatar} />
@@ -365,10 +367,10 @@ export default function OrderDetailScreen() {
                 </View>
               )}
               <View style={{ flex: 1 }}>
-                <Text style={s.driverName}>
+                <Text style={[s.driverName, { color: colors.text }]}>
                   {order.driverAssignment.driver.user.firstName} {order.driverAssignment.driver.user.secondName}
                 </Text>
-                <Text style={s.driverPhone}>{order.driverAssignment.driver.user.phone}</Text>
+                <Text style={[s.driverPhone, { color: colors.textSecondary }]}>{order.driverAssignment.driver.user.phone}</Text>
                 {order.driverAssignment.driver.avgRating !== null && order.driverAssignment.driver.avgRating !== undefined && (
                   <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 }}
                     onPress={handleShowReviews} activeOpacity={0.7}>
@@ -434,16 +436,16 @@ export default function OrderDetailScreen() {
 
         {/* ── Description ── */}
         {order.description && (
-          <View style={s.card}>
-            <Text style={s.cardTitle}>Package Description</Text>
-            <Text style={s.descriptionText}>{order.description}</Text>
+          <View style={[s.card, { backgroundColor: colors.card }]}>
+            <Text style={[s.cardTitle, { color: colors.text }]}>Package Description</Text>
+            <Text style={[s.descriptionText, { color: colors.text }]}>{order.description}</Text>
           </View>
         )}
 
         {/* ── Rating (already submitted) ── */}
         {order.rating && (
-          <View style={[s.card, { borderLeftWidth: 4, borderLeftColor: '#f59e0b' }]}>
-            <Text style={s.cardTitle}>Your Rating</Text>
+          <View style={[s.card, { backgroundColor: colors.card, borderLeftWidth: 4, borderLeftColor: '#f59e0b' }]}>
+            <Text style={[s.cardTitle, { color: colors.text }]}>Your Rating</Text>
             <View style={{ alignItems: 'center', gap: 8 }}>
               <View style={{ flexDirection: 'row', gap: 4 }}>
                 {Array.from({ length: 10 }, (_, i) => (
@@ -451,11 +453,11 @@ export default function OrderDetailScreen() {
                     color={i < order.rating!.score ? '#f59e0b' : '#d1d5db'} />
                 ))}
               </View>
-              <Text style={{ fontSize: 16, fontWeight: '700', color: '#111827' }}>
+              <Text style={{ fontSize: 16, fontWeight: '700', color: colors.text }}>
                 {order.rating.score}/10 — {STAR_LABELS[order.rating.score]}
               </Text>
               {order.rating.comment && (
-                <Text style={{ fontSize: 14, color: '#6b7280', textAlign: 'center' }}>"{order.rating.comment}"</Text>
+                <Text style={{ fontSize: 14, color: colors.textSecondary, textAlign: 'center' }}>"{order.rating.comment}"</Text>
               )}
             </View>
           </View>
@@ -463,8 +465,8 @@ export default function OrderDetailScreen() {
 
         {/* ── Rate Driver (not yet rated, delivered) ── */}
         {order.status === 'DELIVERED' && !order.rating && (
-          <View style={[s.card, { borderLeftWidth: 4, borderLeftColor: '#f59e0b' }]}>
-            <Text style={s.cardTitle}>Rate Your Driver</Text>
+          <View style={[s.card, { backgroundColor: colors.card, borderLeftWidth: 4, borderLeftColor: '#f59e0b' }]}>
+            <Text style={[s.cardTitle, { color: colors.text }]}>Rate Your Driver</Text>
             <View style={{ alignItems: 'center', gap: 12 }}>
               <View style={{ flexDirection: 'row', gap: 6 }}>
                 {Array.from({ length: 10 }, (_, i) => (
@@ -481,13 +483,13 @@ export default function OrderDetailScreen() {
               )}
               <TextInput
                 style={{
-                  width: '100%', backgroundColor: '#f8fafc', borderRadius: 12, padding: 12,
-                  fontSize: 14, color: '#111827', borderWidth: 1, borderColor: '#e5e7eb', minHeight: 60,
+                  width: '100%', backgroundColor: colors.inputBg, borderRadius: 12, padding: 12,
+                  fontSize: 14, color: colors.text, borderWidth: 1, borderColor: colors.inputBorder, minHeight: 60,
                 }}
                 value={ratingComment}
                 onChangeText={setRatingComment}
                 placeholder="Leave a comment (optional)"
-                placeholderTextColor="#9ca3af"
+                placeholderTextColor={colors.textTertiary}
                 multiline
                 textAlignVertical="top"
               />
@@ -512,8 +514,8 @@ export default function OrderDetailScreen() {
 
         {/* ── Dispute Info ── */}
         {order.dispute && (
-          <View style={[s.card, { borderLeftWidth: 4, borderLeftColor: '#dc2626' }]}>
-            <Text style={s.cardTitle}>Dispute</Text>
+          <View style={[s.card, { backgroundColor: colors.card, borderLeftWidth: 4, borderLeftColor: '#dc2626' }]}>
+            <Text style={[s.cardTitle, { color: colors.text }]}>Dispute</Text>
             <View style={{ gap: 8 }}>
               <View style={s.priceRow}>
                 <Text style={s.priceLabel}>Status</Text>
@@ -540,13 +542,13 @@ export default function OrderDetailScreen() {
         {/* ── Actions ── */}
         <View style={{ gap: 10, marginTop: 4 }}>
           {canChangePayment && (
-            <TouchableOpacity style={s.actionBtn}
+            <TouchableOpacity style={[s.actionBtn, { backgroundColor: colors.card, borderColor: colors.border }]}
               onPress={() => handleChangePayment(order.paymentType === 'COD' ? 'WALLET' : 'COD')} activeOpacity={0.8}>
               <View style={[s.actionIconCircle, { backgroundColor: '#e0e7ff' }]}>
                 <Ionicons name="swap-horizontal" size={18} color="#4f46e5" />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={s.actionTitle}>Switch to {order.paymentType === 'COD' ? 'Wallet' : 'Cash'}</Text>
+                <Text style={[s.actionTitle, { color: colors.text }]}>Switch to {order.paymentType === 'COD' ? 'Wallet' : 'Cash'}</Text>
                 <Text style={s.actionSub}>Change payment method</Text>
               </View>
               <Ionicons name="chevron-forward" size={18} color="#9ca3af" />
@@ -636,15 +638,15 @@ export default function OrderDetailScreen() {
       {/* ── Dispute Reason Modal ── */}
       <Modal visible={disputeModalVisible} transparent animationType="fade">
         <View style={s.modalOverlay}>
-          <View style={s.modalCard}>
-            <Text style={s.modalTitle}>Report an Issue</Text>
-            <Text style={s.modalSub}>Please describe what went wrong with this order</Text>
+          <View style={[s.modalCard, { backgroundColor: colors.card }]}>
+            <Text style={[s.modalTitle, { color: colors.text }]}>Report an Issue</Text>
+            <Text style={[s.modalSub, { color: colors.textSecondary }]}>Please describe what went wrong with this order</Text>
             <TextInput
-              style={s.modalInput}
+              style={[s.modalInput, { backgroundColor: colors.inputBg, color: colors.text, borderColor: colors.inputBorder }]}
               value={disputeReason}
               onChangeText={setDisputeReason}
               placeholder="Describe the issue..."
-              placeholderTextColor="#9ca3af"
+              placeholderTextColor={colors.textTertiary}
               multiline
               numberOfLines={4}
               textAlignVertical="top"

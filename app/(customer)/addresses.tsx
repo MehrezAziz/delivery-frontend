@@ -16,6 +16,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import axios from 'axios';
 import { geographyService, Country, Governorate, Delegation } from '../../services/api/geography.service';
+import { useTheme } from '../../contexts/ThemeContext';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api';
 
@@ -37,6 +38,7 @@ interface Address {
 
 export default function CustomerAddressesScreen() {
   const router = useRouter();
+  const { colors, isDark } = useTheme();
   const [addresses, setAddresses] = useState<Address[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -207,29 +209,29 @@ export default function CustomerAddressesScreen() {
     }
   };
 
-  if (loading) return <View style={s.centered}><ActivityIndicator size="large" color="#0284c7" /></View>;
+  if (loading) return <View style={[s.centered, { backgroundColor: colors.background }]}><ActivityIndicator size="large" color={colors.primary} /></View>;
 
   return (
-    <View style={s.container}>
-      <View style={s.header}>
+    <View style={[s.container, { backgroundColor: colors.background }]}>
+      <View style={[s.header, { backgroundColor: colors.card }]}>
         <TouchableOpacity onPress={() => router.back()} style={s.backBtn}>
-          <Ionicons name="arrow-back" size={24} color="#0284c7" />
+          <Ionicons name="arrow-back" size={24} color={colors.primary} />
         </TouchableOpacity>
-        <Text style={s.title}>My Addresses</Text>
+        <Text style={[s.title, { color: colors.text }]}>My Addresses</Text>
       </View>
       <ScrollView style={s.scroll} contentContainerStyle={s.scrollContent}>
         {addresses.length === 0 && (
           <View style={s.emptyBox}>
-            <Ionicons name="location-outline" size={48} color="#9ca3af" />
-            <Text style={s.emptyTitle}>No Addresses</Text>
-            <Text style={s.emptyText}>Add an address from your profile.</Text>
+            <Ionicons name="location-outline" size={48} color={colors.textTertiary} />
+            <Text style={[s.emptyTitle, { color: colors.text }]}>No Addresses</Text>
+            <Text style={[s.emptyText, { color: colors.textSecondary }]}>Add an address from your profile.</Text>
           </View>
         )}
         {addresses.map((addr) => (
-          <View key={addr.id} style={s.card}>
+          <View key={addr.id} style={[s.card, { backgroundColor: colors.card }]}>
             <View style={s.cardTop}>
-              <Ionicons name="location" size={20} color="#0284c7" />
-              <Text style={s.locationText}>
+              <Ionicons name="location" size={20} color={colors.primary} />
+              <Text style={[s.locationText, { color: colors.text }]}>
                 {addr.delegation.nameDelegation}, {addr.delegation.governorate.nameGovernorate}
               </Text>
             </View>
@@ -289,11 +291,11 @@ export default function CustomerAddressesScreen() {
               </View>
             ) : (
               <>
-                <Text style={s.streetText}>{addr.street || 'No street specified'}</Text>
+                <Text style={[s.streetText, { color: colors.textSecondary }]}>{addr.street || 'No street specified'}</Text>
                 {addr.latitude && addr.longitude && (
-                  <Text style={s.coordText}>📍 {addr.latitude.toFixed(4)}, {addr.longitude.toFixed(4)}</Text>
+                  <Text style={[s.coordText, { color: colors.textTertiary }]}>📍 {addr.latitude.toFixed(4)}, {addr.longitude.toFixed(4)}</Text>
                 )}
-                <View style={s.cardActions}>
+                <View style={[s.cardActions, { borderTopColor: colors.border }]}>
                   <TouchableOpacity style={s.editBtn} onPress={() => startEdit(addr)}>
                     <Ionicons name="pencil" size={16} color="#0284c7" />
                     <Text style={s.editBtnText}>Edit</Text>
@@ -312,9 +314,9 @@ export default function CustomerAddressesScreen() {
       {/* Picker Modal */}
       <Modal visible={pickerVisible} transparent animationType="slide">
         <View style={s.modalOverlay}>
-          <View style={s.modalContent}>
-            <View style={s.modalHeader}>
-              <Text style={s.modalTitle}>
+          <View style={[s.modalContent, { backgroundColor: colors.card }]}>
+            <View style={[s.modalHeader, { borderBottomColor: colors.border }]}>
+              <Text style={[s.modalTitle, { color: colors.text }]}>
                 {pickerType === 'country' ? 'Select Country' : pickerType === 'governorate' ? 'Select Governorate' : 'Select Delegation'}
               </Text>
               <TouchableOpacity onPress={() => setPickerVisible(false)}>

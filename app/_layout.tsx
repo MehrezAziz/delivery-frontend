@@ -3,6 +3,7 @@ import { Stack } from 'expo-router';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { ThemeProvider, useTheme } from '../contexts/ThemeContext';
 import {
   registerForPushNotifications,
   setupNotificationListeners,
@@ -18,7 +19,8 @@ setupBackgroundHandler();
 // This only registers the task runner — does NOT start the service
 registerOrderForegroundService();
 
-export default function RootLayout() {
+function RootContent() {
+  const { isDark } = useTheme();
   const cleanupRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
@@ -41,9 +43,19 @@ export default function RootLayout() {
   }, []);
 
   return (
-    <SafeAreaProvider>
-      <StatusBar style="dark" />
+    <>
+      <StatusBar style={isDark ? 'light' : 'dark'} />
       <Stack screenOptions={{ headerShown: false }} />
-    </SafeAreaProvider>
+    </>
+  );
+}
+
+export default function RootLayout() {
+  return (
+    <ThemeProvider>
+      <SafeAreaProvider>
+        <RootContent />
+      </SafeAreaProvider>
+    </ThemeProvider>
   );
 }

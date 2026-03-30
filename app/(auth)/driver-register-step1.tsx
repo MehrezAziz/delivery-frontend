@@ -9,6 +9,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 import axios from 'axios';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
+import { useTheme } from '../../contexts/ThemeContext';
 
 const API_BASE = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api';
 
@@ -22,6 +23,7 @@ try {
 
 export default function DriverRegisterStep1() {
   const router = useRouter();
+  const { colors, isDark } = useTheme();
   const [formData, setFormData] = useState({
     phone: '', password: '', firstName: '', secondName: '',
     myEmail: '', userGender: '' as 'MALE' | 'FEMALE' | '',
@@ -112,13 +114,13 @@ export default function DriverRegisterStep1() {
   };
 
   return (
-    <ScrollView style={styles.container}>
+    <ScrollView style={[styles.container, { backgroundColor: colors.card }]}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace('/')} style={styles.backBtn}>
-          <Ionicons name="chevron-back" size={22} color="#111" />
+        <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace('/')} style={[styles.backBtn, { backgroundColor: colors.surfaceVariant }]}>
+          <Ionicons name="chevron-back" size={22} color={colors.text} />
         </TouchableOpacity>
-        <Text style={styles.title}>Driver Registration</Text>
-        <Text style={styles.subtitle}>Step 1 of 3: Personal Information</Text>
+        <Text style={[styles.title, { color: colors.text }]}>Driver Registration</Text>
+        <Text style={[styles.subtitle, { color: colors.textSecondary }]}>Step 1 of 3: Personal Information</Text>
       </View>
 
       {/* Profile Picture */}
@@ -127,72 +129,72 @@ export default function DriverRegisterStep1() {
           {profileImage ? (
             <Image source={{ uri: profileImage }} style={styles.profileImage} />
           ) : (
-            <View style={styles.imagePlaceholder}>
-              <Ionicons name="camera" size={40} color="#666" />
-              <Text style={styles.imageText}>Add Photo</Text>
+            <View style={[styles.imagePlaceholder, { backgroundColor: colors.surfaceVariant, borderColor: colors.border }]}>
+              <Ionicons name="camera" size={40} color={colors.textSecondary} />
+              <Text style={[styles.imageText, { color: colors.textSecondary }]}>Add Photo</Text>
             </View>
           )}
         </TouchableOpacity>
       </View>
 
       {/* Google Sign-In */}
-      <TouchableOpacity style={styles.googleButton} onPress={handleGoogleSignIn} disabled={loading}>
+      <TouchableOpacity style={[styles.googleButton, { borderColor: colors.border, backgroundColor: colors.card }]} onPress={handleGoogleSignIn} disabled={loading}>
         <Ionicons name="logo-google" size={24} color="#DB4437" />
-        <Text style={styles.googleButtonText}>Continue with Google</Text>
+        <Text style={[styles.googleButtonText, { color: colors.text }]}>Continue with Google</Text>
       </TouchableOpacity>
 
       <View style={styles.divider}>
-        <View style={styles.dividerLine} />
-        <Text style={styles.dividerText}>OR</Text>
-        <View style={styles.dividerLine} />
+        <View style={[styles.dividerLine, { backgroundColor: colors.border }]} />
+        <Text style={[styles.dividerText, { color: colors.textTertiary }]}>OR</Text>
+        <View style={[styles.dividerLine, { backgroundColor: colors.border }]} />
       </View>
 
       <View style={styles.inputGroup}>
-        <Text style={styles.label}>Phone Number *</Text>
-        <TextInput style={styles.input} placeholder="+1234567890" value={formData.phone}
+        <Text style={[styles.label, { color: colors.text }]}>Phone Number *</Text>
+        <TextInput style={[styles.input, { borderColor: colors.inputBorder, backgroundColor: colors.inputBg, color: colors.text }]} placeholder="+1234567890" placeholderTextColor={colors.textTertiary} value={formData.phone}
           onChangeText={text => setFormData({ ...formData, phone: text })}
           keyboardType="phone-pad" autoCapitalize="none" />
       </View>
 
       <View style={styles.inputGroup}>
-        <Text style={styles.label}>Password *</Text>
-        <View style={styles.passwordContainer}>
-          <TextInput style={styles.passwordInput} placeholder="Min 8 characters"
+        <Text style={[styles.label, { color: colors.text }]}>Password *</Text>
+        <View style={[styles.passwordContainer, { borderColor: colors.inputBorder, backgroundColor: colors.inputBg }]}>
+          <TextInput style={[styles.passwordInput, { color: colors.text }]} placeholder="Min 8 characters" placeholderTextColor={colors.textTertiary}
             value={formData.password} onChangeText={text => setFormData({ ...formData, password: text })}
             secureTextEntry={!showPassword} autoCapitalize="none" />
           <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeIcon}>
-            <Ionicons name={showPassword ? 'eye-off' : 'eye'} size={24} color="#666" />
+            <Ionicons name={showPassword ? 'eye-off' : 'eye'} size={24} color={colors.textSecondary} />
           </TouchableOpacity>
         </View>
       </View>
 
       <View style={styles.inputGroup}>
-        <Text style={styles.label}>First Name</Text>
-        <TextInput style={styles.input} placeholder="John" value={formData.firstName}
+        <Text style={[styles.label, { color: colors.text }]}>First Name</Text>
+        <TextInput style={[styles.input, { borderColor: colors.inputBorder, backgroundColor: colors.inputBg, color: colors.text }]} placeholder="John" placeholderTextColor={colors.textTertiary} value={formData.firstName}
           onChangeText={text => setFormData({ ...formData, firstName: text })} />
       </View>
 
       <View style={styles.inputGroup}>
-        <Text style={styles.label}>Last Name</Text>
-        <TextInput style={styles.input} placeholder="Doe" value={formData.secondName}
+        <Text style={[styles.label, { color: colors.text }]}>Last Name</Text>
+        <TextInput style={[styles.input, { borderColor: colors.inputBorder, backgroundColor: colors.inputBg, color: colors.text }]} placeholder="Doe" placeholderTextColor={colors.textTertiary} value={formData.secondName}
           onChangeText={text => setFormData({ ...formData, secondName: text })} />
       </View>
 
       <View style={styles.inputGroup}>
-        <Text style={styles.label}>Email</Text>
-        <TextInput style={styles.input} placeholder="john@example.com" value={formData.myEmail}
+        <Text style={[styles.label, { color: colors.text }]}>Email</Text>
+        <TextInput style={[styles.input, { borderColor: colors.inputBorder, backgroundColor: colors.inputBg, color: colors.text }]} placeholder="john@example.com" placeholderTextColor={colors.textTertiary} value={formData.myEmail}
           onChangeText={text => setFormData({ ...formData, myEmail: text })}
           keyboardType="email-address" autoCapitalize="none" />
       </View>
 
       <View style={styles.inputGroup}>
-        <Text style={styles.label}>Gender</Text>
+        <Text style={[styles.label, { color: colors.text }]}>Gender</Text>
         <View style={styles.genderContainer}>
           {(['MALE', 'FEMALE'] as const).map(g => (
             <TouchableOpacity key={g}
-              style={[styles.genderButton, formData.userGender === g && styles.genderButtonActive]}
+              style={[styles.genderButton, { borderColor: colors.inputBorder, backgroundColor: colors.inputBg }, formData.userGender === g && { backgroundColor: colors.primary, borderColor: colors.primary }]}
               onPress={() => setFormData({ ...formData, userGender: g })}>
-              <Text style={[styles.genderText, formData.userGender === g && styles.genderTextActive]}>
+              <Text style={[styles.genderText, { color: colors.text }, formData.userGender === g && styles.genderTextActive]}>
                 {g === 'MALE' ? 'Male' : 'Female'}
               </Text>
             </TouchableOpacity>
@@ -200,14 +202,14 @@ export default function DriverRegisterStep1() {
         </View>
       </View>
 
-      <TouchableOpacity style={[styles.submitButton, loading && styles.submitButtonDisabled]}
+      <TouchableOpacity style={[styles.submitButton, { backgroundColor: colors.primary }, loading && styles.submitButtonDisabled]}
         onPress={handleSubmit} disabled={loading}>
         {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.submitButtonText}>Continue to Step 2</Text>}
       </TouchableOpacity>
 
       <TouchableOpacity style={styles.loginLink} onPress={() => router.push('/(auth)/driver-login')}>
-        <Text style={styles.loginLinkText}>
-          Already have an account? <Text style={styles.loginLinkBold}>Login</Text>
+        <Text style={[styles.loginLinkText, { color: colors.textSecondary }]}>
+          Already have an account? <Text style={[styles.loginLinkBold, { color: colors.primary }]}>Login</Text>
         </Text>
       </TouchableOpacity>
     </ScrollView>
@@ -215,39 +217,38 @@ export default function DriverRegisterStep1() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#fff', padding: 20, marginBottom: 60 },
+  container: { flex: 1, padding: 20, marginBottom: 60 },
   backBtn: {
-    width: 42, height: 42, borderRadius: 21, backgroundColor: '#f3f4f6',
+    width: 42, height: 42, borderRadius: 21,
     alignItems: 'center', justifyContent: 'center', marginBottom: 24,
   },
   header: { marginBottom: 30, marginTop: 20 },
-  title: { fontSize: 28, fontWeight: 'bold', color: '#333', marginBottom: 8 },
-  subtitle: { fontSize: 16, color: '#666' },
+  title: { fontSize: 28, fontWeight: 'bold', marginBottom: 8 },
+  subtitle: { fontSize: 16 },
   imageContainer: { alignItems: 'center', marginBottom: 20 },
   imagePicker: { width: 120, height: 120, borderRadius: 60, overflow: 'hidden' },
   profileImage: { width: '100%', height: '100%' },
-  imagePlaceholder: { width: '100%', height: '100%', backgroundColor: '#f0f0f0', justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#ddd', borderStyle: 'dashed' },
-  imageText: { marginTop: 8, color: '#666', fontSize: 14 },
-  googleButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 16, borderWidth: 1, borderColor: '#ddd', borderRadius: 8, gap: 12, marginBottom: 20 },
-  googleButtonText: { fontSize: 16, color: '#333', fontWeight: '600' },
+  imagePlaceholder: { width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderStyle: 'dashed' },
+  imageText: { marginTop: 8, fontSize: 14 },
+  googleButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 16, borderWidth: 1, borderRadius: 8, gap: 12, marginBottom: 20 },
+  googleButtonText: { fontSize: 16, fontWeight: '600' },
   divider: { flexDirection: 'row', alignItems: 'center', marginVertical: 20 },
-  dividerLine: { flex: 1, height: 1, backgroundColor: '#ddd' },
-  dividerText: { marginHorizontal: 16, color: '#999', fontSize: 14 },
+  dividerLine: { flex: 1, height: 1 },
+  dividerText: { marginHorizontal: 16, fontSize: 14 },
   inputGroup: { marginBottom: 20 },
-  label: { fontSize: 16, fontWeight: '600', color: '#333', marginBottom: 8 },
-  input: { borderWidth: 1, borderColor: '#ddd', borderRadius: 8, padding: 12, fontSize: 16, backgroundColor: '#f9f9f9' },
-  passwordContainer: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: '#ddd', borderRadius: 8, backgroundColor: '#f9f9f9' },
+  label: { fontSize: 16, fontWeight: '600', marginBottom: 8 },
+  input: { borderWidth: 1, borderRadius: 8, padding: 12, fontSize: 16 },
+  passwordContainer: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderRadius: 8 },
   passwordInput: { flex: 1, padding: 12, fontSize: 16 },
   eyeIcon: { padding: 12 },
   genderContainer: { flexDirection: 'row', gap: 12 },
-  genderButton: { flex: 1, padding: 12, borderWidth: 1, borderColor: '#ddd', borderRadius: 8, alignItems: 'center', backgroundColor: '#f9f9f9' },
-  genderButtonActive: { backgroundColor: '#007AFF', borderColor: '#007AFF' },
-  genderText: { fontSize: 16, color: '#333' },
+  genderButton: { flex: 1, padding: 12, borderWidth: 1, borderRadius: 8, alignItems: 'center' },
+  genderText: { fontSize: 16 },
   genderTextActive: { color: '#fff', fontWeight: '600' },
-  submitButton: { backgroundColor: '#007AFF', padding: 16, borderRadius: 8, alignItems: 'center', marginTop: 20 },
+  submitButton: { padding: 16, borderRadius: 8, alignItems: 'center', marginTop: 20 },
   submitButtonDisabled: { opacity: 0.6 },
   submitButtonText: { color: '#fff', fontSize: 18, fontWeight: '600' },
   loginLink: { marginTop: 20, marginBottom: 40, alignItems: 'center' },
-  loginLinkText: { fontSize: 16, color: '#666' },
-  loginLinkBold: { color: '#007AFF', fontWeight: '600' },
+  loginLinkText: { fontSize: 16 },
+  loginLinkBold: { fontWeight: '600' },
 });

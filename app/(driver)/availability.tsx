@@ -12,6 +12,7 @@ import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import axios from 'axios';
+import { useTheme } from '../../contexts/ThemeContext';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
 
@@ -31,6 +32,7 @@ interface DayAvailability {
 
 export default function DriverAvailability() {
   const router = useRouter();
+  const { colors, isDark } = useTheme();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [selectedCells, setSelectedCells] = useState<{ [key: string]: boolean }>({});
@@ -198,20 +200,20 @@ export default function DriverAvailability() {
 
   if (loading) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#007AFF" />
+      <View style={[styles.loadingContainer, { backgroundColor: colors.background }]}>
+        <ActivityIndicator size="large" color={colors.primary} />
       </View>
     );
   }
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
       {/* Header */}
-      <View style={styles.header}>
+      <View style={[styles.header, { backgroundColor: colors.card, borderBottomColor: colors.border }]}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <Ionicons name="arrow-back" size={24} color="#007AFF" />
+          <Ionicons name="arrow-back" size={24} color={colors.primary} />
         </TouchableOpacity>
-        <Text style={styles.title}>My Availability</Text>
+        <Text style={[styles.title, { color: colors.text }]}>My Availability</Text>
         <TouchableOpacity onPress={toggleStatus} style={styles.statusButton}>
           <Ionicons
             name={availabilityStatus === 'ACTIVE' ? 'checkmark-circle' : 'close-circle'}
@@ -235,9 +237,9 @@ export default function DriverAvailability() {
       </View>
 
       {/* Instructions */}
-      <View style={styles.instructions}>
-        <Ionicons name="information-circle" size={20} color="#666" />
-        <Text style={styles.instructionsText}>
+      <View style={[styles.instructions, { backgroundColor: colors.surfaceVariant }]}>
+        <Ionicons name="information-circle" size={20} color={colors.textSecondary} />
+        <Text style={[styles.instructionsText, { color: colors.textSecondary }]}>
           Tap cells to select hours. Tap day name to select/deselect full day.
         </Text>
       </View>
@@ -283,7 +285,7 @@ export default function DriverAvailability() {
       </ScrollView>
 
       {/* Action Buttons */}
-      <View style={styles.actions}>
+      <View style={[styles.actions, { borderTopColor: colors.border }]}>
         <TouchableOpacity style={styles.clearButton} onPress={clearAll}>
           <Text style={styles.clearButtonText}>Clear All</Text>
         </TouchableOpacity>

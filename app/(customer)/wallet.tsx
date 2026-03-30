@@ -6,6 +6,7 @@ import { useState, useCallback, useEffect } from 'react';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { walletService } from '../../services/api';
 import type { Wallet, WalletTransaction, WithdrawalRequest } from '../../services/api';
+import { useTheme } from '../../contexts/ThemeContext';
 
 type Tab = 'overview' | 'transactions' | 'withdrawals';
 
@@ -32,6 +33,7 @@ const STATUS_COLORS: Record<string, string> = {
 
 export default function WalletScreen() {
   const router = useRouter();
+  const { colors, isDark } = useTheme();
   const [activeTab, setActiveTab] = useState<Tab>('overview');
   const [wallet, setWallet] = useState<Wallet | null>(null);
   const [transactions, setTransactions] = useState<WalletTransaction[]>([]);
@@ -125,19 +127,19 @@ export default function WalletScreen() {
 
   if (loading) {
     return (
-      <View style={styles.container}>
-        <View style={styles.header}><Text style={styles.headerTitle}>My Wallet</Text></View>
-        <View style={styles.center}><ActivityIndicator size="large" color="#0284c7" /></View>
+      <View style={[styles.container, { backgroundColor: colors.background }]}>
+        <View style={[styles.header, { backgroundColor: colors.card }]}><Text style={[styles.headerTitle, { color: colors.text }]}>My Wallet</Text></View>
+        <View style={styles.center}><ActivityIndicator size="large" color={colors.primary} /></View>
       </View>
     );
   }
 
   if (error || !wallet) {
     return (
-      <View style={styles.container}>
-        <View style={styles.header}><Text style={styles.headerTitle}>My Wallet</Text></View>
+      <View style={[styles.container, { backgroundColor: colors.background }]}>
+        <View style={[styles.header, { backgroundColor: colors.card }]}><Text style={[styles.headerTitle, { color: colors.text }]}>My Wallet</Text></View>
         <View style={styles.center}>
-          <Text style={styles.errorText}>Wallet not found</Text>
+          <Text style={[styles.errorText, { color: colors.textSecondary }]}>Wallet not found</Text>
           <TouchableOpacity style={styles.setupBtn} onPress={() => router.push('/(auth)/customer-setup')}>
             <Text style={styles.setupBtnText}>Add address to get a wallet</Text>
           </TouchableOpacity>
@@ -147,14 +149,14 @@ export default function WalletScreen() {
   }
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
       {/* Header */}
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>My Wallet</Text>
+      <View style={[styles.header, { backgroundColor: colors.card }]}>
+        <Text style={[styles.headerTitle, { color: colors.text }]}>My Wallet</Text>
       </View>
 
       {/* Balance card */}
-      <View style={styles.balanceCard}>
+      <View style={[styles.balanceCard, { backgroundColor: colors.primary }]}>
         <Text style={styles.balanceLabel}>Available Balance</Text>
         <Text style={styles.balanceAmount}>
           {wallet.balance.toFixed(2)} <Text style={styles.currency}>{wallet.currency}</Text>
@@ -172,14 +174,14 @@ export default function WalletScreen() {
       </View>
 
       {/* Tabs */}
-      <View style={styles.tabs}>
+      <View style={[styles.tabs, { backgroundColor: colors.card }]}>
         {(['overview', 'transactions', 'withdrawals'] as Tab[]).map((t) => (
           <TouchableOpacity
             key={t}
-            style={[styles.tab, activeTab === t && styles.tabActive]}
+            style={[styles.tab, activeTab === t && [styles.tabActive, { backgroundColor: colors.primary }]]}
             onPress={() => setActiveTab(t)}
           >
-            <Text style={[styles.tabText, activeTab === t && styles.tabTextActive]}>
+            <Text style={[styles.tabText, { color: colors.textSecondary }, activeTab === t && styles.tabTextActive]}>
               {t === 'overview' ? 'Overview' : t === 'transactions' ? 'Transactions' : 'Withdrawals'}
             </Text>
           </TouchableOpacity>
@@ -192,21 +194,21 @@ export default function WalletScreen() {
         {/* Overview */}
         {activeTab === 'overview' && (
           <View style={{ gap: 16 }}>
-            <View style={styles.infoCard}>
-              <Text style={styles.infoLabel}>Currency</Text>
-              <Text style={styles.infoValue}>{wallet.currency}</Text>
+            <View style={[styles.infoCard, { backgroundColor: colors.card }]}>
+              <Text style={[styles.infoLabel, { color: colors.textSecondary }]}>Currency</Text>
+              <Text style={[styles.infoValue, { color: colors.text }]}>{wallet.currency}</Text>
             </View>
-            <View style={styles.infoCard}>
-              <Text style={styles.infoLabel}>Last updated</Text>
-              <Text style={styles.infoValue}>{formatDate(wallet.updatedAt)}</Text>
+            <View style={[styles.infoCard, { backgroundColor: colors.card }]}>
+              <Text style={[styles.infoLabel, { color: colors.textSecondary }]}>Last updated</Text>
+              <Text style={[styles.infoValue, { color: colors.text }]}>{formatDate(wallet.updatedAt)}</Text>
             </View>
-            <TouchableOpacity style={styles.navCard} onPress={() => setActiveTab('transactions')}>
-              <Text style={styles.navCardText}>📋  View Transaction History</Text>
-              <Text style={styles.navArrow}>→</Text>
+            <TouchableOpacity style={[styles.navCard, { backgroundColor: colors.card }]} onPress={() => setActiveTab('transactions')}>
+              <Text style={[styles.navCardText, { color: colors.text }]}>📋  View Transaction History</Text>
+              <Text style={[styles.navArrow, { color: colors.primary }]}>→</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.navCard} onPress={() => setActiveTab('withdrawals')}>
-              <Text style={styles.navCardText}>💸  View Withdrawal Requests</Text>
-              <Text style={styles.navArrow}>→</Text>
+            <TouchableOpacity style={[styles.navCard, { backgroundColor: colors.card }]} onPress={() => setActiveTab('withdrawals')}>
+              <Text style={[styles.navCardText, { color: colors.text }]}>💸  View Withdrawal Requests</Text>
+              <Text style={[styles.navArrow, { color: colors.primary }]}>→</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -218,14 +220,14 @@ export default function WalletScreen() {
           ) : transactions.length === 0 ? (
             <View style={styles.empty}>
               <Text style={styles.emptyIcon}>📋</Text>
-              <Text style={styles.emptyText}>No transactions yet</Text>
+              <Text style={[styles.emptyText, { color: colors.textTertiary }]}>No transactions yet</Text>
             </View>
           ) : (
             transactions.map((tx) => (
-              <View key={tx.id} style={styles.txCard}>
+              <View key={tx.id} style={[styles.txCard, { backgroundColor: colors.card }]}>
                 <View style={styles.txLeft}>
-                  <Text style={styles.txType}>{TRANSACTION_TYPE_LABELS[tx.type] ?? tx.type}</Text>
-                  <Text style={styles.txDate}>{formatDate(tx.createdAt)}</Text>
+                  <Text style={[styles.txType, { color: colors.text }]}>{TRANSACTION_TYPE_LABELS[tx.type] ?? tx.type}</Text>
+                  <Text style={[styles.txDate, { color: colors.textTertiary }]}>{formatDate(tx.createdAt)}</Text>
                 </View>
                 <View style={styles.txRight}>
                   <Text style={[
@@ -251,7 +253,7 @@ export default function WalletScreen() {
           ) : withdrawals.length === 0 ? (
             <View style={styles.empty}>
               <Text style={styles.emptyIcon}>💸</Text>
-              <Text style={styles.emptyText}>No withdrawal requests yet</Text>
+              <Text style={[styles.emptyText, { color: colors.textTertiary }]}>No withdrawal requests yet</Text>
               <TouchableOpacity
                 style={styles.newWithdrawBtn}
                 onPress={() => setShowWithdrawModal(true)}
@@ -262,10 +264,10 @@ export default function WalletScreen() {
           ) : (
             <>
               {withdrawals.map((wd) => (
-                <View key={wd.id} style={styles.txCard}>
+                <View key={wd.id} style={[styles.txCard, { backgroundColor: colors.card }]}>
                   <View style={styles.txLeft}>
-                    <Text style={styles.txType}>{wd.amount.toFixed(2)} {wallet.currency}</Text>
-                    <Text style={styles.txDate}>{formatDate(wd.requestedAt)}</Text>
+                    <Text style={[styles.txType, { color: colors.text }]}>{wd.amount.toFixed(2)} {wallet.currency}</Text>
+                    <Text style={[styles.txDate, { color: colors.textTertiary }]}>{formatDate(wd.requestedAt)}</Text>
                     {wd.descriptionOfCustomer && (
                       <Text style={styles.txNote}>{wd.descriptionOfCustomer}</Text>
                     )}
@@ -292,27 +294,27 @@ export default function WalletScreen() {
       {/* Withdrawal Modal */}
       <Modal visible={showWithdrawModal} transparent animationType="slide">
         <View style={styles.modalOverlay}>
-          <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Request Withdrawal</Text>
-            <Text style={styles.modalBalance}>
+          <View style={[styles.modalCard, { backgroundColor: colors.card }]}>
+            <Text style={[styles.modalTitle, { color: colors.text }]}>Request Withdrawal</Text>
+            <Text style={[styles.modalBalance, { color: colors.textSecondary }]}>
               Balance: {wallet.balance.toFixed(2)} {wallet.currency}
             </Text>
 
-            <Text style={styles.modalLabel}>Amount ({wallet.currency})</Text>
+            <Text style={[styles.modalLabel, { color: colors.text }]}>Amount ({wallet.currency})</Text>
             <TextInput
-              style={styles.modalInput}
+              style={[styles.modalInput, { backgroundColor: colors.inputBg, borderColor: colors.inputBorder, color: colors.text }]}
               placeholder="0.00"
-              placeholderTextColor="#9ca3af"
+              placeholderTextColor={colors.textTertiary}
               keyboardType="decimal-pad"
               value={withdrawAmount}
               onChangeText={setWithdrawAmount}
             />
 
-            <Text style={styles.modalLabel}>Note (optional)</Text>
+            <Text style={[styles.modalLabel, { color: colors.text }]}>Note (optional)</Text>
             <TextInput
-              style={[styles.modalInput, { height: 80, textAlignVertical: 'top' }]}
+              style={[styles.modalInput, { height: 80, textAlignVertical: 'top', backgroundColor: colors.inputBg, borderColor: colors.inputBorder, color: colors.text }]}
               placeholder="Reason for withdrawal..."
-              placeholderTextColor="#9ca3af"
+              placeholderTextColor={colors.textTertiary}
               multiline
               value={withdrawNote}
               onChangeText={setWithdrawNote}

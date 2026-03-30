@@ -7,6 +7,7 @@ import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import { orderService, Order } from '../../services/api/order.service';
+import { useTheme } from '../../contexts/ThemeContext';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const SIDEBAR_WIDTH = SCREEN_WIDTH * 0.65;
@@ -32,6 +33,7 @@ const STATUS_CONFIG: Record<string, { bg: string; text: string; label: string }>
 
 export default function CustomerOrdersScreen() {
   const router = useRouter();
+  const { colors, isDark } = useTheme();
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -98,24 +100,24 @@ export default function CustomerOrdersScreen() {
 
   if (loading) {
     return (
-      <View style={st.center}>
-        <ActivityIndicator size="large" color="#0284c7" />
+      <View style={[st.center, { backgroundColor: colors.background }]}>
+        <ActivityIndicator size="large" color={colors.primary} />
       </View>
     );
   }
 
   return (
-    <View style={st.container}>
-      <StatusBar style="dark" />
+    <View style={[st.container, { backgroundColor: colors.background }]}>
+      <StatusBar style={isDark ? 'light' : 'dark'} />
       {/* Header */}
-      <View style={st.header}>
+      <View style={[st.header, { backgroundColor: colors.card, borderBottomColor: colors.border }]}>
         <View>
-          <Text style={st.headerTitle}>My Orders</Text>
-          <Text style={st.headerCount}>{orders.length} total</Text>
+          <Text style={[st.headerTitle, { color: colors.text }]}>My Orders</Text>
+          <Text style={[st.headerCount, { color: colors.textTertiary }]}>{orders.length} total</Text>
         </View>
-        <TouchableOpacity style={[st.filterBtn, filter !== 'ALL' && { backgroundColor: '#0284c7' }]} onPress={openSidebar} activeOpacity={0.7}>
-          <Ionicons name="filter" size={20} color={filter !== 'ALL' ? '#fff' : '#374151'} />
-          {filter !== 'ALL' && <View style={st.filterDot} />}
+        <TouchableOpacity style={[st.filterBtn, { backgroundColor: colors.surfaceVariant }, filter !== 'ALL' && { backgroundColor: colors.primary }]} onPress={openSidebar} activeOpacity={0.7}>
+          <Ionicons name="filter" size={20} color={filter !== 'ALL' ? '#fff' : colors.text} />
+          {filter !== 'ALL' && <View style={[st.filterDot, { backgroundColor: colors.primary }]} />}
         </TouchableOpacity>
       </View>
 
@@ -124,20 +126,20 @@ export default function CustomerOrdersScreen() {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
         {filteredOrders.length === 0 ? (
           <View style={st.empty}>
-            <Ionicons name="receipt-outline" size={48} color="#d1d5db" />
-            <Text style={st.emptyText}>No orders found</Text>
+            <Ionicons name="receipt-outline" size={48} color={colors.border} />
+            <Text style={[st.emptyText, { color: colors.textTertiary }]}>No orders found</Text>
           </View>
         ) : filteredOrders.map((order) => {
           const cfg = STATUS_CONFIG[order.status] || { bg: '#f3f4f6', text: '#374151', label: order.status };
           const canEditPayment = order.status === 'SEARCHING_DRIVER';
 
           return (
-            <TouchableOpacity key={order.id} style={st.card}
+            <TouchableOpacity key={order.id} style={[st.card, { backgroundColor: colors.card }]}
               onPress={() => router.push(`/(customer)/order-detail?orderId=${order.id}`)}
               activeOpacity={0.7}>
               {/* Top row: ID + status */}
               <View style={st.cardTopRow}>
-                <Text style={st.orderId}>#{order.id.slice(0, 8)}</Text>
+                <Text style={[st.orderId, { color: colors.text }]}>#{order.id.slice(0, 8)}</Text>
                 <View style={[st.statusBadge, { backgroundColor: cfg.bg }]}>
                   <Text style={[st.statusText, { color: cfg.text }]}>{cfg.label}</Text>
                 </View>
@@ -147,13 +149,13 @@ export default function CustomerOrdersScreen() {
               <View style={st.routeSection}>
                 <View style={st.routeItem}>
                   <View style={[st.routeDot, { backgroundColor: '#22c55e' }]} />
-                  <Text style={st.routeText} numberOfLines={1}>
+                  <Text style={[st.routeText, { color: colors.text }]} numberOfLines={1}>
                     {order.pickupAddress?.delegation?.nameDelegation || 'Pickup'}
                   </Text>
                 </View>
                 <View style={st.routeItem}>
                   <View style={[st.routeDot, { backgroundColor: '#ef4444' }]} />
-                  <Text style={st.routeText} numberOfLines={1}>
+                  <Text style={[st.routeText, { color: colors.text }]} numberOfLines={1}>
                     {order.dropoffAddress?.delegation?.nameDelegation || 'Dropoff'}
                   </Text>
                 </View>
@@ -161,7 +163,7 @@ export default function CustomerOrdersScreen() {
 
               {/* Bottom row: price + payment */}
               <View style={st.cardBottomRow}>
-                <Text style={st.price}>{order.price.toFixed(2)} TND</Text>
+                <Text style={[st.price, { color: colors.primary }]}>{order.price.toFixed(2)} TND</Text>
 
                 {canEditPayment ? (
                   <TouchableOpacity
@@ -189,9 +191,9 @@ export default function CustomerOrdersScreen() {
 
               {/* Driver info */}
               {order.driverAssignment?.driver && (
-                <View style={st.driverRow}>
-                  <Ionicons name="car-outline" size={14} color="#6b7280" />
-                  <Text style={st.driverText}>
+                <View style={[st.driverRow, { borderTopColor: colors.border }]}>
+                  <Ionicons name="car-outline" size={14} color={colors.textSecondary} />
+                  <Text style={[st.driverText, { color: colors.textSecondary }]}>
                     {order.driverAssignment.driver.user.firstName} {order.driverAssignment.driver.user.secondName}
                   </Text>
                 </View>
@@ -207,8 +209,8 @@ export default function CustomerOrdersScreen() {
           <Animated.View style={[st.overlay, { opacity: overlayAnim }]}>
             <Pressable style={StyleSheet.absoluteFill} onPress={closeSidebar} />
           </Animated.View>
-          <Animated.View style={[st.sidebar, { transform: [{ translateX: slideAnim }] }]}>
-            <Text style={st.sidebarTitle}>Filter by Status</Text>
+          <Animated.View style={[st.sidebar, { transform: [{ translateX: slideAnim }], backgroundColor: colors.card }]}>
+            <Text style={[st.sidebarTitle, { color: colors.text }]}>Filter by Status</Text>
             <ScrollView showsVerticalScrollIndicator={false}>
               {ALL_STATUSES.map(s => {
                 const active = filter === s;
@@ -219,9 +221,9 @@ export default function CustomerOrdersScreen() {
                   <TouchableOpacity key={s} style={[st.sidebarItem, active && st.sidebarItemActive]}
                     onPress={() => selectFilter(s)} activeOpacity={0.7}>
                     {cfg && <View style={[st.sidebarDot, { backgroundColor: cfg.text }]} />}
-                    {!cfg && <Ionicons name="list" size={14} color="#374151" />}
-                    <Text style={[st.sidebarItemText, active && st.sidebarItemTextActive]}>{label}</Text>
-                    <Text style={st.sidebarCount}>{count}</Text>
+                    {!cfg && <Ionicons name="list" size={14} color={colors.text} />}
+                    <Text style={[st.sidebarItemText, { color: colors.text }, active && st.sidebarItemTextActive]}>{label}</Text>
+                    <Text style={[st.sidebarCount, { color: colors.textTertiary }]}>{count}</Text>
                   </TouchableOpacity>
                 );
               })}

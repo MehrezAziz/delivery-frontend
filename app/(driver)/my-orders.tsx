@@ -6,6 +6,7 @@ import {
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { orderService, Order } from '../../services/api/order.service';
+import { useTheme } from '../../contexts/ThemeContext';
 
 const STATUS_META: Record<string, { color: string; bg: string; label: string; icon: string }> = {
   PENDING_CUSTOMER_APPROVAL: { color: '#ea580c', bg: '#ffedd5', label: 'Waiting for Customer', icon: 'hourglass-outline' },
@@ -32,6 +33,7 @@ const STATUS_REVERT: Record<string, { prev: string; label: string }> = {
 
 export default function DriverMyOrdersScreen() {
   const router = useRouter();
+  const { colors, isDark } = useTheme();
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -91,7 +93,7 @@ export default function DriverMyOrdersScreen() {
   };
 
   if (loading) {
-    return <View style={s.center}><ActivityIndicator size="large" color="#0284c7" /></View>;
+    return <View style={[s.center, { backgroundColor: colors.background }]}><ActivityIndicator size="large" color={colors.primary} /></View>;
   }
 
   const activeOrders = orders.filter(o => !['DELIVERED', 'CANCELLED'].includes(o.status));
@@ -104,20 +106,20 @@ export default function DriverMyOrdersScreen() {
     const isUpdating = updatingStatus === order.id;
 
     return (
-      <TouchableOpacity key={order.id} style={s.card} activeOpacity={0.7}
+      <TouchableOpacity key={order.id} style={[s.card, { backgroundColor: colors.card }]} activeOpacity={0.7}
         onPress={() => router.push(`/(driver)/order-detail?orderId=${order.id}`)}>
         {/* Header: status badge + price */}
         <View style={s.cardTop}>
           <View style={{ flex: 1 }}>
-            <Text style={s.orderId}>#{order.id.slice(0, 8)}</Text>
+            <Text style={[s.orderId, { color: colors.text }]}>#{order.id.slice(0, 8)}</Text>
             <View style={[s.statusBadge, { backgroundColor: meta.bg }]}>
               <Ionicons name={meta.icon as any} size={12} color={meta.color} />
               <Text style={[s.statusText, { color: meta.color }]}>{meta.label}</Text>
             </View>
           </View>
           <View style={s.priceCol}>
-            <Text style={s.priceText}>{order.price.toFixed(2)}</Text>
-            <Text style={s.priceCurrency}>TND</Text>
+            <Text style={[s.priceText, { color: colors.primary }]}>{order.price.toFixed(2)}</Text>
+            <Text style={[s.priceCurrency, { color: colors.textTertiary }]}>TND</Text>
           </View>
         </View>
 
@@ -125,15 +127,15 @@ export default function DriverMyOrdersScreen() {
         <View style={s.routeSection}>
           <View style={s.routeIconCol}>
             <View style={[s.routeDot, { backgroundColor: '#22c55e' }]} />
-            <View style={s.routeLine} />
+            <View style={[s.routeLine, { backgroundColor: colors.border }]} />
             <View style={[s.routeDot, { backgroundColor: '#ef4444' }]} />
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={s.routeText} numberOfLines={1}>
+            <Text style={[s.routeText, { color: colors.text }]} numberOfLines={1}>
               {order.pickupAddress?.street || order.pickupAddress?.delegation?.nameDelegation || 'Pickup'}
             </Text>
             <View style={{ height: 14 }} />
-            <Text style={s.routeText} numberOfLines={1}>
+            <Text style={[s.routeText, { color: colors.text }]} numberOfLines={1}>
               {order.dropoffAddress?.street || order.dropoffAddress?.delegation?.nameDelegation || 'Dropoff'}
             </Text>
           </View>
@@ -141,13 +143,13 @@ export default function DriverMyOrdersScreen() {
 
         {/* Info chips */}
         <View style={s.chipsRow}>
-          <View style={s.chip}>
-            <Ionicons name="resize-outline" size={12} color="#6b7280" />
-            <Text style={s.chipText}>{order.distanceKm.toFixed(1)} km</Text>
+          <View style={[s.chip, { backgroundColor: colors.surfaceVariant }]}>
+            <Ionicons name="resize-outline" size={12} color={colors.textSecondary} />
+            <Text style={[s.chipText, { color: colors.textSecondary }]}>{order.distanceKm.toFixed(1)} km</Text>
           </View>
-          <View style={s.chip}>
-            <Ionicons name="cube-outline" size={12} color="#6b7280" />
-            <Text style={s.chipText}>{order.weight} kg</Text>
+          <View style={[s.chip, { backgroundColor: colors.surfaceVariant }]}>
+            <Ionicons name="cube-outline" size={12} color={colors.textSecondary} />
+            <Text style={[s.chipText, { color: colors.textSecondary }]}>{order.weight} kg</Text>
           </View>
           <View style={[s.chip, { backgroundColor: order.paymentType === 'COD' ? '#dcfce7' : '#dbeafe' }]}>
             <Text style={{ fontSize: 11 }}>{order.paymentType === 'COD' ? '💵' : '💰'}</Text>
@@ -181,12 +183,12 @@ export default function DriverMyOrdersScreen() {
           <View style={{ flexDirection: 'row', gap: 8, marginBottom: 8 }}>
             {STATUS_REVERT[order.status] && (
               <TouchableOpacity
-                style={[s.revertBtn]}
+                style={[s.revertBtn, { backgroundColor: colors.surfaceVariant, borderColor: colors.border }]}
                 onPress={() => handleRevertStatus(order.id)}
                 disabled={isUpdating}
                 activeOpacity={0.7}
               >
-                <Ionicons name="arrow-undo" size={18} color="#6b7280" />
+                <Ionicons name="arrow-undo" size={18} color={colors.textSecondary} />
               </TouchableOpacity>
             )}
             <TouchableOpacity
@@ -227,17 +229,17 @@ export default function DriverMyOrdersScreen() {
         {/* Secondary actions */}
         <View style={s.secondaryRow}>
           {order.status === 'DRIVER_ASSIGNED' && (
-            <TouchableOpacity style={s.cancelBtn} onPress={() => handleCancel(order.id)} activeOpacity={0.7}>
-              <Ionicons name="close-circle-outline" size={16} color="#dc2626" />
-              <Text style={s.cancelBtnText}>Cancel</Text>
+            <TouchableOpacity style={[s.cancelBtn, { backgroundColor: colors.dangerBg }]} onPress={() => handleCancel(order.id)} activeOpacity={0.7}>
+              <Ionicons name="close-circle-outline" size={16} color={colors.danger} />
+              <Text style={[s.cancelBtnText, { color: colors.danger }]}>Cancel</Text>
             </TouchableOpacity>
           )}
           {['PICKED_UP', 'DELIVERING', 'DELIVERED'].includes(order.status) && (
-            <TouchableOpacity style={[s.proofBtn, order.driverAssignment?.image1Proof && { backgroundColor: '#dcfce7' }]}
+            <TouchableOpacity style={[s.proofBtn, { backgroundColor: colors.surfaceVariant }, order.driverAssignment?.image1Proof && { backgroundColor: '#dcfce7' }]}
               onPress={() => router.push(`/(driver)/upload-proofs?orderId=${order.id}`)} activeOpacity={0.7}>
               <Ionicons name={order.driverAssignment?.image1Proof ? 'checkmark-circle' : 'camera-outline'} size={16}
-                color={order.driverAssignment?.image1Proof ? '#16a34a' : '#374151'} />
-              <Text style={[s.proofBtnText, order.driverAssignment?.image1Proof && { color: '#16a34a' }]}>
+                color={order.driverAssignment?.image1Proof ? '#16a34a' : colors.text} />
+              <Text style={[s.proofBtnText, { color: colors.text }, order.driverAssignment?.image1Proof && { color: '#16a34a' }]}>
                 {order.driverAssignment?.image1Proof ? 'Image Uploaded' : 'Upload Proofs'}
               </Text>
             </TouchableOpacity>
@@ -248,16 +250,16 @@ export default function DriverMyOrdersScreen() {
   };
 
   return (
-    <View style={s.container}>
+    <View style={[s.container, { backgroundColor: colors.background }]}>
       {/* Header */}
-      <View style={s.header}>
+      <View style={[s.header, { backgroundColor: colors.card, borderBottomColor: colors.border }]}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-          <TouchableOpacity onPress={() => router.back()} style={s.backBtn}>
-            <Ionicons name="chevron-back" size={22} color="#111827" />
+          <TouchableOpacity onPress={() => router.back()} style={[s.backBtn, { backgroundColor: colors.surfaceVariant }]}>
+            <Ionicons name="chevron-back" size={22} color={colors.text} />
           </TouchableOpacity>
           <View>
-            <Text style={s.headerTitle}>My Deliveries</Text>
-            <Text style={s.headerSub}>
+            <Text style={[s.headerTitle, { color: colors.text }]}>My Deliveries</Text>
+            <Text style={[s.headerSub, { color: colors.textTertiary }]}>
               {activeOrders.length} active · {pastOrders.length} completed
             </Text>
           </View>
@@ -268,8 +270,8 @@ export default function DriverMyOrdersScreen() {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} />}>
         {orders.length === 0 ? (
           <View style={s.empty}>
-            <Ionicons name="car-outline" size={56} color="#d1d5db" />
-            <Text style={s.emptyTitle}>No deliveries yet</Text>
+            <Ionicons name="car-outline" size={56} color={colors.textTertiary} />
+            <Text style={[s.emptyTitle, { color: colors.textTertiary }]}>No deliveries yet</Text>
             <Text style={s.emptySub}>Accept orders to start delivering</Text>
           </View>
         ) : (
@@ -278,7 +280,7 @@ export default function DriverMyOrdersScreen() {
               <View style={{ marginBottom: 20 }}>
                 <View style={s.sectionHeader}>
                   <View style={[s.sectionDot, { backgroundColor: '#22c55e' }]} />
-                  <Text style={s.sectionTitle}>Active</Text>
+                  <Text style={[s.sectionTitle, { color: colors.text }]}>Active</Text>
                 </View>
                 {activeOrders.map(renderOrder)}
               </View>
@@ -287,7 +289,7 @@ export default function DriverMyOrdersScreen() {
               <View>
                 <View style={s.sectionHeader}>
                   <View style={[s.sectionDot, { backgroundColor: '#9ca3af' }]} />
-                  <Text style={s.sectionTitle}>Past</Text>
+                  <Text style={[s.sectionTitle, { color: colors.text }]}>Past</Text>
                 </View>
                 {pastOrders.map(renderOrder)}
               </View>

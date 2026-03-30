@@ -8,6 +8,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { notificationService, Notification } from '../../services/api/notification.service';
+import { useTheme } from '../../contexts/ThemeContext';
 
 const PRIORITY_COLORS: Record<string, string> = {
   LOW: '#6b7280',
@@ -38,6 +39,7 @@ const TYPE_ICONS: Record<string, string> = {
 export default function DriverNotifications() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { colors, isDark } = useTheme();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -105,7 +107,7 @@ export default function DriverNotifications() {
 
     return (
       <TouchableOpacity
-        style={[s.notifItem, isUnread && s.unread]}
+        style={[s.notifItem, { backgroundColor: colors.card, borderBottomColor: colors.border }, isUnread && { backgroundColor: isDark ? '#0c4a6e' : '#eff6ff' }]}
         onPress={() => handleNotificationPress(item)}
         activeOpacity={0.7}
       >
@@ -113,13 +115,13 @@ export default function DriverNotifications() {
           <Ionicons name={iconName as any} size={22} color={priorityColor} />
         </View>
         <View style={s.notifContent}>
-          <Text style={[s.notifTitle, isUnread && s.boldText]} numberOfLines={1}>
+          <Text style={[s.notifTitle, { color: colors.text }, isUnread && s.boldText]} numberOfLines={1}>
             {item.title}
           </Text>
-          <Text style={s.notifBody} numberOfLines={2}>{item.body}</Text>
-          <Text style={s.notifTime}>{formatTime(item.sentAt)}</Text>
+          <Text style={[s.notifBody, { color: colors.textSecondary }]} numberOfLines={2}>{item.body}</Text>
+          <Text style={[s.notifTime, { color: colors.textTertiary }]}>{formatTime(item.sentAt)}</Text>
         </View>
-        {isUnread && <View style={s.unreadDot} />}
+        {isUnread && <View style={[s.unreadDot, { backgroundColor: colors.primary }]} />}
       </TouchableOpacity>
     );
   };
@@ -127,25 +129,25 @@ export default function DriverNotifications() {
   if (loading) {
     return (
       <View style={s.center}>
-        <ActivityIndicator size="large" color="#0284c7" />
+        <ActivityIndicator size="large" color={colors.primary} />
       </View>
     );
   }
 
   return (
-    <View style={s.container}>
-      <View style={[s.header, { paddingTop: insets.top + 12 }]}>
-        <TouchableOpacity onPress={() => router.back()} style={s.backBtn}>
-          <Ionicons name="chevron-back" size={24} color="#111" />
+    <View style={[s.container, { backgroundColor: colors.background }]}>
+      <View style={[s.header, { paddingTop: insets.top + 12, backgroundColor: colors.card, borderBottomColor: colors.border }]}>
+        <TouchableOpacity onPress={() => router.back()} style={[s.backBtn, { backgroundColor: colors.surfaceVariant }]}>
+          <Ionicons name="chevron-back" size={24} color={colors.text} />
         </TouchableOpacity>
-        <Text style={s.headerTitle}>Notifications</Text>
+        <Text style={[s.headerTitle, { color: colors.text }]}>Notifications</Text>
         <TouchableOpacity
           onPress={() => {
             notificationService.markAllAsRead();
             setNotifications((prev) => prev.map((n) => ({ ...n, readAt: n.readAt || new Date().toISOString() })));
           }}
         >
-          <Text style={s.markAllText}>Mark all read</Text>
+          <Text style={[s.markAllText, { color: colors.primary }]}>Mark all read</Text>
         </TouchableOpacity>
       </View>
 

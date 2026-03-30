@@ -8,6 +8,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import axios from 'axios';
 import { saveLoginTimestamp } from '../../services/auth-session';
+import { useTheme } from '../../contexts/ThemeContext';
 
 const API_BASE = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api';
 const API_URL = API_BASE.replace(/\/api$/, '');
@@ -18,20 +19,20 @@ interface Country { id: string; name: string; isoCode: string; currencyCode: str
 interface Governorate { id: string; nameGovernorate: string; }
 interface Delegation { id: string; nameDelegation: string; }
 
-function SearchPicker({ visible, title, data, onSelect, onClose, search, setSearch, labelKey }: any) {
+function SearchPicker({ visible, title, data, onSelect, onClose, search, setSearch, labelKey, colors }: any) {
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
-      <View style={styles.modalContainer}>
-        <View style={styles.modalHeader}>
-          <Text style={styles.modalTitle}>{title}</Text>
-          <TouchableOpacity onPress={onClose}><Text style={styles.modalClose}>✕</Text></TouchableOpacity>
+      <View style={[styles.modalContainer, { backgroundColor: colors.background }]}>
+        <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
+          <Text style={[styles.modalTitle, { color: colors.text }]}>{title}</Text>
+          <TouchableOpacity onPress={onClose}><Text style={[styles.modalClose, { color: colors.textTertiary }]}>✕</Text></TouchableOpacity>
         </View>
-        <View style={styles.searchBox}>
+        <View style={[styles.searchBox, { borderColor: colors.inputBorder, backgroundColor: colors.card }]}>
           <Text>🔍</Text>
-          <TextInput style={styles.searchInput} placeholder="Search..." placeholderTextColor="#9ca3af"
+          <TextInput style={[styles.searchInput, { color: colors.text }]} placeholder="Search..." placeholderTextColor={colors.textTertiary}
             value={search} onChangeText={setSearch} autoFocus />
           {search.length > 0 && (
-            <TouchableOpacity onPress={() => setSearch('')}><Text style={styles.clearIcon}>✕</Text></TouchableOpacity>
+            <TouchableOpacity onPress={() => setSearch('')}><Text style={[styles.clearIcon, { color: colors.textTertiary }]}>✕</Text></TouchableOpacity>
           )}
         </View>
         <FlatList
@@ -39,12 +40,12 @@ function SearchPicker({ visible, title, data, onSelect, onClose, search, setSear
           keyExtractor={(item: any) => item.id}
           keyboardShouldPersistTaps="handled"
           renderItem={({ item }: any) => (
-            <TouchableOpacity style={styles.pickerItem} onPress={() => onSelect(item)}>
-              <Text style={styles.pickerItemText}>{item[labelKey]}</Text>
-              {item.isoCode && <Text style={styles.pickerItemSub}>{item.isoCode} · {item.currencyCode}</Text>}
+            <TouchableOpacity style={[styles.pickerItem, { borderBottomColor: colors.border }]} onPress={() => onSelect(item)}>
+              <Text style={[styles.pickerItemText, { color: colors.text }]}>{item[labelKey]}</Text>
+              {item.isoCode && <Text style={[styles.pickerItemSub, { color: colors.textSecondary }]}>{item.isoCode} · {item.currencyCode}</Text>}
             </TouchableOpacity>
           )}
-          ListEmptyComponent={<Text style={styles.emptyText}>No results</Text>}
+          ListEmptyComponent={<Text style={[styles.emptyText, { color: colors.textTertiary }]}>No results</Text>}
         />
       </View>
     </Modal>
@@ -53,6 +54,7 @@ function SearchPicker({ visible, title, data, onSelect, onClose, search, setSear
 
 export default function DriverRegisterStep2() {
   const router = useRouter();
+  const { colors, isDark } = useTheme();
   const [vehicleType, setVehicleType] = useState('');
   const [description, setDescription] = useState('');
   const [loading, setLoading] = useState(false);
@@ -164,32 +166,32 @@ export default function DriverRegisterStep2() {
   };
 
   return (
-    <ScrollView style={styles.container} keyboardShouldPersistTaps="handled">
+    <ScrollView style={[styles.container, { backgroundColor: colors.card }]} keyboardShouldPersistTaps="handled">
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace('/')} style={styles.backBtn}>
-          <Ionicons name="chevron-back" size={22} color="#111" />
+        <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace('/')} style={[styles.backBtn, { backgroundColor: colors.surfaceVariant }]}>
+          <Ionicons name="chevron-back" size={22} color={colors.text} />
         </TouchableOpacity>
-        <Text style={styles.title}>Driver Registration</Text>
-        <Text style={styles.subtitle}>Step 2 of 3: Vehicle & Address</Text>
+        <Text style={[styles.title, { color: colors.text }]}>Driver Registration</Text>
+        <Text style={[styles.subtitle, { color: colors.textSecondary }]}>Step 2 of 3: Vehicle & Address</Text>
       </View>
 
       <View style={styles.progressContainer}>
         <View style={[styles.progressDot, styles.progressDotComplete]} />
-        <View style={styles.progressLine} />
-        <View style={[styles.progressDot, styles.progressDotActive]} />
-        <View style={styles.progressLine} />
-        <View style={styles.progressDot} />
+        <View style={[styles.progressLine, { backgroundColor: colors.border }]} />
+        <View style={[styles.progressDot, styles.progressDotActive, { backgroundColor: colors.primary }]} />
+        <View style={[styles.progressLine, { backgroundColor: colors.border }]} />
+        <View style={[styles.progressDot, { backgroundColor: colors.border }]} />
       </View>
 
       {/* Vehicle Type */}
       <View style={styles.inputGroup}>
-        <Text style={styles.label}>Vehicle Type *</Text>
+        <Text style={[styles.label, { color: colors.text }]}>Vehicle Type *</Text>
         <View style={styles.vehicleGrid}>
           {VEHICLE_TYPES.map(type => (
             <TouchableOpacity key={type}
-              style={[styles.vehicleButton, vehicleType === type && styles.vehicleButtonActive]}
+              style={[styles.vehicleButton, { borderColor: colors.inputBorder, backgroundColor: colors.inputBg }, vehicleType === type && { backgroundColor: colors.primary, borderColor: colors.primary }]}
               onPress={() => setVehicleType(type)}>
-              <Text style={[styles.vehicleText, vehicleType === type && styles.vehicleTextActive]}>{type}</Text>
+              <Text style={[styles.vehicleText, { color: colors.text }, vehicleType === type && styles.vehicleTextActive]}>{type}</Text>
             </TouchableOpacity>
           ))}
         </View>
@@ -197,60 +199,61 @@ export default function DriverRegisterStep2() {
 
       {/* Description */}
       <View style={styles.inputGroup}>
-        <Text style={styles.label}>Vehicle Description (Optional)</Text>
-        <TextInput style={[styles.input, styles.textArea]} placeholder="e.g., Red Honda Civic 2020"
+        <Text style={[styles.label, { color: colors.text }]}>Vehicle Description (Optional)</Text>
+        <TextInput style={[styles.input, styles.textArea, { borderColor: colors.inputBorder, backgroundColor: colors.inputBg, color: colors.text }]} placeholder="e.g., Red Honda Civic 2020"
+          placeholderTextColor={colors.textTertiary}
           value={description} onChangeText={setDescription} multiline numberOfLines={3} maxLength={500} />
-        <Text style={styles.charCount}>{description.length}/500</Text>
+        <Text style={[styles.charCount, { color: colors.textTertiary }]}>{description.length}/500</Text>
       </View>
 
       {/* Address — required */}
       <View style={styles.inputGroup}>
-        <Text style={styles.label}>Your Address *</Text>
-        <Text style={styles.hint}>Select your country, governorate and delegation.</Text>
+        <Text style={[styles.label, { color: colors.text }]}>Your Address *</Text>
+        <Text style={[styles.hint, { color: colors.textTertiary }]}>Select your country, governorate and delegation.</Text>
 
         {/* Country */}
-        <TouchableOpacity style={styles.pickerButton} onPress={() => setShowCountryPicker(true)}>
-          <Text style={selectedCountry ? styles.pickerText : styles.pickerPlaceholder}>
+        <TouchableOpacity style={[styles.pickerButton, { borderColor: colors.inputBorder, backgroundColor: colors.inputBg }]} onPress={() => setShowCountryPicker(true)}>
+          <Text style={selectedCountry ? [styles.pickerText, { color: colors.text }] : [styles.pickerPlaceholder, { color: colors.textTertiary }]}>
             {selectedCountry ? `${selectedCountry.name} (${selectedCountry.isoCode})` : 'Select Country *'}
           </Text>
-          <Text style={styles.pickerArrow}>▾</Text>
+          <Text style={[styles.pickerArrow, { color: colors.textTertiary }]}>▾</Text>
         </TouchableOpacity>
 
         {/* Governorate */}
         {selectedCountry && (
-          <TouchableOpacity style={[styles.pickerButton, { marginTop: 10 }]}
+          <TouchableOpacity style={[styles.pickerButton, { marginTop: 10, borderColor: colors.inputBorder, backgroundColor: colors.inputBg }]}
             onPress={() => setShowGovPicker(true)} disabled={geoLoading}>
             {geoLoading && !selectedGovernorate
-              ? <ActivityIndicator size="small" color="#007AFF" />
-              : <Text style={selectedGovernorate ? styles.pickerText : styles.pickerPlaceholder}>
+              ? <ActivityIndicator size="small" color={colors.primary} />
+              : <Text style={selectedGovernorate ? [styles.pickerText, { color: colors.text }] : [styles.pickerPlaceholder, { color: colors.textTertiary }]}>
                   {selectedGovernorate ? selectedGovernorate.nameGovernorate : 'Select Governorate *'}
                 </Text>}
-            <Text style={styles.pickerArrow}>▾</Text>
+            <Text style={[styles.pickerArrow, { color: colors.textTertiary }]}>▾</Text>
           </TouchableOpacity>
         )}
 
         {/* Delegation */}
         {selectedGovernorate && (
-          <TouchableOpacity style={[styles.pickerButton, { marginTop: 10 }]}
+          <TouchableOpacity style={[styles.pickerButton, { marginTop: 10, borderColor: colors.inputBorder, backgroundColor: colors.inputBg }]}
             onPress={() => setShowDelPicker(true)} disabled={geoLoading}>
             {geoLoading && !selectedDelegation
-              ? <ActivityIndicator size="small" color="#007AFF" />
-              : <Text style={selectedDelegation ? styles.pickerText : styles.pickerPlaceholder}>
+              ? <ActivityIndicator size="small" color={colors.primary} />
+              : <Text style={selectedDelegation ? [styles.pickerText, { color: colors.text }] : [styles.pickerPlaceholder, { color: colors.textTertiary }]}>
                   {selectedDelegation ? selectedDelegation.nameDelegation : 'Select Delegation *'}
                 </Text>}
-            <Text style={styles.pickerArrow}>▾</Text>
+            <Text style={[styles.pickerArrow, { color: colors.textTertiary }]}>▾</Text>
           </TouchableOpacity>
         )}
 
         {/* Street (optional) */}
         {selectedDelegation && (
-          <TextInput style={[styles.input, { marginTop: 10 }]}
-            placeholder="Street (optional)" placeholderTextColor="#9ca3af"
+          <TextInput style={[styles.input, { marginTop: 10, borderColor: colors.inputBorder, backgroundColor: colors.inputBg, color: colors.text }]}
+            placeholder="Street (optional)" placeholderTextColor={colors.textTertiary}
             value={street} onChangeText={setStreet} />
         )}
       </View>
 
-      <TouchableOpacity style={[styles.submitButton, loading && styles.submitButtonDisabled]}
+      <TouchableOpacity style={[styles.submitButton, { backgroundColor: colors.primary }, loading && styles.submitButtonDisabled]}
         onPress={handleSubmit} disabled={loading}>
         {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.submitButtonText}>Continue to Step 3</Text>}
       </TouchableOpacity>
@@ -258,60 +261,59 @@ export default function DriverRegisterStep2() {
       {/* Pickers */}
       <SearchPicker visible={showCountryPicker} title="Select Country" data={filteredCountries}
         onSelect={handleSelectCountry} onClose={() => setShowCountryPicker(false)}
-        search={countrySearch} setSearch={setCountrySearch} labelKey="name" />
+        search={countrySearch} setSearch={setCountrySearch} labelKey="name" colors={colors} />
       <SearchPicker visible={showGovPicker} title="Select Governorate" data={filteredGov}
         onSelect={handleSelectGovernorate} onClose={() => setShowGovPicker(false)}
-        search={govSearch} setSearch={setGovSearch} labelKey="nameGovernorate" />
+        search={govSearch} setSearch={setGovSearch} labelKey="nameGovernorate" colors={colors} />
       <SearchPicker visible={showDelPicker} title="Select Delegation" data={filteredDel}
         onSelect={(d: Delegation) => { setSelectedDelegation(d); setShowDelPicker(false); }}
         onClose={() => setShowDelPicker(false)}
-        search={delSearch} setSearch={setDelSearch} labelKey="nameDelegation" />
+        search={delSearch} setSearch={setDelSearch} labelKey="nameDelegation" colors={colors} />
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#fff', padding: 20 },
+  container: { flex: 1, padding: 20 },
   header: { marginBottom: 20, marginTop: 20 },
   backBtn: {
-    width: 42, height: 42, borderRadius: 21, backgroundColor: '#f3f4f6',
+    width: 42, height: 42, borderRadius: 21,
     alignItems: 'center', justifyContent: 'center', marginBottom: 16,
   },
-  title: { fontSize: 28, fontWeight: 'bold', color: '#333', marginBottom: 8 },
-  subtitle: { fontSize: 16, color: '#666' },
+  title: { fontSize: 28, fontWeight: 'bold', marginBottom: 8 },
+  subtitle: { fontSize: 16 },
   progressContainer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginBottom: 30 },
-  progressDot: { width: 12, height: 12, borderRadius: 6, backgroundColor: '#ddd' },
-  progressDotActive: { backgroundColor: '#007AFF', width: 16, height: 16, borderRadius: 8 },
+  progressDot: { width: 12, height: 12, borderRadius: 6 },
+  progressDotActive: { width: 16, height: 16, borderRadius: 8 },
   progressDotComplete: { backgroundColor: '#34C759' },
-  progressLine: { width: 40, height: 2, backgroundColor: '#ddd', marginHorizontal: 8 },
+  progressLine: { width: 40, height: 2, marginHorizontal: 8 },
   inputGroup: { marginBottom: 24 },
-  label: { fontSize: 16, fontWeight: '600', color: '#333', marginBottom: 12 },
-  hint: { fontSize: 13, color: '#999', marginBottom: 10 },
-  input: { borderWidth: 1, borderColor: '#ddd', borderRadius: 8, padding: 12, fontSize: 16, backgroundColor: '#f9f9f9', color: '#111' },
+  label: { fontSize: 16, fontWeight: '600', marginBottom: 12 },
+  hint: { fontSize: 13, marginBottom: 10 },
+  input: { borderWidth: 1, borderRadius: 8, padding: 12, fontSize: 16 },
   textArea: { height: 90, textAlignVertical: 'top' },
-  charCount: { textAlign: 'right', color: '#999', fontSize: 12, marginTop: 4 },
+  charCount: { textAlign: 'right', fontSize: 12, marginTop: 4 },
   vehicleGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
-  vehicleButton: { paddingVertical: 12, paddingHorizontal: 20, borderWidth: 1, borderColor: '#ddd', borderRadius: 8, backgroundColor: '#f9f9f9' },
-  vehicleButtonActive: { backgroundColor: '#007AFF', borderColor: '#007AFF' },
-  vehicleText: { fontSize: 16, color: '#333' },
+  vehicleButton: { paddingVertical: 12, paddingHorizontal: 20, borderWidth: 1, borderRadius: 8 },
+  vehicleText: { fontSize: 16 },
   vehicleTextActive: { color: '#fff', fontWeight: '600' },
-  pickerButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderWidth: 1, borderColor: '#ddd', borderRadius: 8, padding: 14, backgroundColor: '#f9f9f9' },
-  pickerText: { fontSize: 16, color: '#111', flex: 1 },
-  pickerPlaceholder: { fontSize: 16, color: '#9ca3af', flex: 1 },
-  pickerArrow: { fontSize: 16, color: '#9ca3af' },
-  submitButton: { backgroundColor: '#007AFF', padding: 16, borderRadius: 8, alignItems: 'center', marginTop: 20, marginBottom: 40 },
+  pickerButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderWidth: 1, borderRadius: 8, padding: 14 },
+  pickerText: { fontSize: 16, flex: 1 },
+  pickerPlaceholder: { fontSize: 16, flex: 1 },
+  pickerArrow: { fontSize: 16 },
+  submitButton: { padding: 16, borderRadius: 8, alignItems: 'center', marginTop: 20, marginBottom: 40 },
   submitButtonDisabled: { opacity: 0.6 },
   submitButtonText: { color: '#fff', fontSize: 18, fontWeight: '600' },
   // Modal
-  modalContainer: { flex: 1, backgroundColor: '#fff' },
-  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, paddingTop: 56, borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
-  modalTitle: { fontSize: 20, fontWeight: 'bold', color: '#111' },
-  modalClose: { fontSize: 20, color: '#9ca3af', padding: 4 },
-  searchBox: { flexDirection: 'row', alignItems: 'center', margin: 16, borderWidth: 1.5, borderColor: '#e5e7eb', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10, gap: 8 },
-  searchInput: { flex: 1, fontSize: 15, color: '#111', padding: 0 },
-  clearIcon: { fontSize: 14, color: '#9ca3af', paddingHorizontal: 4 },
-  pickerItem: { paddingHorizontal: 20, paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
-  pickerItemText: { fontSize: 16, color: '#111', fontWeight: '500' },
-  pickerItemSub: { fontSize: 13, color: '#6b7280', marginTop: 2 },
-  emptyText: { textAlign: 'center', color: '#9ca3af', padding: 40, fontSize: 15 },
+  modalContainer: { flex: 1 },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, paddingTop: 56, borderBottomWidth: 1 },
+  modalTitle: { fontSize: 20, fontWeight: 'bold' },
+  modalClose: { fontSize: 20, padding: 4 },
+  searchBox: { flexDirection: 'row', alignItems: 'center', margin: 16, borderWidth: 1.5, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10, gap: 8 },
+  searchInput: { flex: 1, fontSize: 15, padding: 0 },
+  clearIcon: { fontSize: 14, paddingHorizontal: 4 },
+  pickerItem: { paddingHorizontal: 20, paddingVertical: 16, borderBottomWidth: 1 },
+  pickerItemText: { fontSize: 16, fontWeight: '500' },
+  pickerItemSub: { fontSize: 13, marginTop: 2 },
+  emptyText: { textAlign: 'center', padding: 40, fontSize: 15 },
 });

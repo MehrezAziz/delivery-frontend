@@ -6,11 +6,13 @@ import { useRouter } from 'expo-router';
 import { useState, useEffect, useMemo } from 'react';
 import { geographyService, walletService } from '../../services/api';
 import type { Country, Governorate, Delegation } from '../../services/api';
+import { useTheme } from '../../contexts/ThemeContext';
 
 type Step = 'country' | 'governorate' | 'delegation' | 'street';
 
 export default function CustomerSetupScreen() {
   const router = useRouter();
+  const { colors, isDark } = useTheme();
   const [step, setStep] = useState<Step>('country');
 
   const [countries, setCountries] = useState<Country[]>([]);
@@ -172,34 +174,34 @@ export default function CustomerSetupScreen() {
   // ── Street step ─────────────────────────────────────────────────────────────
   if (step === 'street') {
     return (
-      <View style={styles.container}>
-        <View style={styles.header}>
+      <View style={[styles.container, { backgroundColor: colors.background }]}>
+        <View style={[styles.header, { backgroundColor: colors.card, borderBottomColor: colors.border }]}>
           <TouchableOpacity onPress={handleBack} style={styles.backRow}>
-            <Text style={styles.backText}>← Back</Text>
+            <Text style={[styles.backText, { color: colors.primary }]}>← Back</Text>
           </TouchableOpacity>
-          <Text style={styles.title}>Street (optional)</Text>
-          <Text style={styles.subtitle}>
+          <Text style={[styles.title, { color: colors.text }]}>Street (optional)</Text>
+          <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
             {selectedCountry?.name} › {selectedGovernorate?.nameGovernorate} › {selectedDelegation?.nameDelegation}
           </Text>
         </View>
 
         <View style={styles.streetContainer}>
           <TextInput
-            style={styles.streetInput}
+            style={[styles.streetInput, { backgroundColor: colors.inputBg, borderColor: colors.inputBorder, color: colors.text }]}
             placeholder="e.g. 12 Avenue Habib Bourguiba"
-            placeholderTextColor="#9ca3af"
+            placeholderTextColor={colors.textTertiary}
             value={street}
             onChangeText={setStreet}
             autoFocus
           />
-          <Text style={styles.streetHint}>You can leave this empty and add it later.</Text>
+          <Text style={[styles.streetHint, { color: colors.textTertiary }]}>You can leave this empty and add it later.</Text>
         </View>
 
         {error && <Text style={styles.errorText}>{error}</Text>}
 
-        <View style={styles.footer}>
+        <View style={[styles.footer, { backgroundColor: colors.card, borderTopColor: colors.border }]}>
           <TouchableOpacity
-            style={[styles.btn, submitting && styles.btnDisabled]}
+            style={[styles.btn, { backgroundColor: colors.primary }, submitting && styles.btnDisabled]}
             onPress={handleSubmit}
             disabled={submitting}
             activeOpacity={0.8}
@@ -217,35 +219,35 @@ export default function CustomerSetupScreen() {
   const cfg = stepConfig[step];
 
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <View style={[styles.header, { backgroundColor: colors.card, borderBottomColor: colors.border }]}>
         <TouchableOpacity onPress={handleBack} style={styles.backRow}>
-          <Text style={styles.backText}>← Back</Text>
+          <Text style={[styles.backText, { color: colors.primary }]}>← Back</Text>
         </TouchableOpacity>
-        <Text style={styles.title}>{cfg.title}</Text>
-        {cfg.subtitle ? <Text style={styles.subtitle}>{cfg.subtitle}</Text> : null}
+        <Text style={[styles.title, { color: colors.text }]}>{cfg.title}</Text>
+        {cfg.subtitle ? <Text style={[styles.subtitle, { color: colors.textSecondary }]}>{cfg.subtitle}</Text> : null}
       </View>
 
-      <View style={styles.searchContainer}>
+      <View style={[styles.searchContainer, { backgroundColor: colors.card, borderColor: colors.inputBorder }]}>
         <Text style={styles.searchIcon}>🔍</Text>
         <TextInput
-          style={styles.searchInput}
+          style={[styles.searchInput, { color: colors.text }]}
           placeholder={cfg.placeholder}
-          placeholderTextColor="#9ca3af"
+          placeholderTextColor={colors.textTertiary}
           value={search}
           onChangeText={setSearch}
           autoCorrect={false}
         />
         {search.length > 0 && (
           <TouchableOpacity onPress={() => setSearch('')}>
-            <Text style={styles.clearIcon}>✕</Text>
+            <Text style={[styles.clearIcon, { color: colors.textTertiary }]}>✕</Text>
           </TouchableOpacity>
         )}
       </View>
 
       {loadingList ? (
         <View style={styles.center}>
-          <ActivityIndicator size="large" color="#0284c7" />
+          <ActivityIndicator size="large" color={colors.primary} />
         </View>
       ) : (
         <FlatList
@@ -255,22 +257,22 @@ export default function CustomerSetupScreen() {
           keyboardShouldPersistTaps="handled"
           ListEmptyComponent={
             <View style={styles.center}>
-              <Text style={styles.emptyText}>No results</Text>
+              <Text style={[styles.emptyText, { color: colors.textTertiary }]}>No results</Text>
             </View>
           }
           renderItem={({ item }) => {
             const isSelected = cfg.selected?.id === item.id;
             return (
               <TouchableOpacity
-                style={[styles.item, isSelected && styles.itemSelected]}
+                style={[styles.item, { backgroundColor: colors.card, borderColor: colors.border }, isSelected && { borderColor: colors.primary, backgroundColor: isDark ? colors.primaryLight : '#f0f9ff' }]}
                 onPress={() => cfg.onSelect(item)}
                 activeOpacity={0.7}
               >
                 <View style={styles.itemLeft}>
-                  <Text style={styles.itemTitle}>{item[cfg.labelKey]}</Text>
-                  {cfg.subKey && <Text style={styles.itemSub}>{cfg.subKey(item)}</Text>}
+                  <Text style={[styles.itemTitle, { color: colors.text }]}>{item[cfg.labelKey]}</Text>
+                  {cfg.subKey && <Text style={[styles.itemSub, { color: colors.textSecondary }]}>{cfg.subKey(item)}</Text>}
                 </View>
-                {isSelected && <Text style={styles.checkmark}>✓</Text>}
+                {isSelected && <Text style={[styles.checkmark, { color: colors.primary }]}>✓</Text>}
               </TouchableOpacity>
             );
           }}
@@ -279,9 +281,9 @@ export default function CustomerSetupScreen() {
 
       {error && <Text style={styles.errorText}>{error}</Text>}
 
-      <View style={styles.footer}>
+      <View style={[styles.footer, { backgroundColor: colors.card, borderTopColor: colors.border }]}>
         <TouchableOpacity
-          style={[styles.btn, cfg.nextDisabled && styles.btnDisabled]}
+          style={[styles.btn, { backgroundColor: colors.primary }, cfg.nextDisabled && styles.btnDisabled]}
           onPress={handleNext}
           disabled={cfg.nextDisabled}
           activeOpacity={0.8}
@@ -294,67 +296,57 @@ export default function CustomerSetupScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f9fafb' },
+  container: { flex: 1 },
   header: {
-    backgroundColor: '#fff',
     paddingHorizontal: 24,
     paddingTop: 56,
     paddingBottom: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#f3f4f6',
   },
   backRow: { marginBottom: 12 },
-  backText: { color: '#0284c7', fontSize: 16, fontWeight: '500' },
-  title: { fontSize: 26, fontWeight: 'bold', color: '#111827', marginBottom: 4 },
-  subtitle: { fontSize: 14, color: '#6b7280' },
+  backText: { fontSize: 16, fontWeight: '500' },
+  title: { fontSize: 26, fontWeight: 'bold', marginBottom: 4 },
+  subtitle: { fontSize: 14 },
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#fff',
     marginHorizontal: 16,
     marginTop: 12,
     marginBottom: 4,
     borderRadius: 12,
     borderWidth: 1.5,
-    borderColor: '#e5e7eb',
     paddingHorizontal: 14,
     paddingVertical: 10,
     gap: 8,
   },
   searchIcon: { fontSize: 16 },
-  searchInput: { flex: 1, fontSize: 15, color: '#111827', padding: 0 },
-  clearIcon: { fontSize: 14, color: '#9ca3af', paddingHorizontal: 4 },
+  searchInput: { flex: 1, fontSize: 15, padding: 0 },
+  clearIcon: { fontSize: 14, paddingHorizontal: 4 },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingVertical: 40 },
-  emptyText: { color: '#9ca3af', fontSize: 15 },
+  emptyText: { fontSize: 15 },
   listContent: { padding: 16, paddingBottom: 20 },
   item: {
-    backgroundColor: '#fff',
     borderRadius: 12,
     padding: 16,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     borderWidth: 1.5,
-    borderColor: '#e5e7eb',
     marginBottom: 8,
   },
-  itemSelected: { borderColor: '#0284c7', backgroundColor: '#f0f9ff' },
   itemLeft: { gap: 2, flex: 1 },
-  itemTitle: { fontSize: 16, fontWeight: '600', color: '#111827' },
-  itemSub: { fontSize: 13, color: '#6b7280' },
-  checkmark: { fontSize: 18, color: '#0284c7', fontWeight: 'bold', marginLeft: 8 },
+  itemTitle: { fontSize: 16, fontWeight: '600' },
+  itemSub: { fontSize: 13 },
+  checkmark: { fontSize: 18, fontWeight: 'bold', marginLeft: 8 },
   streetContainer: { flex: 1, padding: 24 },
   streetInput: {
-    backgroundColor: '#fff',
     borderWidth: 1.5,
-    borderColor: '#e5e7eb',
     borderRadius: 12,
     paddingHorizontal: 16,
     paddingVertical: 14,
     fontSize: 16,
-    color: '#111827',
   },
-  streetHint: { fontSize: 13, color: '#9ca3af', marginTop: 8 },
+  streetHint: { fontSize: 13, marginTop: 8 },
   errorText: {
     color: '#dc2626',
     fontSize: 14,
@@ -364,12 +356,9 @@ const styles = StyleSheet.create({
   },
   footer: {
     padding: 16,
-    backgroundColor: '#fff',
     borderTopWidth: 1,
-    borderTopColor: '#f3f4f6',
   },
   btn: {
-    backgroundColor: '#0284c7',
     paddingVertical: 16,
     borderRadius: 12,
     alignItems: 'center',

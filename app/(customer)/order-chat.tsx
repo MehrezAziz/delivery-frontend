@@ -7,10 +7,12 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { orderService, ChatMessage, ChatRoom } from '../../services/api/order.service';
+import { useTheme } from '../../contexts/ThemeContext';
 
 export default function OrderChatScreen() {
   const router = useRouter();
   const { orderId } = useLocalSearchParams<{ orderId: string }>();
+  const { colors, isDark } = useTheme();
   const [chatRoom, setChatRoom] = useState<ChatRoom | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
@@ -59,8 +61,8 @@ export default function OrderChatScreen() {
 
   if (loading) {
     return (
-      <View style={s.loadingContainer}>
-        <ActivityIndicator size="large" color="#0284c7" />
+      <View style={[s.loadingContainer, { backgroundColor: colors.background }]}>
+        <ActivityIndicator size="large" color={colors.primary} />
       </View>
     );
   }
@@ -71,10 +73,10 @@ export default function OrderChatScreen() {
     const isMe = item.senderId === myUserId;
     return (
       <View style={[s.msgRow, isMe ? s.msgRowMe : s.msgRowOther]}>
-        <View style={[s.bubble, isMe ? s.bubbleMe : s.bubbleOther]}>
-          <Text style={[s.bubbleText, isMe ? s.bubbleTextMe : s.bubbleTextOther]}>{item.content}</Text>
+        <View style={[s.bubble, isMe ? s.bubbleMe : [s.bubbleOther, { backgroundColor: colors.card, borderColor: colors.border }]]}>
+          <Text style={[s.bubbleText, isMe ? s.bubbleTextMe : [s.bubbleTextOther, { color: colors.text }]]}>{item.content}</Text>
         </View>
-        <Text style={[s.msgTime, isMe && s.msgTimeMe]}>
+        <Text style={[s.msgTime, { color: colors.textTertiary }, isMe && s.msgTimeMe]}>
           {new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
         </Text>
       </View>
@@ -82,9 +84,9 @@ export default function OrderChatScreen() {
   };
 
   return (
-    <KeyboardAvoidingView style={s.container} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+    <KeyboardAvoidingView style={[s.container, { backgroundColor: colors.background }]} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       {/* Header */}
-      <View style={s.header}>
+      <View style={[s.header, { backgroundColor: colors.headerBg }]}>
         <TouchableOpacity onPress={() => router.back()} style={s.headerBtn}>
           <Ionicons name="chevron-back" size={22} color="#fff" />
         </TouchableOpacity>
@@ -108,33 +110,33 @@ export default function OrderChatScreen() {
         renderItem={renderMessage}
         ListEmptyComponent={
           <View style={s.emptyWrap}>
-            <Ionicons name="chatbubbles-outline" size={48} color="#d1d5db" />
-            <Text style={s.emptyText}>No messages yet</Text>
-            <Text style={s.emptySub}>Start the conversation</Text>
+            <Ionicons name="chatbubbles-outline" size={48} color={colors.border} />
+            <Text style={[s.emptyText, { color: colors.textTertiary }]}>No messages yet</Text>
+            <Text style={[s.emptySub, { color: colors.border }]}>Start the conversation</Text>
           </View>
         }
       />
 
       {/* Input */}
       {isClosed ? (
-        <View style={s.closedBar}>
-          <Ionicons name="lock-closed-outline" size={16} color="#9ca3af" />
-          <Text style={s.closedText}>Chat is closed</Text>
+        <View style={[s.closedBar, { backgroundColor: colors.surfaceVariant }]}>
+          <Ionicons name="lock-closed-outline" size={16} color={colors.textTertiary} />
+          <Text style={[s.closedText, { color: colors.textTertiary }]}>Chat is closed</Text>
         </View>
       ) : (
-        <View style={s.inputBar}>
+        <View style={[s.inputBar, { backgroundColor: colors.card, borderTopColor: colors.border }]}>
           <TextInput
-            style={s.textInput}
+            style={[s.textInput, { backgroundColor: colors.surfaceVariant, color: colors.text }]}
             value={input}
             onChangeText={setInput}
             placeholder="Type a message..."
-            placeholderTextColor="#9ca3af"
+            placeholderTextColor={colors.textTertiary}
             multiline
           />
           <TouchableOpacity
             onPress={handleSend}
             disabled={sending || !input.trim()}
-            style={[s.sendBtn, input.trim() ? s.sendBtnActive : s.sendBtnDisabled]}
+            style={[s.sendBtn, input.trim() ? [s.sendBtnActive, { backgroundColor: colors.primary }] : s.sendBtnDisabled]}
           >
             {sending ? (
               <ActivityIndicator size="small" color="#fff" />

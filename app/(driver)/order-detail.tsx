@@ -6,6 +6,7 @@ import {
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { orderService, Order } from '../../services/api/order.service';
+import { useTheme } from '../../contexts/ThemeContext';
 
 const STATUS_META: Record<string, { icon: string; color: string; bg: string; label: string }> = {
   DRAFT:            { icon: 'document-outline',    color: '#6b7280', bg: '#f3f4f6', label: 'Draft' },
@@ -26,6 +27,7 @@ const STAR_LABELS = ['Terrible','Very Bad','Bad','Poor','Below Avg','Average','A
 export default function DriverOrderDetailScreen() {
   const router = useRouter();
   const { orderId } = useLocalSearchParams<{ orderId: string }>();
+  const { colors, isDark } = useTheme();
   const [order, setOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -39,14 +41,14 @@ export default function DriverOrderDetailScreen() {
   useEffect(() => { load(); }, [load]);
 
   if (loading || !order) {
-    return <View style={s.center}><ActivityIndicator size="large" color="#0284c7" /></View>;
+    return <View style={[s.center, { backgroundColor: colors.background }]}><ActivityIndicator size="large" color={colors.primary} /></View>;
   }
 
   const meta = STATUS_META[order.status] || STATUS_META.DELIVERED;
   const da = order.driverAssignment;
 
   return (
-    <View style={s.container}>
+    <View style={[s.container, { backgroundColor: colors.background }]}>
       {/* Header */}
       <View style={[s.header, { backgroundColor: meta.color }]}>
         <View style={s.headerTop}>
@@ -69,26 +71,26 @@ export default function DriverOrderDetailScreen() {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} />}>
 
         {/* Route */}
-        <View style={s.card}>
-          <Text style={s.cardTitle}>Route</Text>
+        <View style={[s.card, { backgroundColor: colors.card }]}>
+          <Text style={[s.cardTitle, { color: colors.text }]}>Route</Text>
           <View style={s.routeRow}>
             <View style={s.routeIconCol}>
               <View style={[s.routeDot, { backgroundColor: '#22c55e' }]} />
-              <View style={s.routeLine} />
+              <View style={[s.routeLine, { backgroundColor: colors.border }]} />
               <View style={[s.routeDot, { backgroundColor: '#ef4444' }]} />
             </View>
             <View style={{ flex: 1 }}>
               <View style={{ marginBottom: 22 }}>
-                <Text style={s.routeLabel}>PICKUP</Text>
-                <Text style={s.routeAddress} numberOfLines={2}>{order.pickupAddress?.street || 'Pickup'}</Text>
-                <Text style={s.routeSub}>
+                <Text style={[s.routeLabel, { color: colors.textTertiary }]}>PICKUP</Text>
+                <Text style={[s.routeAddress, { color: colors.text }]} numberOfLines={2}>{order.pickupAddress?.street || 'Pickup'}</Text>
+                <Text style={[s.routeSub, { color: colors.textSecondary }]}>
                   {order.pickupAddress?.delegation?.nameDelegation}, {order.pickupAddress?.delegation?.governorate?.nameGovernorate}
                 </Text>
               </View>
               <View>
-                <Text style={s.routeLabel}>DELIVERY</Text>
-                <Text style={s.routeAddress} numberOfLines={2}>{order.dropoffAddress?.street || 'Dropoff'}</Text>
-                <Text style={s.routeSub}>
+                <Text style={[s.routeLabel, { color: colors.textTertiary }]}>DELIVERY</Text>
+                <Text style={[s.routeAddress, { color: colors.text }]} numberOfLines={2}>{order.dropoffAddress?.street || 'Dropoff'}</Text>
+                <Text style={[s.routeSub, { color: colors.textSecondary }]}>
                   {order.dropoffAddress?.delegation?.nameDelegation}, {order.dropoffAddress?.delegation?.governorate?.nameGovernorate}
                 </Text>
               </View>
@@ -104,25 +106,25 @@ export default function DriverOrderDetailScreen() {
               {order.paymentType === 'COD' ? 'Cash' : 'Wallet'}
             </Text>
           </View>
-          <View style={s.chip}><Text style={{ fontSize: 14 }}>📦</Text><Text style={s.chipText}>{order.weight} kg</Text></View>
-          <View style={s.chip}><Text style={{ fontSize: 14 }}>📏</Text><Text style={s.chipText}>{order.distanceKm.toFixed(1)} km</Text></View>
+          <View style={[s.chip, { backgroundColor: colors.surfaceVariant }]}><Text style={{ fontSize: 14 }}>📦</Text><Text style={[s.chipText, { color: colors.text }]}>{order.weight} kg</Text></View>
+          <View style={[s.chip, { backgroundColor: colors.surfaceVariant }]}><Text style={{ fontSize: 14 }}>📏</Text><Text style={[s.chipText, { color: colors.text }]}>{order.distanceKm.toFixed(1)} km</Text></View>
           {order.isNightDelivery && (
             <View style={[s.chip, { backgroundColor: '#e0e7ff' }]}><Text style={{ fontSize: 14 }}>🌙</Text><Text style={[s.chipText, { color: '#3730a3' }]}>Night</Text></View>
           )}
         </View>
 
         {/* Price */}
-        <View style={s.card}>
-          <Text style={s.cardTitle}>Price</Text>
-          <View style={s.priceRow}><Text style={s.priceLabel}>Total</Text><Text style={s.totalValue}>{order.price.toFixed(2)} TND</Text></View>
-          {order.extraWeightFee > 0 && <View style={s.priceRow}><Text style={s.priceLabel}>Extra Weight</Text><Text style={s.priceValue}>{order.extraWeightFee.toFixed(2)} TND</Text></View>}
-          {order.nightFee > 0 && <View style={s.priceRow}><Text style={s.priceLabel}>Night Fee</Text><Text style={s.priceValue}>{order.nightFee.toFixed(2)} TND</Text></View>}
-          {order.deliveryZoneType && <View style={s.priceRow}><Text style={s.priceLabel}>Zone</Text><Text style={s.priceValue}>{order.deliveryZoneType.replace(/_/g, ' ')}</Text></View>}
+        <View style={[s.card, { backgroundColor: colors.card }]}>
+          <Text style={[s.cardTitle, { color: colors.text }]}>Price</Text>
+          <View style={s.priceRow}><Text style={[s.priceLabel, { color: colors.textSecondary }]}>Total</Text><Text style={[s.totalValue, { color: colors.primary }]}>{order.price.toFixed(2)} TND</Text></View>
+          {order.extraWeightFee > 0 && <View style={s.priceRow}><Text style={[s.priceLabel, { color: colors.textSecondary }]}>Extra Weight</Text><Text style={[s.priceValue, { color: colors.text }]}>{order.extraWeightFee.toFixed(2)} TND</Text></View>}
+          {order.nightFee > 0 && <View style={s.priceRow}><Text style={[s.priceLabel, { color: colors.textSecondary }]}>Night Fee</Text><Text style={[s.priceValue, { color: colors.text }]}>{order.nightFee.toFixed(2)} TND</Text></View>}
+          {order.deliveryZoneType && <View style={s.priceRow}><Text style={[s.priceLabel, { color: colors.textSecondary }]}>Zone</Text><Text style={[s.priceValue, { color: colors.text }]}>{order.deliveryZoneType.replace(/_/g, ' ')}</Text></View>}
         </View>
 
         {/* Timeline */}
-        <View style={s.card}>
-          <Text style={s.cardTitle}>Timeline</Text>
+        <View style={[s.card, { backgroundColor: colors.card }]}>
+          <Text style={[s.cardTitle, { color: colors.text }]}>Timeline</Text>
           <TimelineItem label="Order Created" time={order.createdAt} color="#6b7280" />
           {da?.acceptedAt && <TimelineItem label="Accepted" time={da.acceptedAt} color="#2563eb" />}
           {da?.arrivedAt && <TimelineItem label="Arrived at Pickup" time={da.arrivedAt} color="#7c3aed" />}
@@ -132,16 +134,16 @@ export default function DriverOrderDetailScreen() {
 
         {/* Customer info */}
         {order.description && (
-          <View style={s.card}>
-            <Text style={s.cardTitle}>Package Description</Text>
-            <Text style={s.descText}>{order.description}</Text>
+          <View style={[s.card, { backgroundColor: colors.card }]}>
+            <Text style={[s.cardTitle, { color: colors.text }]}>Package Description</Text>
+            <Text style={[s.descText, { color: colors.text }]}>{order.description}</Text>
           </View>
         )}
 
         {/* Rating received */}
         {order.rating && (
-          <View style={[s.card, { borderLeftWidth: 4, borderLeftColor: '#f59e0b' }]}>
-            <Text style={s.cardTitle}>Customer Rating</Text>
+          <View style={[s.card, { borderLeftWidth: 4, borderLeftColor: '#f59e0b', backgroundColor: colors.card }]}>
+            <Text style={[s.cardTitle, { color: colors.text }]}>Customer Rating</Text>
             <View style={{ alignItems: 'center', gap: 8 }}>
               <View style={{ flexDirection: 'row', gap: 4 }}>
                 {Array.from({ length: 10 }, (_, i) => (
@@ -149,11 +151,11 @@ export default function DriverOrderDetailScreen() {
                     color={i < order.rating!.score ? '#f59e0b' : '#d1d5db'} />
                 ))}
               </View>
-              <Text style={{ fontSize: 16, fontWeight: '700', color: '#111827' }}>
+              <Text style={{ fontSize: 16, fontWeight: '700', color: colors.text }}>
                 {order.rating.score}/10 — {STAR_LABELS[order.rating.score]}
               </Text>
               {order.rating.comment && (
-                <Text style={{ fontSize: 14, color: '#6b7280', textAlign: 'center' }}>"{order.rating.comment}"</Text>
+                <Text style={{ fontSize: 14, color: colors.textSecondary, textAlign: 'center' }}>"{order.rating.comment}"</Text>
               )}
             </View>
           </View>
@@ -161,8 +163,8 @@ export default function DriverOrderDetailScreen() {
 
         {/* Proof status */}
         {da && (
-          <View style={s.card}>
-            <Text style={s.cardTitle}>Proof Images</Text>
+          <View style={[s.card, { backgroundColor: colors.card }]}>
+            <Text style={[s.cardTitle, { color: colors.text }]}>Proof Images</Text>
             <View style={{ flexDirection: 'row', gap: 8 }}>
               <View style={[s.proofStatus, da.image1Proof ? { backgroundColor: '#dcfce7' } : { backgroundColor: '#fef2f2' }]}>
                 <Ionicons name={da.image1Proof ? 'checkmark-circle' : 'close-circle'} size={16}

@@ -2,6 +2,7 @@ import { View, Text, TouchableOpacity, StyleSheet, FlatList, ActivityIndicator, 
 import { useRouter } from 'expo-router';
 import { useState, useEffect, useCallback } from 'react';
 import { supportService, SupportTicket } from '../../services/api/support.service';
+import { useTheme } from '../../contexts/ThemeContext';
 
 const CATEGORIES = ['ORDER_ISSUE', 'PAYMENT', 'TECHNICAL', 'OTHER'];
 const PRIORITIES = ['LOW', 'MEDIUM', 'HIGH', 'URGENT'];
@@ -15,6 +16,7 @@ const STATUS_COLORS: Record<string, string> = {
 
 export default function DriverSupportScreen() {
   const router = useRouter();
+  const { colors, isDark } = useTheme();
   const [tickets, setTickets] = useState<SupportTicket[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
@@ -72,12 +74,12 @@ export default function DriverSupportScreen() {
   }
 
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <View style={[styles.header, { backgroundColor: colors.card, borderBottomColor: colors.border }]}>
         <TouchableOpacity onPress={() => router.back()}>
           <Text style={styles.backText}>← Back</Text>
         </TouchableOpacity>
-        <Text style={styles.title}>Support</Text>
+        <Text style={[styles.title, { color: colors.text }]}>Support</Text>
         <TouchableOpacity onPress={() => setShowCreate(true)} style={styles.newBtn}>
           <Text style={styles.newBtnText}>+ New</Text>
         </TouchableOpacity>
@@ -88,8 +90,8 @@ export default function DriverSupportScreen() {
       ) : tickets.length === 0 ? (
         <View style={styles.empty}>
           <Text style={styles.emptyIcon}>💬</Text>
-          <Text style={styles.emptyText}>No support tickets yet</Text>
-          <Text style={styles.emptySubtext}>Tap "+ New" to create one</Text>
+          <Text style={[styles.emptyText, { color: colors.text }]}>No support tickets yet</Text>
+          <Text style={[styles.emptySubtext, { color: colors.textTertiary }]}>Tap "+ New" to create one</Text>
         </View>
       ) : (
         <FlatList
@@ -98,20 +100,20 @@ export default function DriverSupportScreen() {
           contentContainerStyle={{ padding: 16 }}
           renderItem={({ item }) => (
             <TouchableOpacity
-              style={styles.ticketCard}
+              style={[styles.ticketCard, { backgroundColor: colors.card, borderColor: colors.border }]}
               onPress={() => router.push(`/(driver)/support-chat?ticketId=${item.id}`)}
             >
               <View style={styles.ticketHeader}>
                 <View style={[styles.statusBadge, { backgroundColor: STATUS_COLORS[item.status] || '#6b7280' }]}>
                   <Text style={styles.statusText}>{item.status.replace('_', ' ')}</Text>
                 </View>
-                <Text style={styles.ticketCategory}>{item.category.replace('_', ' ')}</Text>
+                <Text style={[styles.ticketCategory, { color: colors.textSecondary }]}>{item.category.replace('_', ' ')}</Text>
               </View>
-              <Text style={styles.ticketDesc}>{getLastMessage(item)}</Text>
+              <Text style={[styles.ticketDesc, { color: colors.text }]}>{getLastMessage(item)}</Text>
               <View style={styles.ticketFooter}>
-                <Text style={styles.ticketDate}>{new Date(item.createdAt).toLocaleDateString()}</Text>
+                <Text style={[styles.ticketDate, { color: colors.textTertiary }]}>{new Date(item.createdAt).toLocaleDateString()}</Text>
                 {item.customerService && (
-                  <Text style={styles.ticketAssigned}>Assigned: {item.customerService.superUser.pseudo}</Text>
+                  <Text style={[styles.ticketAssigned, { color: colors.textSecondary }]}>Assigned: {item.customerService.superUser.pseudo}</Text>
                 )}
               </View>
             </TouchableOpacity>
@@ -121,32 +123,32 @@ export default function DriverSupportScreen() {
 
       <Modal visible={showCreate} transparent animationType="slide">
         <View style={styles.modalOverlay}>
-          <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>New Support Ticket</Text>
+          <View style={[styles.modalCard, { backgroundColor: colors.card }]}>
+            <Text style={[styles.modalTitle, { color: colors.text }]}>New Support Ticket</Text>
             <ScrollView>
-              <Text style={styles.label}>Category</Text>
+              <Text style={[styles.label, { color: colors.text }]}>Category</Text>
               <View style={styles.chipRow}>
                 {CATEGORIES.map(c => (
-                  <TouchableOpacity key={c} style={[styles.chip, category === c && styles.chipActive]} onPress={() => setCategory(c)}>
-                    <Text style={[styles.chipText, category === c && styles.chipTextActive]}>{c.replace('_', ' ')}</Text>
+                  <TouchableOpacity key={c} style={[styles.chip, { backgroundColor: colors.surfaceVariant, borderColor: colors.border }, category === c && styles.chipActive]} onPress={() => setCategory(c)}>
+                    <Text style={[styles.chipText, { color: colors.text }, category === c && styles.chipTextActive]}>{c.replace('_', ' ')}</Text>
                   </TouchableOpacity>
                 ))}
               </View>
-              <Text style={styles.label}>Priority</Text>
+              <Text style={[styles.label, { color: colors.text }]}>Priority</Text>
               <View style={styles.chipRow}>
                 {PRIORITIES.map(p => (
-                  <TouchableOpacity key={p} style={[styles.chip, priority === p && styles.chipActive]} onPress={() => setPriority(p)}>
-                    <Text style={[styles.chipText, priority === p && styles.chipTextActive]}>{p}</Text>
+                  <TouchableOpacity key={p} style={[styles.chip, { backgroundColor: colors.surfaceVariant, borderColor: colors.border }, priority === p && styles.chipActive]} onPress={() => setPriority(p)}>
+                    <Text style={[styles.chipText, { color: colors.text }, priority === p && styles.chipTextActive]}>{p}</Text>
                   </TouchableOpacity>
                 ))}
               </View>
-              <Text style={styles.label}>Description</Text>
+              <Text style={[styles.label, { color: colors.text }]}>Description</Text>
               <TextInput
-                style={styles.textArea}
+                style={[styles.textArea, { backgroundColor: colors.surfaceVariant, borderColor: colors.border, color: colors.text }]}
                 multiline
                 numberOfLines={4}
                 placeholder="Describe your issue..."
-                placeholderTextColor="#9ca3af"
+                placeholderTextColor={colors.textTertiary}
                 value={description}
                 onChangeText={setDescription}
               />

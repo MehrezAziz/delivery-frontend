@@ -6,11 +6,13 @@ import {
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { orderService } from '../../services/api/order.service';
+import { useTheme } from '../../contexts/ThemeContext';
 
 const STAR_LABELS = ['', 'Terrible', 'Very Bad', 'Bad', 'Poor', 'Below Avg', 'Average', 'Above Avg', 'Good', 'Very Good', 'Excellent'];
 
 export default function DriverMyRatingsScreen() {
   const router = useRouter();
+  const { colors, isDark } = useTheme();
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -24,14 +26,14 @@ export default function DriverMyRatingsScreen() {
   useEffect(() => { load(); }, [load]);
 
   if (loading) {
-    return <View style={s.center}><ActivityIndicator size="large" color="#f59e0b" /></View>;
+    return <View style={[s.center, { backgroundColor: colors.background }]}><ActivityIndicator size="large" color="#f59e0b" /></View>;
   }
 
   const avg = data?.avgRating;
   const ratings = data?.ratings || [];
 
   return (
-    <View style={s.container}>
+    <View style={[s.container, { backgroundColor: colors.background }]}>
       <View style={s.header}>
         <TouchableOpacity onPress={() => router.back()} style={s.headerBtn}>
           <Ionicons name="chevron-back" size={22} color="#fff" />
@@ -44,7 +46,7 @@ export default function DriverMyRatingsScreen() {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} />}>
 
         {/* Summary card */}
-        <View style={s.summaryCard}>
+        <View style={[s.summaryCard, { backgroundColor: colors.card }]}>
           <View style={{ alignItems: 'center', gap: 8 }}>
             <Text style={s.avgScore}>{avg !== null ? avg.toFixed(1) : '—'}</Text>
             <View style={{ flexDirection: 'row', gap: 3 }}>
@@ -53,7 +55,7 @@ export default function DriverMyRatingsScreen() {
                   size={18} color={avg !== null && i < Math.round(avg) ? '#f59e0b' : '#d1d5db'} />
               ))}
             </View>
-            <Text style={s.summaryText}>
+            <Text style={[s.summaryText, { color: colors.textSecondary }]}>
               {data?.totalRatings || 0} ratings · {data?.completedOrders || 0} deliveries
             </Text>
           </View>
@@ -62,16 +64,16 @@ export default function DriverMyRatingsScreen() {
         {/* Ratings list */}
         {ratings.length === 0 ? (
           <View style={s.empty}>
-            <Ionicons name="star-outline" size={48} color="#d1d5db" />
-            <Text style={s.emptyTitle}>No ratings yet</Text>
+            <Ionicons name="star-outline" size={48} color={colors.textTertiary} />
+            <Text style={[s.emptyTitle, { color: colors.textTertiary }]}>No ratings yet</Text>
             <Text style={s.emptySub}>Complete deliveries to receive ratings</Text>
           </View>
         ) : (
           ratings.map((r: any) => (
-            <View key={r.id} style={s.ratingCard}>
+            <View key={r.id} style={[s.ratingCard, { backgroundColor: colors.card }]}>
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                <Text style={s.customerName}>{r.customerName}</Text>
-                <Text style={s.ratingDate}>
+                <Text style={[s.customerName, { color: colors.text }]}>{r.customerName}</Text>
+                <Text style={[s.ratingDate, { color: colors.textTertiary }]}>
                   {new Date(r.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                 </Text>
               </View>
@@ -84,7 +86,7 @@ export default function DriverMyRatingsScreen() {
                 </View>
                 <Text style={s.scoreLabel}>{r.score}/10</Text>
               </View>
-              {r.comment && <Text style={s.comment}>"{r.comment}"</Text>}
+              {r.comment && <Text style={[s.comment, { color: colors.textSecondary }]}>"{r.comment}"</Text>}
             </View>
           ))
         )}

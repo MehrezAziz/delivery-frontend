@@ -11,11 +11,13 @@ import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import axios from 'axios';
+import { useTheme } from '../../contexts/ThemeContext';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
 
 export default function DriverProfileScreen() {
   const router = useRouter();
+  const { colors, isDark, toggleTheme } = useTheme();
   const [driver, setDriver] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
@@ -94,8 +96,8 @@ export default function DriverProfileScreen() {
 
   if (loading) {
     return (
-      <View style={s.loadingContainer}>
-        <ActivityIndicator size="large" color="#0284c7" />
+      <View style={[s.loadingContainer, { backgroundColor: colors.background }]}>
+        <ActivityIndicator size="large" color={colors.primary} />
       </View>
     );
   }
@@ -126,9 +128,9 @@ export default function DriverProfileScreen() {
   ];
 
   return (
-    <View style={s.container}>
+    <View style={[s.container, { backgroundColor: colors.background }]}>
       {/* Header */}
-      <View style={s.header}>
+      <View style={[s.header, { backgroundColor: colors.headerBg }]}>
         <TouchableOpacity onPress={() => router.back()} style={s.headerBtn}>
           <Ionicons name="chevron-back" size={22} color="#fff" />
         </TouchableOpacity>
@@ -138,7 +140,7 @@ export default function DriverProfileScreen() {
 
       <ScrollView style={{ flex: 1 }} contentContainerStyle={s.content}>
         {/* Profile Card */}
-        <View style={s.profileCard}>
+        <View style={[s.profileCard, { backgroundColor: colors.card }]}>
           <View style={s.avatarWrap}>
             {driver?.user?.image ? (
               <Image source={{ uri: driver.user.image }} style={s.avatar} />
@@ -147,8 +149,8 @@ export default function DriverProfileScreen() {
                 <Text style={s.avatarText}>{initials}</Text>
               </View>
             )}
-            <View style={[s.statusDot, { backgroundColor: statusColor }]} />
-            <TouchableOpacity style={s.cameraBtn} onPress={() => {
+            <View style={[s.statusDot, { backgroundColor: statusColor, borderColor: colors.card }]} />
+            <TouchableOpacity style={[s.cameraBtn, { borderColor: colors.card }]} onPress={() => {
               if (driver?.user?.image) {
                 Alert.alert('Profile Photo', 'What would you like to do?', [
                   { text: 'Change Photo', onPress: handleChangePhoto },
@@ -162,8 +164,8 @@ export default function DriverProfileScreen() {
               <Ionicons name="camera" size={14} color="#fff" />
             </TouchableOpacity>
           </View>
-          <Text style={s.name}>{firstName} {secondName}</Text>
-          <Text style={s.phone}>{driver?.user?.phone || ''}</Text>
+          <Text style={[s.name, { color: colors.text }]}>{firstName} {secondName}</Text>
+          <Text style={[s.phone, { color: colors.textSecondary }]}>{driver?.user?.phone || ''}</Text>
           <View style={[s.statusBadge, { backgroundColor: statusColor + '18' }]}>
             <View style={[s.statusDotSmall, { backgroundColor: statusColor }]} />
             <Text style={[s.statusText, { color: statusColor }]}>{statusLabel}</Text>
@@ -172,19 +174,19 @@ export default function DriverProfileScreen() {
           {/* Info rows */}
           <View style={s.infoSection}>
             {driver?.account && (
-              <View style={s.infoRow}>
+              <View style={[s.infoRow, { backgroundColor: colors.surfaceVariant }]}>
                 <View style={[s.infoIconWrap, { backgroundColor: driver.account.balance < 0 ? '#fee2e2' : '#dcfce7' }]}>
                   <Ionicons name="wallet-outline" size={18} color={driver.account.balance < 0 ? '#dc2626' : '#16a34a'} />
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={s.infoLabel}>Account Balance</Text>
+                  <Text style={[s.infoLabel, { color: colors.textTertiary }]}>Account Balance</Text>
                   <Text style={[s.infoValue, { color: driver.account.balance < 0 ? '#dc2626' : '#16a34a' }]}>
                     {driver.account.balance.toFixed(2)} {driver.account.currency}
                   </Text>
                 </View>
                 <View style={{ alignItems: 'flex-end' }}>
-                  <Text style={s.infoLabel}>Deliveries</Text>
-                  <Text style={s.infoValue}>{driver.account.completedDeliveries}</Text>
+                  <Text style={[s.infoLabel, { color: colors.textTertiary }]}>Deliveries</Text>
+                  <Text style={[s.infoValue, { color: colors.text }]}>{driver.account.completedDeliveries}</Text>
                 </View>
               </View>
             )}
@@ -223,24 +225,24 @@ export default function DriverProfileScreen() {
               </View>
             )}
             {driver?.vehicleType && (
-              <View style={s.infoRow}>
+              <View style={[s.infoRow, { backgroundColor: colors.surfaceVariant }]}>
                 <View style={[s.infoIconWrap, { backgroundColor: '#dbeafe' }]}>
                   <Ionicons name="car-outline" size={18} color="#2563eb" />
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={s.infoLabel}>Vehicle</Text>
-                  <Text style={s.infoValue}>{driver.vehicleType}</Text>
+                  <Text style={[s.infoLabel, { color: colors.textTertiary }]}>Vehicle</Text>
+                  <Text style={[s.infoValue, { color: colors.text }]}>{driver.vehicleType}</Text>
                 </View>
               </View>
             )}
             {driver?.description && (
-              <View style={s.infoRow}>
+              <View style={[s.infoRow, { backgroundColor: colors.surfaceVariant }]}>
                 <View style={[s.infoIconWrap, { backgroundColor: '#ede9fe' }]}>
                   <Ionicons name="information-circle-outline" size={18} color="#7c3aed" />
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={s.infoLabel}>Description</Text>
-                  <Text style={s.infoValue}>{driver.description}</Text>
+                  <Text style={[s.infoLabel, { color: colors.textTertiary }]}>Description</Text>
+                  <Text style={[s.infoValue, { color: colors.text }]}>{driver.description}</Text>
                 </View>
               </View>
             )}
@@ -248,27 +250,39 @@ export default function DriverProfileScreen() {
         </View>
 
         {/* Menu */}
-        <View style={s.menuCard}>
+        <View style={[s.menuCard, { backgroundColor: colors.card }]}>
           {menuItems.map((item, i) => (
             <TouchableOpacity
               key={item.label}
-              style={[s.menuItem, i < menuItems.length - 1 && s.menuItemBorder]}
+              style={[s.menuItem, i < menuItems.length - 1 && [s.menuItemBorder, { borderBottomColor: colors.border }]]}
               onPress={() => router.push(item.route as any)}
               activeOpacity={0.7}
             >
               <View style={[s.menuIconWrap, { backgroundColor: item.color + '15' }]}>
                 <Ionicons name={item.icon as any} size={20} color={item.color} />
               </View>
-              <Text style={s.menuLabel}>{item.label}</Text>
-              <Ionicons name="chevron-forward" size={18} color="#d1d5db" />
+              <Text style={[s.menuLabel, { color: colors.text }]}>{item.label}</Text>
+              <Ionicons name="chevron-forward" size={18} color={colors.textTertiary} />
             </TouchableOpacity>
           ))}
+          {/* Theme toggle menu item */}
+          <TouchableOpacity
+            style={[s.menuItem, s.menuItemBorder, { borderBottomColor: colors.border }]}
+            onPress={toggleTheme}
+            activeOpacity={0.7}
+          >
+            <View style={[s.menuIconWrap, { backgroundColor: isDark ? '#422006' : '#fef3c7' }]}>
+              <Ionicons name={isDark ? 'sunny' : 'moon'} size={20} color={isDark ? '#fbbf24' : '#92400e'} />
+            </View>
+            <Text style={[s.menuLabel, { color: colors.text }]}>{isDark ? 'Light Mode' : 'Dark Mode'}</Text>
+            <Ionicons name="chevron-forward" size={18} color={colors.textTertiary} />
+          </TouchableOpacity>
         </View>
 
         {/* Logout */}
-        <TouchableOpacity style={s.logoutBtn} onPress={handleLogout} activeOpacity={0.8}>
-          <Ionicons name="log-out-outline" size={20} color="#dc2626" />
-          <Text style={s.logoutText}>Logout</Text>
+        <TouchableOpacity style={[s.logoutBtn, { backgroundColor: colors.dangerBg }]} onPress={handleLogout} activeOpacity={0.8}>
+          <Ionicons name="log-out-outline" size={20} color={colors.danger} />
+          <Text style={[s.logoutText, { color: colors.danger }]}>Logout</Text>
         </TouchableOpacity>
       </ScrollView>
     </View>

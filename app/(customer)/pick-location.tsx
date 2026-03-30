@@ -8,6 +8,7 @@ import { Ionicons } from '@expo/vector-icons';
 import MapView, { Marker, Region } from 'react-native-maps';
 import * as Location from 'expo-location';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useTheme } from '../../contexts/ThemeContext';
 
 const GOOGLE_API_KEY = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY || '';
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -21,6 +22,7 @@ interface PlacePrediction {
 export default function PickLocationScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ type: string }>();
+  const { colors, isDark } = useTheme();
   const isPickup = params.type === 'pickup';
   const mapRef = useRef<MapView>(null);
 
@@ -193,21 +195,21 @@ export default function PickLocationScreen() {
       {/* Top bar with search */}
       <View style={styles.topBar}>
         <View style={styles.headerRow}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-            <Ionicons name="arrow-back" size={22} color="#111" />
+          <TouchableOpacity onPress={() => router.back()} style={[styles.backBtn, { backgroundColor: colors.card }]}>
+            <Ionicons name="arrow-back" size={22} color={colors.text} />
           </TouchableOpacity>
           <Text style={[styles.title, { color: accentColor }]}>{title}</Text>
           <View style={{ width: 40 }} />
         </View>
 
-        <View style={styles.searchContainer}>
-          <Ionicons name="search" size={18} color="#9ca3af" style={{ marginLeft: 12 }} />
+        <View style={[styles.searchContainer, { backgroundColor: colors.card }]}>
+          <Ionicons name="search" size={18} color={colors.textTertiary} style={{ marginLeft: 12 }} />
           <TextInput
-            style={styles.searchInput}
+            style={[styles.searchInput, { color: colors.text }]}
             value={searchQuery}
             onChangeText={handleSearch}
             placeholder="Search for a place..."
-            placeholderTextColor="#9ca3af"
+            placeholderTextColor={colors.textTertiary}
             returnKeyType="search"
           />
           {searchQuery.length > 0 && (
@@ -218,17 +220,17 @@ export default function PickLocationScreen() {
         </View>
 
         {predictions.length > 0 && (
-          <View style={styles.predictionsContainer}>
+          <View style={[styles.predictionsContainer, { backgroundColor: colors.card }]}>
             <FlatList
               data={predictions.slice(0, 5)}
               keyExtractor={(item) => item.place_id}
               keyboardShouldPersistTaps="handled"
               renderItem={({ item }) => (
-                <TouchableOpacity style={styles.predictionItem} onPress={() => selectPrediction(item)}>
-                  <Ionicons name="location-outline" size={16} color="#6b7280" style={{ marginRight: 10 }} />
+                <TouchableOpacity style={[styles.predictionItem, { borderBottomColor: colors.border }]} onPress={() => selectPrediction(item)}>
+                  <Ionicons name="location-outline" size={16} color={colors.textSecondary} style={{ marginRight: 10 }} />
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.predictionMain}>{item.structured_formatting.main_text}</Text>
-                    <Text style={styles.predictionSub} numberOfLines={1}>{item.structured_formatting.secondary_text}</Text>
+                    <Text style={[styles.predictionMain, { color: colors.text }]}>{item.structured_formatting.main_text}</Text>
+                    <Text style={[styles.predictionSub, { color: colors.textSecondary }]} numberOfLines={1}>{item.structured_formatting.secondary_text}</Text>
                   </View>
                 </TouchableOpacity>
               )}
@@ -239,7 +241,7 @@ export default function PickLocationScreen() {
 
       {/* My location button */}
       <TouchableOpacity
-        style={styles.myLocationBtn}
+        style={[styles.myLocationBtn, { backgroundColor: colors.card }]}
         onPress={async () => {
           try {
             const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
@@ -250,18 +252,18 @@ export default function PickLocationScreen() {
           } catch {}
         }}
       >
-        <Ionicons name="locate" size={22} color="#0284c7" />
+        <Ionicons name="locate" size={22} color={colors.primary} />
       </TouchableOpacity>
 
       {/* Bottom card */}
       {marker && (
-        <View style={styles.bottomCard}>
-          <View style={styles.bottomCardHandle} />
+        <View style={[styles.bottomCard, { backgroundColor: colors.card }]}>
+          <View style={[styles.bottomCardHandle, { backgroundColor: colors.border }]} />
           <View style={styles.addressRow}>
             <View style={[styles.dot, { backgroundColor: accentColor }]} />
             <View style={{ flex: 1 }}>
-              <Text style={styles.addressLabel}>{isPickup ? 'Pickup from' : 'Deliver to'}</Text>
-              <Text style={styles.addressText} numberOfLines={2}>{address || 'Loading address...'}</Text>
+              <Text style={[styles.addressLabel, { color: colors.textSecondary }]}>{isPickup ? 'Pickup from' : 'Deliver to'}</Text>
+              <Text style={[styles.addressText, { color: colors.text }]} numberOfLines={2}>{address || 'Loading address...'}</Text>
             </View>
           </View>
           <TouchableOpacity
@@ -280,16 +282,16 @@ export default function PickLocationScreen() {
 
       {/* Hint when no marker */}
       {!marker && !gettingLocation && (
-        <View style={styles.hintCard}>
-          <Ionicons name="hand-left-outline" size={20} color="#6b7280" />
-          <Text style={styles.hintText}>Tap on the map or search to select a location</Text>
+        <View style={[styles.hintCard, { backgroundColor: colors.card }]}>
+          <Ionicons name="hand-left-outline" size={20} color={colors.textSecondary} />
+          <Text style={[styles.hintText, { color: colors.textSecondary }]}>Tap on the map or search to select a location</Text>
         </View>
       )}
 
       {gettingLocation && (
         <View style={styles.loadingOverlay}>
-          <ActivityIndicator size="large" color="#0284c7" />
-          <Text style={{ color: '#6b7280', marginTop: 8 }}>Getting your location...</Text>
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={{ color: colors.textSecondary, marginTop: 8 }}>Getting your location...</Text>
         </View>
       )}
     </View>

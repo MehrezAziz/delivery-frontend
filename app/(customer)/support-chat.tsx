@@ -3,10 +3,12 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supportService, SupportMessage, SupportTicket } from '../../services/api/support.service';
+import { useTheme } from '../../contexts/ThemeContext';
 
 export default function SupportChatScreen() {
   const router = useRouter();
   const { ticketId } = useLocalSearchParams<{ ticketId: string }>();
+  const { colors, isDark } = useTheme();
   const [ticket, setTicket] = useState<(SupportTicket & { messages: SupportMessage[] }) | null>(null);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState('');
@@ -59,16 +61,16 @@ export default function SupportChatScreen() {
 
   if (loading) {
     return (
-      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
-        <ActivityIndicator size="large" color="#0284c7" />
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background }]}>
+        <ActivityIndicator size="large" color={colors.primary} />
       </View>
     );
   }
 
   if (!ticket) {
     return (
-      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
-        <Text style={{ color: '#ef4444' }}>Ticket not found</Text>
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background }]}>
+        <Text style={{ color: colors.danger }}>Ticket not found</Text>
       </View>
     );
   }
@@ -76,15 +78,15 @@ export default function SupportChatScreen() {
   const isClosed = ticket.status === 'CLOSED';
 
   return (
-    <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}>
+    <KeyboardAvoidingView style={[styles.container, { backgroundColor: colors.background }]} behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}>
       {/* Header */}
-      <View style={styles.header}>
+      <View style={[styles.header, { backgroundColor: colors.card, borderBottomColor: colors.border }]}>
         <TouchableOpacity onPress={() => router.back()}>
-          <Text style={styles.backText}>← Back</Text>
+          <Text style={[styles.backText, { color: colors.primary }]}>← Back</Text>
         </TouchableOpacity>
         <View style={{ flex: 1, alignItems: 'center' }}>
-          <Text style={styles.headerTitle}>{ticket.category.replace('_', ' ')}</Text>
-          <Text style={styles.headerStatus}>{ticket.status.replace('_', ' ')}</Text>
+          <Text style={[styles.headerTitle, { color: colors.text }]}>{ticket.category.replace('_', ' ')}</Text>
+          <Text style={[styles.headerStatus, { color: colors.textSecondary }]}>{ticket.status.replace('_', ' ')}</Text>
         </View>
         <View style={{ width: 50 }} />
       </View>
@@ -105,9 +107,9 @@ export default function SupportChatScreen() {
         renderItem={({ item }) => {
           const isMe = item.senderType === 'USER';
           return (
-            <View style={[styles.messageBubble, isMe ? styles.myMessage : styles.theirMessage]}>
-              {!isMe && <Text style={styles.senderLabel}>{item.senderType === 'ADMIN' ? 'Admin' : 'Customer Service'}</Text>}
-              <Text style={[styles.messageText, isMe ? styles.myMessageText : styles.theirMessageText]}>{item.content}</Text>
+            <View style={[styles.messageBubble, isMe ? styles.myMessage : [styles.theirMessage, { backgroundColor: colors.card, borderColor: colors.border }]]}>
+              {!isMe && <Text style={[styles.senderLabel, { color: colors.textSecondary }]}>{item.senderType === 'ADMIN' ? 'Admin' : 'Customer Service'}</Text>}
+              <Text style={[styles.messageText, isMe ? styles.myMessageText : [styles.theirMessageText, { color: colors.text }]]}>{item.content}</Text>
               <Text style={[styles.messageTime, isMe ? styles.myMessageTime : styles.theirMessageTime]}>
                 {new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                 {item.readAt ? ' ✓' : ''}
@@ -119,15 +121,15 @@ export default function SupportChatScreen() {
 
       {/* Input */}
       {isClosed ? (
-        <View style={styles.closedBanner}>
-          <Text style={styles.closedText}>This ticket is closed</Text>
+        <View style={[styles.closedBanner, { backgroundColor: colors.surfaceVariant, borderTopColor: colors.border }]}>
+          <Text style={[styles.closedText, { color: colors.textSecondary }]}>This ticket is closed</Text>
         </View>
       ) : (
-        <View style={styles.inputBar}>
+        <View style={[styles.inputBar, { backgroundColor: colors.card, borderTopColor: colors.border }]}>
           <TextInput
-            style={styles.input}
+            style={[styles.input, { backgroundColor: colors.inputBg, borderColor: colors.inputBorder, color: colors.text }]}
             placeholder="Type a message..."
-            placeholderTextColor="#9ca3af"
+            placeholderTextColor={colors.textTertiary}
             value={message}
             onChangeText={setMessage}
             multiline

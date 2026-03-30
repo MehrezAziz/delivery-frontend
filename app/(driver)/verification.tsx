@@ -15,6 +15,7 @@ import { Camera } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 import axios from 'axios';
+import { useTheme } from '../../contexts/ThemeContext';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
 
@@ -26,6 +27,7 @@ const DOCUMENT_TYPES = [
 
 export default function DriverVerification() {
   const router = useRouter();
+  const { colors, isDark } = useTheme();
   const [documentType, setDocumentType] = useState('');
   const [selfieImage, setSelfieImage] = useState<string | null>(null);
   const [docImageTop, setDocImageTop] = useState<string | null>(null);
@@ -217,31 +219,32 @@ export default function DriverVerification() {
   }
 
   return (
-    <ScrollView style={styles.container}>
+    <ScrollView style={[styles.container, { backgroundColor: colors.background }]}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <Ionicons name="arrow-back" size={24} color="#007AFF" />
+          <Ionicons name="arrow-back" size={24} color={colors.primary} />
         </TouchableOpacity>
-        <Text style={styles.title}>Complete Verification</Text>
+        <Text style={[styles.title, { color: colors.text }]}>Complete Verification</Text>
       </View>
 
-      <View style={styles.infoCard}>
-        <Ionicons name="shield-checkmark" size={32} color="#007AFF" />
-        <Text style={styles.infoTitle}>Document Verification Required</Text>
-        <Text style={styles.infoText}>
+      <View style={[styles.infoCard, { backgroundColor: isDark ? '#0c4a6e' : '#f0f9ff' }]}>
+        <Ionicons name="shield-checkmark" size={32} color={colors.primary} />
+        <Text style={[styles.infoTitle, { color: colors.text }]}>Document Verification Required</Text>
+        <Text style={[styles.infoText, { color: colors.textSecondary }]}>
           To start accepting delivery orders, please submit your identification documents for verification.
         </Text>
       </View>
 
       {/* Document Type Selection */}
       <View style={styles.inputGroup}>
-        <Text style={styles.label}>Document Type *</Text>
+        <Text style={[styles.label, { color: colors.text }]}>Document Type *</Text>
         <View style={styles.documentTypeContainer}>
           {DOCUMENT_TYPES.map((type) => (
             <TouchableOpacity
               key={type.value}
               style={[
                 styles.documentTypeButton,
+                { backgroundColor: colors.surfaceVariant, borderColor: colors.border },
                 documentType === type.value && styles.documentTypeButtonActive,
               ]}
               onPress={() => setDocumentType(type.value)}
@@ -249,6 +252,7 @@ export default function DriverVerification() {
               <Text
                 style={[
                   styles.documentTypeText,
+                  { color: colors.text },
                   documentType === type.value && styles.documentTypeTextActive,
                 ]}
               >
@@ -261,8 +265,8 @@ export default function DriverVerification() {
 
       {/* Selfie */}
       <View style={styles.inputGroup}>
-        <Text style={styles.label}>Selfie Photo *</Text>
-        <Text style={styles.hint}>Take a clear photo of your face</Text>
+        <Text style={[styles.label, { color: colors.text }]}>Selfie Photo *</Text>
+        <Text style={[styles.hint, { color: colors.textTertiary }]}>Take a clear photo of your face</Text>
         <TouchableOpacity onPress={takeSelfie} style={styles.photoButton}>
           {selfieImage ? (
             <Image source={{ uri: selfieImage }} style={styles.photoPreview} />
@@ -277,8 +281,8 @@ export default function DriverVerification() {
 
       {/* Document Front */}
       <View style={styles.inputGroup}>
-        <Text style={styles.label}>Document Front *</Text>
-        <Text style={styles.hint}>Capture the front side of your document</Text>
+        <Text style={[styles.label, { color: colors.text }]}>Document Front *</Text>
+        <Text style={[styles.hint, { color: colors.textTertiary }]}>Capture the front side of your document</Text>
         <TouchableOpacity onPress={() => takeDocumentPhoto('top')} style={styles.photoButton}>
           {docImageTop ? (
             <Image source={{ uri: docImageTop }} style={styles.photoPreview} />
@@ -293,8 +297,8 @@ export default function DriverVerification() {
 
       {/* Document Back */}
       <View style={styles.inputGroup}>
-        <Text style={styles.label}>Document Back (Optional)</Text>
-        <Text style={styles.hint}>Capture the back side if applicable</Text>
+        <Text style={[styles.label, { color: colors.text }]}>Document Back (Optional)</Text>
+        <Text style={[styles.hint, { color: colors.textTertiary }]}>Capture the back side if applicable</Text>
         <TouchableOpacity onPress={() => takeDocumentPhoto('bottom')} style={styles.photoButton}>
           {docImageBottom ? (
             <Image source={{ uri: docImageBottom }} style={styles.photoPreview} />
@@ -320,9 +324,9 @@ export default function DriverVerification() {
         )}
       </TouchableOpacity>
 
-      <View style={styles.noteBox}>
-        <Ionicons name="information-circle" size={20} color="#666" />
-        <Text style={styles.noteText}>
+      <View style={[styles.noteBox, { backgroundColor: colors.surfaceVariant }]}>
+        <Ionicons name="information-circle" size={20} color={colors.textSecondary} />
+        <Text style={[styles.noteText, { color: colors.textSecondary }]}>
           Your documents will be reviewed within 24-48 hours. You'll be notified once verified.
         </Text>
       </View>

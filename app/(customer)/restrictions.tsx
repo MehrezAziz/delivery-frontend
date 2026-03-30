@@ -11,6 +11,7 @@ import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import axios from 'axios';
+import { useTheme } from '../../contexts/ThemeContext';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api';
 
@@ -25,6 +26,7 @@ interface Restriction {
 
 export default function CustomerRestrictionsScreen() {
   const router = useRouter();
+  const { colors, isDark } = useTheme();
   const [restrictions, setRestrictions] = useState<Restriction[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -77,27 +79,27 @@ export default function CustomerRestrictionsScreen() {
 
   if (loading) {
     return (
-      <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#0284c7" />
+      <View style={[styles.centered, { backgroundColor: colors.background }]}>
+        <ActivityIndicator size="large" color={colors.primary} />
       </View>
     );
   }
 
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <View style={[styles.header, { backgroundColor: colors.card }]}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-          <Ionicons name="arrow-back" size={24} color="#0284c7" />
+          <Ionicons name="arrow-back" size={24} color={colors.primary} />
         </TouchableOpacity>
-        <Text style={styles.title}>My Restrictions</Text>
+        <Text style={[styles.title, { color: colors.text }]}>My Restrictions</Text>
       </View>
 
       <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent}>
         {error && (
-          <View style={styles.errorBox}>
-            <Text style={styles.errorText}>{error}</Text>
+          <View style={[styles.errorBox, { backgroundColor: colors.dangerBg }]}>
+            <Text style={[styles.errorText, { color: colors.danger }]}>{error}</Text>
             <TouchableOpacity onPress={loadRestrictions}>
-              <Text style={styles.retryText}>Retry</Text>
+              <Text style={[styles.retryText, { color: colors.primary }]}>Retry</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -105,21 +107,21 @@ export default function CustomerRestrictionsScreen() {
         {restrictions.length === 0 && !error && (
           <View style={styles.emptyBox}>
             <Ionicons name="checkmark-circle" size={48} color="#22c55e" />
-            <Text style={styles.emptyTitle}>No Active Restrictions</Text>
-            <Text style={styles.emptyText}>Your account is in good standing.</Text>
+            <Text style={[styles.emptyTitle, { color: colors.text }]}>No Active Restrictions</Text>
+            <Text style={[styles.emptyText, { color: colors.textSecondary }]}>Your account is in good standing.</Text>
           </View>
         )}
 
         {restrictions.map((r) => (
-          <View key={r.id} style={styles.card}>
+          <View key={r.id} style={[styles.card, { backgroundColor: colors.card }]}>
             <View style={styles.cardHeader}>
               <Ionicons name={getTypeIcon(r.type) as any} size={24} color={getTypeColor(r.type)} />
               <View style={[styles.typeBadge, { backgroundColor: getTypeColor(r.type) + '20' }]}>
                 <Text style={[styles.typeText, { color: getTypeColor(r.type) }]}>{r.type}</Text>
               </View>
             </View>
-            <Text style={styles.reasonLabel}>Reason:</Text>
-            <Text style={styles.reasonText}>{r.reason}</Text>
+            <Text style={[styles.reasonLabel, { color: colors.textSecondary }]}>Reason:</Text>
+            <Text style={[styles.reasonText, { color: colors.text }]}>{r.reason}</Text>
             <View style={styles.dateRow}>
               <Text style={styles.dateLabel}>Since: {formatDate(r.startDate)}</Text>
               {r.endDate && <Text style={styles.dateLabel}>Until: {formatDate(r.endDate)}</Text>}

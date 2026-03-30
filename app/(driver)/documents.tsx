@@ -13,6 +13,7 @@ import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import axios from 'axios';
+import { useTheme } from '../../contexts/ThemeContext';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api';
 
@@ -36,6 +37,7 @@ interface VerificationData {
 
 export default function DriverDocumentsScreen() {
   const router = useRouter();
+  const { colors, isDark } = useTheme();
   const [data, setData] = useState<VerificationData | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -78,21 +80,21 @@ export default function DriverDocumentsScreen() {
 
   const canUploadNew = data?.documents.some(d => d.verificationStatus === 'REJECTED') || data?.status === 'REJECTED';
 
-  if (loading) return <View style={s.centered}><ActivityIndicator size="large" color="#007AFF" /></View>;
+  if (loading) return <View style={s.centered}><ActivityIndicator size="large" color={colors.primary} /></View>;
 
   return (
-    <View style={s.container}>
-      <View style={s.header}>
+    <View style={[s.container, { backgroundColor: colors.background }]}>
+      <View style={[s.header, { backgroundColor: colors.card, borderBottomColor: colors.border }]}>
         <TouchableOpacity onPress={() => router.back()} style={s.backBtn}>
-          <Ionicons name="arrow-back" size={24} color="#007AFF" />
+          <Ionicons name="arrow-back" size={24} color={colors.primary} />
         </TouchableOpacity>
-        <Text style={s.title}>My Documents</Text>
+        <Text style={[s.title, { color: colors.text }]}>My Documents</Text>
       </View>
       <ScrollView style={s.scroll} contentContainerStyle={s.scrollContent}>
         {/* Overall Status */}
         {data && (
-          <View style={s.statusCard}>
-            <Text style={s.statusLabel}>Verification Status</Text>
+          <View style={[s.statusCard, { backgroundColor: colors.card }]}>
+            <Text style={[s.statusLabel, { color: colors.textSecondary }]}>Verification Status</Text>
             <View style={s.statusRow}>
               <Ionicons name={getStatusIcon(data.status) as any} size={24} color={getStatusColor(data.status)} />
               <Text style={[s.statusValue, { color: getStatusColor(data.status) }]}>{data.status}</Text>
@@ -100,16 +102,16 @@ export default function DriverDocumentsScreen() {
             {data.documentType && (
               <Text style={s.infoText}>Document Type: {data.documentType.replace('_', ' ')}</Text>
             )}
-            <Text style={s.infoText}>Submitted: {formatDate(data.submittedAt)}</Text>
-            {data.verifiedAt && <Text style={s.infoText}>Verified: {formatDate(data.verifiedAt)}</Text>}
+            <Text style={[s.infoText, { color: colors.textSecondary }]}>Submitted: {formatDate(data.submittedAt)}</Text>
+            {data.verifiedAt && <Text style={[s.infoText, { color: colors.textSecondary }]}>Verified: {formatDate(data.verifiedAt)}</Text>}
           </View>
         )}
 
         {/* Documents */}
         {data?.documents.map((doc, index) => (
-          <View key={doc.id} style={s.docCard}>
+          <View key={doc.id} style={[s.docCard, { backgroundColor: colors.card }]}>
             <View style={s.docHeader}>
-              <Text style={s.docTitle}>Document #{index + 1}</Text>
+              <Text style={[s.docTitle, { color: colors.text }]}>Document #{index + 1}</Text>
               <View style={[s.docBadge, { backgroundColor: getStatusColor(doc.verificationStatus) + '20' }]}>
                 <Text style={[s.docBadgeText, { color: getStatusColor(doc.verificationStatus) }]}>
                   {doc.verificationStatus}

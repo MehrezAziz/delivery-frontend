@@ -1,9 +1,11 @@
 import { View, Text, TouchableOpacity, TextInput, KeyboardAvoidingView, Platform, ScrollView, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
+import { useTheme } from '../../contexts/ThemeContext';
 
 export default function DriverRegisterScreen() {
   const router = useRouter();
+  const { colors, isDark } = useTheme();
   const [formData, setFormData] = useState({
     firstName: '',
     secondName: '',
@@ -22,7 +24,7 @@ export default function DriverRegisterScreen() {
   return (
     <KeyboardAvoidingView 
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      style={styles.container}
+      style={[styles.container, { backgroundColor: colors.card }]}
     >
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <View style={styles.content}>
@@ -31,7 +33,7 @@ export default function DriverRegisterScreen() {
             onPress={() => router.canGoBack() ? router.back() : router.replace('/')}
             style={styles.backButton}
           >
-            <Text style={styles.backText}>← Back</Text>
+            <Text style={[styles.backText, { color: '#c026d3' }]}>← Back</Text>
           </TouchableOpacity>
 
           {/* Header */}
@@ -39,40 +41,40 @@ export default function DriverRegisterScreen() {
             <View style={styles.iconContainer}>
               <Text style={styles.iconText}>🚗</Text>
             </View>
-            <Text style={styles.title}>Become a Driver</Text>
-            <Text style={styles.subtitle}>Start earning by delivering packages</Text>
+            <Text style={[styles.title, { color: colors.text }]}>Become a Driver</Text>
+            <Text style={[styles.subtitle, { color: colors.textSecondary }]}>Start earning by delivering packages</Text>
           </View>
 
           {/* Form */}
           <View style={styles.form}>
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>First Name</Text>
+              <Text style={[styles.label, { color: colors.text }]}>First Name</Text>
               <TextInput
-                style={styles.input}
+                style={[styles.input, { backgroundColor: colors.inputBg, borderColor: colors.inputBorder, color: colors.text }]}
                 placeholder="Enter your first name"
-                placeholderTextColor="#9ca3af"
+                placeholderTextColor={colors.textTertiary}
                 value={formData.firstName}
                 onChangeText={(text) => setFormData({...formData, firstName: text})}
               />
             </View>
 
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>Last Name</Text>
+              <Text style={[styles.label, { color: colors.text }]}>Last Name</Text>
               <TextInput
-                style={styles.input}
+                style={[styles.input, { backgroundColor: colors.inputBg, borderColor: colors.inputBorder, color: colors.text }]}
                 placeholder="Enter your last name"
-                placeholderTextColor="#9ca3af"
+                placeholderTextColor={colors.textTertiary}
                 value={formData.secondName}
                 onChangeText={(text) => setFormData({...formData, secondName: text})}
               />
             </View>
 
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>Phone Number</Text>
+              <Text style={[styles.label, { color: colors.text }]}>Phone Number</Text>
               <TextInput
-                style={styles.input}
+                style={[styles.input, { backgroundColor: colors.inputBg, borderColor: colors.inputBorder, color: colors.text }]}
                 placeholder="+216 XX XXX XXX"
-                placeholderTextColor="#9ca3af"
+                placeholderTextColor={colors.textTertiary}
                 keyboardType="phone-pad"
                 value={formData.phone}
                 onChangeText={(text) => setFormData({...formData, phone: text})}
@@ -80,22 +82,22 @@ export default function DriverRegisterScreen() {
             </View>
 
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>Vehicle Type</Text>
+              <Text style={[styles.label, { color: colors.text }]}>Vehicle Type</Text>
               <TextInput
-                style={styles.input}
+                style={[styles.input, { backgroundColor: colors.inputBg, borderColor: colors.inputBorder, color: colors.text }]}
                 placeholder="e.g., Motorcycle, Car, Van"
-                placeholderTextColor="#9ca3af"
+                placeholderTextColor={colors.textTertiary}
                 value={formData.vehicleType}
                 onChangeText={(text) => setFormData({...formData, vehicleType: text})}
               />
             </View>
 
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>Password</Text>
+              <Text style={[styles.label, { color: colors.text }]}>Password</Text>
               <TextInput
-                style={styles.input}
+                style={[styles.input, { backgroundColor: colors.inputBg, borderColor: colors.inputBorder, color: colors.text }]}
                 placeholder="Create a password"
-                placeholderTextColor="#9ca3af"
+                placeholderTextColor={colors.textTertiary}
                 secureTextEntry
                 value={formData.password}
                 onChangeText={(text) => setFormData({...formData, password: text})}
@@ -103,11 +105,11 @@ export default function DriverRegisterScreen() {
             </View>
 
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>Confirm Password</Text>
+              <Text style={[styles.label, { color: colors.text }]}>Confirm Password</Text>
               <TextInput
-                style={styles.input}
+                style={[styles.input, { backgroundColor: colors.inputBg, borderColor: colors.inputBorder, color: colors.text }]}
                 placeholder="Confirm your password"
-                placeholderTextColor="#9ca3af"
+                placeholderTextColor={colors.textTertiary}
                 secureTextEntry
                 value={formData.confirmPassword}
                 onChangeText={(text) => setFormData({...formData, confirmPassword: text})}
@@ -124,7 +126,7 @@ export default function DriverRegisterScreen() {
 
             {/* Login Link */}
             <View style={styles.loginContainer}>
-              <Text style={styles.loginText}>Already a driver? </Text>
+              <Text style={[styles.loginText, { color: colors.textSecondary }]}>Already a driver? </Text>
               <TouchableOpacity onPress={() => router.back()}>
                 <Text style={styles.loginLink}>Login</Text>
               </TouchableOpacity>
@@ -139,7 +141,6 @@ export default function DriverRegisterScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#ffffff',
     marginBottom:60,
   },
   scrollContent: {
@@ -155,7 +156,6 @@ const styles = StyleSheet.create({
     marginBottom: 32,
   },
   backText: {
-    color: '#c026d3',
     fontSize: 18,
     fontWeight: '500',
   },
@@ -177,12 +177,10 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 36,
     fontWeight: 'bold',
-    color: '#111827',
     marginBottom: 8,
   },
   subtitle: {
     fontSize: 18,
-    color: '#6b7280',
   },
   form: {
     gap: 20,
@@ -191,19 +189,15 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   label: {
-    color: '#374151',
     fontWeight: '600',
     fontSize: 16,
   },
   input: {
-    backgroundColor: '#f9fafb',
     borderWidth: 1,
-    borderColor: '#e5e7eb',
     borderRadius: 12,
     paddingHorizontal: 16,
     paddingVertical: 16,
     fontSize: 16,
-    color: '#111827',
   },
   registerButton: {
     backgroundColor: '#c026d3',
@@ -232,7 +226,6 @@ const styles = StyleSheet.create({
     marginTop: 24,
   },
   loginText: {
-    color: '#6b7280',
     fontSize: 15,
   },
   loginLink: {

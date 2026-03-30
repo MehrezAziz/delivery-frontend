@@ -6,10 +6,12 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 import { orderService, Order } from '../../services/api/order.service';
+import { useTheme } from '../../contexts/ThemeContext';
 
 export default function TrackDriverScreen() {
   const router = useRouter();
   const { orderId } = useLocalSearchParams<{ orderId: string }>();
+  const { colors, isDark } = useTheme();
   const [order, setOrder] = useState<Order | null>(null);
   const [driverLoc, setDriverLoc] = useState<{ latitude: number; longitude: number } | null>(null);
   const [loading, setLoading] = useState(true);
@@ -58,8 +60,8 @@ export default function TrackDriverScreen() {
 
   if (loading || !order) {
     return (
-      <View style={s.loadingContainer}>
-        <ActivityIndicator size="large" color="#0284c7" />
+      <View style={[s.loadingContainer, { backgroundColor: colors.background }]}>
+        <ActivityIndicator size="large" color={colors.primary} />
       </View>
     );
   }
@@ -103,11 +105,11 @@ export default function TrackDriverScreen() {
       </MapView>
 
       {/* Header overlay */}
-      <View style={s.headerOverlay}>
-        <TouchableOpacity onPress={() => router.back()} style={s.headerBtn}>
-          <Ionicons name="chevron-back" size={22} color="#111" />
+      <View style={[s.headerOverlay, { backgroundColor: isDark ? 'rgba(15,23,42,0.95)' : 'rgba(255,255,255,0.95)' }]}>
+        <TouchableOpacity onPress={() => router.back()} style={[s.headerBtn, { backgroundColor: colors.surfaceVariant }]}>
+          <Ionicons name="chevron-back" size={22} color={colors.text} />
         </TouchableOpacity>
-        <Text style={s.headerTitle}>Track Driver</Text>
+        <Text style={[s.headerTitle, { color: colors.text }]}>Track Driver</Text>
         <TouchableOpacity onPress={() => {
           if (!mapRef.current) return;
           const coords: { latitude: number; longitude: number }[] = [];
@@ -117,13 +119,13 @@ export default function TrackDriverScreen() {
           if (coords.length >= 2) {
             mapRef.current.fitToCoordinates(coords, { edgePadding: { top: 80, right: 60, bottom: 200, left: 60 }, animated: true });
           }
-        }} style={s.headerBtn}>
-          <Ionicons name="expand-outline" size={20} color="#111" />
+        }} style={[s.headerBtn, { backgroundColor: colors.surfaceVariant }]}>
+          <Ionicons name="expand-outline" size={20} color={colors.text} />
         </TouchableOpacity>
       </View>
 
       {/* Bottom info card */}
-      <View style={s.bottomCard}>
+      <View style={[s.bottomCard, { backgroundColor: colors.card }]}>
         {/* Driver info */}
         {order?.driverAssignment?.driver && (
           <View style={s.driverRow}>
@@ -131,8 +133,8 @@ export default function TrackDriverScreen() {
               <Ionicons name="person" size={20} color="#fff" />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={s.driverNameText}>{driverName}</Text>
-              <Text style={s.driverPhone}>{order.driverAssignment.driver.user.phone}</Text>
+              <Text style={[s.driverNameText, { color: colors.text }]}>{driverName}</Text>
+              <Text style={[s.driverPhone, { color: colors.textSecondary }]}>{order.driverAssignment.driver.user.phone}</Text>
             </View>
             <TouchableOpacity style={s.chatBtn}
               onPress={() => router.push(`/(customer)/order-chat?orderId=${orderId}`)}>
@@ -149,10 +151,10 @@ export default function TrackDriverScreen() {
             <View style={[s.dot, { backgroundColor: '#ef4444' }]} />
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={s.routeAddr} numberOfLines={1}>
+            <Text style={[s.routeAddr, { color: colors.textSecondary }]} numberOfLines={1}>
               {order?.pickupAddress?.street || order?.pickupAddress?.delegation?.nameDelegation || 'Pickup'}
             </Text>
-            <Text style={s.routeAddr} numberOfLines={1}>
+            <Text style={[s.routeAddr, { color: colors.textSecondary }]} numberOfLines={1}>
               {order?.dropoffAddress?.street || order?.dropoffAddress?.delegation?.nameDelegation || 'Delivery'}
             </Text>
           </View>

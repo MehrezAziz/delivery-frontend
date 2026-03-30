@@ -8,10 +8,12 @@ import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { orderService } from '../../services/api/order.service';
+import { useTheme } from '../../contexts/ThemeContext';
 
 export default function UploadProofsScreen() {
   const router = useRouter();
   const { orderId } = useLocalSearchParams<{ orderId: string }>();
+  const { colors, isDark } = useTheme();
   const [image1, setImage1] = useState<string | null>(null);
   const [image2, setImage2] = useState<string | null>(null);
   const [existingImage1, setExistingImage1] = useState(false);
@@ -141,10 +143,10 @@ export default function UploadProofsScreen() {
   ) => {
     const isExisting = imageNum === 1 ? existingImage1 : existingImage2;
     return (
-      <View style={s.fieldCard}>
+      <View style={[s.fieldCard, { backgroundColor: colors.card }]}>
         <View style={s.fieldHeader}>
-          <Ionicons name="camera-outline" size={20} color={required ? '#16a34a' : '#6b7280'} />
-          <Text style={s.fieldLabel}>Proof Image {imageNum}</Text>
+          <Ionicons name="camera-outline" size={20} color={required ? '#16a34a' : colors.textSecondary} />
+          <Text style={[s.fieldLabel, { color: colors.text }]}>Proof Image {imageNum}</Text>
           <View style={isExisting ? s.uploadedBadge : required ? s.requiredBadge : s.optionalBadge}>
             <Text style={isExisting ? s.uploadedText : required ? s.requiredText : s.optionalText}>
               {isExisting ? 'Uploaded' : required ? 'Required' : 'Optional'}
@@ -163,11 +165,11 @@ export default function UploadProofsScreen() {
           </View>
         ) : (
           <View style={s.actionRow}>
-            <TouchableOpacity style={s.pickBtn} onPress={() => pickFromGallery(imageNum)} activeOpacity={0.7}>
-              <Ionicons name="images-outline" size={24} color="#0284c7" />
-              <Text style={s.pickBtnText}>Gallery</Text>
+            <TouchableOpacity style={[s.pickBtn, { backgroundColor: colors.background, borderColor: colors.border }]} onPress={() => pickFromGallery(imageNum)} activeOpacity={0.7}>
+              <Ionicons name="images-outline" size={24} color={colors.primary} />
+              <Text style={[s.pickBtnText, { color: colors.primary }]}>Gallery</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={s.pickBtn} onPress={() => openCamera(imageNum)} activeOpacity={0.7}>
+            <TouchableOpacity style={[s.pickBtn, { backgroundColor: colors.background, borderColor: colors.border }]} onPress={() => openCamera(imageNum)} activeOpacity={0.7}>
               <Ionicons name="camera-outline" size={24} color="#16a34a" />
               <Text style={[s.pickBtnText, { color: '#16a34a' }]}>Camera</Text>
             </TouchableOpacity>
@@ -179,14 +181,14 @@ export default function UploadProofsScreen() {
 
   if (loadingOrder) {
     return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f8fafc' }}>
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background }}>
         <ActivityIndicator size="large" color="#16a34a" />
       </View>
     );
   }
 
   return (
-    <View style={s.container}>
+    <View style={[s.container, { backgroundColor: colors.background }]}>
       <View style={s.header}>
         <TouchableOpacity onPress={() => router.back()} style={s.headerBtn}>
           <Ionicons name="chevron-back" size={22} color="#fff" />

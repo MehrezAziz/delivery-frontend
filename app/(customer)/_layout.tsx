@@ -1,17 +1,22 @@
 import { Tabs } from 'expo-router';
+import { useTheme } from '../../contexts/ThemeContext';
 
 export default function CustomerLayout() {
+  const { colors, isDark } = useTheme();
+
   return (
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: '#0284c7',
-        tabBarInactiveTintColor: '#9ca3af',
+        tabBarActiveTintColor: colors.primary,
+        tabBarInactiveTintColor: colors.textTertiary,
         tabBarStyle: {
           height: 60,
           paddingBottom: 8,
           paddingTop: 8,
           marginBottom: 45,
+          backgroundColor: colors.tabBar,
+          borderTopColor: colors.tabBarBorder,
         },
       }}
     >

@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useGoogleAuth } from '../../hooks/useGoogleAuth';
 import { saveLoginTimestamp } from '../../services/auth-session';
+import { useTheme } from '../../contexts/ThemeContext';
 
 // For Android emulator, use 10.0.2.2 instead of localhost
 // For physical device with USB + ADB reverse, use localhost
@@ -16,6 +17,7 @@ const API_BASE_URL = Platform.OS === 'android'
 
 export default function CustomerRegisterScreen() {
   const router = useRouter();
+  const { colors, isDark } = useTheme();
   const [formData, setFormData] = useState({
     firstName: '',
     secondName: '',
@@ -213,7 +215,7 @@ export default function CustomerRegisterScreen() {
   return (
     <KeyboardAvoidingView 
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      style={styles.container}
+      style={[styles.container, { backgroundColor: colors.card }]}
     >
       {/* Account Exists Modal */}
       <Modal
@@ -223,20 +225,20 @@ export default function CustomerRegisterScreen() {
         onRequestClose={() => setShowAccountExistsModal(false)}
       >
         <View style={styles.modalOverlay}>
-          <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Account already exists</Text>
-            <Text style={styles.modalBody}>
+          <View style={[styles.modalCard, { backgroundColor: colors.card }]}>
+            <Text style={[styles.modalTitle, { color: colors.text }]}>Account already exists</Text>
+            <Text style={[styles.modalBody, { color: colors.textSecondary }]}>
               A customer account is already linked to this Google account. Would you like to log in instead?
             </Text>
             <View style={styles.modalActions}>
               <TouchableOpacity
-                style={styles.modalBtnSecondary}
+                style={[styles.modalBtnSecondary, { backgroundColor: colors.surfaceVariant }]}
                 onPress={() => setShowAccountExistsModal(false)}
               >
-                <Text style={styles.modalBtnSecondaryText}>Cancel</Text>
+                <Text style={[styles.modalBtnSecondaryText, { color: colors.text }]}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={styles.modalBtnPrimary}
+                style={[styles.modalBtnPrimary, { backgroundColor: colors.primary }]}
                 onPress={() => {
                   setShowAccountExistsModal(false);
                   router.replace('/(auth)/customer-login');
@@ -254,50 +256,50 @@ export default function CustomerRegisterScreen() {
           {/* Back Button */}
           <TouchableOpacity 
             onPress={() => router.canGoBack() ? router.back() : router.replace('/')}
-            style={styles.backBtn}
+            style={[styles.backBtn, { backgroundColor: colors.surfaceVariant }]}
           >
-            <Ionicons name="chevron-back" size={22} color="#111" />
+            <Ionicons name="chevron-back" size={22} color={colors.text} />
           </TouchableOpacity>
 
           {/* Header */}
           <View style={styles.header}>
-            <View style={styles.iconContainer}>
+            <View style={[styles.iconContainer, { backgroundColor: colors.primary }]}>
               <Text style={styles.iconText}>📦</Text>
             </View>
-            <Text style={styles.title}>Create Account</Text>
-            <Text style={styles.subtitle}>Register as a customer</Text>
+            <Text style={[styles.title, { color: colors.text }]}>Create Account</Text>
+            <Text style={[styles.subtitle, { color: colors.textSecondary }]}>Register as a customer</Text>
           </View>
 
           {/* Form */}
           <View style={styles.form}>
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>First Name</Text>
+              <Text style={[styles.label, { color: colors.text }]}>First Name</Text>
               <TextInput
-                style={styles.input}
+                style={[styles.input, { backgroundColor: colors.inputBg, borderColor: colors.inputBorder, color: colors.text }]}
                 placeholder="Enter your first name"
-                placeholderTextColor="#9ca3af"
+                placeholderTextColor={colors.textTertiary}
                 value={formData.firstName}
                 onChangeText={(text) => setFormData({...formData, firstName: text})}
               />
             </View>
 
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>Last Name</Text>
+              <Text style={[styles.label, { color: colors.text }]}>Last Name</Text>
               <TextInput
-                style={styles.input}
+                style={[styles.input, { backgroundColor: colors.inputBg, borderColor: colors.inputBorder, color: colors.text }]}
                 placeholder="Enter your last name"
-                placeholderTextColor="#9ca3af"
+                placeholderTextColor={colors.textTertiary}
                 value={formData.secondName}
                 onChangeText={(text) => setFormData({...formData, secondName: text})}
               />
             </View>
 
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>Phone Number</Text>
+              <Text style={[styles.label, { color: colors.text }]}>Phone Number</Text>
               <TextInput
-                style={styles.input}
+                style={[styles.input, { backgroundColor: colors.inputBg, borderColor: colors.inputBorder, color: colors.text }]}
                 placeholder="+216 XX XXX XXX"
-                placeholderTextColor="#9ca3af"
+                placeholderTextColor={colors.textTertiary}
                 keyboardType="phone-pad"
                 value={formData.phone}
                 onChangeText={(text) => setFormData({...formData, phone: text})}
@@ -305,11 +307,11 @@ export default function CustomerRegisterScreen() {
             </View>
 
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>Email (Optional)</Text>
+              <Text style={[styles.label, { color: colors.text }]}>Email (Optional)</Text>
               <TextInput
-                style={styles.input}
+                style={[styles.input, { backgroundColor: colors.inputBg, borderColor: colors.inputBorder, color: colors.text }]}
                 placeholder="your@email.com"
-                placeholderTextColor="#9ca3af"
+                placeholderTextColor={colors.textTertiary}
                 keyboardType="email-address"
                 autoCapitalize="none"
                 value={formData.email}
@@ -318,31 +320,35 @@ export default function CustomerRegisterScreen() {
             </View>
 
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>Gender (Optional)</Text>
+              <Text style={[styles.label, { color: colors.text }]}>Gender (Optional)</Text>
               <View style={styles.genderContainer}>
                 <TouchableOpacity
                   style={[
                     styles.genderButton,
-                    formData.userGender === 'MALE' && styles.genderButtonActive
+                    { backgroundColor: colors.inputBg, borderColor: colors.inputBorder },
+                    formData.userGender === 'MALE' && [styles.genderButtonActive, { backgroundColor: colors.primary, borderColor: colors.primary }]
                   ]}
                   onPress={() => setFormData({...formData, userGender: 'MALE'})}
                   activeOpacity={0.7}
                 >
                   <Text style={[
                     styles.genderButtonText,
+                    { color: colors.textSecondary },
                     formData.userGender === 'MALE' && styles.genderButtonTextActive
                   ]}>Male</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={[
                     styles.genderButton,
-                    formData.userGender === 'FEMALE' && styles.genderButtonActive
+                    { backgroundColor: colors.inputBg, borderColor: colors.inputBorder },
+                    formData.userGender === 'FEMALE' && [styles.genderButtonActive, { backgroundColor: colors.primary, borderColor: colors.primary }]
                   ]}
                   onPress={() => setFormData({...formData, userGender: 'FEMALE'})}
                   activeOpacity={0.7}
                 >
                   <Text style={[
                     styles.genderButtonText,
+                    { color: colors.textSecondary },
                     formData.userGender === 'FEMALE' && styles.genderButtonTextActive
                   ]}>Female</Text>
                 </TouchableOpacity>
@@ -350,12 +356,12 @@ export default function CustomerRegisterScreen() {
             </View>
 
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>Referral Code (Optional)</Text>
+              <Text style={[styles.label, { color: colors.text }]}>Referral Code (Optional)</Text>
               <View style={styles.referralCodeContainer}>
                 <TextInput
-                  style={[styles.input, styles.referralCodeInput]}
+                  style={[styles.input, styles.referralCodeInput, { backgroundColor: colors.inputBg, borderColor: colors.inputBorder, color: colors.text }]}
                   placeholder="Enter referral code"
-                  placeholderTextColor="#9ca3af"
+                  placeholderTextColor={colors.textTertiary}
                   autoCapitalize="characters"
                   value={formData.referralCode}
                   onChangeText={(text) => {
@@ -372,6 +378,7 @@ export default function CustomerRegisterScreen() {
                 <TouchableOpacity
                   style={[
                     styles.validateButton,
+                    { backgroundColor: colors.primary },
                     !formData.referralCode.trim() && styles.validateButtonDisabled
                   ]}
                   onPress={handleValidateReferralCode}
@@ -395,9 +402,9 @@ export default function CustomerRegisterScreen() {
                     <Text style={styles.validationSuccessText}>
                       {referralValidation.validatedCode.type === 'PERCENTAGE' 
                         ? `Get ${referralValidation.validatedCode.value}% discount`
-                        : `Get $${referralValidation.validatedCode.value} off`}
+                        : `Get ${referralValidation.validatedCode.value} off`}
                       {referralValidation.validatedCode.minOrderAmount && 
-                        ` on orders over $${referralValidation.validatedCode.minOrderAmount}`}
+                        ` on orders over ${referralValidation.validatedCode.minOrderAmount}`}
                     </Text>
                   </View>
                 </View>
@@ -414,11 +421,11 @@ export default function CustomerRegisterScreen() {
             </View>
 
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>Password</Text>
+              <Text style={[styles.label, { color: colors.text }]}>Password</Text>
               <TextInput
-                style={styles.input}
+                style={[styles.input, { backgroundColor: colors.inputBg, borderColor: colors.inputBorder, color: colors.text }]}
                 placeholder="Create a password"
-                placeholderTextColor="#9ca3af"
+                placeholderTextColor={colors.textTertiary}
                 secureTextEntry
                 value={formData.password}
                 onChangeText={(text) => setFormData({...formData, password: text})}
@@ -426,11 +433,11 @@ export default function CustomerRegisterScreen() {
             </View>
 
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>Confirm Password</Text>
+              <Text style={[styles.label, { color: colors.text }]}>Confirm Password</Text>
               <TextInput
-                style={styles.input}
+                style={[styles.input, { backgroundColor: colors.inputBg, borderColor: colors.inputBorder, color: colors.text }]}
                 placeholder="Confirm your password"
-                placeholderTextColor="#9ca3af"
+                placeholderTextColor={colors.textTertiary}
                 secureTextEntry
                 value={formData.confirmPassword}
                 onChangeText={(text) => setFormData({...formData, confirmPassword: text})}
@@ -448,6 +455,7 @@ export default function CustomerRegisterScreen() {
             <TouchableOpacity
               style={[
                 styles.registerButton,
+                { backgroundColor: colors.primary, shadowColor: colors.primary },
                 isSubmitting && styles.registerButtonDisabled
               ]}
               onPress={handleRegister}
@@ -466,16 +474,17 @@ export default function CustomerRegisterScreen() {
 
             {/* Divider */}
             <View style={styles.dividerContainer}>
-              <View style={styles.dividerLine} />
-              <Text style={styles.dividerText}>OR</Text>
-              <View style={styles.dividerLine} />
+              <View style={[styles.dividerLine, { backgroundColor: colors.border }]} />
+              <Text style={[styles.dividerText, { color: colors.textTertiary }]}>OR</Text>
+              <View style={[styles.dividerLine, { backgroundColor: colors.border }]} />
             </View>
 
             {/* Google Sign-In Button */}
             <TouchableOpacity
               style={[
                 styles.googleButton,
-                isGoogleLoading && styles.googleButtonDisabled
+                { backgroundColor: colors.card, borderColor: colors.border },
+                isGoogleLoading && [styles.googleButtonDisabled, { backgroundColor: colors.surfaceVariant }]
               ]}
               onPress={handleGoogleRegister}
               disabled={isGoogleLoading}
@@ -483,22 +492,22 @@ export default function CustomerRegisterScreen() {
             >
               {isGoogleLoading ? (
                 <View style={styles.googleButtonContent}>
-                  <ActivityIndicator size="small" color="#1f2937" />
-                  <Text style={styles.googleButtonText}>Signing in...</Text>
+                  <ActivityIndicator size="small" color={colors.text} />
+                  <Text style={[styles.googleButtonText, { color: colors.text }]}>Signing in...</Text>
                 </View>
               ) : (
                 <View style={styles.googleButtonContent}>
                   <Text style={styles.googleIcon}>G</Text>
-                  <Text style={styles.googleButtonText}>Continue with Google</Text>
+                  <Text style={[styles.googleButtonText, { color: colors.text }]}>Continue with Google</Text>
                 </View>
               )}
             </TouchableOpacity>
 
             {/* Login Link */}
             <View style={styles.loginContainer}>
-              <Text style={styles.loginText}>Already have an account? </Text>
+              <Text style={[styles.loginText, { color: colors.textSecondary }]}>Already have an account? </Text>
               <TouchableOpacity onPress={() => router.back()}>
-                <Text style={styles.loginLink}>Login</Text>
+                <Text style={[styles.loginLink, { color: colors.primary }]}>Login</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -511,7 +520,6 @@ export default function CustomerRegisterScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#ffffff',
     marginBottom:40,
   },
   scrollContent: {
@@ -524,7 +532,7 @@ const styles = StyleSheet.create({
     paddingBottom: 32,
   },
   backBtn: {
-    width: 42, height: 42, borderRadius: 21, backgroundColor: '#f3f4f6',
+    width: 42, height: 42, borderRadius: 21,
     alignItems: 'center', justifyContent: 'center', marginBottom: 24,
   },
   header: {
@@ -533,7 +541,6 @@ const styles = StyleSheet.create({
   iconContainer: {
     width: 80,
     height: 80,
-    backgroundColor: '#0284c7',
     borderRadius: 40,
     alignItems: 'center',
     justifyContent: 'center',
@@ -545,12 +552,10 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 36,
     fontWeight: 'bold',
-    color: '#111827',
     marginBottom: 8,
   },
   subtitle: {
     fontSize: 18,
-    color: '#6b7280',
   },
   form: {
     gap: 20,
@@ -559,25 +564,19 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   label: {
-    color: '#374151',
     fontWeight: '600',
     fontSize: 16,
   },
   input: {
-    backgroundColor: '#f9fafb',
     borderWidth: 1,
-    borderColor: '#e5e7eb',
     borderRadius: 12,
     paddingHorizontal: 16,
     paddingVertical: 16,
     fontSize: 16,
-    color: '#111827',
   },
   registerButton: {
-    backgroundColor: '#0284c7',
     paddingVertical: 16,
     borderRadius: 12,
-    shadowColor: '#0284c7',
     shadowOffset: {
       width: 0,
       height: 4,
@@ -630,11 +629,9 @@ const styles = StyleSheet.create({
     marginTop: 24,
   },
   loginText: {
-    color: '#6b7280',
     fontSize: 15,
   },
   loginLink: {
-    color: '#0284c7',
     fontWeight: '600',
     fontSize: 15,
   },
@@ -644,19 +641,13 @@ const styles = StyleSheet.create({
   },
   genderButton: {
     flex: 1,
-    backgroundColor: '#f9fafb',
     borderWidth: 1,
-    borderColor: '#e5e7eb',
     borderRadius: 12,
     paddingVertical: 16,
     alignItems: 'center',
   },
-  genderButtonActive: {
-    backgroundColor: '#0284c7',
-    borderColor: '#0284c7',
-  },
+  genderButtonActive: {},
   genderButtonText: {
-    color: '#6b7280',
     fontSize: 16,
     fontWeight: '600',
   },
@@ -671,7 +662,6 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   validateButton: {
-    backgroundColor: '#0284c7',
     paddingHorizontal: 20,
     borderRadius: 12,
     justifyContent: 'center',
@@ -742,18 +732,14 @@ const styles = StyleSheet.create({
   dividerLine: {
     flex: 1,
     height: 1,
-    backgroundColor: '#e5e7eb',
   },
   dividerText: {
-    color: '#9ca3af',
     fontSize: 14,
     fontWeight: '500',
     paddingHorizontal: 16,
   },
   googleButton: {
-    backgroundColor: '#ffffff',
     borderWidth: 1,
-    borderColor: '#e5e7eb',
     paddingVertical: 16,
     borderRadius: 12,
     shadowColor: '#000000',
@@ -766,7 +752,6 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   googleButtonDisabled: {
-    backgroundColor: '#f9fafb',
     opacity: 0.6,
   },
   googleButtonContent: {
@@ -781,7 +766,6 @@ const styles = StyleSheet.create({
     color: '#4285f4',
   },
   googleButtonText: {
-    color: '#1f2937',
     fontSize: 16,
     fontWeight: '600',
   },
@@ -793,7 +777,6 @@ const styles = StyleSheet.create({
     padding: 24,
   },
   modalCard: {
-    backgroundColor: '#fff',
     borderRadius: 16,
     padding: 24,
     width: '100%',
@@ -802,11 +785,9 @@ const styles = StyleSheet.create({
   modalTitle: {
     fontSize: 20,
     fontWeight: '700',
-    color: '#111827',
   },
   modalBody: {
     fontSize: 15,
-    color: '#6b7280',
     lineHeight: 22,
   },
   modalActions: {
@@ -818,11 +799,9 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: 14,
     borderRadius: 10,
-    backgroundColor: '#f3f4f6',
     alignItems: 'center',
   },
   modalBtnSecondaryText: {
-    color: '#374151',
     fontWeight: '600',
     fontSize: 15,
   },
@@ -830,7 +809,6 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: 14,
     borderRadius: 10,
-    backgroundColor: '#0284c7',
     alignItems: 'center',
   },
   modalBtnPrimaryText: {

@@ -10,6 +10,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { api } from '../../services/api/client';
 import { orderService, Order } from '../../services/api/order.service';
 import { startOrderTracking } from '../../services/notifications';
+import { useTheme } from '../../contexts/ThemeContext';
 
 interface SavedAddress {
   addressId: string;
@@ -36,6 +37,7 @@ interface PricePreview {
 
 export default function CreateOrderScreen() {
   const router = useRouter();
+  const { colors, isDark } = useTheme();
 
   const [step, setStep] = useState<'form' | 'preview'>('form');
   const [pickupAddress, setPickupAddress] = useState<SavedAddress | null>(null);
@@ -257,9 +259,9 @@ export default function CreateOrderScreen() {
     const insufficientWallet = !isCash && preview.walletBalance !== null && preview.walletBalance < preview.totalPrice;
 
     return (
-      <View style={s.container}>
+      <View style={[s.container, { backgroundColor: colors.background }]}>
         {/* Header */}
-        <View style={s.header}>
+        <View style={[s.header, { backgroundColor: colors.headerBg }]}>
           <TouchableOpacity onPress={() => setStep('form')} style={s.headerBackBtn}>
             <Ionicons name="chevron-back" size={22} color="#fff" />
           </TouchableOpacity>
@@ -269,7 +271,7 @@ export default function CreateOrderScreen() {
 
         <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 20, paddingBottom: 40 }}>
           {/* Route card */}
-          <View style={s.card}>
+          <View style={[s.card, { backgroundColor: colors.card }]}>
             <View style={s.routeRow}>
               <View style={s.routeIconCol}>
                 <View style={[s.routeDot, { backgroundColor: '#22c55e' }]} />
@@ -316,16 +318,16 @@ export default function CreateOrderScreen() {
           </View>
 
           {/* Price breakdown */}
-          <View style={s.card}>
-            <Text style={s.cardTitle}>Price Breakdown</Text>
+          <View style={[s.card, { backgroundColor: colors.card }]}>
+            <Text style={[s.cardTitle, { color: colors.text }]}>Price Breakdown</Text>
             <PriceRow label="Base Fee" value={preview.baseFee} unit={unit} />
             <PriceRow label="Distance Fee" value={preview.distanceFee} unit={unit} />
             {preview.extraWeightFee > 0 && <PriceRow label="Extra Weight" value={preview.extraWeightFee} unit={unit} />}
             {preview.nightFee > 0 && <PriceRow label="Night Fee 🌙" value={preview.nightFee} unit={unit} />}
-            <View style={s.divider} />
+            <View style={[s.divider, { backgroundColor: colors.border }]} />
             <View style={s.priceRow}>
-              <Text style={s.totalLabel}>Total</Text>
-              <Text style={s.totalValue}>{preview.totalPrice.toFixed(2)} {unit}</Text>
+              <Text style={[s.totalLabel, { color: colors.text }]}>Total</Text>
+              <Text style={[s.totalValue, { color: colors.primary }]}>{preview.totalPrice.toFixed(2)} {unit}</Text>
             </View>
           </View>
 
@@ -388,9 +390,9 @@ export default function CreateOrderScreen() {
   // ═══════════════════════════════════════════
   return (
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <View style={s.container}>
+      <View style={[s.container, { backgroundColor: colors.background }]}>
         {/* Header */}
-        <View style={s.header}>
+        <View style={[s.header, { backgroundColor: colors.headerBg }]}>
           <TouchableOpacity onPress={() => router.back()} style={s.headerBackBtn}>
             <Ionicons name="chevron-back" size={22} color="#fff" />
           </TouchableOpacity>
@@ -426,8 +428,8 @@ export default function CreateOrderScreen() {
           )}
 
           {/* ── Addresses ── */}
-          <View style={s.card}>
-            <Text style={s.cardTitle}>Route</Text>
+          <View style={[s.card, { backgroundColor: colors.card }]}>
+            <Text style={[s.cardTitle, { color: colors.text }]}>Route</Text>
 
             {/* Pickup */}
             <TouchableOpacity
@@ -478,8 +480,8 @@ export default function CreateOrderScreen() {
           </View>
 
           {/* ── Payment Method ── */}
-          <View style={s.card}>
-            <Text style={s.cardTitle}>Payment</Text>
+          <View style={[s.card, { backgroundColor: colors.card }]}>
+            <Text style={[s.cardTitle, { color: colors.text }]}>Payment</Text>
             <View style={s.paymentRow}>
               <TouchableOpacity
                 style={[s.paymentOption, paymentType === 'COD' && s.paymentOptionActiveCash]}
@@ -504,8 +506,8 @@ export default function CreateOrderScreen() {
           </View>
 
           {/* ── Package Details ── */}
-          <View style={s.card}>
-            <Text style={s.cardTitle}>Package Details</Text>
+          <View style={[s.card, { backgroundColor: colors.card }]}>
+            <Text style={[s.cardTitle, { color: colors.text }]}>Package Details</Text>
 
             <Text style={s.inputLabel}>Weight (kg)</Text>
             <View style={s.weightRow}>
@@ -536,7 +538,7 @@ export default function CreateOrderScreen() {
               value={description}
               onChangeText={setDescription}
               placeholder="What are you sending?"
-              placeholderTextColor="#9ca3af"
+              placeholderTextColor={colors.textTertiary}
               multiline
               numberOfLines={3}
               textAlignVertical="top"
@@ -544,8 +546,8 @@ export default function CreateOrderScreen() {
           </View>
 
           {/* ── Auto-Cancel Timer ── */}
-          <View style={s.card}>
-            <Text style={s.cardTitle}>Auto-Cancel Timer</Text>
+          <View style={[s.card, { backgroundColor: colors.card }]}>
+            <Text style={[s.cardTitle, { color: colors.text }]}>Auto-Cancel Timer</Text>
             <Text style={s.inputLabel}>Cancel if no driver responds (minutes)</Text>
             <View style={s.weightRow}>
               <TouchableOpacity style={s.weightBtn} onPress={() => {

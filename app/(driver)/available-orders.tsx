@@ -8,6 +8,7 @@ import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { orderService, AvailableOrders, FilteredOrders, Order } from '../../services/api/order.service';
 import { api } from '../../services/api/client';
+import { useTheme } from '../../contexts/ThemeContext';
 
 const ZONE_META: Record<string, { icon: string; color: string; bg: string }> = {
   'Same Delegation':        { icon: 'location',      color: '#16a34a', bg: '#dcfce7' },
@@ -66,6 +67,7 @@ function SearchPicker({ visible, title, data, onSelect, onClose, search, setSear
 
 export default function AvailableOrdersScreen() {
   const router = useRouter();
+  const { colors, isDark } = useTheme();
   const [data, setData] = useState<AvailableOrders | null>(null);
   const [filteredData, setFilteredData] = useState<FilteredOrders | null>(null);
   const [loading, setLoading] = useState(true);
@@ -332,38 +334,38 @@ export default function AvailableOrdersScreen() {
   const renderOrderCard = (order: Order) => {
     const isAccepting = accepting === order.id;
     return (
-      <View key={order.id} style={s.card}>
+      <View key={order.id} style={[s.card, { backgroundColor: colors.card }]}>
         <View style={s.cardTop}>
-          <Text style={s.orderId}>#{order.id.slice(0, 8)}</Text>
-          <View style={s.priceTag}>
-            <Text style={s.priceText}>{order.price.toFixed(2)}</Text>
-            <Text style={s.priceCurrency}>TND</Text>
+          <Text style={[s.orderId, { color: colors.text }]}>#{order.id.slice(0, 8)}</Text>
+          <View style={[s.priceTag, { color: colors.primary }]}>
+            <Text style={[s.priceText, { color: colors.primary }]}>{order.price.toFixed(2)}</Text>
+            <Text style={[s.priceCurrency, { color: colors.textSecondary }]}>TND</Text>
           </View>
         </View>
         <View style={s.routeSection}>
           <View style={s.routeIconCol}>
             <View style={[s.routeDot, { backgroundColor: '#22c55e' }]} />
-            <View style={s.routeLine} />
+            <View style={[s.routeLine, { backgroundColor: colors.border }]} />
             <View style={[s.routeDot, { backgroundColor: '#ef4444' }]} />
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={s.routeText} numberOfLines={1}>
+            <Text style={[s.routeText, { color: colors.text }]} numberOfLines={1}>
               {order.pickupAddress?.street || order.pickupAddress?.delegation?.nameDelegation || 'Pickup'}
             </Text>
             <View style={{ height: 14 }} />
-            <Text style={s.routeText} numberOfLines={1}>
+            <Text style={[s.routeText, { color: colors.text }]} numberOfLines={1}>
               {order.dropoffAddress?.street || order.dropoffAddress?.delegation?.nameDelegation || 'Dropoff'}
             </Text>
           </View>
         </View>
         <View style={s.chipsRow}>
-          <View style={s.chip}>
-            <Ionicons name="resize-outline" size={12} color="#6b7280" />
-            <Text style={s.chipText}>{order.distanceKm.toFixed(1)} km</Text>
+          <View style={[s.chip, { backgroundColor: colors.surfaceVariant }]}>
+            <Ionicons name="resize-outline" size={12} color={colors.textSecondary} />
+            <Text style={[s.chipText, { color: colors.textSecondary }]}>{order.distanceKm.toFixed(1)} km</Text>
           </View>
-          <View style={s.chip}>
-            <Ionicons name="cube-outline" size={12} color="#6b7280" />
-            <Text style={s.chipText}>{order.weight} kg</Text>
+          <View style={[s.chip, { backgroundColor: colors.surfaceVariant }]}>
+            <Ionicons name="cube-outline" size={12} color={colors.textSecondary} />
+            <Text style={[s.chipText, { color: colors.textSecondary }]}>{order.weight} kg</Text>
           </View>
           <View style={[s.chip, { backgroundColor: order.paymentType === 'COD' ? '#dcfce7' : '#dbeafe' }]}>
             <Text style={{ fontSize: 11 }}>{order.paymentType === 'COD' ? '💵' : '💰'}</Text>
@@ -406,8 +408,8 @@ export default function AvailableOrdersScreen() {
           <View style={[s.sectionIcon, { backgroundColor: meta.bg }]}>
             <Ionicons name={meta.icon as any} size={14} color={meta.color} />
           </View>
-          <Text style={s.sectionTitle}>{title}</Text>
-          <View style={s.sectionBadge}><Text style={s.sectionBadgeText}>{orders.length}</Text></View>
+          <Text style={[s.sectionTitle, { color: colors.text }]}>{title}</Text>
+          <View style={[s.sectionBadge, { backgroundColor: colors.border }]}><Text style={[s.sectionBadgeText, { color: colors.textSecondary }]}>{orders.length}</Text></View>
         </View>
         {orders.map(renderOrderCard)}
       </View>
@@ -429,7 +431,7 @@ export default function AvailableOrdersScreen() {
     : selectedCountryIds;
 
   if (loading || !initDone) {
-    return <View style={s.center}><ActivityIndicator size="large" color="#0284c7" /></View>;
+    return <View style={[s.center, { backgroundColor: colors.background }]}><ActivityIndicator size="large" color={colors.primary} /></View>;
   }
 
   // Compute total
@@ -443,9 +445,9 @@ export default function AvailableOrdersScreen() {
     || advSelectedGovernorate?.nameGovernorate || advSelectedCountry?.name || '';
 
   return (
-    <View style={s.container}>
+    <View style={[s.container, { backgroundColor: colors.background }]}>
       {/* Header */}
-      <View style={s.header}>
+      <View style={[s.header, { backgroundColor: colors.headerBg }]}>
         <View style={s.headerRow}>
           <TouchableOpacity onPress={() => router.back()} style={s.headerBtn}>
             <Ionicons name="chevron-back" size={22} color="#fff" />
@@ -549,8 +551,8 @@ export default function AvailableOrdersScreen() {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} />}>
         {totalOrders === 0 ? (
           <View style={s.empty}>
-            <Ionicons name="cube-outline" size={56} color="#d1d5db" />
-            <Text style={s.emptyTitle}>{filterActive ? 'No orders in this area' : 'No orders available'}</Text>
+            <Ionicons name="cube-outline" size={56} color={colors.textTertiary} />
+            <Text style={[s.emptyTitle, { color: colors.textTertiary }]}>{filterActive ? 'No orders in this area' : 'No orders available'}</Text>
             <Text style={s.emptySub}>{filterActive ? 'Try a different location' : 'Pull down to refresh'}</Text>
           </View>
         ) : isFlat ? (
@@ -617,15 +619,15 @@ export default function AvailableOrdersScreen() {
 
       {/* Advanced Filter Modal */}
       <Modal visible={showFilter} animationType="slide" onRequestClose={() => setShowFilter(false)}>
-        <View style={s.filterModal}>
-          <View style={s.filterModalHeader}>
-            <Text style={s.filterModalTitle}>Filter Orders</Text>
+        <View style={[s.filterModal, { backgroundColor: colors.background }]}>
+          <View style={[s.filterModalHeader, { borderBottomColor: colors.border }]}>
+            <Text style={[s.filterModalTitle, { color: colors.text }]}>Filter Orders</Text>
             <TouchableOpacity onPress={() => setShowFilter(false)}>
-              <Ionicons name="close" size={24} color="#374151" />
+              <Ionicons name="close" size={24} color={colors.text} />
             </TouchableOpacity>
           </View>
           <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 20 }}>
-            <Text style={s.filterHint}>
+            <Text style={[s.filterHint, { color: colors.textSecondary }]}>
               Search for orders in a specific location. This ignores your availability and address — useful when traveling or on break.
             </Text>
             <Text style={s.filterLabel}>Country</Text>

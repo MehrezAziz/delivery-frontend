@@ -6,11 +6,13 @@ import {
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useTheme } from '../../contexts/ThemeContext';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api';
 
 export default function CustomerEditProfileScreen() {
   const router = useRouter();
+  const { colors, isDark } = useTheme();
   const [verified, setVerified] = useState(false);
   const [isGoogleUser, setIsGoogleUser] = useState(false);
   const [password, setPassword] = useState('');
@@ -110,27 +112,27 @@ export default function CustomerEditProfileScreen() {
     } finally { setSaving(false); }
   };
 
-  if (loading) return <View style={s.center}><ActivityIndicator size="large" color="#0284c7" /></View>;
+  if (loading) return <View style={[s.center, { backgroundColor: colors.background }]}><ActivityIndicator size="large" color={colors.primary} /></View>;
 
   if (!verified) {
     return (
-      <View style={s.container}>
-        <View style={s.header}>
-          <TouchableOpacity onPress={() => router.back()} style={s.headerBtn}>
-            <Ionicons name="chevron-back" size={22} color="#111827" />
+      <View style={[s.container, { backgroundColor: colors.background }]}>
+        <View style={[s.header, { backgroundColor: colors.card, borderBottomColor: colors.border }]}>
+          <TouchableOpacity onPress={() => router.back()} style={[s.headerBtn, { backgroundColor: colors.surfaceVariant }]}>
+            <Ionicons name="chevron-back" size={22} color={colors.text} />
           </TouchableOpacity>
-          <Text style={s.headerTitleDark}>Edit Profile</Text>
+          <Text style={[s.headerTitleDark, { color: colors.text }]}>Edit Profile</Text>
           <View style={{ width: 38 }} />
         </View>
-        <View style={s.gateContainer}>
+        <View style={[s.gateContainer, { backgroundColor: colors.background }]}>
           <View style={s.gateIconWrap}>
-            <Ionicons name="lock-closed" size={40} color="#0284c7" />
+            <Ionicons name="lock-closed" size={40} color={colors.primary} />
           </View>
-          <Text style={s.gateTitle}>Verify Your Identity</Text>
-          <Text style={s.gateSub}>Enter your password to edit your profile</Text>
-          <TextInput style={s.gateInput} value={password} onChangeText={setPassword}
-            placeholder="Enter your password" placeholderTextColor="#9ca3af" secureTextEntry autoFocus />
-          <TouchableOpacity style={[s.gateBtn, !password.trim() && { opacity: 0.5 }]}
+          <Text style={[s.gateTitle, { color: colors.text }]}>Verify Your Identity</Text>
+          <Text style={[s.gateSub, { color: colors.textSecondary }]}>Enter your password to edit your profile</Text>
+          <TextInput style={[s.gateInput, { backgroundColor: colors.inputBg, color: colors.text, borderColor: colors.inputBorder }]} value={password} onChangeText={setPassword}
+            placeholder="Enter your password" placeholderTextColor={colors.textTertiary} secureTextEntry autoFocus />
+          <TouchableOpacity style={[s.gateBtn, { backgroundColor: colors.primary }, !password.trim() && { opacity: 0.5 }]}
             onPress={handleVerify} disabled={verifying || !password.trim()}>
             {verifying ? <ActivityIndicator color="#fff" /> : <Text style={s.gateBtnText}>Verify</Text>}
           </TouchableOpacity>
@@ -140,12 +142,12 @@ export default function CustomerEditProfileScreen() {
   }
 
   return (
-    <View style={s.container}>
-      <View style={s.header}>
-        <TouchableOpacity onPress={() => router.back()} style={s.headerBtn}>
-          <Ionicons name="chevron-back" size={22} color="#111827" />
+    <View style={[s.container, { backgroundColor: colors.background }]}>
+      <View style={[s.header, { backgroundColor: colors.card, borderBottomColor: colors.border }]}>
+        <TouchableOpacity onPress={() => router.back()} style={[s.headerBtn, { backgroundColor: colors.surfaceVariant }]}>
+          <Ionicons name="chevron-back" size={22} color={colors.text} />
         </TouchableOpacity>
-        <Text style={s.headerTitleDark}>Edit Profile</Text>
+        <Text style={[s.headerTitleDark, { color: colors.text }]}>Edit Profile</Text>
         <View style={{ width: 38 }} />
       </View>
       <ScrollView style={{ flex: 1 }} contentContainerStyle={s.content}>

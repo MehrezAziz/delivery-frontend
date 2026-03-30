@@ -15,6 +15,7 @@ import { Ionicons } from '@expo/vector-icons';
 import axios from 'axios';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import { saveLoginTimestamp } from '../../services/auth-session';
+import { useTheme } from '../../contexts/ThemeContext';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
 
@@ -27,6 +28,7 @@ GoogleSignin.configure({
 
 export default function DriverLogin() {
   const router = useRouter();
+  const { colors, isDark } = useTheme();
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -137,21 +139,22 @@ export default function DriverLogin() {
   };
 
   return (
-    <ScrollView style={styles.container}>
+    <ScrollView style={[styles.container, { backgroundColor: colors.card }]}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace('/')} style={styles.backBtn}>
-          <Ionicons name="chevron-back" size={22} color="#111" />
+        <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace('/')} style={[styles.backBtn, { backgroundColor: colors.surfaceVariant }]}>
+          <Ionicons name="chevron-back" size={22} color={colors.text} />
         </TouchableOpacity>
-        <Text style={styles.title}>Driver Login</Text>
-        <Text style={styles.subtitle}>Welcome back!</Text>
+        <Text style={[styles.title, { color: colors.text }]}>Driver Login</Text>
+        <Text style={[styles.subtitle, { color: colors.textSecondary }]}>Welcome back!</Text>
       </View>
 
       {/* Phone Input */}
       <View style={styles.inputGroup}>
-        <Text style={styles.label}>Phone Number</Text>
+        <Text style={[styles.label, { color: colors.text }]}>Phone Number</Text>
         <TextInput
-          style={styles.input}
+          style={[styles.input, { borderColor: colors.inputBorder, backgroundColor: colors.inputBg, color: colors.text }]}
           placeholder="+1234567890"
+          placeholderTextColor={colors.textTertiary}
           value={phone}
           onChangeText={setPhone}
           keyboardType="phone-pad"
@@ -161,11 +164,12 @@ export default function DriverLogin() {
 
       {/* Password Input */}
       <View style={styles.inputGroup}>
-        <Text style={styles.label}>Password</Text>
-        <View style={styles.passwordContainer}>
+        <Text style={[styles.label, { color: colors.text }]}>Password</Text>
+        <View style={[styles.passwordContainer, { borderColor: colors.inputBorder, backgroundColor: colors.inputBg }]}>
           <TextInput
-            style={styles.passwordInput}
+            style={[styles.passwordInput, { color: colors.text }]}
             placeholder="Enter your password"
+            placeholderTextColor={colors.textTertiary}
             value={password}
             onChangeText={setPassword}
             secureTextEntry={!showPassword}
@@ -178,7 +182,7 @@ export default function DriverLogin() {
             <Ionicons
               name={showPassword ? 'eye-off' : 'eye'}
               size={24}
-              color="#666"
+              color={colors.textSecondary}
             />
           </TouchableOpacity>
         </View>
@@ -186,7 +190,7 @@ export default function DriverLogin() {
 
       {/* Login Button */}
       <TouchableOpacity
-        style={[styles.loginButton, loading && styles.loginButtonDisabled]}
+        style={[styles.loginButton, { backgroundColor: colors.primary }, loading && styles.loginButtonDisabled]}
         onPress={handleLogin}
         disabled={loading}
       >
@@ -199,18 +203,18 @@ export default function DriverLogin() {
 
       {/* Divider */}
       <View style={styles.divider}>
-        <View style={styles.dividerLine} />
-        <Text style={styles.dividerText}>OR</Text>
-        <View style={styles.dividerLine} />
+        <View style={[styles.dividerLine, { backgroundColor: colors.border }]} />
+        <Text style={[styles.dividerText, { color: colors.textTertiary }]}>OR</Text>
+        <View style={[styles.dividerLine, { backgroundColor: colors.border }]} />
       </View>
 
       {/* Google Login Button */}
       <TouchableOpacity
-        style={styles.googleButton}
+        style={[styles.googleButton, { borderColor: colors.border, backgroundColor: colors.card }]}
         onPress={handleGoogleLogin}
       >
         <Ionicons name="logo-google" size={24} color="#DB4437" />
-        <Text style={styles.googleButtonText}>Continue with Google</Text>
+        <Text style={[styles.googleButtonText, { color: colors.text }]}>Continue with Google</Text>
       </TouchableOpacity>
 
       {/* Register Link */}
@@ -218,14 +222,14 @@ export default function DriverLogin() {
         style={styles.registerLink}
         onPress={() => router.push('/(auth)/driver-register-step1')}
       >
-        <Text style={styles.registerLinkText}>
-          Don't have an account? <Text style={styles.registerLinkBold}>Register</Text>
+        <Text style={[styles.registerLinkText, { color: colors.textSecondary }]}>
+          Don't have an account? <Text style={[styles.registerLinkBold, { color: colors.primary }]}>Register</Text>
         </Text>
       </TouchableOpacity>
 
       {/* Forgot Password */}
       <TouchableOpacity style={styles.forgotPassword}>
-        <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
+        <Text style={[styles.forgotPasswordText, { color: colors.primary }]}>Forgot Password?</Text>
       </TouchableOpacity>
     </ScrollView>
   );
@@ -234,11 +238,10 @@ export default function DriverLogin() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
     padding: 20,
   },
   backBtn: {
-    width: 42, height: 42, borderRadius: 21, backgroundColor: '#f3f4f6',
+    width: 42, height: 42, borderRadius: 21,
     alignItems: 'center', justifyContent: 'center', marginBottom: 24,
   },
   header: {
@@ -248,12 +251,10 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 32,
     fontWeight: 'bold',
-    color: '#333',
     marginBottom: 8,
   },
   subtitle: {
     fontSize: 18,
-    color: '#666',
   },
   inputGroup: {
     marginBottom: 20,
@@ -261,36 +262,29 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#333',
     marginBottom: 8,
   },
   input: {
     borderWidth: 1,
-    borderColor: '#ddd',
     borderRadius: 8,
     padding: 12,
     fontSize: 16,
-    backgroundColor: '#f9f9f9',
   },
   passwordContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#ddd',
     borderRadius: 8,
-    backgroundColor: '#f9f9f9',
   },
   passwordInput: {
     flex: 1,
     padding: 12,
     fontSize: 16,
-    color: '#000000',
   },
   eyeIcon: {
     padding: 12,
   },
   loginButton: {
-    backgroundColor: '#007AFF',
     padding: 16,
     borderRadius: 8,
     alignItems: 'center',
@@ -312,11 +306,9 @@ const styles = StyleSheet.create({
   dividerLine: {
     flex: 1,
     height: 1,
-    backgroundColor: '#ddd',
   },
   dividerText: {
     marginHorizontal: 16,
-    color: '#999',
     fontSize: 14,
   },
   googleButton: {
@@ -325,13 +317,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     padding: 16,
     borderWidth: 1,
-    borderColor: '#ddd',
     borderRadius: 8,
     gap: 12,
   },
   googleButtonText: {
     fontSize: 16,
-    color: '#333',
     fontWeight: '600',
   },
   registerLink: {
@@ -340,10 +330,8 @@ const styles = StyleSheet.create({
   },
   registerLinkText: {
     fontSize: 16,
-    color: '#666',
   },
   registerLinkBold: {
-    color: '#007AFF',
     fontWeight: '600',
   },
   forgotPassword: {
@@ -353,6 +341,5 @@ const styles = StyleSheet.create({
   },
   forgotPasswordText: {
     fontSize: 16,
-    color: '#007AFF',
   },
 });

@@ -6,6 +6,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useGoogleAuth } from '../../hooks/useGoogleAuth';
 import { saveLoginTimestamp } from '../../services/auth-session';
 import { registerForPushNotifications } from '../../services/notifications';
+import { useTheme } from '../../contexts/ThemeContext';
 
 // For Android emulator, use 10.0.2.2 instead of localhost
 // For physical device with USB + ADB reverse, use localhost
@@ -17,6 +18,7 @@ const API_BASE_URL = Platform.OS === 'android'
 
 export default function CustomerLoginScreen() {
   const router = useRouter();
+  const { colors, isDark } = useTheme();
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -146,32 +148,32 @@ export default function CustomerLoginScreen() {
   return (
     <KeyboardAvoidingView 
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      style={styles.container}
+      style={[styles.container, { backgroundColor: colors.card }]}
     >
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <View style={styles.content}>
           <TouchableOpacity 
             onPress={() => router.canGoBack() ? router.back() : router.replace('/')}
-            style={styles.backBtn}
+            style={[styles.backBtn, { backgroundColor: colors.surfaceVariant }]}
           >
-            <Ionicons name="chevron-back" size={22} color="#111" />
+            <Ionicons name="chevron-back" size={22} color={colors.text} />
           </TouchableOpacity>
 
           <View style={styles.header}>
-            <View style={styles.iconContainer}>
+            <View style={[styles.iconContainer, { backgroundColor: colors.primary }]}>
               <Text style={styles.iconText}>📦</Text>
             </View>
-            <Text style={styles.title}>Welcome Back</Text>
-            <Text style={styles.subtitle}>Login to your customer account</Text>
+            <Text style={[styles.title, { color: colors.text }]}>Welcome Back</Text>
+            <Text style={[styles.subtitle, { color: colors.textSecondary }]}>Login to your customer account</Text>
           </View>
 
           <View style={styles.form}>
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>Phone Number</Text>
+              <Text style={[styles.label, { color: colors.text }]}>Phone Number</Text>
               <TextInput
-                style={styles.input}
+                style={[styles.input, { backgroundColor: colors.inputBg, borderColor: colors.inputBorder, color: colors.text }]}
                 placeholder="+216 XX XXX XXX"
-                placeholderTextColor="#9ca3af"
+                placeholderTextColor={colors.textTertiary}
                 keyboardType="phone-pad"
                 value={phone}
                 onChangeText={setPhone}
@@ -180,11 +182,11 @@ export default function CustomerLoginScreen() {
             </View>
 
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>Password</Text>
+              <Text style={[styles.label, { color: colors.text }]}>Password</Text>
               <TextInput
-                style={styles.input}
+                style={[styles.input, { backgroundColor: colors.inputBg, borderColor: colors.inputBorder, color: colors.text }]}
                 placeholder="Enter your password"
-                placeholderTextColor="#9ca3af"
+                placeholderTextColor={colors.textTertiary}
                 secureTextEntry
                 value={password}
                 onChangeText={setPassword}
@@ -193,7 +195,7 @@ export default function CustomerLoginScreen() {
             </View>
 
             <TouchableOpacity style={styles.forgotButton}>
-              <Text style={styles.forgotText}>Forgot Password?</Text>
+              <Text style={[styles.forgotText, { color: colors.primary }]}>Forgot Password?</Text>
             </TouchableOpacity>
 
             {/* Error Display */}
@@ -207,6 +209,7 @@ export default function CustomerLoginScreen() {
             <TouchableOpacity 
               style={[
                 styles.loginButton,
+                { backgroundColor: colors.primary, shadowColor: colors.primary },
                 isSubmitting && styles.loginButtonDisabled
               ]}
               onPress={handleLogin}
@@ -225,15 +228,16 @@ export default function CustomerLoginScreen() {
 
             {/* Divider */}
             <View style={styles.dividerContainer}>
-              <View style={styles.divider} />
-              <Text style={styles.dividerText}>OR</Text>
-              <View style={styles.divider} />
+              <View style={[styles.divider, { backgroundColor: colors.border }]} />
+              <Text style={[styles.dividerText, { color: colors.textSecondary }]}>OR</Text>
+              <View style={[styles.divider, { backgroundColor: colors.border }]} />
             </View>
 
             {/* Google Sign-In Button */}
             <TouchableOpacity 
               style={[
                 styles.googleButton,
+                { backgroundColor: colors.card, borderColor: colors.border },
                 isGoogleLoading && styles.googleButtonDisabled
               ]}
               onPress={handleGoogleLogin}
@@ -241,19 +245,19 @@ export default function CustomerLoginScreen() {
               activeOpacity={0.8}
             >
               {isGoogleLoading ? (
-                <ActivityIndicator size="small" color="#4285F4" />
+                <ActivityIndicator size="small" color={colors.primary} />
               ) : (
                 <>
                   <Text style={styles.googleIcon}>G</Text>
-                  <Text style={styles.googleButtonText}>Continue with Google</Text>
+                  <Text style={[styles.googleButtonText, { color: colors.text }]}>Continue with Google</Text>
                 </>
               )}
             </TouchableOpacity>
 
             <View style={styles.registerLink}>
-              <Text style={styles.registerText}>Don't have an account? </Text>
+              <Text style={[styles.registerText, { color: colors.textSecondary }]}>Don't have an account? </Text>
               <TouchableOpacity onPress={() => router.push('/(auth)/customer-register')}>
-                <Text style={styles.registerLinkText}>Register</Text>
+                <Text style={[styles.registerLinkText, { color: colors.primary }]}>Register</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -266,7 +270,6 @@ export default function CustomerLoginScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#ffffff',
     marginBottom:40,
   },
   scrollContent: {
@@ -279,7 +282,7 @@ const styles = StyleSheet.create({
     paddingBottom: 32,
   },
   backBtn: {
-    width: 42, height: 42, borderRadius: 21, backgroundColor: '#f3f4f6',
+    width: 42, height: 42, borderRadius: 21,
     alignItems: 'center', justifyContent: 'center', marginBottom: 24,
   },
   header: {
@@ -288,7 +291,6 @@ const styles = StyleSheet.create({
   iconContainer: {
     width: 80,
     height: 80,
-    backgroundColor: '#0284c7',
     borderRadius: 40,
     alignItems: 'center',
     justifyContent: 'center',
@@ -300,12 +302,10 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 36,
     fontWeight: 'bold',
-    color: '#111827',
     marginBottom: 8,
   },
   subtitle: {
     fontSize: 18,
-    color: '#6b7280',
   },
   form: {
     gap: 20,
@@ -314,25 +314,20 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   label: {
-    color: '#374151',
     fontWeight: '600',
     fontSize: 16,
   },
   input: {
-    backgroundColor: '#f9fafb',
     borderWidth: 1,
-    borderColor: '#e5e7eb',
     borderRadius: 12,
     paddingHorizontal: 16,
     paddingVertical: 16,
     fontSize: 16,
-    color: '#111827',
   },
   forgotButton: {
     alignSelf: 'flex-end',
   },
   forgotText: {
-    color: '#0284c7',
     fontWeight: '500',
     fontSize: 15,
   },
@@ -357,10 +352,8 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   loginButton: {
-    backgroundColor: '#0284c7',
     paddingVertical: 16,
     borderRadius: 12,
-    shadowColor: '#0284c7',
     shadowOffset: {
       width: 0,
       height: 4,
@@ -394,18 +387,14 @@ const styles = StyleSheet.create({
   divider: {
     flex: 1,
     height: 1,
-    backgroundColor: '#e5e7eb',
   },
   dividerText: {
-    color: '#6b7280',
     paddingHorizontal: 16,
     fontSize: 14,
     fontWeight: '500',
   },
   googleButton: {
-    backgroundColor: '#ffffff',
     borderWidth: 1,
-    borderColor: '#e5e7eb',
     paddingVertical: 16,
     borderRadius: 12,
     flexDirection: 'row',
@@ -430,7 +419,6 @@ const styles = StyleSheet.create({
     color: '#4285F4',
   },
   googleButtonText: {
-    color: '#111827',
     fontSize: 16,
     fontWeight: '600',
   },
@@ -441,11 +429,9 @@ const styles = StyleSheet.create({
     marginTop: 24,
   },
   registerText: {
-    color: '#6b7280',
     fontSize: 15,
   },
   registerLinkText: {
-    color: '#0284c7',
     fontWeight: '600',
     fontSize: 15,
   },
