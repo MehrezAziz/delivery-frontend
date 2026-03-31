@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { AppState, type AppStateStatus } from 'react-native';
 import { Stack } from 'expo-router';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
@@ -10,6 +11,7 @@ import {
   setupBackgroundHandler,
   createNotificationChannels,
   registerOrderForegroundService,
+  restoreOrderTrackingForCustomer,
 } from '../services/notifications';
 // Register background handler at module level (required by React Native Firebase)
 setupBackgroundHandler();
@@ -36,7 +38,21 @@ function RootContent() {
     // Set up foreground notification listeners
     cleanupRef.current = setupNotificationListeners();
 
+    const onAppState = (next: AppStateStatus) => {
+      if (next !== 'active') return;
+      // Re-post FCM token whenever the app returns to foreground so the backend
+      // can push order updates while the app is closed (see server log: "No FCM token … skipping push").
+      AsyncStorage.getItem('accessToken').then(async (accessToken) => {
+        if (!accessToken) return;
+        await registerForPushNotifications();
+        const role = await AsyncStorage.getItem('userRole');
+        if (role === 'CUSTOMER') await restoreOrderTrackingForCustomer();
+      });
+    };
+    const appStateSub = AppState.addEventListener('change', onAppState);
+
     return () => {
+      appStateSub.remove();
       cleanupRef.current?.();
     };
   }, []);

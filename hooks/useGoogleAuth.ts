@@ -4,7 +4,10 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import { Platform } from 'react-native';
 import { saveLoginTimestamp } from '../services/auth-session';
-import { restoreOrderTrackingForCustomer } from '../services/notifications';
+import {
+  registerForPushNotifications,
+  restoreOrderTrackingForCustomer,
+} from '../services/notifications';
 
 // Use environment variable for API URL
 // For physical device with USB + ADB reverse, use localhost
@@ -145,6 +148,7 @@ export const useGoogleAuth = (role: 'CUSTOMER' | 'DRIVER', referralCode?: string
       setIsLoading(false);
       
       // Navigate based on role
+      await registerForPushNotifications();
       if (role === 'CUSTOMER') {
         await restoreOrderTrackingForCustomer();
         router.replace('/(customer)/home');

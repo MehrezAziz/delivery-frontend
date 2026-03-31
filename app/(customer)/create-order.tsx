@@ -225,7 +225,19 @@ export default function CreateOrderScreen() {
       ]);
 
       // Start the foreground service for order tracking with progress bar
-      startOrderTracking(order.id, '📦 Order Confirmed — Searching for a driver...', '⛟———⌖———⌖———⌖———⌖———⌖———⌖');
+      startOrderTracking(
+        order.id,
+        '📦 Order Confirmed — Searching for a driver...',
+        '⛟———⌖———⌖———⌖———⌖———⌖———⌖',
+        {
+          orderId: order.id,
+          orderStatus: 'SEARCHING_DRIVER',
+          groupKey: `order:${order.id}`,
+          relatedEntityType: 'Order',
+          relatedEntityId: order.id,
+          ongoing: 'true',
+        },
+      );
     } catch (e: any) {
       Alert.alert('Error', e.message || 'Failed to create order');
     } finally {

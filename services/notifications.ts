@@ -2,7 +2,15 @@ import notifee, {
   AndroidImportance,
   EventType,
 } from '@notifee/react-native';
-import messaging from '@react-native-firebase/messaging';
+import {
+  AuthorizationStatus,
+  getMessaging,
+  getToken,
+  onMessage,
+  onTokenRefresh,
+  requestPermission,
+  setBackgroundMessageHandler,
+} from '@react-native-firebase/messaging';
 import { Platform } from 'react-native';
 import { router } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -24,6 +32,54 @@ const ORDER_ACTIVE_STATUSES = [
   'PICKED_UP',
   'DELIVERING',
 ];
+
+const STATUS_BY_NOTIFICATION_TYPE: Record<string, string> = {
+  ORDER_CREATED: 'SEARCHING_DRIVER',
+  DRIVER_ASSIGNED: 'DRIVER_ASSIGNED',
+  DRIVER_ARRIVED: 'DRIVER_ARRIVED',
+  PACKAGE_PICKED_UP: 'PICKED_UP',
+  DELIVERY_IN_PROGRESS: 'DELIVERING',
+  ORDER_DELIVERED: 'DELIVERED',
+  ORDER_CANCELLED: 'CANCELLED',
+  NO_DRIVER_FOUND: 'FAILED',
+  DISPUTE_OPENED: 'DISPUTED',
+};
+
+let backgroundHandlersRegistered = false;
+
+const firebaseMessaging = getMessaging();
+
+let fcmTokenRefreshRegistered = false;
+
+/** FCM data values are not always typed as strings at the JS boundary; normalize before use. */
+function coerceFcmData(
+  raw: Record<string, unknown> | undefined,
+): Record<string, string> {
+  if (!raw || typeof raw !== 'object') return {};
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(raw)) {
+    if (v == null) continue;
+    out[k] = typeof v === 'string' ? v : String(v);
+  }
+  return out;
+}
+
+async function resolveOrderTrackingText(
+  data: Record<string, string>,
+  oid: string,
+): Promise<{ title: string; body: string } | null> {
+  let title = data.title?.trim() || '';
+  let body = data.body?.trim() || '';
+  if (title && body) return { title, body };
+
+  try {
+    const order = await orderService.getOrder(oid);
+    if (!order) return title && body ? { title, body } : null;
+    return getTrackingNotificationFromOrder(order);
+  } catch {
+    return title && body ? { title, body } : null;
+  }
+}
 
 /**
  * Create Android notification channels
@@ -50,13 +106,13 @@ export async function createNotificationChannels() {
  */
 export async function registerForPushNotifications(): Promise<string | null> {
   try {
-    const authStatus = await messaging().requestPermission();
+    const authStatus = await requestPermission(firebaseMessaging);
     const enabled =
-      authStatus === messaging.AuthorizationStatus.AUTHORIZED ||
-      authStatus === messaging.AuthorizationStatus.PROVISIONAL;
+      authStatus === AuthorizationStatus.AUTHORIZED ||
+      authStatus === AuthorizationStatus.PROVISIONAL;
     if (!enabled) return null;
 
-    const token = await messaging().getToken();
+    const token = await getToken(firebaseMessaging);
     if (!token) return null;
 
     const platform = Platform.OS as 'android' | 'ios';
@@ -67,12 +123,16 @@ export async function registerForPushNotifications(): Promise<string | null> {
       console.error('Failed to register push token with backend:', error);
     }
 
-    messaging().onTokenRefresh(async (newToken) => {
-      try {
-        await notificationService.registerToken(newToken, platform);
-        await AsyncStorage.setItem('pushToken', newToken);
-      } catch {}
-    });
+    if (!fcmTokenRefreshRegistered) {
+      fcmTokenRefreshRegistered = true;
+      onTokenRefresh(firebaseMessaging, async (newToken) => {
+        try {
+          const p = Platform.OS as 'android' | 'ios';
+          await notificationService.registerToken(newToken, p);
+          await AsyncStorage.setItem('pushToken', newToken);
+        } catch {}
+      });
+    }
 
     return token;
   } catch (error) {
@@ -450,19 +510,29 @@ async function handleInitialNotificationOpen() {
 // FCM MESSAGE HANDLERS
 // ============================================================
 
-async function handleOrderFCMData(data: Record<string, string>) {
-  const { title, body, orderId, groupKey, ongoing } = data;
-  if (!title || !body) return;
+async function handleOrderFCMData(rawData: Record<string, unknown>) {
+  const data = coerceFcmData(rawData);
+  const { orderId, groupKey, ongoing } = data;
 
   const isTerminal = ongoing === 'false';
   const oid = orderId || groupKey?.replace('order:', '') || '';
+  const inferredOrderStatus =
+    data.orderStatus ||
+    (data.type ? STATUS_BY_NOTIFICATION_TYPE[data.type] : undefined);
+
+  const resolved = await resolveOrderTrackingText(data, oid);
+  if (!resolved) return;
 
   if (isTerminal) {
-    await stopOrderTracking(title, body, oid);
+    await stopOrderTracking(resolved.title, resolved.body, oid);
     return;
   }
   if (!oid) return;
-  await updateOrderTracking(title, body, { ...data, orderId: oid });
+  await updateOrderTracking(resolved.title, resolved.body, {
+    ...data,
+    orderId: oid,
+    ...(inferredOrderStatus ? { orderStatus: inferredOrderStatus } : {}),
+  });
 }
 
 async function displayRegularNotification(data: Record<string, string>) {
@@ -491,16 +561,8 @@ export function setupNotificationListeners() {
   handleInitialNotificationOpen();
   flushPendingNotificationRoute();
 
-  const unsubscribeForeground = messaging().onMessage(async (remoteMessage) => {
-    const data = remoteMessage?.data as Record<string, string> | undefined;
-    if (!data) return;
-    const { groupKey } = data;
-    if (groupKey?.startsWith('order:')) {
-      await handleOrderFCMData(data);
-    } else {
-      await displayRegularNotification(data);
-    }
-  });
+  // Foreground FCM is registered in setupBackgroundHandler() as soon as the
+  // bundle loads (see index.js), so messages are not missed before React mounts.
 
   const unsubscribeNotifee = notifee.onForegroundEvent(({ type, detail }) => {
     if (type === EventType.ACTION_PRESS) {
@@ -532,21 +594,32 @@ export function setupNotificationListeners() {
   });
 
   return () => {
-    unsubscribeForeground();
     unsubscribeNotifee();
   };
 }
 
 export function setupBackgroundHandler() {
-  messaging().setBackgroundMessageHandler(async (remoteMessage) => {
-    const data = remoteMessage?.data as Record<string, string> | undefined;
-    if (!data) return;
+  if (backgroundHandlersRegistered) return;
+  backgroundHandlersRegistered = true;
+
+  const routeFcmDataMessage = async (remoteMessage: { data?: Record<string, unknown> }) => {
+    const raw = remoteMessage?.data as Record<string, unknown> | undefined;
+    if (!raw || typeof raw !== 'object') return;
+    const data = coerceFcmData(raw);
     const { groupKey } = data;
     if (groupKey?.startsWith('order:')) {
-      await handleOrderFCMData(data);
+      await handleOrderFCMData(raw);
     } else {
       await displayRegularNotification(data);
     }
+  };
+
+  // Register alongside the background handler, before AppRegistry (index.js),
+  // so foreground data messages reliably reach the client while the UI is open.
+  onMessage(firebaseMessaging, routeFcmDataMessage);
+
+  setBackgroundMessageHandler(firebaseMessaging, async (remoteMessage) => {
+    await routeFcmDataMessage(remoteMessage);
   });
 
   notifee.onBackgroundEvent(async ({ type, detail }) => {
@@ -578,6 +651,11 @@ export function setupBackgroundHandler() {
     }
   });
 }
+
+// IMPORTANT:
+// Register background handlers at module load so they are available in headless mode
+// (app closed), not only after React layout mounts.
+setupBackgroundHandler();
 
 
 // ============================================================
