@@ -5,7 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useGoogleAuth } from '../../hooks/useGoogleAuth';
 import { saveLoginTimestamp } from '../../services/auth-session';
-import { registerForPushNotifications } from '../../services/notifications';
+import { registerForPushNotifications, restoreOrderTrackingForCustomer } from '../../services/notifications';
 import { useTheme } from '../../contexts/ThemeContext';
 
 // For Android emulator, use 10.0.2.2 instead of localhost
@@ -125,6 +125,7 @@ export default function CustomerLoginScreen() {
 
       // Register for push notifications after successful login
       await registerForPushNotifications();
+      await restoreOrderTrackingForCustomer();
 
       // Navigate to customer home screen
       router.replace('/(customer)/home');

@@ -11,7 +11,6 @@ import {
   createNotificationChannels,
   registerOrderForegroundService,
 } from '../services/notifications';
-
 // Register background handler at module level (required by React Native Firebase)
 setupBackgroundHandler();
 

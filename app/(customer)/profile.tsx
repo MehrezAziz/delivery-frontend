@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Clipboard from 'expo-clipboard';
 import { clearPushToken } from '../../services/api/notification.service';
+import { stopOrderTrackingSilently } from '../../services/notifications';
 import { useTheme } from '../../contexts/ThemeContext';
 
 // Get API URL from environment variable
@@ -136,6 +137,8 @@ export default function CustomerProfileScreen() {
 
   const handleLogout = async () => {
     try {
+      // Ensure persistent order tracking notification is removed on logout
+      await stopOrderTrackingSilently();
       // Clear FCM token on backend before logout
       await clearPushToken();
       // Clear all stored data

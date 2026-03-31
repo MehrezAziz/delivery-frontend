@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, ActivityIndicator,
   Alert, RefreshControl, StyleSheet, TextInput, Modal, Image,
@@ -31,7 +31,7 @@ const STAR_LABELS = ['Terrible', 'Very Bad', 'Bad', 'Poor', 'Below Average', 'Av
 
 export default function OrderDetailScreen() {
   const router = useRouter();
-  const { orderId } = useLocalSearchParams<{ orderId: string }>();
+  const { orderId, scrollTo } = useLocalSearchParams<{ orderId: string; scrollTo?: string }>();
   const { colors, isDark } = useTheme();
   const [order, setOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
@@ -43,6 +43,10 @@ export default function OrderDetailScreen() {
   const [ratingSubmitting, setRatingSubmitting] = useState(false);
   const [reviewsModalVisible, setReviewsModalVisible] = useState(false);
   const [driverReviews, setDriverReviews] = useState<{ id: string; score: number; comment: string | null; createdAt: string; customerName: string }[]>([]);
+
+  const scrollViewRef = useRef<ScrollView>(null);
+  const [driverCardY, setDriverCardY] = useState<number | null>(null);
+  const hasAutoScrolledRef = useRef(false);
 
   const loadOrder = useCallback(async () => {
     try {
@@ -58,6 +62,25 @@ export default function OrderDetailScreen() {
     const interval = setInterval(loadOrder, 5000);
     return () => clearInterval(interval);
   }, [loadOrder]);
+
+  // Deep-link support from notification actions
+  useEffect(() => {
+    if (!order) return;
+    if (scrollTo !== 'driver') {
+      hasAutoScrolledRef.current = false;
+      return;
+    }
+    if (hasAutoScrolledRef.current) return;
+
+    const scrollView = scrollViewRef.current;
+    if (driverCardY === null) return;
+
+    // Wait a bit to ensure layout is measured correctly
+    setTimeout(() => {
+      hasAutoScrolledRef.current = true;
+      scrollView.scrollTo({ y: driverCardY, animated: true });
+    }, 150);
+  }, [order, scrollTo, driverCardY]);
 
   const handleCancel = () => {
     Alert.alert('Cancel Order', 'Are you sure you want to cancel this order?', [
@@ -211,7 +234,10 @@ export default function OrderDetailScreen() {
         </View>
       </View>
 
-      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 20, paddingBottom: 40 }}
+      <ScrollView
+        ref={scrollViewRef}
+        style={{ flex: 1 }}
+        contentContainerStyle={{ padding: 20, paddingBottom: 40 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); loadOrder(); }} />}>
 
         {/* ── Progress Steps (only for active orders) ── */}
@@ -356,7 +382,10 @@ export default function OrderDetailScreen() {
 
         {/* ── Driver Card ── */}
         {order.driverAssignment?.driver && (
-          <View style={[s.card, { backgroundColor: colors.card }]}>
+          <View
+            style={[s.card, { backgroundColor: colors.card }]}
+            onLayout={(event) => setDriverCardY(event.nativeEvent.layout.y)}
+          >
             <Text style={[s.cardTitle, { color: colors.text }]}>Your Driver</Text>
             <View style={s.driverRow}>
               {order.driverAssignment.driver.user.image ? (

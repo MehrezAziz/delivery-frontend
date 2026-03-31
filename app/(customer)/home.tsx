@@ -12,6 +12,7 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { ThemeToggle } from '../../components/ThemeToggle';
 import { orderService, Order } from '../../services/api/order.service';
 import { notificationService } from '../../services/api/notification.service';
+import { restoreOrderTrackingForCustomer } from '../../services/notifications';
 
 const ACTIVE_STATUSES = [
   'SEARCHING_DRIVER', 'PENDING_CUSTOMER_APPROVAL', 'DRIVER_ASSIGNED', 'DRIVER_ARRIVED', 'PICKED_UP', 'DELIVERING',
@@ -43,6 +44,7 @@ export default function CustomerHomeScreen() {
         setUserName(user.firstName || user.secondName || '');
       }
     });
+    restoreOrderTrackingForCustomer();
   }, []);
 
   const loadOrders = useCallback(async () => {

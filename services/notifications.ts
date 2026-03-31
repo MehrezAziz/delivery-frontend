@@ -8,13 +8,24 @@ import { router } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { notificationService } from './api/notification.service';
 import { api } from './api/client';
+import { orderService, Order } from './api/order.service';
 
 // Channel IDs
 const CHANNEL_ORDER = 'order-updates';
 const CHANNEL_DEFAULT = 'default';
+const PENDING_NOTIFICATION_ROUTE_KEY = 'pendingNotificationRoute';
+const TRACKING_STATUS_KEY = 'trackingOrderStatus';
 
 // Fixed notification ID for the order tracking foreground service
 const ORDER_FGS_ID = 'order-fgs';
+const ORDER_ACTIVE_STATUSES = [
+  'SEARCHING_DRIVER',
+  'PENDING_CUSTOMER_APPROVAL',
+  'DRIVER_ASSIGNED',
+  'DRIVER_ARRIVED',
+  'PICKED_UP',
+  'DELIVERING',
+];
 
 /**
  * Create Android notification channels
@@ -107,7 +118,10 @@ function buildNotifeeActions(data: Record<string, string>) {
   if (buttons.length > 0) {
     return buttons.map((btn) => ({
       title: btn.title,
-      pressAction: { id: btn.id, launchActivity: 'default' },
+      pressAction:
+        btn.id === 'accept_driver'
+          ? ({ id: btn.id, launchActivity: 'none' } as any) // keep app closed for background approval
+          : { id: btn.id, launchActivity: 'default' },
     }));
   }
   // Default action
@@ -117,6 +131,58 @@ function buildNotifeeActions(data: Record<string, string>) {
 // Total steps in the order progress (0-6)
 const PROGRESS_TOTAL = 7;
 
+function getTrackingNotificationFromOrder(order: Order): { title: string; body: string } {
+  const driverName =
+    order.driverAssignment?.driver?.user?.firstName ||
+    order.driverAssignment?.driver?.user?.secondName ||
+    'Driver';
+
+  switch (order.status) {
+    case 'SEARCHING_DRIVER':
+      return {
+        title: '📦 Order Confirmed — Searching for a driver...',
+        body: '⛟———⌖———⌖———⌖———⌖———⌖———⌖',
+      };
+    case 'PENDING_CUSTOMER_APPROVAL':
+      return {
+        title: `🚗 Driver Found! — ${driverName}`,
+        body: '◉———⛟———⌖———⌖———⌖———⌖———⌖',
+      };
+    case 'DRIVER_ASSIGNED':
+      return {
+        title: `✅ Driver Assigned — ${driverName} is on the way!`,
+        body: '◉———◉———⛟———⌖———⌖———⌖———⌖',
+      };
+    case 'DRIVER_ARRIVED':
+      return {
+        title: '📍 Driver Arrived — At the pickup location',
+        body: '◉———◉———◉———⛟———⌖———⌖———⌖',
+      };
+    case 'PICKED_UP':
+      return {
+        title: '📦 Package Picked Up — On its way!',
+        body: '◉———◉———◉———◉———⛟———⌖———⌖',
+      };
+    case 'DELIVERING':
+      return {
+        title: '🚚 Delivery In Progress',
+        body: '◉———◉———◉———◉———◉———⛟———⌖',
+      };
+    default:
+      return {
+        title: '📦 Order Update',
+        body: '⛟———⌖———⌖———⌖———⌖———⌖———⌖',
+      };
+  }
+}
+
+function getDriverFoundActionButtons() {
+  return [
+    { id: 'accept_driver', title: '✅ Accept Driver', action: 'accept_driver' },
+    { id: 'see_driver', title: '👤 See Driver', action: 'see_driver' },
+  ];
+}
+
 /**
  * Start the order tracking foreground service.
  */
@@ -124,6 +190,9 @@ export async function startOrderTracking(orderId: string, title: string, body: s
   if (Platform.OS !== 'android') return;
 
   await AsyncStorage.setItem('trackingOrderId', orderId);
+  if (data?.orderStatus) {
+    await AsyncStorage.setItem(TRACKING_STATUS_KEY, data.orderStatus);
+  }
 
   await notifee.displayNotification({
     id: ORDER_FGS_ID,
@@ -151,6 +220,9 @@ export async function updateOrderTracking(title: string, body: string, data?: Re
   if (Platform.OS !== 'android') return;
 
   const orderId = await AsyncStorage.getItem('trackingOrderId');
+  if (data?.orderStatus) {
+    await AsyncStorage.setItem(TRACKING_STATUS_KEY, data.orderStatus);
+  }
 
   await notifee.displayNotification({
     id: ORDER_FGS_ID,
@@ -175,13 +247,24 @@ export async function updateOrderTracking(title: string, body: string, data?: Re
  * Stop the order tracking foreground service.
  */
 export async function stopOrderTracking(title: string, body: string) {
+  return stopOrderTrackingWithOptions(title, body, true);
+}
+
+export async function stopOrderTrackingSilently() {
+  return stopOrderTrackingWithOptions('', '', false);
+}
+
+async function stopOrderTrackingWithOptions(title: string, body: string, showFinalNotification: boolean) {
   if (Platform.OS !== 'android') return;
 
-  await AsyncStorage.removeItem('trackingOrderId');
+  const orderId = await AsyncStorage.getItem('trackingOrderId');
+  await AsyncStorage.multiRemove(['trackingOrderId', TRACKING_STATUS_KEY]);
 
   try {
     await notifee.stopForegroundService();
   } catch {}
+
+  if (!showFinalNotification) return;
 
   await notifee.displayNotification({
     title,
@@ -190,9 +273,70 @@ export async function stopOrderTracking(title: string, body: string) {
       channelId: CHANNEL_ORDER,
       importance: AndroidImportance.HIGH,
       autoCancel: true,
-      pressAction: { id: 'default' },
+      // Always deep-link back to the order details screen
+      pressAction: { id: 'view_order', launchActivity: 'default' },
+    },
+    data: {
+      orderId: orderId || '',
+      relatedEntityType: 'Order',
+      relatedEntityId: orderId || '',
     },
   });
+}
+
+/**
+ * Restore customer order tracking notification after login/reopen.
+ * If there is no active order, foreground service is stopped silently.
+ */
+export async function restoreOrderTrackingForCustomer() {
+  if (Platform.OS !== 'android') return;
+
+  try {
+    const role = await AsyncStorage.getItem('userRole');
+    if (role !== 'CUSTOMER') {
+      await stopOrderTrackingSilently();
+      return;
+    }
+
+    const orders = await orderService.getMyOrders();
+    const activeOrders = orders
+      .filter((order) => ORDER_ACTIVE_STATUSES.includes(order.status))
+      .sort(
+        (a, b) =>
+          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+      );
+
+    const order = activeOrders[0];
+    if (!order) {
+      await stopOrderTrackingSilently();
+      return;
+    }
+
+    const currentTrackingOrderId = await AsyncStorage.getItem('trackingOrderId');
+    const currentTrackingStatus = await AsyncStorage.getItem(TRACKING_STATUS_KEY);
+
+    // Already tracking this exact order in the same status; avoid re-posting notification.
+    if (currentTrackingOrderId === order.id && currentTrackingStatus === order.status) {
+      return;
+    }
+
+    const { title, body } = getTrackingNotificationFromOrder(order);
+
+    const actionButtons =
+      order.status === 'PENDING_CUSTOMER_APPROVAL' ? getDriverFoundActionButtons() : null;
+
+    await startOrderTracking(order.id, title, body, {
+      orderId: order.id,
+      groupKey: `order:${order.id}`,
+      relatedEntityType: 'Order',
+      relatedEntityId: order.id,
+      ongoing: 'true',
+      orderStatus: order.status,
+      ...(actionButtons ? { actionButtons: JSON.stringify(actionButtons) } : {}),
+    });
+  } catch (error) {
+    console.error('Failed to restore order tracking notification:', error);
+  }
 }
 
 
@@ -219,6 +363,52 @@ async function handleAcceptDriver(orderId: string) {
   } catch (error) {
     console.error('Failed to approve driver from notification:', error);
   }
+}
+
+function getOrderRoute(orderId: string, scrollToDriver: boolean = false) {
+  return scrollToDriver
+    ? `/(customer)/order-detail?orderId=${orderId}&scrollTo=driver`
+    : `/(customer)/order-detail?orderId=${orderId}`;
+}
+
+async function savePendingNotificationRoute(route: string) {
+  try {
+    await AsyncStorage.setItem(PENDING_NOTIFICATION_ROUTE_KEY, route);
+  } catch {}
+}
+
+async function flushPendingNotificationRoute() {
+  try {
+    const route = await AsyncStorage.getItem(PENDING_NOTIFICATION_ROUTE_KEY);
+    if (!route) return;
+    await AsyncStorage.removeItem(PENDING_NOTIFICATION_ROUTE_KEY);
+    router.push(route as any);
+  } catch {}
+}
+
+async function handleInitialNotificationOpen() {
+  try {
+    const initial = await notifee.getInitialNotification();
+    if (!initial) return;
+
+    const actionId = initial.pressAction?.id;
+    const data = initial.notification?.data as Record<string, string> | undefined;
+    const orderId = data?.orderId || data?.relatedEntityId || '';
+
+    if (!orderId) return;
+
+    if (actionId === 'accept_driver') {
+      await handleAcceptDriver(orderId);
+      return;
+    }
+
+    if (actionId === 'see_driver') {
+      router.push(getOrderRoute(orderId, true) as any);
+      return;
+    }
+
+    router.push(getOrderRoute(orderId) as any);
+  } catch {}
 }
 
 // ============================================================
@@ -268,6 +458,10 @@ async function displayRegularNotification(data: Record<string, string>) {
 // ============================================================
 
 export function setupNotificationListeners() {
+  // Handle notification taps that launched the app from killed state
+  handleInitialNotificationOpen();
+  flushPendingNotificationRoute();
+
   const unsubscribeForeground = messaging().onMessage(async (remoteMessage) => {
     const data = remoteMessage?.data as Record<string, string> | undefined;
     if (!data) return;
@@ -290,18 +484,18 @@ export function setupNotificationListeners() {
         return;
       }
       if (actionId === 'see_driver' && orderId) {
-        router.push(`/(customer)/order-detail?orderId=${orderId}`);
+        router.push(getOrderRoute(orderId, true) as any);
         return;
       }
       if (actionId === 'view_order' && orderId) {
-        router.push(`/(customer)/order-detail?orderId=${orderId}`);
+        router.push(getOrderRoute(orderId) as any);
         return;
       }
     }
     if (type === EventType.PRESS) {
       const data = detail.notification?.data as Record<string, string> | undefined;
       if (data?.relatedEntityType === 'Order' && data?.relatedEntityId) {
-        router.push(`/(customer)/order-detail?orderId=${data.relatedEntityId}`);
+        router.push(getOrderRoute(data.relatedEntityId) as any);
       } else if (data) {
         handleNotificationTap(data);
       }
@@ -337,18 +531,18 @@ export function setupBackgroundHandler() {
         return;
       }
       if (actionId === 'see_driver' && orderId) {
-        router.push(`/(customer)/order-detail?orderId=${orderId}`);
+        await savePendingNotificationRoute(getOrderRoute(orderId, true));
         return;
       }
       if (actionId === 'view_order' && orderId) {
-        router.push(`/(customer)/order-detail?orderId=${orderId}`);
+        await savePendingNotificationRoute(getOrderRoute(orderId));
         return;
       }
     }
     if (type === EventType.PRESS) {
       const data = detail.notification?.data as Record<string, string> | undefined;
       if (data?.relatedEntityType === 'Order' && data?.relatedEntityId) {
-        router.push(`/(customer)/order-detail?orderId=${data.relatedEntityId}`);
+        await savePendingNotificationRoute(getOrderRoute(data.relatedEntityId));
       } else if (data) {
         handleNotificationTap(data);
       }
