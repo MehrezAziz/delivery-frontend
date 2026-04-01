@@ -3,6 +3,7 @@ import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { isSessionValid, clearSession } from '../services/auth-session';
+import { resolveLaunchRouteAfterLogin } from '../services/notifications';
 
 export default function RoleSelectionScreen() {
   const router = useRouter();
@@ -16,6 +17,12 @@ export default function RoleSelectionScreen() {
     try {
       const valid = await isSessionValid();
       if (valid) {
+        const launchRoute = await resolveLaunchRouteAfterLogin();
+        if (launchRoute) {
+          router.replace(launchRoute as any);
+          return;
+        }
+
         // Session is still valid — redirect to the right home screen
         const userRole = await AsyncStorage.getItem('userRole');
         const customer = await AsyncStorage.getItem('customer');

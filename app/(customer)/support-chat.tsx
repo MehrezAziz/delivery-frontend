@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supportService, SupportMessage, SupportTicket } from '../../services/api/support.service';
 import { useTheme } from '../../contexts/ThemeContext';
+import { useActiveChatForNotifications } from '../../hooks/useActiveChatForNotifications';
 
 export default function SupportChatScreen() {
   const router = useRouter();
@@ -21,6 +22,8 @@ export default function SupportChatScreen() {
       if (u) setUserId(JSON.parse(u).id);
     });
   }, []);
+
+  useActiveChatForNotifications('support', ticketId);
 
   const loadTicket = useCallback(async () => {
     if (!ticketId) return;

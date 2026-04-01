@@ -8,6 +8,7 @@ import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { orderService, ChatMessage, ChatRoom } from '../../services/api/order.service';
 import { useTheme } from '../../contexts/ThemeContext';
+import { useActiveChatForNotifications } from '../../hooks/useActiveChatForNotifications';
 
 export default function OrderChatScreen() {
   const router = useRouter();
@@ -26,6 +27,8 @@ export default function OrderChatScreen() {
       if (u) setMyUserId(JSON.parse(u).id || '');
     });
   }, []);
+
+  useActiveChatForNotifications('order', orderId);
 
   const loadChat = useCallback(async () => {
     try {

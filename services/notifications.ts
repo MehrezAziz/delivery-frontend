@@ -4,9 +4,11 @@ import notifee, {
 } from '@notifee/react-native';
 import {
   AuthorizationStatus,
+  getInitialNotification,
   getMessaging,
   getToken,
   onMessage,
+  onNotificationOpenedApp,
   onTokenRefresh,
   requestPermission,
   setBackgroundMessageHandler,
@@ -23,6 +25,21 @@ const CHANNEL_ORDER = 'order-updates';
 const CHANNEL_DEFAULT = 'default';
 const PENDING_NOTIFICATION_ROUTE_KEY = 'pendingNotificationRoute';
 const TRACKING_STATUS_MAP_KEY = 'trackingOrderStatusMap';
+
+/** While this matches the open chat screen, suppress redundant "new message" pushes. */
+export type ActiveChatContext = { kind: 'order' | 'support'; id: string };
+
+let activeChatContext: ActiveChatContext | null = null;
+
+export function setActiveChatContext(ctx: ActiveChatContext | null) {
+  activeChatContext = ctx;
+}
+
+export function clearActiveChatContextIfMatches(kind: ActiveChatContext['kind'], id: string) {
+  if (activeChatContext?.kind === kind && activeChatContext.id === id) {
+    activeChatContext = null;
+  }
+}
 
 const ORDER_ACTIVE_STATUSES = [
   'SEARCHING_DRIVER',
@@ -472,38 +489,148 @@ async function savePendingNotificationRoute(route: string) {
   } catch {}
 }
 
-async function flushPendingNotificationRoute() {
+/** Read and clear queued deep link (e.g. notification action while app was headless). */
+export async function consumePendingLaunchRoute(): Promise<string | null> {
   try {
     const route = await AsyncStorage.getItem(PENDING_NOTIFICATION_ROUTE_KEY);
-    if (!route) return;
+    if (!route) return null;
     await AsyncStorage.removeItem(PENDING_NOTIFICATION_ROUTE_KEY);
-    router.push(route as any);
-  } catch {}
+    return route;
+  } catch {
+    return null;
+  }
 }
 
-async function handleInitialNotificationOpen() {
-  try {
-    const initial = await notifee.getInitialNotification();
-    if (!initial) return;
+async function flushPendingNotificationRoute() {
+  const route = await consumePendingLaunchRoute();
+  if (route) router.push(route as any);
+}
 
-    const actionId = initial.pressAction?.id;
-    const data = initial.notification?.data as Record<string, string> | undefined;
-    const orderId = data?.orderId || data?.relatedEntityId || '';
+function shouldSuppressChatNotification(data: Record<string, string>): boolean {
+  const type = data.type || '';
+  const relType = data.relatedEntityType || '';
+  const relId = data.relatedEntityId || '';
+  if (!activeChatContext || !relId) return false;
 
-    if (!orderId) return;
+  if (
+    relType === 'ChatRoom' &&
+    (type === 'NEW_MESSAGE_FROM_DRIVER' || type === 'NEW_MESSAGE_FROM_CUSTOMER')
+  ) {
+    return activeChatContext.kind === 'order' && activeChatContext.id === relId;
+  }
+  if (relType === 'SupportTicket' && type === 'SUPPORT_TICKET_REPLY') {
+    return activeChatContext.kind === 'support' && activeChatContext.id === relId;
+  }
+  return false;
+}
 
-    if (actionId === 'accept_driver') {
-      await handleAcceptDriver(orderId);
-      return;
+/** Build an expo-router path from FCM / Notifee notification data. */
+export async function notificationDataToRoute(
+  data: Record<string, string> | undefined,
+): Promise<string | null> {
+  if (!data) return null;
+  const { relatedEntityType, relatedEntityId, type } = data;
+  if (!relatedEntityType || !relatedEntityId) return null;
+
+  switch (relatedEntityType) {
+    case 'Order': {
+      const driverTypes = [
+        'NEW_ORDER_AVAILABLE',
+        'ORDER_EXPIRED',
+        'ORDER_CANCELLED_BY_CUSTOMER',
+        'PICKUP_REMINDER',
+        'PAYMENT_RECEIVED_COD',
+        'PAYMENT_CREDITED_WALLET',
+        'NEW_MESSAGE_FROM_CUSTOMER',
+      ];
+      if (driverTypes.includes(type || '')) {
+        return `/(driver)/order-detail?orderId=${relatedEntityId}`;
+      }
+      return `/(customer)/order-detail?orderId=${relatedEntityId}`;
     }
-
-    if (actionId === 'see_driver') {
-      router.push(getOrderRoute(orderId, true) as any);
-      return;
+    case 'ChatRoom': {
+      const u = await AsyncStorage.getItem('user');
+      let role: string | undefined;
+      if (u) {
+        try {
+          role = JSON.parse(u).role;
+        } catch {
+          role = undefined;
+        }
+      }
+      if (!role) role = (await AsyncStorage.getItem('userRole')) || 'CUSTOMER';
+      return role === 'DRIVER'
+        ? `/(driver)/order-chat?orderId=${relatedEntityId}`
+        : `/(customer)/order-chat?orderId=${relatedEntityId}`;
     }
+    case 'SupportTicket': {
+      const u = await AsyncStorage.getItem('user');
+      let role: string | undefined;
+      if (u) {
+        try {
+          role = JSON.parse(u).role;
+        } catch {
+          role = undefined;
+        }
+      }
+      if (!role) role = (await AsyncStorage.getItem('userRole')) || 'CUSTOMER';
+      return role === 'DRIVER'
+        ? `/(driver)/support-chat?ticketId=${relatedEntityId}`
+        : `/(customer)/support-chat?ticketId=${relatedEntityId}`;
+    }
+    case 'Rating':
+      return '/(driver)/my-ratings';
+    default:
+      return null;
+  }
+}
 
-    router.push(getOrderRoute(orderId) as any);
-  } catch {}
+type NotifeeInitial = NonNullable<Awaited<ReturnType<typeof notifee.getInitialNotification>>>;
+
+async function routeFromNotifeeInitialForNavigation(initial: NotifeeInitial): Promise<string | null> {
+  const actionId = initial.pressAction?.id;
+  const data = coerceFcmData(initial.notification?.data as Record<string, unknown>);
+  const orderId = data.orderId || data.relatedEntityId || '';
+
+  if (actionId === 'see_driver' && orderId) return getOrderRoute(orderId, true);
+  if (actionId === 'view_order' && orderId) return getOrderRoute(orderId);
+  if (actionId === 'accept_driver') return null;
+
+  if (data.relatedEntityType && data.relatedEntityId) {
+    return notificationDataToRoute(data);
+  }
+  if (orderId && data.groupKey?.startsWith('order:')) {
+    return getOrderRoute(orderId);
+  }
+  return null;
+}
+
+/**
+ * After a valid session on cold start: pending AsyncStorage route, then Notifee/FCM "opened from notification".
+ * Notifee initial payload is one-shot — read here only (not again in layout listeners).
+ */
+export async function resolveLaunchRouteAfterLogin(): Promise<string | null> {
+  const pending = await consumePendingLaunchRoute();
+  if (pending) return pending;
+
+  const n = await notifee.getInitialNotification();
+  if (n?.pressAction?.id === 'accept_driver') {
+    const data = coerceFcmData(n.notification?.data as Record<string, unknown>);
+    const orderId = data.orderId || data.relatedEntityId;
+    if (orderId) await handleAcceptDriver(orderId);
+    return null;
+  }
+  if (n) {
+    const r = await routeFromNotifeeInitialForNavigation(n);
+    if (r) return r;
+  }
+
+  const fcm = await getInitialNotification(firebaseMessaging);
+  if (fcm?.data) {
+    const r = await notificationDataToRoute(coerceFcmData(fcm.data as Record<string, unknown>));
+    if (r) return r;
+  }
+  return null;
 }
 
 // ============================================================
@@ -538,6 +665,7 @@ async function handleOrderFCMData(rawData: Record<string, unknown>) {
 async function displayRegularNotification(data: Record<string, string>) {
   const { title, body } = data;
   if (!title || !body) return;
+  if (shouldSuppressChatNotification(data)) return;
 
   await notifee.displayNotification({
     title,
@@ -557,9 +685,16 @@ async function displayRegularNotification(data: Record<string, string>) {
 // ============================================================
 
 export function setupNotificationListeners() {
-  // Handle notification taps that launched the app from killed state
-  handleInitialNotificationOpen();
+  // Cold-start deep links are handled in app/index.tsx via resolveLaunchRouteAfterLogin()
+  // so the default home redirect does not win over notification targets.
   flushPendingNotificationRoute();
+
+  const unsubOpened = onNotificationOpenedApp(firebaseMessaging, async (remoteMessage) => {
+    const route = await notificationDataToRoute(
+      coerceFcmData(remoteMessage?.data as Record<string, unknown>),
+    );
+    if (route) router.push(route as any);
+  });
 
   // Foreground FCM is registered in setupBackgroundHandler() as soon as the
   // bundle loads (see index.js), so messages are not missed before React mounts.
@@ -585,15 +720,14 @@ export function setupNotificationListeners() {
     }
     if (type === EventType.PRESS) {
       const data = detail.notification?.data as Record<string, string> | undefined;
-      if (data?.relatedEntityType === 'Order' && data?.relatedEntityId) {
-        router.push(getOrderRoute(data.relatedEntityId) as any);
-      } else if (data) {
-        handleNotificationTap(data);
-      }
+      void notificationDataToRoute(coerceFcmData(data as Record<string, unknown>)).then((route) => {
+        if (route) router.push(route as any);
+      });
     }
   });
 
   return () => {
+    unsubOpened();
     unsubscribeNotifee();
   };
 }
@@ -643,11 +777,8 @@ export function setupBackgroundHandler() {
     }
     if (type === EventType.PRESS) {
       const data = detail.notification?.data as Record<string, string> | undefined;
-      if (data?.relatedEntityType === 'Order' && data?.relatedEntityId) {
-        await savePendingNotificationRoute(getOrderRoute(data.relatedEntityId));
-      } else if (data) {
-        handleNotificationTap(data);
-      }
+      const route = await notificationDataToRoute(coerceFcmData(data as Record<string, unknown>));
+      if (route) await savePendingNotificationRoute(route);
     }
   });
 }
@@ -657,53 +788,6 @@ export function setupBackgroundHandler() {
 // (app closed), not only after React layout mounts.
 setupBackgroundHandler();
 
-
-// ============================================================
-// NOTIFICATION TAP HANDLER
-// ============================================================
-
-function handleNotificationTap(data: Record<string, string> | undefined) {
-  if (!data) return;
-  const { relatedEntityType, relatedEntityId, type } = data;
-  if (!relatedEntityType || !relatedEntityId) return;
-
-  switch (relatedEntityType) {
-    case 'Order': {
-      const driverTypes = [
-        'NEW_ORDER_AVAILABLE', 'ORDER_EXPIRED', 'ORDER_CANCELLED_BY_CUSTOMER',
-        'PICKUP_REMINDER', 'PAYMENT_RECEIVED_COD', 'PAYMENT_CREDITED_WALLET',
-        'NEW_MESSAGE_FROM_CUSTOMER',
-      ];
-      if (driverTypes.includes(type)) {
-        router.push(`/(driver)/order-detail?orderId=${relatedEntityId}`);
-      } else {
-        router.push(`/(customer)/order-detail?orderId=${relatedEntityId}`);
-      }
-      break;
-    }
-    case 'ChatRoom':
-      AsyncStorage.getItem('user').then((u) => {
-        if (u) {
-          const user = JSON.parse(u);
-          if (user.role === 'DRIVER') router.push(`/(driver)/order-chat?orderId=${relatedEntityId}`);
-          else router.push(`/(customer)/order-chat?orderId=${relatedEntityId}`);
-        }
-      });
-      break;
-    case 'SupportTicket':
-      AsyncStorage.getItem('user').then((u) => {
-        if (u) {
-          const user = JSON.parse(u);
-          if (user.role === 'DRIVER') router.push(`/(driver)/support-chat?ticketId=${relatedEntityId}`);
-          else router.push(`/(customer)/support-chat?ticketId=${relatedEntityId}`);
-        }
-      });
-      break;
-    case 'Rating':
-      router.push('/(driver)/my-ratings');
-      break;
-  }
-}
 
 // ============================================================
 // LEGACY EXPORTS
