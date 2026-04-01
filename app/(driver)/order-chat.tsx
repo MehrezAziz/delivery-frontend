@@ -13,6 +13,10 @@ import { useActiveChatForNotifications } from '../../hooks/useActiveChatForNotif
 export default function DriverOrderChatScreen() {
   const router = useRouter();
   const { orderId } = useLocalSearchParams<{ orderId: string }>();
+  const handleBack = () => {
+    if (router.canGoBack()) router.back();
+    else router.replace('/(driver)/home');
+  };
   const { colors, isDark } = useTheme();
   const [chatRoom, setChatRoom] = useState<ChatRoom | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -94,7 +98,7 @@ export default function DriverOrderChatScreen() {
     <KeyboardAvoidingView style={[s.container, { backgroundColor: colors.background }]} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       {/* Header */}
       <View style={s.header}>
-        <TouchableOpacity onPress={() => router.back()} style={s.headerBtn}>
+        <TouchableOpacity onPress={handleBack} style={s.headerBtn}>
           <Ionicons name="chevron-back" size={22} color="#fff" />
         </TouchableOpacity>
         <View style={{ flex: 1 }}>

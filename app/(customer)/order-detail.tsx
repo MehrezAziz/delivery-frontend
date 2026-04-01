@@ -32,6 +32,10 @@ const STAR_LABELS = ['Terrible', 'Very Bad', 'Bad', 'Poor', 'Below Average', 'Av
 export default function OrderDetailScreen() {
   const router = useRouter();
   const { orderId, scrollTo } = useLocalSearchParams<{ orderId: string; scrollTo?: string }>();
+  const handleBack = () => {
+    if (router.canGoBack()) router.back();
+    else router.replace('/(customer)/home');
+  };
   const { colors, isDark } = useTheme();
   const [order, setOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
@@ -216,7 +220,7 @@ export default function OrderDetailScreen() {
       {/* ── Header ── */}
       <View style={[s.header, { backgroundColor: meta.color }]}>
         <View style={s.headerTop}>
-          <TouchableOpacity onPress={() => router.back()} style={s.headerBtn}>
+          <TouchableOpacity onPress={handleBack} style={s.headerBtn}>
             <Ionicons name="chevron-back" size={22} color="#fff" />
           </TouchableOpacity>
           <Text style={s.headerTitle}>Order Details</Text>

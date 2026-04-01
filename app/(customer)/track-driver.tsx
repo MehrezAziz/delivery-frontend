@@ -106,7 +106,7 @@ export default function TrackDriverScreen() {
 
       {/* Header overlay */}
       <View style={[s.headerOverlay, { backgroundColor: isDark ? 'rgba(15,23,42,0.95)' : 'rgba(255,255,255,0.95)' }]}>
-        <TouchableOpacity onPress={() => router.back()} style={[s.headerBtn, { backgroundColor: colors.surfaceVariant }]}>
+        <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace('/(customer)/home')} style={[s.headerBtn, { backgroundColor: colors.surfaceVariant }]}>
           <Ionicons name="chevron-back" size={22} color={colors.text} />
         </TouchableOpacity>
         <Text style={[s.headerTitle, { color: colors.text }]}>Track Driver</Text>

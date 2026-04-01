@@ -137,7 +137,7 @@ export default function DriverNotifications() {
   return (
     <View style={[s.container, { backgroundColor: colors.background }]}>
       <View style={[s.header, { paddingTop: insets.top + 12, backgroundColor: colors.card, borderBottomColor: colors.border }]}>
-        <TouchableOpacity onPress={() => router.back()} style={[s.backBtn, { backgroundColor: colors.surfaceVariant }]}>
+        <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace('/(driver)/home')} style={[s.backBtn, { backgroundColor: colors.surfaceVariant }]}>
           <Ionicons name="chevron-back" size={24} color={colors.text} />
         </TouchableOpacity>
         <Text style={[s.headerTitle, { color: colors.text }]}>Notifications</Text>

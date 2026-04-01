@@ -195,7 +195,7 @@ export default function PickLocationScreen() {
       {/* Top bar with search */}
       <View style={styles.topBar}>
         <View style={styles.headerRow}>
-          <TouchableOpacity onPress={() => router.back()} style={[styles.backBtn, { backgroundColor: colors.card }]}>
+          <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace('/(customer)/home')} style={[styles.backBtn, { backgroundColor: colors.card }]}>
             <Ionicons name="arrow-back" size={22} color={colors.text} />
           </TouchableOpacity>
           <Text style={[styles.title, { color: accentColor }]}>{title}</Text>

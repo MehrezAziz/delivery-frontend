@@ -76,7 +76,7 @@ export default function DriverSupportScreen() {
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <View style={[styles.header, { backgroundColor: colors.card, borderBottomColor: colors.border }]}>
-        <TouchableOpacity onPress={() => router.back()}>
+        <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace('/(driver)/home')}>
           <Text style={styles.backText}>← Back</Text>
         </TouchableOpacity>
         <Text style={[styles.title, { color: colors.text }]}>Support</Text>

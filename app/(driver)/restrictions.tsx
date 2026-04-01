@@ -63,7 +63,7 @@ export default function DriverRestrictionsScreen() {
   return (
     <View style={[s.container, { backgroundColor: colors.background }]}>
       <View style={[s.header, { backgroundColor: colors.card, borderBottomColor: colors.border }]}>
-        <TouchableOpacity onPress={() => router.back()} style={s.backBtn}>
+        <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace('/(driver)/home')} style={s.backBtn}>
           <Ionicons name="arrow-back" size={24} color={colors.primary} />
         </TouchableOpacity>
         <Text style={[s.title, { color: colors.text }]}>My Restrictions</Text>

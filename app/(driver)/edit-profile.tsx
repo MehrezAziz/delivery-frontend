@@ -92,7 +92,7 @@ export default function DriverEditProfileScreen() {
       }, { headers: { Authorization: `Bearer ${token}` } });
 
       Alert.alert('Success', 'Profile updated', [
-        { text: 'OK', onPress: () => router.back() },
+        { text: 'OK', onPress: () => router.canGoBack() ? router.back() : router.replace('/(driver)/home') },
       ]);
     } catch (e: any) {
       Alert.alert('Error', e.response?.data?.message || 'Failed to update');
@@ -108,7 +108,7 @@ export default function DriverEditProfileScreen() {
     return (
       <View style={[s.container, { backgroundColor: colors.background }]}>
         <View style={[s.header, { backgroundColor: colors.headerBg }]}>
-          <TouchableOpacity onPress={() => router.back()} style={s.headerBtn}>
+          <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace('/(driver)/home')} style={s.headerBtn}>
             <Ionicons name="chevron-back" size={22} color="#fff" />
           </TouchableOpacity>
           <Text style={s.headerTitle}>Edit Profile</Text>
@@ -144,7 +144,7 @@ export default function DriverEditProfileScreen() {
   return (
     <View style={[s.container, { backgroundColor: colors.background }]}>
       <View style={[s.header, { backgroundColor: colors.headerBg }]}>
-        <TouchableOpacity onPress={() => router.back()} style={s.headerBtn}>
+        <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace('/(driver)/home')} style={s.headerBtn}>
           <Ionicons name="chevron-back" size={22} color="#fff" />
         </TouchableOpacity>
         <Text style={s.headerTitle}>Edit Profile</Text>

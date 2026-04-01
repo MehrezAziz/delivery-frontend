@@ -127,7 +127,7 @@ export default function DriverRegisterScreen() {
             {/* Login Link */}
             <View style={styles.loginContainer}>
               <Text style={[styles.loginText, { color: colors.textSecondary }]}>Already a driver? </Text>
-              <TouchableOpacity onPress={() => router.back()}>
+              <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace('/')}>
                 <Text style={styles.loginLink}>Login</Text>
               </TouchableOpacity>
             </View>

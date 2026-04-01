@@ -9,6 +9,10 @@ import { useActiveChatForNotifications } from '../../hooks/useActiveChatForNotif
 export default function SupportChatScreen() {
   const router = useRouter();
   const { ticketId } = useLocalSearchParams<{ ticketId: string }>();
+  const handleBack = () => {
+    if (router.canGoBack()) router.back();
+    else router.replace('/(customer)/home');
+  };
   const { colors, isDark } = useTheme();
   const [ticket, setTicket] = useState<(SupportTicket & { messages: SupportMessage[] }) | null>(null);
   const [loading, setLoading] = useState(true);
@@ -84,7 +88,7 @@ export default function SupportChatScreen() {
     <KeyboardAvoidingView style={[styles.container, { backgroundColor: colors.background }]} behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}>
       {/* Header */}
       <View style={[styles.header, { backgroundColor: colors.card, borderBottomColor: colors.border }]}>
-        <TouchableOpacity onPress={() => router.back()}>
+        <TouchableOpacity onPress={handleBack}>
           <Text style={[styles.backText, { color: colors.primary }]}>← Back</Text>
         </TouchableOpacity>
         <View style={{ flex: 1, alignItems: 'center' }}>

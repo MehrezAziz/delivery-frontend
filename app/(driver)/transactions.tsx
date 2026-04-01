@@ -120,7 +120,7 @@ export default function DriverTransactionsScreen() {
   return (
     <View style={[s.container, { backgroundColor: colors.background }]}>
       <View style={[s.header, { backgroundColor: colors.headerBg }]}>
-        <TouchableOpacity onPress={() => router.back()} style={s.headerBtn}>
+        <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace('/(driver)/home')} style={s.headerBtn}>
           <Ionicons name="chevron-back" size={22} color="#fff" />
         </TouchableOpacity>
         <Text style={s.headerTitle}>Transactions</Text>

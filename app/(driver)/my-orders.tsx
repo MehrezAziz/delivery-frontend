@@ -254,7 +254,7 @@ export default function DriverMyOrdersScreen() {
       {/* Header */}
       <View style={[s.header, { backgroundColor: colors.card, borderBottomColor: colors.border }]}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-          <TouchableOpacity onPress={() => router.back()} style={[s.backBtn, { backgroundColor: colors.surfaceVariant }]}>
+          <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace('/(driver)/home')} style={[s.backBtn, { backgroundColor: colors.surfaceVariant }]}>
             <Ionicons name="chevron-back" size={22} color={colors.text} />
           </TouchableOpacity>
           <View>

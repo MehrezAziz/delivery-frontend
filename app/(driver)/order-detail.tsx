@@ -4,9 +4,11 @@ import {
   RefreshControl, StyleSheet,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { orderService, Order } from '../../services/api/order.service';
 import { useTheme } from '../../contexts/ThemeContext';
+import { restoreOrderTrackingForDriver } from '../../services/notifications';
 
 const STATUS_META: Record<string, { icon: string; color: string; bg: string; label: string }> = {
   DRAFT:            { icon: 'document-outline',    color: '#6b7280', bg: '#f3f4f6', label: 'Draft' },
@@ -27,10 +29,15 @@ const STAR_LABELS = ['Terrible','Very Bad','Bad','Poor','Below Avg','Average','A
 export default function DriverOrderDetailScreen() {
   const router = useRouter();
   const { orderId, scrollTo } = useLocalSearchParams<{ orderId: string; scrollTo?: string }>();
+  const handleBack = () => {
+    if (router.canGoBack()) router.back();
+    else router.replace('/(driver)/home');
+  };
   const { colors, isDark } = useTheme();
   const [order, setOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [statusUpdating, setStatusUpdating] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
 
   const load = useCallback(async () => {
@@ -40,6 +47,65 @@ export default function DriverOrderDetailScreen() {
   }, [orderId]);
 
   useEffect(() => { load(); }, [load]);
+  useFocusEffect(
+    useCallback(() => {
+      load();
+    }, [load]),
+  );
+
+  const applyNextStatus = async () => {
+    if (!order || statusUpdating) return;
+    const nextByStatus: Record<string, string> = {
+      DRIVER_ASSIGNED: 'DRIVER_ARRIVED',
+      DRIVER_ARRIVED: 'PICKED_UP',
+      PICKED_UP: 'DELIVERING',
+    };
+    const next = nextByStatus[order.status];
+    if (!next) return;
+    try {
+      setStatusUpdating(true);
+      await orderService.updateOrderStatus(order.id, next);
+      await load();
+      await restoreOrderTrackingForDriver();
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setStatusUpdating(false);
+    }
+  };
+
+  const revertStatus = async () => {
+    if (!order || statusUpdating) return;
+    try {
+      setStatusUpdating(true);
+      await orderService.revertOrderStatus(order.id);
+      await load();
+      await restoreOrderTrackingForDriver();
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setStatusUpdating(false);
+    }
+  };
+
+  const handleDelivered = async () => {
+    if (!order || statusUpdating) return;
+    const hasProof1 = Boolean(order.driverAssignment?.image1Proof);
+    if (!hasProof1) {
+      router.push(`/(driver)/upload-proofs?orderId=${order.id}` as any);
+      return;
+    }
+    try {
+      setStatusUpdating(true);
+      await orderService.updateOrderStatus(order.id, 'DELIVERED');
+      await load();
+      await restoreOrderTrackingForDriver();
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setStatusUpdating(false);
+    }
+  };
 
   if (loading || !order) {
     return <View style={[s.center, { backgroundColor: colors.background }]}><ActivityIndicator size="large" color={colors.primary} /></View>;
@@ -47,13 +113,21 @@ export default function DriverOrderDetailScreen() {
 
   const meta = STATUS_META[order.status] || STATUS_META.DELIVERED;
   const da = order.driverAssignment;
+  const showProofSection = ['DRIVER_ARRIVED', 'PICKED_UP', 'DELIVERING', 'DELIVERED'].includes(order.status);
+  const canRevert = ['DRIVER_ARRIVED', 'PICKED_UP', 'DELIVERING'].includes(order.status);
+  const nextActionLabel: Record<string, string> = {
+    DRIVER_ASSIGNED: "I've arrived",
+    DRIVER_ARRIVED: 'Package picked up',
+    PICKED_UP: 'Start delivering now',
+  };
+  const canGoNext = Boolean(nextActionLabel[order.status]);
 
   return (
     <View style={[s.container, { backgroundColor: colors.background }]}>
       {/* Header */}
       <View style={[s.header, { backgroundColor: meta.color }]}>
         <View style={s.headerTop}>
-          <TouchableOpacity onPress={() => router.back()} style={s.headerBtn}>
+          <TouchableOpacity onPress={handleBack} style={s.headerBtn}>
             <Ionicons name="chevron-back" size={22} color="#fff" />
           </TouchableOpacity>
           <Text style={s.headerTitle}>Order Details</Text>
@@ -137,6 +211,42 @@ export default function DriverOrderDetailScreen() {
           {da?.deliveredAt && <TimelineItem label="Delivered" time={da.deliveredAt} color="#16a34a" />}
         </View>
 
+        {(canRevert || canGoNext || order.status === 'DELIVERING') && (
+          <View style={[s.card, { backgroundColor: colors.card }]}>
+            <Text style={[s.cardTitle, { color: colors.text }]}>Delivery Actions</Text>
+            <View style={s.stepActionsRow}>
+              {canRevert && (
+                <TouchableOpacity
+                  style={[s.revertBtn, statusUpdating && { opacity: 0.6 }]}
+                  onPress={revertStatus}
+                  disabled={statusUpdating}
+                >
+                  <Ionicons name="return-up-back-outline" size={16} color="#6b7280" />
+                  <Text style={s.revertBtnText}>Return</Text>
+                </TouchableOpacity>
+              )}
+              {canGoNext && (
+                <TouchableOpacity
+                  style={[s.nextBtn, { backgroundColor: colors.primary }, statusUpdating && { opacity: 0.6 }]}
+                  onPress={applyNextStatus}
+                  disabled={statusUpdating}
+                >
+                  <Text style={s.nextBtnText}>{nextActionLabel[order.status]}</Text>
+                </TouchableOpacity>
+              )}
+              {order.status === 'DELIVERING' && (
+                <TouchableOpacity
+                  style={[s.nextBtn, { backgroundColor: '#16a34a' }, statusUpdating && { opacity: 0.6 }]}
+                  onPress={handleDelivered}
+                  disabled={statusUpdating}
+                >
+                  <Text style={s.nextBtnText}>Delivered</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
+        )}
+
         {/* Customer info */}
         {order.description && (
           <View style={[s.card, { backgroundColor: colors.card }]}>
@@ -167,7 +277,7 @@ export default function DriverOrderDetailScreen() {
         )}
 
         {/* Proof status */}
-        {da && (
+        {da && showProofSection && (
           <View
             style={[s.card, { backgroundColor: colors.card }]}
             onLayout={(e) => {
@@ -196,6 +306,16 @@ export default function DriverOrderDetailScreen() {
                 </Text>
               </View>
             </View>
+            <TouchableOpacity
+              style={[s.proofActionBtn, { backgroundColor: colors.primary }]}
+              onPress={() => router.push(`/(driver)/upload-proofs?orderId=${order.id}` as any)}
+              activeOpacity={0.85}
+            >
+              <Ionicons name="cloud-upload-outline" size={16} color="#fff" />
+              <Text style={s.proofActionText}>
+                {da.image1Proof ? 'Update proof images' : 'Add proof images'}
+              </Text>
+            </TouchableOpacity>
           </View>
         )}
       </ScrollView>
@@ -266,5 +386,53 @@ const s = StyleSheet.create({
   proofStatus: {
     flex: 1, flexDirection: 'row', alignItems: 'center', gap: 6,
     paddingVertical: 10, paddingHorizontal: 12, borderRadius: 12,
+  },
+  proofActionBtn: {
+    marginTop: 12,
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  proofActionText: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  stepActionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  revertBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  revertBtnText: {
+    color: '#6b7280',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  nextBtn: {
+    flex: 1,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  nextBtnText: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '700',
   },
 });

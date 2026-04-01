@@ -106,7 +106,7 @@ export default function CustomerEditProfileScreen() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || 'Failed to update profile');
-      Alert.alert('Success', 'Profile updated', [{ text: 'OK', onPress: () => router.back() }]);
+      Alert.alert('Success', 'Profile updated', [{ text: 'OK', onPress: () => router.canGoBack() ? router.back() : router.replace('/(customer)/home') }]);
     } catch (e: any) {
       Alert.alert('Error', 'Failed to update, phone number exists!');
     } finally { setSaving(false); }
@@ -118,7 +118,7 @@ export default function CustomerEditProfileScreen() {
     return (
       <View style={[s.container, { backgroundColor: colors.background }]}>
         <View style={[s.header, { backgroundColor: colors.card, borderBottomColor: colors.border }]}>
-          <TouchableOpacity onPress={() => router.back()} style={[s.headerBtn, { backgroundColor: colors.surfaceVariant }]}>
+          <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace('/(customer)/home')} style={[s.headerBtn, { backgroundColor: colors.surfaceVariant }]}>
             <Ionicons name="chevron-back" size={22} color={colors.text} />
           </TouchableOpacity>
           <Text style={[s.headerTitleDark, { color: colors.text }]}>Edit Profile</Text>
@@ -144,7 +144,7 @@ export default function CustomerEditProfileScreen() {
   return (
     <View style={[s.container, { backgroundColor: colors.background }]}>
       <View style={[s.header, { backgroundColor: colors.card, borderBottomColor: colors.border }]}>
-        <TouchableOpacity onPress={() => router.back()} style={[s.headerBtn, { backgroundColor: colors.surfaceVariant }]}>
+        <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace('/(customer)/home')} style={[s.headerBtn, { backgroundColor: colors.surfaceVariant }]}>
           <Ionicons name="chevron-back" size={22} color={colors.text} />
         </TouchableOpacity>
         <Text style={[s.headerTitleDark, { color: colors.text }]}>Edit Profile</Text>

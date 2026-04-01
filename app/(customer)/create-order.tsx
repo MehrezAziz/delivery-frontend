@@ -405,7 +405,7 @@ export default function CreateOrderScreen() {
       <View style={[s.container, { backgroundColor: colors.background }]}>
         {/* Header */}
         <View style={[s.header, { backgroundColor: colors.headerBg }]}>
-          <TouchableOpacity onPress={() => router.back()} style={s.headerBackBtn}>
+          <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace('/(customer)/home')} style={s.headerBackBtn}>
             <Ionicons name="chevron-back" size={22} color="#fff" />
           </TouchableOpacity>
           <Text style={s.headerTitle}>New Order</Text>

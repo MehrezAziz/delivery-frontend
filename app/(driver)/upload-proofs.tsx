@@ -104,7 +104,7 @@ export default function UploadProofsScreen() {
     try {
       await orderService.uploadProofs(orderId, sendImage1 || image1, sendImage2);
       Alert.alert('Success', 'Proofs uploaded successfully', [
-        { text: 'OK', onPress: () => router.back() },
+        { text: 'OK', onPress: () => router.canGoBack() ? router.back() : router.replace('/(driver)/home') },
       ]);
     } catch (e: any) {
       Alert.alert('Error', e.message);
@@ -190,7 +190,7 @@ export default function UploadProofsScreen() {
   return (
     <View style={[s.container, { backgroundColor: colors.background }]}>
       <View style={s.header}>
-        <TouchableOpacity onPress={() => router.back()} style={s.headerBtn}>
+        <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace('/(driver)/home')} style={s.headerBtn}>
           <Ionicons name="chevron-back" size={22} color="#fff" />
         </TouchableOpacity>
         <Text style={s.headerTitle}>Upload Proofs</Text>

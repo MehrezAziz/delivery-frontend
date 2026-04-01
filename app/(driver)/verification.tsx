@@ -60,13 +60,13 @@ export default function DriverVerification() {
         Alert.alert(
           'Already Verified',
           'Your account is already verified!',
-          [{ text: 'OK', onPress: () => router.back() }]
+          [{ text: 'OK', onPress: () => router.canGoBack() ? router.back() : router.replace('/(driver)/home') }]
         );
       } else if (response.data.status === 'PENDING_REVIEW') {
         Alert.alert(
           'Under Review',
           'Your documents are currently being reviewed.',
-          [{ text: 'OK', onPress: () => router.back() }]
+          [{ text: 'OK', onPress: () => router.canGoBack() ? router.back() : router.replace('/(driver)/home') }]
         );
       }
     } catch (error) {
@@ -221,7 +221,7 @@ export default function DriverVerification() {
   return (
     <ScrollView style={[styles.container, { backgroundColor: colors.background }]}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace('/(driver)/home')} style={styles.backButton}>
           <Ionicons name="arrow-back" size={24} color={colors.primary} />
         </TouchableOpacity>
         <Text style={[styles.title, { color: colors.text }]}>Complete Verification</Text>

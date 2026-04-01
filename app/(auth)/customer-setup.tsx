@@ -97,7 +97,7 @@ export default function CustomerSetupScreen() {
     if (step === 'governorate') setStep('country');
     else if (step === 'delegation') setStep('governorate');
     else if (step === 'street') setStep('delegation');
-    else router.back();
+    else router.canGoBack() ? router.back() : router.replace('/');
   };
 
   const handleSubmit = async () => {
@@ -109,7 +109,7 @@ export default function CustomerSetupScreen() {
         delegationId: selectedDelegation.id,
         street: street.trim() || undefined,
       });
-      router.back();
+      router.canGoBack() ? router.back() : router.replace('/');
     } catch (e: any) {
       setError(e.message || 'Setup failed. Please try again.');
     } finally {

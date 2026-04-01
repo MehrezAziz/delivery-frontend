@@ -12,6 +12,10 @@ const STAR_LABELS = ['', 'Terrible', 'Very Bad', 'Bad', 'Poor', 'Below Avg', 'Av
 
 export default function DriverMyRatingsScreen() {
   const router = useRouter();
+  const handleBack = () => {
+    if (router.canGoBack()) router.back();
+    else router.replace('/(driver)/home');
+  };
   const { colors, isDark } = useTheme();
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -35,7 +39,7 @@ export default function DriverMyRatingsScreen() {
   return (
     <View style={[s.container, { backgroundColor: colors.background }]}>
       <View style={s.header}>
-        <TouchableOpacity onPress={() => router.back()} style={s.headerBtn}>
+        <TouchableOpacity onPress={handleBack} style={s.headerBtn}>
           <Ionicons name="chevron-back" size={22} color="#fff" />
         </TouchableOpacity>
         <Text style={s.headerTitle}>My Ratings</Text>

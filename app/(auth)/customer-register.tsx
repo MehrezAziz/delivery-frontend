@@ -506,7 +506,7 @@ export default function CustomerRegisterScreen() {
             {/* Login Link */}
             <View style={styles.loginContainer}>
               <Text style={[styles.loginText, { color: colors.textSecondary }]}>Already have an account? </Text>
-              <TouchableOpacity onPress={() => router.back()}>
+              <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace('/')}>
                 <Text style={[styles.loginLink, { color: colors.primary }]}>Login</Text>
               </TouchableOpacity>
             </View>
