@@ -122,6 +122,10 @@ export const orderService = {
 
   getDriverLocation: (id: string) => api.get(`/orders/${id}/driver-location`),
 
+  getTrackingToken: (id: string) => api.get<{ trackingToken: string }>(`/orders/${id}/tracking-token`),
+
+  getPublicTracking: (token: string) => api.get<{ status: string; driverLocation: { latitude: number; longitude: number; timestamp: string } | null; dropoffAddress: { street: string | null; delegation: string; governorate: string } | null }>(`/tracking/${token}`),
+
   createDispute: (id: string, reason: string) => api.post(`/orders/${id}/dispute`, { reason }),
 
   cancelDispute: (id: string) => api.delete(`/orders/${id}/dispute`),

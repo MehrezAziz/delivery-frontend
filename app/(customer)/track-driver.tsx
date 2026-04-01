@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import {
-  View, Text, TouchableOpacity, ActivityIndicator, StyleSheet, Alert,
+  View, Text, TouchableOpacity, ActivityIndicator, StyleSheet, Alert, Share, Clipboard,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -15,8 +15,23 @@ export default function TrackDriverScreen() {
   const [order, setOrder] = useState<Order | null>(null);
   const [driverLoc, setDriverLoc] = useState<{ latitude: number; longitude: number } | null>(null);
   const [loading, setLoading] = useState(true);
+  const [trackingToken, setTrackingToken] = useState<string | null>(null);
   const mapRef = useRef<MapView>(null);
 
+  const handleShare = useCallback(async () => {
+    try {
+      const res = await orderService.getTrackingToken(orderId);
+      const token = res.trackingToken;
+      setTrackingToken(token);
+      const webLink = `http://localhost:3001/track/${token}`;
+      await Share.share({
+        message: `Track my delivery live!\n\n📦 Code: ${token}\n🔗 Link: ${webLink}\n\nOpen the app → Orders → "Track" button → enter the code.\nOr tap the link to track in your browser.`,
+        title: 'Track My Delivery',
+      });
+    } catch (e: any) {
+      Alert.alert('Error', e.message || 'Could not get tracking token');
+    }
+  }, [orderId]);
   const loadData = useCallback(async () => {
     try {
       const [orderData, loc] = await Promise.all([
@@ -110,7 +125,11 @@ export default function TrackDriverScreen() {
           <Ionicons name="chevron-back" size={22} color={colors.text} />
         </TouchableOpacity>
         <Text style={[s.headerTitle, { color: colors.text }]}>Track Driver</Text>
-        <TouchableOpacity onPress={() => {
+        <View style={{ flexDirection: 'row', gap: 8 }}>
+          <TouchableOpacity onPress={handleShare} style={[s.headerBtn, { backgroundColor: colors.surfaceVariant }]}>
+            <Ionicons name="share-outline" size={20} color={colors.text} />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => {
           if (!mapRef.current) return;
           const coords: { latitude: number; longitude: number }[] = [];
           if (driverLoc) coords.push(driverLoc);
@@ -122,6 +141,7 @@ export default function TrackDriverScreen() {
         }} style={[s.headerBtn, { backgroundColor: colors.surfaceVariant }]}>
           <Ionicons name="expand-outline" size={20} color={colors.text} />
         </TouchableOpacity>
+        </View>
       </View>
 
       {/* Bottom info card */}

@@ -2,8 +2,9 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, ActivityIndicator,
   RefreshControl, Alert, StyleSheet, Animated, Dimensions, Pressable,
+  Modal, TextInput, KeyboardAvoidingView, Platform,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import { orderService, Order } from '../../services/api/order.service';
@@ -42,6 +43,15 @@ export default function CustomerOrdersScreen() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const slideAnim = useRef(new Animated.Value(SIDEBAR_WIDTH)).current;
   const overlayAnim = useRef(new Animated.Value(0)).current;
+  const [trackModalOpen, setTrackModalOpen] = useState(false);
+  const [trackCode, setTrackCode] = useState('');
+
+  // Clear track code when leaving the page
+  useFocusEffect(
+    useCallback(() => {
+      return () => setTrackCode('');
+    }, [])
+  );
 
   const openSidebar = () => {
     setSidebarOpen(true);
@@ -115,11 +125,55 @@ export default function CustomerOrdersScreen() {
           <Text style={[st.headerTitle, { color: colors.text }]}>My Orders</Text>
           <Text style={[st.headerCount, { color: colors.textTertiary }]}>{orders.length} total</Text>
         </View>
-        <TouchableOpacity style={[st.filterBtn, { backgroundColor: colors.surfaceVariant }, filter !== 'ALL' && { backgroundColor: colors.primary }]} onPress={openSidebar} activeOpacity={0.7}>
-          <Ionicons name="filter" size={20} color={filter !== 'ALL' ? '#fff' : colors.text} />
-          {filter !== 'ALL' && <View style={[st.filterDot, { backgroundColor: colors.primary }]} />}
-        </TouchableOpacity>
+        <View style={{ flexDirection: 'row', gap: 10, alignItems: 'center' }}>
+          <TouchableOpacity style={[st.trackBtn, { backgroundColor: '#0284c7' }]} onPress={() => setTrackModalOpen(true)} activeOpacity={0.8}>
+            <Ionicons name="location-outline" size={16} color="#fff" />
+            <Text style={st.trackBtnText}>Track</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={[st.filterBtn, { backgroundColor: colors.surfaceVariant }, filter !== 'ALL' && { backgroundColor: colors.primary }]} onPress={openSidebar} activeOpacity={0.7}>
+            <Ionicons name="filter" size={20} color={filter !== 'ALL' ? '#fff' : colors.text} />
+            {filter !== 'ALL' && <View style={[st.filterDot, { backgroundColor: colors.primary }]} />}
+          </TouchableOpacity>
+        </View>
       </View>
+
+      {/* Track a Delivery Modal */}
+      <Modal visible={trackModalOpen} transparent animationType="fade" onRequestClose={() => setTrackModalOpen(false)}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
+          <Pressable style={st.modalOverlay} onPress={() => setTrackModalOpen(false)}>
+            <Pressable style={[st.modalBox, { backgroundColor: colors.card }]} onPress={() => {}}>
+              <View style={st.modalHeader}>
+                <Text style={[st.modalTitle, { color: colors.text }]}>Track a Delivery</Text>
+                <TouchableOpacity onPress={() => setTrackModalOpen(false)} style={st.modalClose}>
+                  <Ionicons name="close" size={22} color={colors.textSecondary} />
+                </TouchableOpacity>
+              </View>
+              <Text style={[st.modalSubtitle, { color: colors.textSecondary }]}>Enter the code shared with you</Text>
+              <TextInput
+                style={[st.modalInput, { borderColor: colors.border, color: colors.text, backgroundColor: colors.background }]}
+                value={trackCode}
+                onChangeText={setTrackCode}
+                placeholder="e.g. TRK-A3F9X2"
+                placeholderTextColor={colors.textTertiary}
+                autoCapitalize="characters"
+                autoCorrect={false}
+                autoFocus
+              />
+              <TouchableOpacity
+                style={[st.modalBtn, !trackCode.trim() && { opacity: 0.4 }]}
+                disabled={!trackCode.trim()}
+                onPress={() => {
+                  setTrackModalOpen(false);
+                  router.push(`/(public)/track?token=${trackCode.trim().toUpperCase()}`);
+                }}
+                activeOpacity={0.8}
+              >
+                <Text style={st.modalBtnText}>Start Tracking</Text>
+              </TouchableOpacity>
+            </Pressable>
+          </Pressable>
+        </KeyboardAvoidingView>
+      </Modal>
 
       {/* Orders list */}
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 40 }}
@@ -313,4 +367,34 @@ const st = StyleSheet.create({
   sidebarItemText: { flex: 1, fontSize: 15, fontWeight: '500', color: '#374151' },
   sidebarItemTextActive: { color: '#0284c7', fontWeight: '700' },
   sidebarCount: { fontSize: 13, fontWeight: '600', color: '#9ca3af' },
+
+  // Track button
+  trackBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    paddingHorizontal: 14, paddingVertical: 10, borderRadius: 21,
+  },
+  trackBtnText: { color: '#fff', fontSize: 13, fontWeight: '700' },
+
+  // Track modal
+  modalOverlay: {
+    flex: 1, backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'center', alignItems: 'center', padding: 24,
+  },
+  modalBox: {
+    width: '100%', borderRadius: 20, padding: 24,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.15, shadowRadius: 20, elevation: 12,
+  },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
+  modalTitle: { fontSize: 20, fontWeight: '800' },
+  modalClose: { width: 32, height: 32, alignItems: 'center', justifyContent: 'center' },
+  modalSubtitle: { fontSize: 14, marginBottom: 16 },
+  modalInput: {
+    height: 50, borderWidth: 1.5, borderRadius: 12,
+    paddingHorizontal: 14, fontSize: 16, letterSpacing: 1, marginBottom: 16,
+  },
+  modalBtn: {
+    backgroundColor: '#0284c7', borderRadius: 12, height: 50,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  modalBtnText: { color: '#fff', fontSize: 16, fontWeight: '700' },
 });
