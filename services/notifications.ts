@@ -81,6 +81,61 @@ function coerceFcmData(
   return out;
 }
 
+/** Screens showing a single order can subscribe; refetch when FCM or notification actions change that order. */
+const orderDetailRefreshListeners = new Map<string, Set<() => void>>();
+
+export function subscribeOrderDetailRefresh(orderId: string, listener: () => void) {
+  let set = orderDetailRefreshListeners.get(orderId);
+  if (!set) {
+    set = new Set();
+    orderDetailRefreshListeners.set(orderId, set);
+  }
+  set.add(listener);
+  return () => {
+    set!.delete(listener);
+    if (set!.size === 0) orderDetailRefreshListeners.delete(orderId);
+  };
+}
+
+function emitOrderDetailRefresh(orderId: string) {
+  if (!orderId) return;
+  const set = orderDetailRefreshListeners.get(orderId);
+  if (!set) return;
+  set.forEach((fn) => {
+    try {
+      fn();
+    } catch {
+      /* ignore */
+    }
+  });
+}
+
+/** Driver "My deliveries" list: refetch when notification actions or order FCM change an assignment. */
+const driverMyOrdersRefreshListeners = new Set<() => void>();
+
+export function subscribeDriverMyOrdersRefresh(listener: () => void) {
+  driverMyOrdersRefreshListeners.add(listener);
+  return () => {
+    driverMyOrdersRefreshListeners.delete(listener);
+  };
+}
+
+function emitDriverMyOrdersRefresh() {
+  driverMyOrdersRefreshListeners.forEach((fn) => {
+    try {
+      fn();
+    } catch {
+      /* ignore */
+    }
+  });
+}
+
+/** Order detail + driver deliveries list (not used for customer-only flows like accept_driver). */
+function emitOrderDetailAndDriverListRefresh(orderId: string) {
+  emitOrderDetailRefresh(orderId);
+  emitDriverMyOrdersRefresh();
+}
+
 async function resolveOrderTrackingText(
   data: Record<string, string>,
   oid: string,
@@ -609,6 +664,7 @@ async function handleAcceptDriver(orderId: string) {
       headers: { Authorization: `Bearer ${token}` },
     });
 
+    emitOrderDetailRefresh(orderId);
     // The backend will emit order.driver_assigned which sends a new FCM
     // that will update the foreground service notification
     console.log('Driver approved successfully from notification');
@@ -636,12 +692,15 @@ async function handleDriverNotificationPress(orderId: string, actionId: string |
         return;
       case 'driver_mark_arrived':
         await orderService.updateOrderStatus(orderId, 'DRIVER_ARRIVED');
+        emitOrderDetailAndDriverListRefresh(orderId);
         return;
       case 'driver_mark_picked_up':
         await orderService.updateOrderStatus(orderId, 'PICKED_UP');
+        emitOrderDetailAndDriverListRefresh(orderId);
         return;
       case 'driver_mark_delivering':
         await orderService.updateOrderStatus(orderId, 'DELIVERING');
+        emitOrderDetailAndDriverListRefresh(orderId);
         return;
       default:
         return;
@@ -661,12 +720,15 @@ async function handleDriverNotificationPressBackground(orderId: string, actionId
     switch (actionId) {
       case 'driver_mark_arrived':
         await orderService.updateOrderStatus(orderId, 'DRIVER_ARRIVED');
+        emitOrderDetailAndDriverListRefresh(orderId);
         return;
       case 'driver_mark_picked_up':
         await orderService.updateOrderStatus(orderId, 'PICKED_UP');
+        emitOrderDetailAndDriverListRefresh(orderId);
         return;
       case 'driver_mark_delivering':
         await orderService.updateOrderStatus(orderId, 'DELIVERING');
+        emitOrderDetailAndDriverListRefresh(orderId);
         return;
       case 'driver_contact_customer':
         await savePendingNotificationRoute(`/(driver)/order-chat?orderId=${orderId}`);
@@ -912,6 +974,7 @@ async function handleOrderFCMData(rawData: Record<string, unknown>) {
 
   if (isTerminal) {
     await stopOrderTracking(resolved.title, resolved.body, oid);
+    emitOrderDetailAndDriverListRefresh(oid);
     return;
   }
   if (!oid) return;
@@ -920,6 +983,7 @@ async function handleOrderFCMData(rawData: Record<string, unknown>) {
     orderId: oid,
     ...(inferredOrderStatus ? { orderStatus: inferredOrderStatus } : {}),
   });
+  emitOrderDetailAndDriverListRefresh(oid);
 }
 
 async function displayRegularNotification(data: Record<string, string>) {

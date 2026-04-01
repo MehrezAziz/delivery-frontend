@@ -7,6 +7,7 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { orderService, Order } from '../../services/api/order.service';
 import { useTheme } from '../../contexts/ThemeContext';
+import { restoreOrderTrackingForDriver, subscribeDriverMyOrdersRefresh } from '../../services/notifications';
 
 const STATUS_META: Record<string, { color: string; bg: string; label: string; icon: string }> = {
   PENDING_CUSTOMER_APPROVAL: { color: '#ea580c', bg: '#ffedd5', label: 'Waiting for Customer', icon: 'hourglass-outline' },
@@ -46,6 +47,11 @@ export default function DriverMyOrdersScreen() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    return subscribeDriverMyOrdersRefresh(() => {
+      void load();
+    });
+  }, [load]);
   useEffect(() => { const i = setInterval(load, 10000); return () => clearInterval(i); }, [load]);
 
   const handleStatusUpdate = async (orderId: string, status: string) => {
@@ -75,7 +81,11 @@ export default function DriverMyOrdersScreen() {
       { text: 'Cancel', style: 'cancel' },
       { text: 'Yes, Go Back', onPress: async () => {
         setUpdatingStatus(orderId);
-        try { await orderService.revertOrderStatus(orderId); load(); }
+        try {
+          await orderService.revertOrderStatus(orderId);
+          await load();
+          await restoreOrderTrackingForDriver();
+        }
         catch (e: any) { Alert.alert('Error', e.message); }
         finally { setUpdatingStatus(null); }
       }},

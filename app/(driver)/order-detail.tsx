@@ -8,7 +8,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { orderService, Order } from '../../services/api/order.service';
 import { useTheme } from '../../contexts/ThemeContext';
-import { restoreOrderTrackingForDriver } from '../../services/notifications';
+import { restoreOrderTrackingForDriver, subscribeOrderDetailRefresh } from '../../services/notifications';
 
 const STATUS_META: Record<string, { icon: string; color: string; bg: string; label: string }> = {
   DRAFT:            { icon: 'document-outline',    color: '#6b7280', bg: '#f3f4f6', label: 'Draft' },
@@ -47,6 +47,12 @@ export default function DriverOrderDetailScreen() {
   }, [orderId]);
 
   useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    if (!orderId) return;
+    return subscribeOrderDetailRefresh(orderId, () => {
+      void load();
+    });
+  }, [orderId, load]);
   useFocusEffect(
     useCallback(() => {
       load();
