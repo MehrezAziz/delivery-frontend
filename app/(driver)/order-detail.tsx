@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, ActivityIndicator,
   RefreshControl, StyleSheet,
@@ -26,11 +26,12 @@ const STAR_LABELS = ['Terrible','Very Bad','Bad','Poor','Below Avg','Average','A
 
 export default function DriverOrderDetailScreen() {
   const router = useRouter();
-  const { orderId } = useLocalSearchParams<{ orderId: string }>();
+  const { orderId, scrollTo } = useLocalSearchParams<{ orderId: string; scrollTo?: string }>();
   const { colors, isDark } = useTheme();
   const [order, setOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const scrollRef = useRef<ScrollView>(null);
 
   const load = useCallback(async () => {
     try { setOrder(await orderService.getOrder(orderId)); }
@@ -67,8 +68,12 @@ export default function DriverOrderDetailScreen() {
         </View>
       </View>
 
-      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 20, paddingBottom: 40 }}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} />}>
+      <ScrollView
+        ref={scrollRef}
+        style={{ flex: 1 }}
+        contentContainerStyle={{ padding: 20, paddingBottom: 40 }}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} />}
+      >
 
         {/* Route */}
         <View style={[s.card, { backgroundColor: colors.card }]}>
@@ -163,7 +168,17 @@ export default function DriverOrderDetailScreen() {
 
         {/* Proof status */}
         {da && (
-          <View style={[s.card, { backgroundColor: colors.card }]}>
+          <View
+            style={[s.card, { backgroundColor: colors.card }]}
+            onLayout={(e) => {
+              const y = e.nativeEvent.layout.y;
+              if (scrollTo === 'proof') {
+                requestAnimationFrame(() => {
+                  scrollRef.current?.scrollTo({ y: Math.max(0, y - 16), animated: true });
+                });
+              }
+            }}
+          >
             <Text style={[s.cardTitle, { color: colors.text }]}>Proof Images</Text>
             <View style={{ flexDirection: 'row', gap: 8 }}>
               <View style={[s.proofStatus, da.image1Proof ? { backgroundColor: '#dcfce7' } : { backgroundColor: '#fef2f2' }]}>

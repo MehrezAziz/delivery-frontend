@@ -12,6 +12,7 @@ import {
   createNotificationChannels,
   registerOrderForegroundService,
   restoreOrderTrackingForCustomer,
+  restoreOrderTrackingForDriver,
 } from '../services/notifications';
 // Register background handler at module level (required by React Native Firebase)
 setupBackgroundHandler();
@@ -47,6 +48,7 @@ function RootContent() {
         await registerForPushNotifications();
         const role = await AsyncStorage.getItem('userRole');
         if (role === 'CUSTOMER') await restoreOrderTrackingForCustomer();
+        if (role === 'DRIVER') await restoreOrderTrackingForDriver();
       });
     };
     const appStateSub = AppState.addEventListener('change', onAppState);

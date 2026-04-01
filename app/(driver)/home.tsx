@@ -14,6 +14,7 @@ import { notificationService } from '../../services/api/notification.service';
 import { clearPushToken } from '../../services/api/notification.service';
 import { useTheme } from '../../contexts/ThemeContext';
 import { ThemeToggle } from '../../components/ThemeToggle';
+import { restoreOrderTrackingForDriver, stopOrderTrackingSilently } from '../../services/notifications';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
 
@@ -86,10 +87,15 @@ export default function DriverHome() {
     return () => clearInterval(interval);
   }, [loadData]);
 
+  useEffect(() => {
+    restoreOrderTrackingForDriver();
+  }, []);
+
   const handleLogout = () => {
     Alert.alert('Logout', 'Are you sure?', [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Logout', style: 'destructive', onPress: async () => {
+        await stopOrderTrackingSilently();
         await clearPushToken();
         await AsyncStorage.clear();
         router.replace('/(auth)/driver-login');

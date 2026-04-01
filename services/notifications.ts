@@ -92,6 +92,9 @@ async function resolveOrderTrackingText(
   try {
     const order = await orderService.getOrder(oid);
     if (!order) return title && body ? { title, body } : null;
+    if (data.trackingAudience === 'DRIVER') {
+      return getDriverTrackingNotificationFromOrder(order);
+    }
     return getTrackingNotificationFromOrder(order);
   } catch {
     return title && body ? { title, body } : null;
@@ -219,19 +222,27 @@ function parseActionButtons(data: Record<string, string>): Array<{ id: string; t
 /**
  * Build Notifee actions from FCM action buttons
  */
+const SILENT_NOTIFICATION_ACTION_IDS = new Set([
+  'accept_driver',
+  'driver_mark_arrived',
+  'driver_mark_picked_up',
+  'driver_mark_delivering',
+]);
+
 function buildNotifeeActions(data: Record<string, string>) {
   const buttons = parseActionButtons(data);
   if (buttons.length > 0) {
     return buttons.map((btn) => ({
       title: btn.title,
       pressAction:
-        btn.id === 'accept_driver'
-          ? ({ id: btn.id, launchActivity: 'none' } as any) // keep app closed for background approval
+        SILENT_NOTIFICATION_ACTION_IDS.has(btn.id)
+          ? ({ id: btn.id, launchActivity: 'none' } as any)
           : { id: btn.id, launchActivity: 'default' },
     }));
   }
-  // Default action
-  return [{ title: '📍 View Order', pressAction: { id: 'view_order', launchActivity: 'default' } }];
+  const mainId = isDriverTrackingData(data) ? 'view_order_driver' : 'view_order';
+  const mainTitle = isDriverTrackingData(data) ? '📋 View order' : '📍 View Order';
+  return [{ title: mainTitle, pressAction: { id: mainId, launchActivity: 'default' } }];
 }
 
 // Total steps in the order progress (0-6)
@@ -289,6 +300,69 @@ function getDriverFoundActionButtons() {
   ];
 }
 
+/** Driver persistent notification — primary tap opens driver order detail. */
+function getDriverOrderRoute(orderId: string, scrollTo?: 'proof') {
+  return scrollTo === 'proof'
+    ? `/(driver)/order-detail?orderId=${orderId}&scrollTo=proof`
+    : `/(driver)/order-detail?orderId=${orderId}`;
+}
+
+function getDriverTrackingNotificationFromOrder(order: Order): { title: string; body: string } {
+  switch (order.status) {
+    case 'PENDING_CUSTOMER_APPROVAL':
+      return {
+        title: '⏳ Waiting for customer approval',
+        body: '◉———⛟———⌖———⌖———⌖———⌖———⌖',
+      };
+    case 'DRIVER_ASSIGNED':
+      return {
+        title: '✅ Approved — Head to pickup',
+        body: '◉———◉———⛟———⌖———⌖———⌖———⌖',
+      };
+    case 'DRIVER_ARRIVED':
+      return {
+        title: '📍 At pickup — Confirm pickup',
+        body: '◉———◉———◉———⛟———⌖———⌖———⌖',
+      };
+    case 'PICKED_UP':
+      return {
+        title: '📦 Picked up — Go to dropoff',
+        body: '◉———◉———◉———◉———⛟———⌖———⌖',
+      };
+    case 'DELIVERING':
+      return {
+        title: '🚚 Delivering — Add proof to finish',
+        body: '◉———◉———◉———◉———◉———⛟———⌖',
+      };
+    default:
+      return {
+        title: '📦 Active order',
+        body: '⛟———⌖———⌖———⌖———⌖———⌖———⌖',
+      };
+  }
+}
+
+function getDriverActionButtonsForStatus(status: string): Array<{ id: string; title: string; action: string }> | null {
+  switch (status) {
+    case 'PENDING_CUSTOMER_APPROVAL':
+      return [{ id: 'driver_contact_customer', title: '💬 Contact customer', action: 'contact_customer' }];
+    case 'DRIVER_ASSIGNED':
+      return [{ id: 'driver_mark_arrived', title: "📍 I've arrived", action: 'mark_arrived' }];
+    case 'DRIVER_ARRIVED':
+      return [{ id: 'driver_mark_picked_up', title: '📦 Package picked up', action: 'mark_picked_up' }];
+    case 'PICKED_UP':
+      return [{ id: 'driver_mark_delivering', title: '🚚 Start delivering', action: 'mark_delivering' }];
+    case 'DELIVERING':
+      return [{ id: 'driver_open_deliver', title: '✅ Delivered (add proof)', action: 'open_deliver_proofs' }];
+    default:
+      return null;
+  }
+}
+
+function isDriverTrackingData(data?: Record<string, string>) {
+  return data?.trackingAudience === 'DRIVER';
+}
+
 /**
  * Start the order tracking foreground service.
  */
@@ -296,6 +370,9 @@ export async function startOrderTracking(orderId: string, title: string, body: s
   if (Platform.OS !== 'android') return;
 
   await setTrackedOrderStatus(orderId, data?.orderStatus);
+
+  const mainPressId = isDriverTrackingData(data) ? 'view_order_driver' : 'view_order';
+  const mainTitle = isDriverTrackingData(data) ? '📋 View order' : '📍 View Order';
 
   await notifee.displayNotification({
     id: getOrderNotificationId(orderId),
@@ -306,9 +383,9 @@ export async function startOrderTracking(orderId: string, title: string, body: s
       ongoing: true,
       autoCancel: false,
       importance: AndroidImportance.HIGH,
-      pressAction: { id: 'view_order', launchActivity: 'default' },
+      pressAction: { id: mainPressId, launchActivity: 'default' },
       actions: data ? buildNotifeeActions(data) : [
-        { title: '📍 View Order', pressAction: { id: 'view_order', launchActivity: 'default' } },
+        { title: mainTitle, pressAction: { id: mainPressId, launchActivity: 'default' } },
       ],
     },
     data: { orderId, relatedEntityType: 'Order', relatedEntityId: orderId, ...(data || {}) },
@@ -325,6 +402,9 @@ export async function updateOrderTracking(title: string, body: string, data?: Re
   if (!orderId) return;
   await setTrackedOrderStatus(orderId, data?.orderStatus);
 
+  const mainPressId = isDriverTrackingData(data) ? 'view_order_driver' : 'view_order';
+  const mainTitle = isDriverTrackingData(data) ? '📋 View order' : '📍 View Order';
+
   await notifee.displayNotification({
     id: getOrderNotificationId(orderId),
     title,
@@ -334,9 +414,9 @@ export async function updateOrderTracking(title: string, body: string, data?: Re
       ongoing: true,
       autoCancel: false,
       importance: AndroidImportance.HIGH,
-      pressAction: { id: 'view_order', launchActivity: 'default' },
+      pressAction: { id: mainPressId, launchActivity: 'default' },
       actions: data ? buildNotifeeActions(data) : [
-        { title: '📍 View Order', pressAction: { id: 'view_order', launchActivity: 'default' } },
+        { title: mainTitle, pressAction: { id: mainPressId, launchActivity: 'default' } },
       ],
     },
     data: { orderId: orderId || '', relatedEntityType: 'Order', relatedEntityId: orderId || '', ...(data || {}) },
@@ -373,6 +453,9 @@ async function stopOrderTrackingWithOptions(title: string, body: string, showFin
 
   if (!showFinalNotification) return;
 
+  const role = await AsyncStorage.getItem('userRole');
+  const pressId = role === 'DRIVER' ? 'view_order_driver' : 'view_order';
+
   await notifee.displayNotification({
     id: getOrderNotificationId(targetOrderId),
     title,
@@ -381,7 +464,7 @@ async function stopOrderTrackingWithOptions(title: string, body: string, showFin
       channelId: CHANNEL_ORDER,
       importance: AndroidImportance.HIGH,
       autoCancel: true,
-      pressAction: { id: 'view_order', launchActivity: 'default' },
+      pressAction: { id: pressId, launchActivity: 'default' },
     },
     data: {
       orderId: targetOrderId,
@@ -451,6 +534,63 @@ export async function restoreOrderTrackingForCustomer() {
   }
 }
 
+/**
+ * Restore driver order tracking (ongoing notification + status actions) after login/reopen.
+ */
+export async function restoreOrderTrackingForDriver() {
+  if (Platform.OS !== 'android') return;
+
+  try {
+    const role = await AsyncStorage.getItem('userRole');
+    if (role !== 'DRIVER') return;
+
+    const orders = await orderService.getDriverMyOrders();
+    const activeOrders = orders
+      .filter((order) => ORDER_ACTIVE_STATUSES.includes(order.status))
+      .sort(
+        (a, b) =>
+          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+      );
+
+    if (!activeOrders.length) {
+      await stopOrderTrackingSilently();
+      return;
+    }
+
+    const map = await getTrackingStatusMap();
+    const activeIdSet = new Set(activeOrders.map((o) => o.id));
+
+    for (const trackedOrderId of Object.keys(map)) {
+      if (!activeIdSet.has(trackedOrderId)) {
+        await notifee.cancelNotification(getOrderNotificationId(trackedOrderId)).catch(() => {});
+        delete map[trackedOrderId];
+      }
+    }
+
+    for (const order of activeOrders) {
+      if (map[order.id] === order.status) continue;
+      const { title, body } = getDriverTrackingNotificationFromOrder(order);
+      const actionButtons = getDriverActionButtonsForStatus(order.status);
+
+      await startOrderTracking(order.id, title, body, {
+        orderId: order.id,
+        groupKey: `order:${order.id}`,
+        relatedEntityType: 'Order',
+        relatedEntityId: order.id,
+        ongoing: 'true',
+        orderStatus: order.status,
+        trackingAudience: 'DRIVER',
+        ...(actionButtons?.length ? { actionButtons: JSON.stringify(actionButtons) } : {}),
+      });
+      map[order.id] = order.status;
+    }
+
+    await setTrackingStatusMap(map);
+  } catch (error) {
+    console.error('Failed to restore driver order tracking notification:', error);
+  }
+}
+
 
 // ============================================================
 // ACTION BUTTON HANDLERS
@@ -474,6 +614,74 @@ async function handleAcceptDriver(orderId: string) {
     console.log('Driver approved successfully from notification');
   } catch (error) {
     console.error('Failed to approve driver from notification:', error);
+  }
+}
+
+/** Foreground / in-process: navigate or PATCH status from driver tracking notification actions. */
+async function handleDriverNotificationPress(orderId: string, actionId: string | undefined) {
+  if (!orderId || !actionId) return;
+  try {
+    const token = await AsyncStorage.getItem('accessToken');
+    if (!token) return;
+
+    switch (actionId) {
+      case 'driver_contact_customer':
+        router.push(`/(driver)/order-chat?orderId=${orderId}` as any);
+        return;
+      case 'view_order_driver':
+        router.push(getDriverOrderRoute(orderId) as any);
+        return;
+      case 'driver_open_deliver':
+        router.push(getDriverOrderRoute(orderId, 'proof') as any);
+        return;
+      case 'driver_mark_arrived':
+        await orderService.updateOrderStatus(orderId, 'DRIVER_ARRIVED');
+        return;
+      case 'driver_mark_picked_up':
+        await orderService.updateOrderStatus(orderId, 'PICKED_UP');
+        return;
+      case 'driver_mark_delivering':
+        await orderService.updateOrderStatus(orderId, 'DELIVERING');
+        return;
+      default:
+        return;
+    }
+  } catch (e) {
+    console.error('Driver notification action failed:', e);
+  }
+}
+
+/** Headless background: same API calls; navigation is queued for next launch. */
+async function handleDriverNotificationPressBackground(orderId: string, actionId: string | undefined) {
+  if (!orderId || !actionId) return;
+  try {
+    const token = await AsyncStorage.getItem('accessToken');
+    if (!token) return;
+
+    switch (actionId) {
+      case 'driver_mark_arrived':
+        await orderService.updateOrderStatus(orderId, 'DRIVER_ARRIVED');
+        return;
+      case 'driver_mark_picked_up':
+        await orderService.updateOrderStatus(orderId, 'PICKED_UP');
+        return;
+      case 'driver_mark_delivering':
+        await orderService.updateOrderStatus(orderId, 'DELIVERING');
+        return;
+      case 'driver_contact_customer':
+        await savePendingNotificationRoute(`/(driver)/order-chat?orderId=${orderId}`);
+        return;
+      case 'view_order_driver':
+        await savePendingNotificationRoute(getDriverOrderRoute(orderId));
+        return;
+      case 'driver_open_deliver':
+        await savePendingNotificationRoute(getDriverOrderRoute(orderId, 'proof'));
+        return;
+      default:
+        return;
+    }
+  } catch (e) {
+    console.error('Driver background notification action failed:', e);
   }
 }
 
@@ -546,6 +754,19 @@ export async function notificationDataToRoute(
       if (driverTypes.includes(type || '')) {
         return `/(driver)/order-detail?orderId=${relatedEntityId}`;
       }
+      let role: string | undefined;
+      const u = await AsyncStorage.getItem('user');
+      if (u) {
+        try {
+          role = JSON.parse(u).role;
+        } catch {
+          role = undefined;
+        }
+      }
+      if (!role) role = (await AsyncStorage.getItem('userRole')) || 'CUSTOMER';
+      if (role === 'DRIVER') {
+        return `/(driver)/order-detail?orderId=${relatedEntityId}`;
+      }
       return `/(customer)/order-detail?orderId=${relatedEntityId}`;
     }
     case 'ChatRoom': {
@@ -594,13 +815,24 @@ async function routeFromNotifeeInitialForNavigation(initial: NotifeeInitial): Pr
 
   if (actionId === 'see_driver' && orderId) return getOrderRoute(orderId, true);
   if (actionId === 'view_order' && orderId) return getOrderRoute(orderId);
+  if (actionId === 'view_order_driver' && orderId) return getDriverOrderRoute(orderId);
+  if (actionId === 'driver_open_deliver' && orderId) return getDriverOrderRoute(orderId, 'proof');
+  if (actionId === 'driver_contact_customer' && orderId) {
+    return `/(driver)/order-chat?orderId=${orderId}`;
+  }
   if (actionId === 'accept_driver') return null;
+  if (
+    actionId &&
+    ['driver_mark_arrived', 'driver_mark_picked_up', 'driver_mark_delivering'].includes(actionId)
+  ) {
+    return null;
+  }
 
   if (data.relatedEntityType && data.relatedEntityId) {
     return notificationDataToRoute(data);
   }
   if (orderId && data.groupKey?.startsWith('order:')) {
-    return getOrderRoute(orderId);
+    return data.trackingAudience === 'DRIVER' ? getDriverOrderRoute(orderId) : getOrderRoute(orderId);
   }
   return null;
 }
@@ -637,6 +869,15 @@ export async function resolveLaunchRouteAfterLogin(): Promise<string | null> {
     const data = coerceFcmData(n.notification?.data as Record<string, unknown>);
     const orderId = data.orderId || data.relatedEntityId;
     if (orderId) await handleAcceptDriver(orderId);
+    return null;
+  }
+  if (
+    n?.pressAction?.id &&
+    ['driver_mark_arrived', 'driver_mark_picked_up', 'driver_mark_delivering'].includes(n.pressAction.id)
+  ) {
+    const data = coerceFcmData(n.notification?.data as Record<string, unknown>);
+    const orderId = data.orderId || data.relatedEntityId;
+    if (orderId) await handleDriverNotificationPress(orderId, n.pressAction.id);
     return null;
   }
   if (n) {
@@ -728,6 +969,18 @@ export function setupNotificationListeners() {
         handleAcceptDriver(orderId);
         return;
       }
+      if (
+        orderId &&
+        (actionId === 'view_order_driver' ||
+          actionId === 'driver_contact_customer' ||
+          actionId === 'driver_open_deliver' ||
+          actionId === 'driver_mark_arrived' ||
+          actionId === 'driver_mark_picked_up' ||
+          actionId === 'driver_mark_delivering')
+      ) {
+        void handleDriverNotificationPress(orderId, actionId);
+        return;
+      }
       if (actionId === 'see_driver' && orderId) {
         router.push(getOrderRoute(orderId, true) as any);
         return;
@@ -790,6 +1043,18 @@ export function setupBackgroundHandler() {
 
       if (actionId === 'accept_driver' && orderId) {
         await handleAcceptDriver(orderId);
+        return;
+      }
+      if (
+        orderId &&
+        (actionId === 'view_order_driver' ||
+          actionId === 'driver_contact_customer' ||
+          actionId === 'driver_open_deliver' ||
+          actionId === 'driver_mark_arrived' ||
+          actionId === 'driver_mark_picked_up' ||
+          actionId === 'driver_mark_delivering')
+      ) {
+        await handleDriverNotificationPressBackground(orderId, actionId);
         return;
       }
       if (actionId === 'see_driver' && orderId) {
