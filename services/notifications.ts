@@ -606,12 +606,31 @@ async function routeFromNotifeeInitialForNavigation(initial: NotifeeInitial): Pr
 }
 
 /**
+ * Non-order FCM from our backend includes `notification` + `data`; Android already shows the system tray message.
+ */
+function fcmHasNativeNotificationTrayPayload(remoteMessage: {
+  notification?: { title?: string | null; body?: string | null } | null;
+}): boolean {
+  const n = remoteMessage.notification;
+  if (!n) return false;
+  const t = n.title;
+  const b = n.body;
+  return (
+    (t != null && String(t).trim().length > 0) ||
+    (b != null && String(b).trim().length > 0)
+  );
+}
+
+/**
  * After a valid session on cold start: pending AsyncStorage route, then Notifee/FCM "opened from notification".
  * Notifee initial payload is one-shot — read here only (not again in layout listeners).
  */
 export async function resolveLaunchRouteAfterLogin(): Promise<string | null> {
   const pending = await consumePendingLaunchRoute();
   if (pending) return pending;
+
+  // Let native FCM / Notifee bridges finish wiring so getInitialNotification() is reliable on first cold start.
+  await new Promise<void>((resolve) => setTimeout(resolve, 160));
 
   const n = await notifee.getInitialNotification();
   if (n?.pressAction?.id === 'accept_driver') {
@@ -736,16 +755,23 @@ export function setupBackgroundHandler() {
   if (backgroundHandlersRegistered) return;
   backgroundHandlersRegistered = true;
 
-  const routeFcmDataMessage = async (remoteMessage: { data?: Record<string, unknown> }) => {
+  const routeFcmDataMessage = async (remoteMessage: {
+    data?: Record<string, unknown>;
+    notification?: { title?: string | null; body?: string | null } | null;
+  }) => {
     const raw = remoteMessage?.data as Record<string, unknown> | undefined;
     if (!raw || typeof raw !== 'object') return;
     const data = coerceFcmData(raw);
     const { groupKey } = data;
     if (groupKey?.startsWith('order:')) {
       await handleOrderFCMData(raw);
-    } else {
-      await displayRegularNotification(data);
+      return;
     }
+    // Non-order pushes use notification+data in firebase.service — OS shows native tray; skip Notifee to avoid duplicates.
+    if (fcmHasNativeNotificationTrayPayload(remoteMessage)) {
+      return;
+    }
+    await displayRegularNotification(data);
   };
 
   // Register alongside the background handler, before AppRegistry (index.js),
@@ -803,7 +829,8 @@ export async function handleFCMMessage(remoteMessage: any) {
   const data = remoteMessage?.data as Record<string, string> | undefined;
   if (!data) return;
   if (data.groupKey?.startsWith('order:')) await handleOrderFCMData(data);
-  else await displayRegularNotification(data);
+  else if (!fcmHasNativeNotificationTrayPayload(remoteMessage))
+    await displayRegularNotification(data);
 }
 export async function handleDataMessage(data: Record<string, string>) {
   await handleFCMMessage({ data });
