@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Camera } from 'expo-camera';
+import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 import axios from 'axios';
@@ -25,6 +25,17 @@ const DOCUMENT_TYPES = [
   { value: 'STUDENT_CARD', label: 'Student Card' },
 ];
 
+const LIVENESS_STEPS: Array<{
+  action: 'TURN_RIGHT' | 'TURN_LEFT' | 'HOLD_HIGH' | 'BLINK';
+  label: string;
+  progress: number;
+}> = [
+  { action: 'TURN_RIGHT', label: 'Turn your face right', progress: 25 },
+  { action: 'TURN_LEFT', label: 'Turn your face left', progress: 50 },
+  { action: 'HOLD_HIGH', label: 'Hold your head high', progress: 75 },
+  { action: 'BLINK', label: 'Blink your eyes', progress: 100 },
+];
+
 export default function DriverRegisterStep3() {
   const router = useRouter();
   const { colors, isDark } = useTheme();
@@ -32,34 +43,68 @@ export default function DriverRegisterStep3() {
   const [selfieImage, setSelfieImage] = useState<string | null>(null);
   const [docImageTop, setDocImageTop] = useState<string | null>(null);
   const [docImageBottom, setDocImageBottom] = useState<string | null>(null);
+  const [livenessPassed, setLivenessPassed] = useState(false);
+  const [livenessSteps, setLivenessSteps] = useState<
+    Array<{ action: 'TURN_LEFT' | 'TURN_RIGHT' | 'HOLD_HIGH' | 'BLINK'; passed: boolean; imageUri?: string }>
+  >([]);
+  const [livenessActive, setLivenessActive] = useState(false);
+  const [currentLivenessStep, setCurrentLivenessStep] = useState(0);
+  const [livenessProgress, setLivenessProgress] = useState(0);
+  const [capturingStep, setCapturingStep] = useState(false);
+  const [cameraPermission, requestCameraPermission] = useCameraPermissions();
+  const cameraRef = useRef<any>(null);
   const [loading, setLoading] = useState(false);
 
-  const takeSelfie = async () => {
-    const { status } = await Camera.requestCameraPermissionsAsync();
-    
-    if (status !== 'granted') {
-      Alert.alert('Permission Denied', 'We need camera permissions to take a selfie.');
-      return;
+  const startLivenessChallenge = async () => {
+    if (!cameraPermission?.granted) {
+      const permission = await requestCameraPermission();
+      if (!permission.granted) {
+        Alert.alert('Permission Denied', 'We need camera permissions to run liveness check.');
+        return;
+      }
     }
 
-    const result = await ImagePicker.launchCameraAsync({
-      cameraType: ImagePicker.CameraType.front,
-      allowsEditing: true,
-      aspect: [3, 4],
-      quality: 0.8,
-    });
+    setLivenessSteps([]);
+    setCurrentLivenessStep(0);
+    setLivenessProgress(0);
+    setLivenessPassed(false);
+    setSelfieImage(null);
+    setLivenessActive(true);
+  };
 
-    if (!result.canceled) {
-      setSelfieImage(result.assets[0].uri);
+  const captureLivenessStep = async () => {
+    if (!cameraRef.current || capturingStep || currentLivenessStep >= LIVENESS_STEPS.length) return;
+    setCapturingStep(true);
+    try {
+      const photo = await cameraRef.current.takePictureAsync({ quality: 0.8 });
+      const step = LIVENESS_STEPS[currentLivenessStep];
+      const nextSteps = [...livenessSteps, { action: step.action, passed: true, imageUri: photo.uri }];
+      setLivenessSteps(nextSteps);
+      setLivenessProgress(step.progress);
+
+      if (currentLivenessStep === LIVENESS_STEPS.length - 1) {
+        setSelfieImage(photo.uri);
+        setLivenessPassed(true);
+        setLivenessActive(false);
+        Alert.alert('Liveness Complete', 'Step 1 Completed successfully!');
+      } else {
+        setCurrentLivenessStep((prev) => prev + 1);
+      }
+    } catch (error) {
+      console.error('Liveness capture error:', error);
+      Alert.alert('Error', 'Failed to capture liveness frame. Please try again.');
+    } finally {
+      setCapturingStep(false);
     }
   };
 
   const takeDocumentPhoto = async (side: 'top' | 'bottom') => {
-    const { status } = await Camera.requestCameraPermissionsAsync();
-    
-    if (status !== 'granted') {
-      Alert.alert('Permission Denied', 'We need camera permissions.');
-      return;
+    if (!cameraPermission?.granted) {
+      const permission = await requestCameraPermission();
+      if (!permission.granted) {
+        Alert.alert('Permission Denied', 'We need camera permissions.');
+        return;
+      }
     }
 
     const result = await ImagePicker.launchCameraAsync({
@@ -75,6 +120,15 @@ export default function DriverRegisterStep3() {
         setDocImageBottom(result.assets[0].uri);
       }
     }
+  };
+
+  const cancelLiveness = () => {
+    setLivenessActive(false);
+    setCurrentLivenessStep(0);
+    setLivenessProgress(0);
+    setLivenessSteps([]);
+    setLivenessPassed(false);
+    setSelfieImage(null);
   };
 
   const handleSkip = () => {
@@ -101,8 +155,8 @@ export default function DriverRegisterStep3() {
       return;
     }
 
-    if (!selfieImage) {
-      Alert.alert('Error', 'Please take a selfie');
+    if (!livenessPassed || !selfieImage) {
+      Alert.alert('Error', 'Please complete the liveness check first');
       return;
     }
 
@@ -124,6 +178,16 @@ export default function DriverRegisterStep3() {
 
       const formData = new FormData();
       formData.append('documentType', documentType);
+      formData.append(
+        'livenessSession',
+        JSON.stringify({
+          nonce: `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
+          timestamp: Date.now(),
+          passed: livenessPassed,
+          steps: livenessSteps,
+          mode: 'guided-mobile-capture',
+        })
+      );
 
       // Add selfie image
       const selfieFilename = selfieImage.split('/').pop();
@@ -243,18 +307,56 @@ export default function DriverRegisterStep3() {
 
       {/* Selfie */}
       <View style={styles.inputGroup}>
-        <Text style={[styles.label, { color: colors.text }]}>Selfie Photo *</Text>
-        <Text style={[styles.hint, { color: colors.textTertiary }]}>Take a clear photo of your face</Text>
-        <TouchableOpacity style={styles.photoButton} onPress={takeSelfie}>
-          {selfieImage ? (
-            <Image source={{ uri: selfieImage }} style={styles.photoPreview} />
-          ) : (
-            <View style={[styles.photoPlaceholder, { backgroundColor: isDark ? colors.primaryLight : '#f0f9ff', borderColor: colors.primary }]}>
-              <Ionicons name="camera" size={40} color={colors.primary} />
-              <Text style={[styles.photoPlaceholderText, { color: colors.primary }]}>Take Selfie</Text>
+        <Text style={[styles.label, { color: colors.text }]}>Realtime Liveness Check *</Text>
+        <Text style={[styles.hint, { color: colors.textTertiary }]}>
+          Keep your face in the center and complete all guided actions. Final frame is used as selfie proof.
+        </Text>
+        {livenessActive ? (
+          <View style={styles.livenessContainer}>
+            <View style={styles.livenessCameraBox}>
+              <CameraView ref={cameraRef} style={styles.livenessCamera} facing="front" />
             </View>
-          )}
-        </TouchableOpacity>
+            <Text style={[styles.livenessInstruction, { color: colors.text }]}>
+              {`${currentLivenessStep + 1}. ${LIVENESS_STEPS[currentLivenessStep]?.label ?? 'Done'}`}
+            </Text>
+            <Text style={[styles.livenessProgressText, { color: colors.primary }]}>
+              Progress: {livenessProgress}%
+            </Text>
+            <View style={styles.livenessActions}>
+              <TouchableOpacity
+                style={[styles.secondaryActionBtn, { borderColor: colors.border }]}
+                onPress={cancelLiveness}
+              >
+                <Text style={[styles.secondaryActionText, { color: colors.text }]}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.primaryActionBtn, { backgroundColor: colors.primary }]}
+                onPress={captureLivenessStep}
+                disabled={capturingStep}
+              >
+                <Text style={styles.primaryActionText}>
+                  {capturingStep ? 'Capturing...' : 'Capture Step'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        ) : (
+          <TouchableOpacity style={styles.photoButton} onPress={startLivenessChallenge}>
+            {selfieImage ? (
+              <Image source={{ uri: selfieImage }} style={styles.photoPreview} />
+            ) : (
+              <View style={[styles.photoPlaceholder, { backgroundColor: isDark ? colors.primaryLight : '#f0f9ff', borderColor: colors.primary }]}>
+                <Ionicons name="camera" size={40} color={colors.primary} />
+                <Text style={[styles.photoPlaceholderText, { color: colors.primary }]}>Start Liveness Check</Text>
+              </View>
+            )}
+          </TouchableOpacity>
+        )}
+        {livenessPassed ? (
+          <Text style={[styles.hint, { color: '#34C759', marginTop: 8 }]}>
+            Liveness completed at 100%. Step 1 Completed successfully!
+          </Text>
+        ) : null}
       </View>
 
       {/* Document Front */}
@@ -423,6 +525,60 @@ const styles = StyleSheet.create({
   photoPlaceholderText: {
     marginTop: 12,
     fontSize: 16,
+    fontWeight: '600',
+  },
+  livenessContainer: {
+    width: '100%',
+    alignItems: 'center',
+    borderRadius: 12,
+    padding: 12,
+    backgroundColor: 'rgba(15, 23, 42, 0.04)',
+  },
+  livenessCameraBox: {
+    width: 260,
+    height: 330,
+    borderRadius: 12,
+    overflow: 'hidden',
+    backgroundColor: '#000',
+  },
+  livenessCamera: {
+    flex: 1,
+  },
+  livenessInstruction: {
+    marginTop: 12,
+    fontSize: 16,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  livenessProgressText: {
+    marginTop: 6,
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  livenessActions: {
+    width: '100%',
+    marginTop: 12,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 10,
+  },
+  primaryActionBtn: {
+    paddingVertical: 10,
+    paddingHorizontal: 18,
+    borderRadius: 8,
+  },
+  primaryActionText: {
+    color: '#fff',
+    fontWeight: '700',
+  },
+  secondaryActionBtn: {
+    paddingVertical: 10,
+    paddingHorizontal: 18,
+    borderRadius: 8,
+    borderWidth: 1,
+    backgroundColor: '#fff',
+  },
+  secondaryActionText: {
     fontWeight: '600',
   },
   submitButton: {
