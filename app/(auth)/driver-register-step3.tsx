@@ -8,13 +8,12 @@ import {
   Alert,
   ActivityIndicator,
   Image,
-  Platform,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { CameraView, useCameraPermissions } from 'expo-camera';
-import * as FaceDetector from 'expo-face-detector';
 import * as ImagePicker from 'expo-image-picker';
+import * as FileSystem from 'expo-file-system/legacy';
 import { Ionicons } from '@expo/vector-icons';
 import axios from 'axios';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -38,57 +37,8 @@ const LIVENESS_STEPS: Array<{
   { action: 'BLINK', label: 'Blink your eyes', progress: 100 },
 ];
 
-const DETECT_OPTIONS: FaceDetector.DetectionOptions = {
-  mode: FaceDetector.FaceDetectorMode.fast,
-  detectLandmarks: FaceDetector.FaceDetectorLandmarks.none,
-  runClassifications: FaceDetector.FaceDetectorClassifications.all,
-};
-
-const STABLE_POSE_FRAMES = 4;
-const DETECT_INTERVAL_MS = 480;
-
-function poseMatchesStep(
-  action: (typeof LIVENESS_STEPS)[number]['action'],
-  face: FaceDetector.FaceFeature,
-  imageHeight: number,
-): boolean {
-  const yaw = face.yawAngle ?? 0;
-  const roll = face.rollAngle ?? 0;
-  const originY = face.bounds?.origin?.y ?? imageHeight * 0.45;
-  const ratioY = originY / Math.max(imageHeight, 1);
-
-  switch (action) {
-    case 'TURN_RIGHT':
-      return Platform.OS === 'ios' ? yaw < -9 : yaw < -7;
-    case 'TURN_LEFT':
-      return Platform.OS === 'ios' ? yaw > 9 : yaw > 7;
-    case 'HOLD_HIGH':
-      return Math.abs(yaw) < 14 && Math.abs(roll) < 24 && ratioY < 0.35;
-    default:
-      return false;
-  }
-}
-
-type BlinkPhase = { phase: 0 | 1 | 2 };
-
-function tryRegisterBlink(face: FaceDetector.FaceFeature, ref: React.MutableRefObject<BlinkPhase>): boolean {
-  const l = face.leftEyeOpenProbability;
-  const r = face.rightEyeOpenProbability;
-  if (l == null || r == null) return false;
-  const open = Math.min(l, r);
-  const p = ref.current.phase;
-  if (p === 0) {
-    if (open > 0.55) ref.current.phase = 1;
-  } else if (p === 1) {
-    if (open < 0.38) ref.current.phase = 2;
-  } else if (p === 2) {
-    if (open > 0.55) {
-      ref.current.phase = 0;
-      return true;
-    }
-  }
-  return false;
-}
+const TICK_MS = 850;
+const MATCH_STREAK_REQUIRED = 2;
 
 export default function DriverRegisterStep3() {
   const router = useRouter();
@@ -104,14 +54,17 @@ export default function DriverRegisterStep3() {
   const [livenessActive, setLivenessActive] = useState(false);
   const [currentLivenessStep, setCurrentLivenessStep] = useState(0);
   const [livenessProgress, setLivenessProgress] = useState(0);
+  const [livenessHint, setLivenessHint] = useState('Center your face in the frame.');
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
   const cameraRef = useRef<any>(null);
   const [loading, setLoading] = useState(false);
 
   const stepIndexRef = useRef(0);
-  const stableHitsRef = useRef(0);
-  const blinkPhaseRef = useRef<BlinkPhase>({ phase: 0 });
   const detectingRef = useRef(false);
+  const livenessTokenRef = useRef<string | null>(null);
+  const matchStreakRef = useRef(0);
+  const blinkPhaseRef = useRef<0 | 1 | 2>(0);
+  const frameErrorCountRef = useRef(0);
 
   const advanceLivenessStep = useCallback((photoUri: string) => {
     const idx = stepIndexRef.current;
@@ -123,7 +76,6 @@ export default function DriverRegisterStep3() {
       setSelfieImage(photoUri);
       setLivenessPassed(true);
       setLivenessActive(false);
-      stableHitsRef.current = 0;
       Alert.alert('Liveness Complete', 'Step 1 Completed successfully!');
       return;
     }
@@ -131,8 +83,8 @@ export default function DriverRegisterStep3() {
     const next = idx + 1;
     stepIndexRef.current = next;
     setCurrentLivenessStep(next);
-    stableHitsRef.current = 0;
-    blinkPhaseRef.current = { phase: 0 };
+    matchStreakRef.current = 0;
+    blinkPhaseRef.current = 0;
   }, []);
 
   useEffect(() => {
@@ -140,45 +92,103 @@ export default function DriverRegisterStep3() {
 
     const tick = async () => {
       if (detectingRef.current || !cameraRef.current) return;
+      if (!livenessTokenRef.current) return;
+
       detectingRef.current = true;
       try {
         const photo = await cameraRef.current.takePictureAsync({
           quality: 0.22,
           skipProcessing: true,
         });
-        const { faces, image } = await FaceDetector.detectFacesAsync(photo.uri, DETECT_OPTIONS);
-        const face = faces[0];
-        const idx = stepIndexRef.current;
-        const step = LIVENESS_STEPS[idx];
+        const imageBase64 = await FileSystem.readAsStringAsync(photo.uri, {
+          encoding: 'base64' as any,
+        });
+        const step = LIVENESS_STEPS[stepIndexRef.current];
+        const res = await axios.post(
+          `${API_URL}/drivers/verification/liveness/frame-check`,
+          {
+            action: step.action,
+            imageBase64,
+          },
+          {
+            headers: { Authorization: `Bearer ${livenessTokenRef.current}` },
+          },
+        );
 
-        if (!face) {
-          stableHitsRef.current = 0;
+        const payload = res.data as {
+          matched?: boolean;
+          faceDetected?: boolean;
+          eyesDetected?: number;
+          yaw?: number;
+          pitch?: number;
+        };
+
+        if (!payload.faceDetected) {
+          setLivenessHint('No face detected. Keep your full face inside the box.');
+          matchStreakRef.current = 0;
           return;
         }
 
         if (step.action === 'BLINK') {
-          if (tryRegisterBlink(face, blinkPhaseRef)) {
+          const eyes = typeof payload.eyesDetected === 'number' ? payload.eyesDetected : 2;
+          if (blinkPhaseRef.current === 0) {
+            // Wait for a clearly open state first.
+            if (eyes >= 1) {
+              blinkPhaseRef.current = 1;
+              setLivenessHint('Now blink once.');
+            } else {
+              setLivenessHint('Open your eyes and look at the camera.');
+            }
+            return;
+          }
+          if (blinkPhaseRef.current === 1) {
+            if (eyes === 0) {
+              blinkPhaseRef.current = 2;
+              setLivenessHint('Great. Open your eyes again.');
+            }
+            return;
+          }
+          if (blinkPhaseRef.current === 2) {
+            if (eyes >= 1) {
+              advanceLivenessStep(photo.uri);
+            }
+            return;
+          }
+          return;
+        }
+
+        if (payload.matched) {
+          matchStreakRef.current += 1;
+          setLivenessHint('Good. Hold that position.');
+          if (matchStreakRef.current >= MATCH_STREAK_REQUIRED) {
             advanceLivenessStep(photo.uri);
           }
           return;
         }
 
-        if (poseMatchesStep(step.action, face, image.height)) {
-          stableHitsRef.current += 1;
-          if (stableHitsRef.current >= STABLE_POSE_FRAMES) {
-            advanceLivenessStep(photo.uri);
-          }
-        } else {
-          stableHitsRef.current = 0;
-        }
+        matchStreakRef.current = 0;
+        const yaw = typeof payload.yaw === 'number' ? payload.yaw.toFixed(1) : '-';
+        const pitch = typeof payload.pitch === 'number' ? payload.pitch.toFixed(1) : '-';
+        setLivenessHint(`Adjust position. yaw=${yaw} pitch=${pitch}`);
+        frameErrorCountRef.current = 0;
       } catch (e) {
         console.warn('Liveness frame:', e);
+        frameErrorCountRef.current += 1;
+        setLivenessHint('Realtime check failed. Retrying...');
+        if (frameErrorCountRef.current >= 4) {
+          setLivenessActive(false);
+          setLivenessHint('Realtime check unavailable. Please try again.');
+          Alert.alert(
+            'Liveness temporarily unavailable',
+            'Could not analyze camera frames. Check backend/ML service and try again.',
+          );
+        }
       } finally {
         detectingRef.current = false;
       }
     };
 
-    const id = setInterval(tick, DETECT_INTERVAL_MS);
+    const id = setInterval(tick, TICK_MS);
     return () => clearInterval(id);
   }, [livenessActive, advanceLivenessStep]);
 
@@ -195,10 +205,19 @@ export default function DriverRegisterStep3() {
     stepIndexRef.current = 0;
     setCurrentLivenessStep(0);
     setLivenessProgress(0);
-    stableHitsRef.current = 0;
-    blinkPhaseRef.current = { phase: 0 };
+    matchStreakRef.current = 0;
+    blinkPhaseRef.current = 0;
     setLivenessPassed(false);
     setSelfieImage(null);
+    setLivenessHint('Center your face in the frame.');
+    frameErrorCountRef.current = 0;
+    const token = await AsyncStorage.getItem('accessToken');
+    if (!token) {
+      Alert.alert('Error', 'Session expired. Please start registration again.');
+      router.push('/(auth)/driver-register-step1');
+      return;
+    }
+    livenessTokenRef.current = token;
     setLivenessActive(true);
   };
 
@@ -232,10 +251,13 @@ export default function DriverRegisterStep3() {
     setCurrentLivenessStep(0);
     setLivenessProgress(0);
     setLivenessSteps([]);
-    stableHitsRef.current = 0;
-    blinkPhaseRef.current = { phase: 0 };
     setLivenessPassed(false);
     setSelfieImage(null);
+    setLivenessHint('Center your face in the frame.');
+    livenessTokenRef.current = null;
+    matchStreakRef.current = 0;
+    blinkPhaseRef.current = 0;
+    frameErrorCountRef.current = 0;
   };
 
   const handleSkip = () => {
@@ -291,7 +313,7 @@ export default function DriverRegisterStep3() {
           timestamp: Date.now(),
           passed: livenessPassed,
           steps: livenessSteps,
-          mode: 'expo-face-detector-auto',
+          mode: 'ml-worker-realtime-pose',
         })
       );
 
@@ -401,7 +423,8 @@ export default function DriverRegisterStep3() {
       <View style={styles.inputGroup}>
         <Text style={[styles.label, { color: colors.text }]}>Realtime Liveness Check *</Text>
         <Text style={[styles.hint, { color: colors.textTertiary }]}>
-          Follow the prompts; the app detects your head pose and blink automatically (no tap to capture).
+          Follow each pose. The app checks your frame in realtime and only moves when the pose/blink is detected (no
+          tap).
         </Text>
         {livenessActive ? (
           <View style={styles.livenessContainer}>
@@ -415,7 +438,7 @@ export default function DriverRegisterStep3() {
               Progress: {livenessProgress}%
             </Text>
             <Text style={[styles.livenessSubHint, { color: colors.textTertiary }]}>
-              Hold steady in good light. If a step does not advance, cancel and try again.
+              {livenessHint}
             </Text>
             <TouchableOpacity
               style={[styles.secondaryActionBtn, { borderColor: colors.border, marginTop: 12, alignSelf: 'center' }]}
