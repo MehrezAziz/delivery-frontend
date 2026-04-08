@@ -25,6 +25,7 @@
     "expo-constants": "~55.0.7",
     "expo-crypto": "~55.0.9",
     "expo-device": "~55.0.10",
+    "expo-face-detector": "~13.0.2",
     "expo-image-picker": "~55.0.12",
     "expo-linking": "~55.0.7",
     "expo-location": "~55.1.2",

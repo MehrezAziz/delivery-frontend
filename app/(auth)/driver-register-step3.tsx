@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -8,10 +8,12 @@ import {
   Alert,
   ActivityIndicator,
   Image,
+  Platform,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { CameraView, useCameraPermissions } from 'expo-camera';
+import * as FaceDetector from 'expo-face-detector';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 import axios from 'axios';
@@ -36,6 +38,58 @@ const LIVENESS_STEPS: Array<{
   { action: 'BLINK', label: 'Blink your eyes', progress: 100 },
 ];
 
+const DETECT_OPTIONS: FaceDetector.DetectionOptions = {
+  mode: FaceDetector.FaceDetectorMode.fast,
+  detectLandmarks: FaceDetector.FaceDetectorLandmarks.none,
+  runClassifications: FaceDetector.FaceDetectorClassifications.all,
+};
+
+const STABLE_POSE_FRAMES = 4;
+const DETECT_INTERVAL_MS = 480;
+
+function poseMatchesStep(
+  action: (typeof LIVENESS_STEPS)[number]['action'],
+  face: FaceDetector.FaceFeature,
+  imageHeight: number,
+): boolean {
+  const yaw = face.yawAngle ?? 0;
+  const roll = face.rollAngle ?? 0;
+  const originY = face.bounds?.origin?.y ?? imageHeight * 0.45;
+  const ratioY = originY / Math.max(imageHeight, 1);
+
+  switch (action) {
+    case 'TURN_RIGHT':
+      return Platform.OS === 'ios' ? yaw < -9 : yaw < -7;
+    case 'TURN_LEFT':
+      return Platform.OS === 'ios' ? yaw > 9 : yaw > 7;
+    case 'HOLD_HIGH':
+      return Math.abs(yaw) < 14 && Math.abs(roll) < 24 && ratioY < 0.35;
+    default:
+      return false;
+  }
+}
+
+type BlinkPhase = { phase: 0 | 1 | 2 };
+
+function tryRegisterBlink(face: FaceDetector.FaceFeature, ref: React.MutableRefObject<BlinkPhase>): boolean {
+  const l = face.leftEyeOpenProbability;
+  const r = face.rightEyeOpenProbability;
+  if (l == null || r == null) return false;
+  const open = Math.min(l, r);
+  const p = ref.current.phase;
+  if (p === 0) {
+    if (open > 0.55) ref.current.phase = 1;
+  } else if (p === 1) {
+    if (open < 0.38) ref.current.phase = 2;
+  } else if (p === 2) {
+    if (open > 0.55) {
+      ref.current.phase = 0;
+      return true;
+    }
+  }
+  return false;
+}
+
 export default function DriverRegisterStep3() {
   const router = useRouter();
   const { colors, isDark } = useTheme();
@@ -50,10 +104,83 @@ export default function DriverRegisterStep3() {
   const [livenessActive, setLivenessActive] = useState(false);
   const [currentLivenessStep, setCurrentLivenessStep] = useState(0);
   const [livenessProgress, setLivenessProgress] = useState(0);
-  const [capturingStep, setCapturingStep] = useState(false);
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
   const cameraRef = useRef<any>(null);
   const [loading, setLoading] = useState(false);
+
+  const stepIndexRef = useRef(0);
+  const stableHitsRef = useRef(0);
+  const blinkPhaseRef = useRef<BlinkPhase>({ phase: 0 });
+  const detectingRef = useRef(false);
+
+  const advanceLivenessStep = useCallback((photoUri: string) => {
+    const idx = stepIndexRef.current;
+    const step = LIVENESS_STEPS[idx];
+    setLivenessSteps((prev) => [...prev, { action: step.action, passed: true, imageUri: photoUri }]);
+    setLivenessProgress(step.progress);
+
+    if (idx >= LIVENESS_STEPS.length - 1) {
+      setSelfieImage(photoUri);
+      setLivenessPassed(true);
+      setLivenessActive(false);
+      stableHitsRef.current = 0;
+      Alert.alert('Liveness Complete', 'Step 1 Completed successfully!');
+      return;
+    }
+
+    const next = idx + 1;
+    stepIndexRef.current = next;
+    setCurrentLivenessStep(next);
+    stableHitsRef.current = 0;
+    blinkPhaseRef.current = { phase: 0 };
+  }, []);
+
+  useEffect(() => {
+    if (!livenessActive) return;
+
+    const tick = async () => {
+      if (detectingRef.current || !cameraRef.current) return;
+      detectingRef.current = true;
+      try {
+        const photo = await cameraRef.current.takePictureAsync({
+          quality: 0.22,
+          skipProcessing: true,
+        });
+        const { faces, image } = await FaceDetector.detectFacesAsync(photo.uri, DETECT_OPTIONS);
+        const face = faces[0];
+        const idx = stepIndexRef.current;
+        const step = LIVENESS_STEPS[idx];
+
+        if (!face) {
+          stableHitsRef.current = 0;
+          return;
+        }
+
+        if (step.action === 'BLINK') {
+          if (tryRegisterBlink(face, blinkPhaseRef)) {
+            advanceLivenessStep(photo.uri);
+          }
+          return;
+        }
+
+        if (poseMatchesStep(step.action, face, image.height)) {
+          stableHitsRef.current += 1;
+          if (stableHitsRef.current >= STABLE_POSE_FRAMES) {
+            advanceLivenessStep(photo.uri);
+          }
+        } else {
+          stableHitsRef.current = 0;
+        }
+      } catch (e) {
+        console.warn('Liveness frame:', e);
+      } finally {
+        detectingRef.current = false;
+      }
+    };
+
+    const id = setInterval(tick, DETECT_INTERVAL_MS);
+    return () => clearInterval(id);
+  }, [livenessActive, advanceLivenessStep]);
 
   const startLivenessChallenge = async () => {
     if (!cameraPermission?.granted) {
@@ -65,37 +192,14 @@ export default function DriverRegisterStep3() {
     }
 
     setLivenessSteps([]);
+    stepIndexRef.current = 0;
     setCurrentLivenessStep(0);
     setLivenessProgress(0);
+    stableHitsRef.current = 0;
+    blinkPhaseRef.current = { phase: 0 };
     setLivenessPassed(false);
     setSelfieImage(null);
     setLivenessActive(true);
-  };
-
-  const captureLivenessStep = async () => {
-    if (!cameraRef.current || capturingStep || currentLivenessStep >= LIVENESS_STEPS.length) return;
-    setCapturingStep(true);
-    try {
-      const photo = await cameraRef.current.takePictureAsync({ quality: 0.8 });
-      const step = LIVENESS_STEPS[currentLivenessStep];
-      const nextSteps = [...livenessSteps, { action: step.action, passed: true, imageUri: photo.uri }];
-      setLivenessSteps(nextSteps);
-      setLivenessProgress(step.progress);
-
-      if (currentLivenessStep === LIVENESS_STEPS.length - 1) {
-        setSelfieImage(photo.uri);
-        setLivenessPassed(true);
-        setLivenessActive(false);
-        Alert.alert('Liveness Complete', 'Step 1 Completed successfully!');
-      } else {
-        setCurrentLivenessStep((prev) => prev + 1);
-      }
-    } catch (error) {
-      console.error('Liveness capture error:', error);
-      Alert.alert('Error', 'Failed to capture liveness frame. Please try again.');
-    } finally {
-      setCapturingStep(false);
-    }
   };
 
   const takeDocumentPhoto = async (side: 'top' | 'bottom') => {
@@ -124,9 +228,12 @@ export default function DriverRegisterStep3() {
 
   const cancelLiveness = () => {
     setLivenessActive(false);
+    stepIndexRef.current = 0;
     setCurrentLivenessStep(0);
     setLivenessProgress(0);
     setLivenessSteps([]);
+    stableHitsRef.current = 0;
+    blinkPhaseRef.current = { phase: 0 };
     setLivenessPassed(false);
     setSelfieImage(null);
   };
@@ -149,7 +256,6 @@ export default function DriverRegisterStep3() {
   };
 
   const handleSubmit = async () => {
-    // Validation
     if (!documentType) {
       Alert.alert('Error', 'Please select a document type');
       return;
@@ -169,7 +275,7 @@ export default function DriverRegisterStep3() {
 
     try {
       const token = await AsyncStorage.getItem('accessToken');
-      
+
       if (!token) {
         Alert.alert('Error', 'Session expired. Please start registration again.');
         router.push('/(auth)/driver-register-step1');
@@ -185,11 +291,10 @@ export default function DriverRegisterStep3() {
           timestamp: Date.now(),
           passed: livenessPassed,
           steps: livenessSteps,
-          mode: 'guided-mobile-capture',
+          mode: 'expo-face-detector-auto',
         })
       );
 
-      // Add selfie image
       const selfieFilename = selfieImage.split('/').pop();
       const selfieMatch = /\.(\w+)$/.exec(selfieFilename || '');
       const selfieType = selfieMatch ? `image/${selfieMatch[1]}` : 'image/jpeg';
@@ -199,7 +304,6 @@ export default function DriverRegisterStep3() {
         type: selfieType,
       } as any);
 
-      // Add document top image
       const docTopFilename = docImageTop.split('/').pop();
       const docTopMatch = /\.(\w+)$/.exec(docTopFilename || '');
       const docTopType = docTopMatch ? `image/${docTopMatch[1]}` : 'image/jpeg';
@@ -209,7 +313,6 @@ export default function DriverRegisterStep3() {
         type: docTopType,
       } as any);
 
-      // Add document bottom image if provided
       if (docImageBottom) {
         const docBottomFilename = docImageBottom.split('/').pop();
         const docBottomMatch = /\.(\w+)$/.exec(docBottomFilename || '');
@@ -221,18 +324,13 @@ export default function DriverRegisterStep3() {
         } as any);
       }
 
-      const response = await axios.post(
-        `${API_URL}/auth/driver/register/step3`,
-        formData,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'multipart/form-data',
-          },
-        }
-      );
+      const response = await axios.post(`${API_URL}/auth/driver/register/step3`, formData, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'multipart/form-data',
+        },
+      });
 
-      // Show success message
       Alert.alert(
         'Registration Complete!',
         response.data.message || 'Your documents have been submitted for review.',
@@ -245,10 +343,7 @@ export default function DriverRegisterStep3() {
       );
     } catch (error: any) {
       console.error('Step 3 error:', error);
-      Alert.alert(
-        'Error',
-        error.response?.data?.message || 'An error occurred'
-      );
+      Alert.alert('Error', error.response?.data?.message || 'An error occurred');
     } finally {
       setLoading(false);
     }
@@ -268,16 +363,14 @@ export default function DriverRegisterStep3() {
         <Text style={[styles.subtitle, { color: colors.textSecondary }]}>Step 3 of 3: Document Verification</Text>
       </View>
 
-      {/* Progress Indicator */}
       <View style={styles.progressContainer}>
         <View style={[styles.progressDot, styles.progressDotComplete]} />
         <View style={[styles.progressLine, { backgroundColor: colors.border }]} />
         <View style={[styles.progressDot, styles.progressDotComplete]} />
         <View style={[styles.progressLine, { backgroundColor: colors.border }]} />
-        <View style={[styles.progressDot, styles.progressDotActive, { backgroundColor: colors.primary }]} />
+        <View style={[styles.progressDot, styles.progressActive, { backgroundColor: colors.primary }]} />
       </View>
 
-      {/* Document Type Selection */}
       <View style={styles.inputGroup}>
         <Text style={[styles.label, { color: colors.text }]}>Document Type *</Text>
         <View style={styles.documentTypeContainer}>
@@ -305,11 +398,10 @@ export default function DriverRegisterStep3() {
         </View>
       </View>
 
-      {/* Selfie */}
       <View style={styles.inputGroup}>
         <Text style={[styles.label, { color: colors.text }]}>Realtime Liveness Check *</Text>
         <Text style={[styles.hint, { color: colors.textTertiary }]}>
-          Keep your face in the center and complete all guided actions. Final frame is used as selfie proof.
+          Follow the prompts; the app detects your head pose and blink automatically (no tap to capture).
         </Text>
         {livenessActive ? (
           <View style={styles.livenessContainer}>
@@ -322,23 +414,15 @@ export default function DriverRegisterStep3() {
             <Text style={[styles.livenessProgressText, { color: colors.primary }]}>
               Progress: {livenessProgress}%
             </Text>
-            <View style={styles.livenessActions}>
-              <TouchableOpacity
-                style={[styles.secondaryActionBtn, { borderColor: colors.border }]}
-                onPress={cancelLiveness}
-              >
-                <Text style={[styles.secondaryActionText, { color: colors.text }]}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.primaryActionBtn, { backgroundColor: colors.primary }]}
-                onPress={captureLivenessStep}
-                disabled={capturingStep}
-              >
-                <Text style={styles.primaryActionText}>
-                  {capturingStep ? 'Capturing...' : 'Capture Step'}
-                </Text>
-              </TouchableOpacity>
-            </View>
+            <Text style={[styles.livenessSubHint, { color: colors.textTertiary }]}>
+              Hold steady in good light. If a step does not advance, cancel and try again.
+            </Text>
+            <TouchableOpacity
+              style={[styles.secondaryActionBtn, { borderColor: colors.border, marginTop: 12, alignSelf: 'center' }]}
+              onPress={cancelLiveness}
+            >
+              <Text style={[styles.secondaryActionText, { color: colors.text }]}>Cancel</Text>
+            </TouchableOpacity>
           </View>
         ) : (
           <TouchableOpacity style={styles.photoButton} onPress={startLivenessChallenge}>
@@ -359,14 +443,10 @@ export default function DriverRegisterStep3() {
         ) : null}
       </View>
 
-      {/* Document Front */}
       <View style={styles.inputGroup}>
         <Text style={[styles.label, { color: colors.text }]}>Document Front *</Text>
         <Text style={[styles.hint, { color: colors.textTertiary }]}>Capture the front side of your document</Text>
-        <TouchableOpacity
-          style={styles.photoButton}
-          onPress={() => takeDocumentPhoto('top')}
-        >
+        <TouchableOpacity style={styles.photoButton} onPress={() => takeDocumentPhoto('top')}>
           {docImageTop ? (
             <Image source={{ uri: docImageTop }} style={styles.photoPreview} />
           ) : (
@@ -378,14 +458,10 @@ export default function DriverRegisterStep3() {
         </TouchableOpacity>
       </View>
 
-      {/* Document Back */}
       <View style={styles.inputGroup}>
         <Text style={[styles.label, { color: colors.text }]}>Document Back (Optional)</Text>
         <Text style={[styles.hint, { color: colors.textTertiary }]}>Capture the back side if applicable</Text>
-        <TouchableOpacity
-          style={styles.photoButton}
-          onPress={() => takeDocumentPhoto('bottom')}
-        >
+        <TouchableOpacity style={styles.photoButton} onPress={() => takeDocumentPhoto('bottom')}>
           {docImageBottom ? (
             <Image source={{ uri: docImageBottom }} style={styles.photoPreview} />
           ) : (
@@ -397,7 +473,6 @@ export default function DriverRegisterStep3() {
         </TouchableOpacity>
       </View>
 
-      {/* Submit Button */}
       <TouchableOpacity
         style={[styles.submitButton, { backgroundColor: colors.primary }, loading && styles.submitButtonDisabled]}
         onPress={handleSubmit}
@@ -410,19 +485,14 @@ export default function DriverRegisterStep3() {
         )}
       </TouchableOpacity>
 
-      {/* Skip Button */}
-      <TouchableOpacity
-        style={[styles.skipButton, { borderColor: colors.primary }]}
-        onPress={handleSkip}
-        disabled={loading}
-      >
+      <TouchableOpacity style={[styles.skipButton, { borderColor: colors.primary }]} onPress={handleSkip} disabled={loading}>
         <Text style={[styles.skipButtonText, { color: colors.primary }]}>Skip for Now</Text>
       </TouchableOpacity>
 
       <View style={[styles.infoBox, { backgroundColor: isDark ? colors.primaryLight : '#f0f9ff' }]}>
         <Ionicons name="information-circle" size={24} color={colors.primary} />
         <Text style={[styles.infoText, { color: colors.textSecondary }]}>
-          Your documents will be reviewed by our team. You'll be notified once verified.
+          Your documents will be reviewed by our team. You will be notified once verified.
         </Text>
       </View>
     </ScrollView>
@@ -439,8 +509,12 @@ const styles = StyleSheet.create({
     marginTop: 20,
   },
   backBtn: {
-    width: 42, height: 42, borderRadius: 21,
-    alignItems: 'center', justifyContent: 'center', marginBottom: 16,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
   },
   title: {
     fontSize: 28,
@@ -461,7 +535,7 @@ const styles = StyleSheet.create({
     height: 12,
     borderRadius: 6,
   },
-  progressDotActive: {
+  progressActive: {
     width: 16,
     height: 16,
     borderRadius: 8,
@@ -555,21 +629,11 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
   },
-  livenessActions: {
-    width: '100%',
-    marginTop: 12,
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 10,
-  },
-  primaryActionBtn: {
-    paddingVertical: 10,
-    paddingHorizontal: 18,
-    borderRadius: 8,
-  },
-  primaryActionText: {
-    color: '#fff',
-    fontWeight: '700',
+  livenessSubHint: {
+    marginTop: 8,
+    fontSize: 12,
+    textAlign: 'center',
+    paddingHorizontal: 8,
   },
   secondaryActionBtn: {
     paddingVertical: 10,
