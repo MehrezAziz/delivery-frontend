@@ -21,6 +21,8 @@ import {
   type RNMLKitFace,
 } from '@infinitered/react-native-mlkit-face-detection';
 import { useTheme } from '../../contexts/ThemeContext';
+import { LivenessStepCoach } from '../../components/liveness/LivenessStepCoach';
+import { useLivenessVoiceEN } from '../../hooks/useLivenessVoiceEN';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api';
 
@@ -163,6 +165,25 @@ export default function DriverRegisterStep3() {
   const blinkPhaseRef = useRef<0 | 1 | 2>(0);
   const frameErrorCountRef = useRef(0);
   const stepStartMsRef = useRef(0);
+  const thankYouPlayedRef = useRef(false);
+
+  const { playStepCue, playThankYou, voiceReady } = useLivenessVoiceEN(livenessActive);
+
+  useEffect(() => {
+    if (!livenessActive || Platform.OS === 'web' || !voiceReady) return;
+    void playStepCue(currentLivenessStep);
+  }, [livenessActive, currentLivenessStep, voiceReady, playStepCue]);
+
+  useEffect(() => {
+    if (Platform.OS === 'web') return;
+    if (livenessPassed && !thankYouPlayedRef.current) {
+      thankYouPlayedRef.current = true;
+      void playThankYou();
+    }
+    if (!livenessPassed) {
+      thankYouPlayedRef.current = false;
+    }
+  }, [livenessPassed, playThankYou]);
 
   useEffect(() => {
     if (Platform.OS === 'web') return;
@@ -276,10 +297,10 @@ export default function DriverRegisterStep3() {
         {
           const { yaw } = getYawPitchRoll(face);
           let hint =
-            yaw == null && step.action !== 'BLINK'
+            yaw == null
               ? 'Face found, but head angles are missing. Use good light and keep your face centered.'
               : formatPoseHint(face);
-          if (step.action !== 'BLINK' && Date.now() - stepStartMsRef.current > MAX_MS_PER_STEP) {
+          if (Date.now() - stepStartMsRef.current > MAX_MS_PER_STEP) {
             hint += ' — aim for under 10s per step.';
           }
           setLivenessHint(hint);
@@ -577,6 +598,13 @@ export default function DriverRegisterStep3() {
             <Text style={[styles.livenessInstruction, { color: colors.text }]}>
               {`${currentLivenessStep + 1}. ${LIVENESS_STEPS[currentLivenessStep]?.label ?? 'Done'}`}
             </Text>
+            {Platform.OS !== 'web' ? (
+              <LivenessStepCoach
+                action={LIVENESS_STEPS[currentLivenessStep]?.action ?? 'BLINK'}
+                accentColor={colors.primary}
+                isDark={isDark}
+              />
+            ) : null}
             <Text style={[styles.livenessProgressText, { color: colors.primary }]}>
               Progress: {livenessProgress}%
             </Text>
