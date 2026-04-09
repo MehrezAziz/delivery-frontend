@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Audio } from 'expo-av';
 import { Platform } from 'react-native';
+import { createAudioPlayer, setAudioModeAsync, type AudioPlayer } from 'expo-audio';
 
 /** Order matches `LIVENESS_STEPS` indices (mirrored labels: left, right, hold, blink). */
 const STEP_SOURCES = [
@@ -12,30 +12,20 @@ const STEP_SOURCES = [
 
 const THANK_YOU_SOURCE = require('../assets/audio/liveness/en/thank_you.mp3');
 
-async function stopAndUnloadSounds(sounds: Audio.Sound[]) {
-  await Promise.all(
-    sounds.map((s) =>
-      s
-        .stopAsync()
-        .catch(() => {})
-        .then(() => s.unloadAsync().catch(() => {})),
-    ),
-  );
+async function configurePlaybackMode() {
+  await setAudioModeAsync({
+    playsInSilentMode: true,
+    shouldPlayInBackground: false,
+    interruptionMode: 'duckOthers',
+    allowsRecording: false,
+    shouldRouteThroughEarpiece: false,
+  });
 }
 
 export function useLivenessVoiceEN(livenessActive: boolean) {
   const [voiceReady, setVoiceReady] = useState(false);
-  const soundsRef = useRef<Audio.Sound[]>([]);
-  const loadingRef = useRef(false);
+  const cuePlayerRef = useRef<AudioPlayer | null>(null);
   const lastStepPlayedRef = useRef(-1);
-
-  const deactivateVoice = useCallback(async () => {
-    const list = soundsRef.current;
-    soundsRef.current = [];
-    lastStepPlayedRef.current = -1;
-    setVoiceReady(false);
-    await stopAndUnloadSounds(list);
-  }, []);
 
   useEffect(() => {
     if (Platform.OS === 'web') {
@@ -43,55 +33,45 @@ export function useLivenessVoiceEN(livenessActive: boolean) {
       return;
     }
 
+    if (!livenessActive) {
+      cuePlayerRef.current?.remove();
+      cuePlayerRef.current = null;
+      setVoiceReady(false);
+      lastStepPlayedRef.current = -1;
+      return;
+    }
+
     let cancelled = false;
 
-    const load = async () => {
-      if (!livenessActive || loadingRef.current) return;
-      loadingRef.current = true;
-      setVoiceReady(false);
+    void (async () => {
       try {
-        const previous = soundsRef.current;
-        soundsRef.current = [];
-        lastStepPlayedRef.current = -1;
-        await stopAndUnloadSounds(previous);
+        await configurePlaybackMode();
+        if (cancelled) return;
 
-        await Audio.setAudioModeAsync({
-          playsInSilentModeIOS: true,
-          staysActiveInBackground: false,
-          shouldDuckAndroid: true,
-          playThroughEarpieceAndroid: false,
+        cuePlayerRef.current?.remove();
+        const p = createAudioPlayer(STEP_SOURCES[0], {
+          downloadFirst: true,
         });
-        const created = await Promise.all(
-          STEP_SOURCES.map((src) =>
-            Audio.Sound.createAsync(src, { shouldPlay: false, volume: 1, isLooping: false }),
-          ),
-        );
-        if (cancelled) {
-          await Promise.all(created.map((c) => c.sound.unloadAsync().catch(() => {})));
-          return;
-        }
-        soundsRef.current = created.map((c) => c.sound);
+        cuePlayerRef.current = p;
         lastStepPlayedRef.current = -1;
-        setVoiceReady(true);
+        if (!cancelled) {
+          setVoiceReady(true);
+        }
       } catch (e) {
-        console.warn('Liveness voice preload failed:', e);
-        setVoiceReady(false);
-      } finally {
-        loadingRef.current = false;
+        console.warn('Liveness voice init failed:', e);
+        if (!cancelled) {
+          setVoiceReady(false);
+        }
       }
-    };
-
-    if (livenessActive) {
-      void load();
-    } else {
-      void deactivateVoice();
-    }
+    })();
 
     return () => {
       cancelled = true;
-      void deactivateVoice();
+      cuePlayerRef.current?.remove();
+      cuePlayerRef.current = null;
+      setVoiceReady(false);
     };
-  }, [livenessActive, deactivateVoice]);
+  }, [livenessActive]);
 
   useEffect(() => {
     if (livenessActive && voiceReady) {
@@ -102,45 +82,44 @@ export function useLivenessVoiceEN(livenessActive: boolean) {
   const playStepCue = useCallback(async (stepIndex: number) => {
     if (Platform.OS === 'web' || stepIndex < 0 || stepIndex >= STEP_SOURCES.length) return;
     if (lastStepPlayedRef.current === stepIndex) return;
-    const sounds = soundsRef.current;
-    if (sounds.length !== STEP_SOURCES.length) return;
+
+    const p = cuePlayerRef.current;
+    if (!p) return;
 
     lastStepPlayedRef.current = stepIndex;
 
-    await Promise.all(
-      sounds.map((s, i) =>
-        i === stepIndex ? Promise.resolve() : s.stopAsync().catch(() => {}),
-      ),
-    );
-
     try {
-      const s = sounds[stepIndex]!;
-      await s.setPositionAsync(0);
-      await s.playAsync();
+      p.pause();
+      p.replace(STEP_SOURCES[stepIndex]);
+      await p.seekTo(0);
+      p.play();
     } catch (e) {
-      console.warn('Liveness voice failed:', e);
+      console.warn('Liveness voice play failed:', e);
     }
   }, []);
 
   const playThankYou = useCallback(async () => {
     if (Platform.OS === 'web') return;
     try {
-      await Audio.setAudioModeAsync({
-        playsInSilentModeIOS: true,
-        staysActiveInBackground: false,
-        shouldDuckAndroid: true,
-        playThroughEarpieceAndroid: false,
-      });
-      const { sound } = await Audio.Sound.createAsync(THANK_YOU_SOURCE, {
-        shouldPlay: true,
-        volume: 1,
-        isLooping: false,
-      });
-      sound.setOnPlaybackStatusUpdate((status) => {
-        if (status.isLoaded && !status.isPlaying && status.didJustFinish) {
-          sound.unloadAsync().catch(() => {});
+      await configurePlaybackMode();
+      const p = createAudioPlayer(THANK_YOU_SOURCE, { downloadFirst: true });
+      let finished = false;
+      let timeoutId: ReturnType<typeof setTimeout>;
+      const finish = () => {
+        if (finished) return;
+        finished = true;
+        clearTimeout(timeoutId);
+        sub.remove();
+        p.remove();
+      };
+      const sub = p.addListener('playbackStatusUpdate', (status) => {
+        if (status.isLoaded && status.didJustFinish) {
+          finish();
         }
       });
+      timeoutId = setTimeout(finish, 30_000);
+      await p.seekTo(0);
+      p.play();
     } catch (e) {
       console.warn('Thank-you voice failed:', e);
     }

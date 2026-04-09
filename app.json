@@ -31,7 +31,8 @@
           "enableMicrophonePermission": false,
           "enableFrameProcessors": false
         }
-      ]
+      ],
+      "expo-audio"
     ],
     "ios": {
       "supportsTablet": true,
