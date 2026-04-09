@@ -23,7 +23,15 @@
         }
       ],
       "@react-native-firebase/app",
-      "@react-native-firebase/messaging"
+      "@react-native-firebase/messaging",
+      [
+        "react-native-vision-camera",
+        {
+          "cameraPermissionText": "Camera access is required for identity verification and liveness.",
+          "enableMicrophonePermission": false,
+          "enableFrameProcessors": false
+        }
+      ]
     ],
     "ios": {
       "supportsTablet": true,

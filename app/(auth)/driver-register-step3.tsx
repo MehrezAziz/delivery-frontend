@@ -8,14 +8,18 @@ import {
   Alert,
   ActivityIndicator,
   Image,
+  Platform,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
-import * as FileSystem from 'expo-file-system/legacy';
 import { Ionicons } from '@expo/vector-icons';
 import axios from 'axios';
+import { Camera, useCameraDevice, useCameraPermission } from 'react-native-vision-camera';
+import {
+  RNMLKitFaceDetector,
+  type RNMLKitFace,
+} from '@infinitered/react-native-mlkit-face-detection';
 import { useTheme } from '../../contexts/ThemeContext';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api';
@@ -31,14 +35,104 @@ const LIVENESS_STEPS: Array<{
   label: string;
   progress: number;
 }> = [
-  { action: 'TURN_RIGHT', label: 'Turn your face right', progress: 25 },
-  { action: 'TURN_LEFT', label: 'Turn your face left', progress: 50 },
+  // Labels swapped vs ML actions: front-camera preview mirrors left↔right for the driver.
+  { action: 'TURN_RIGHT', label: 'Turn your face left', progress: 25 },
+  { action: 'TURN_LEFT', label: 'Turn your face right', progress: 50 },
   { action: 'HOLD_HIGH', label: 'Hold your head high', progress: 75 },
   { action: 'BLINK', label: 'Blink your eyes', progress: 100 },
 ];
 
-const TICK_MS = 850;
-const MATCH_STREAK_REQUIRED = 2;
+/** Throttle ML Kit analysis (Vision Camera preview stays smooth). ~≤40s total with 4 steps if each step completes quickly. */
+const TICK_MS = 420;
+/** One stable frame is enough — native modules never sent `hasHeadEulerAngle*` so streak was blocking progress. */
+const MATCH_STREAK_REQUIRED = 1;
+/** Soft cap per pose/blink step (ms); only used for hint text, not auto-fail. */
+const MAX_MS_PER_STEP = 10_000;
+
+/**
+ * Align with `delivery-verification-ml` InsightFace thresholds.
+ * Slightly relaxed vs ±9° so ML Kit (front camera) registers turns a bit sooner.
+ */
+const TURN_RIGHT_MAX_YAW = -7;
+const TURN_LEFT_MIN_YAW = 7;
+const HOLD_MAX_ABS_YAW = 16;
+const HOLD_MIN_PITCH_UP = -4;
+const HOLD_MAX_ABS_ROLL = 22;
+
+/**
+ * If “turn right/left” feel reversed vs the on-screen hint numbers, set to `true`.
+ * Default `false` uses ML Kit euler Y as returned on the captured photo.
+ */
+const NEGATE_EULER_Y_FOR_FRONT_CAMERA = false;
+
+const EYE_OPEN_MIN = 0.45;
+const EYE_CLOSED_MAX = 0.28;
+
+function photoPathToUri(path: string): string {
+  if (path.startsWith('file://')) return path;
+  return `file://${path}`;
+}
+
+function pickLargestFace(faces: RNMLKitFace[]): RNMLKitFace | null {
+  if (!faces.length) return null;
+  return faces.reduce((best, f) => {
+    const a = (f.frame?.size?.x ?? 0) * (f.frame?.size?.y ?? 0);
+    const b = (best.frame?.size?.x ?? 0) * (best.frame?.size?.y ?? 0);
+    return a > b ? f : best;
+  });
+}
+
+/** Native Kotlin/Swift records expose numeric angles only — not `hasHeadEulerAngle*` (TS types are misleading). */
+function readAngle(v: number | null | undefined): number | null {
+  return typeof v === 'number' && Number.isFinite(v) ? v : null;
+}
+
+function getYawPitchRoll(face: RNMLKitFace): { yaw: number | null; pitch: number | null; roll: number | null } {
+  let yaw = readAngle(face.headEulerAngleY ?? undefined);
+  const pitch = readAngle(face.headEulerAngleX ?? undefined);
+  const roll = readAngle(face.headEulerAngleZ ?? undefined);
+  if (yaw != null && NEGATE_EULER_Y_FOR_FRONT_CAMERA) {
+    yaw = -yaw;
+  }
+  return { yaw, pitch, roll };
+}
+
+function poseMatched(
+  action: 'TURN_RIGHT' | 'TURN_LEFT' | 'HOLD_HIGH',
+  face: RNMLKitFace,
+): boolean {
+  const { yaw, pitch, roll } = getYawPitchRoll(face);
+  if (yaw == null) {
+    return false;
+  }
+  if (action === 'TURN_RIGHT') {
+    return yaw <= TURN_RIGHT_MAX_YAW;
+  }
+  if (action === 'TURN_LEFT') {
+    return yaw >= TURN_LEFT_MIN_YAW;
+  }
+  const p = pitch ?? 0;
+  const r = roll ?? 0;
+  return (
+    Math.abs(yaw) <= HOLD_MAX_ABS_YAW &&
+    p <= HOLD_MIN_PITCH_UP &&
+    Math.abs(r) <= HOLD_MAX_ABS_ROLL
+  );
+}
+
+function formatPoseHint(face: RNMLKitFace | null): string {
+  if (!face) return 'No face detected. Keep your full face inside the frame.';
+  const { yaw, pitch } = getYawPitchRoll(face);
+  const yawS = yaw == null ? '—' : yaw.toFixed(1);
+  const pitchS = pitch == null ? '—' : pitch.toFixed(1);
+  return `Adjust position. yaw=${yawS}° pitch=${pitchS}°`;
+}
+
+function readEyeOpen(face: RNMLKitFace, side: 'left' | 'right'): number {
+  const v =
+    side === 'left' ? face.leftEyeOpenProbability : face.rightEyeOpenProbability;
+  return typeof v === 'number' && Number.isFinite(v) ? v : 1;
+}
 
 export default function DriverRegisterStep3() {
   const router = useRouter();
@@ -55,16 +149,42 @@ export default function DriverRegisterStep3() {
   const [currentLivenessStep, setCurrentLivenessStep] = useState(0);
   const [livenessProgress, setLivenessProgress] = useState(0);
   const [livenessHint, setLivenessHint] = useState('Center your face in the frame.');
-  const [cameraPermission, requestCameraPermission] = useCameraPermissions();
-  const cameraRef = useRef<any>(null);
+  const device = useCameraDevice('front');
+  const { hasPermission: visionCamGranted, requestPermission: requestVisionPermission } = useCameraPermission();
+  const cameraRef = useRef<Camera>(null);
+  const detectorRef = useRef<RNMLKitFaceDetector | null>(null);
+  const [mlReady, setMlReady] = useState(Platform.OS === 'web');
+
   const [loading, setLoading] = useState(false);
 
   const stepIndexRef = useRef(0);
   const detectingRef = useRef(false);
-  const livenessTokenRef = useRef<string | null>(null);
   const matchStreakRef = useRef(0);
   const blinkPhaseRef = useRef<0 | 1 | 2>(0);
   const frameErrorCountRef = useRef(0);
+  const stepStartMsRef = useRef(0);
+
+  useEffect(() => {
+    if (Platform.OS === 'web') return;
+    const d = new RNMLKitFaceDetector(
+      {
+        performanceMode: 'accurate',
+        classificationMode: true,
+        landmarkMode: false,
+        contourMode: false,
+      },
+      true,
+    );
+    detectorRef.current = d;
+    d.initialize({
+      performanceMode: 'accurate',
+      classificationMode: true,
+      landmarkMode: false,
+      contourMode: false,
+    })
+      .then(() => setMlReady(true))
+      .catch(() => setMlReady(false));
+  }, []);
 
   const advanceLivenessStep = useCallback((photoUri: string) => {
     const idx = stepIndexRef.current;
@@ -82,58 +202,44 @@ export default function DriverRegisterStep3() {
 
     const next = idx + 1;
     stepIndexRef.current = next;
+    stepStartMsRef.current = Date.now();
     setCurrentLivenessStep(next);
     matchStreakRef.current = 0;
     blinkPhaseRef.current = 0;
   }, []);
 
   useEffect(() => {
-    if (!livenessActive) return;
+    if (!livenessActive || Platform.OS === 'web' || !mlReady) return;
 
     const tick = async () => {
-      if (detectingRef.current || !cameraRef.current) return;
-      if (!livenessTokenRef.current) return;
+      if (detectingRef.current || !cameraRef.current || !detectorRef.current) return;
 
       detectingRef.current = true;
       try {
-        const photo = await cameraRef.current.takePictureAsync({
-          quality: 0.22,
-          skipProcessing: true,
+        const photo = await cameraRef.current.takePhoto({
+          flash: 'off',
+          enableShutterSound: false,
         });
-        const imageBase64 = await FileSystem.readAsStringAsync(photo.uri, {
-          encoding: 'base64' as any,
-        });
+        const uri = photoPathToUri(photo.path);
+        const result = await detectorRef.current.detectFaces(uri);
+        const face = pickLargestFace(result?.faces ?? []);
+
         const step = LIVENESS_STEPS[stepIndexRef.current];
-        const res = await axios.post(
-          `${API_URL}/drivers/verification/liveness/frame-check`,
-          {
-            action: step.action,
-            imageBase64,
-          },
-          {
-            headers: { Authorization: `Bearer ${livenessTokenRef.current}` },
-          },
-        );
 
-        const payload = res.data as {
-          matched?: boolean;
-          faceDetected?: boolean;
-          eyesDetected?: number;
-          yaw?: number;
-          pitch?: number;
-        };
-
-        if (!payload.faceDetected) {
+        if (!face) {
           setLivenessHint('No face detected. Keep your full face inside the box.');
           matchStreakRef.current = 0;
+          frameErrorCountRef.current = 0;
           return;
         }
 
         if (step.action === 'BLINK') {
-          const eyes = typeof payload.eyesDetected === 'number' ? payload.eyesDetected : 2;
+          const left = readEyeOpen(face, 'left');
+          const right = readEyeOpen(face, 'right');
+          const minOpen = Math.min(left, right);
+
           if (blinkPhaseRef.current === 0) {
-            // Wait for a clearly open state first.
-            if (eyes >= 1) {
+            if (minOpen >= EYE_OPEN_MIN) {
               blinkPhaseRef.current = 1;
               setLivenessHint('Now blink once.');
             } else {
@@ -142,45 +248,53 @@ export default function DriverRegisterStep3() {
             return;
           }
           if (blinkPhaseRef.current === 1) {
-            if (eyes === 0) {
+            if (minOpen <= EYE_CLOSED_MAX) {
               blinkPhaseRef.current = 2;
               setLivenessHint('Great. Open your eyes again.');
             }
             return;
           }
           if (blinkPhaseRef.current === 2) {
-            if (eyes >= 1) {
-              advanceLivenessStep(photo.uri);
+            if (minOpen >= EYE_OPEN_MIN) {
+              advanceLivenessStep(uri);
             }
             return;
           }
           return;
         }
 
-        if (payload.matched) {
+        if (poseMatched(step.action, face)) {
           matchStreakRef.current += 1;
           setLivenessHint('Good. Hold that position.');
           if (matchStreakRef.current >= MATCH_STREAK_REQUIRED) {
-            advanceLivenessStep(photo.uri);
+            advanceLivenessStep(uri);
           }
           return;
         }
 
         matchStreakRef.current = 0;
-        const yaw = typeof payload.yaw === 'number' ? payload.yaw.toFixed(1) : '-';
-        const pitch = typeof payload.pitch === 'number' ? payload.pitch.toFixed(1) : '-';
-        setLivenessHint(`Adjust position. yaw=${yaw} pitch=${pitch}`);
+        {
+          const { yaw } = getYawPitchRoll(face);
+          let hint =
+            yaw == null && step.action !== 'BLINK'
+              ? 'Face found, but head angles are missing. Use good light and keep your face centered.'
+              : formatPoseHint(face);
+          if (step.action !== 'BLINK' && Date.now() - stepStartMsRef.current > MAX_MS_PER_STEP) {
+            hint += ' — aim for under 10s per step.';
+          }
+          setLivenessHint(hint);
+        }
         frameErrorCountRef.current = 0;
       } catch (e) {
         console.warn('Liveness frame:', e);
         frameErrorCountRef.current += 1;
-        setLivenessHint('Realtime check failed. Retrying...');
-        if (frameErrorCountRef.current >= 4) {
+        setLivenessHint('Face analysis failed. Retrying...');
+        if (frameErrorCountRef.current >= 6) {
           setLivenessActive(false);
-          setLivenessHint('Realtime check unavailable. Please try again.');
+          setLivenessHint('On-device analysis failed. Please try again.');
           Alert.alert(
-            'Liveness temporarily unavailable',
-            'Could not analyze camera frames. Check backend/ML service and try again.',
+            'Liveness error',
+            'Could not analyze camera frames. Ensure you are on a supported device and try again.',
           );
         }
       } finally {
@@ -190,15 +304,30 @@ export default function DriverRegisterStep3() {
 
     const id = setInterval(tick, TICK_MS);
     return () => clearInterval(id);
-  }, [livenessActive, advanceLivenessStep]);
+  }, [livenessActive, mlReady, advanceLivenessStep]);
 
   const startLivenessChallenge = async () => {
-    if (!cameraPermission?.granted) {
-      const permission = await requestCameraPermission();
-      if (!permission.granted) {
+    if (Platform.OS === 'web') {
+      Alert.alert('Not available on web', 'Complete verification in the Android or iOS app.');
+      return;
+    }
+
+    if (!device) {
+      Alert.alert('Camera unavailable', 'No front camera was found on this device.');
+      return;
+    }
+
+    if (!visionCamGranted) {
+      const granted = await requestVisionPermission();
+      if (!granted) {
         Alert.alert('Permission Denied', 'We need camera permissions to run liveness check.');
         return;
       }
+    }
+
+    if (!mlReady) {
+      Alert.alert('Please wait', 'Face detection is still loading. Try again in a moment.');
+      return;
     }
 
     setLivenessSteps([]);
@@ -217,17 +346,15 @@ export default function DriverRegisterStep3() {
       router.push('/(auth)/driver-register-step1');
       return;
     }
-    livenessTokenRef.current = token;
+    stepStartMsRef.current = Date.now();
     setLivenessActive(true);
   };
 
   const takeDocumentPhoto = async (side: 'top' | 'bottom') => {
-    if (!cameraPermission?.granted) {
-      const permission = await requestCameraPermission();
-      if (!permission.granted) {
-        Alert.alert('Permission Denied', 'We need camera permissions.');
-        return;
-      }
+    const permission = await ImagePicker.requestCameraPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert('Permission Denied', 'We need camera permissions.');
+      return;
     }
 
     const result = await ImagePicker.launchCameraAsync({
@@ -254,7 +381,6 @@ export default function DriverRegisterStep3() {
     setLivenessPassed(false);
     setSelfieImage(null);
     setLivenessHint('Center your face in the frame.');
-    livenessTokenRef.current = null;
     matchStreakRef.current = 0;
     blinkPhaseRef.current = 0;
     frameErrorCountRef.current = 0;
@@ -273,7 +399,7 @@ export default function DriverRegisterStep3() {
           text: 'Skip for Now',
           onPress: () => router.replace('/(driver)/home'),
         },
-      ]
+      ],
     );
   };
 
@@ -313,8 +439,8 @@ export default function DriverRegisterStep3() {
           timestamp: Date.now(),
           passed: livenessPassed,
           steps: livenessSteps,
-          mode: 'ml-worker-realtime-pose',
-        })
+          mode: 'vision-camera-mlkit-ondevice',
+        }),
       );
 
       const selfieFilename = selfieImage.split('/').pop();
@@ -361,7 +487,7 @@ export default function DriverRegisterStep3() {
             text: 'OK',
             onPress: () => router.replace('/(driver)/home'),
           },
-        ]
+        ],
       );
     } catch (error: any) {
       console.error('Step 3 error:', error);
@@ -374,6 +500,8 @@ export default function DriverRegisterStep3() {
   const handleBack = () => {
     router.canGoBack() ? router.back() : router.replace('/');
   };
+
+  const livenessUiUnavailable = Platform.OS === 'web' || !device;
 
   return (
     <ScrollView style={[styles.container, { backgroundColor: colors.card }]}>
@@ -423,13 +551,28 @@ export default function DriverRegisterStep3() {
       <View style={styles.inputGroup}>
         <Text style={[styles.label, { color: colors.text }]}>Realtime Liveness Check *</Text>
         <Text style={[styles.hint, { color: colors.textTertiary }]}>
-          Follow each pose. The app checks your frame in realtime and only moves when the pose/blink is detected (no
-          tap).
+          Follow each pose. Pose and blink are verified on-device (Google ML Kit) with a smooth camera preview — no
+          server round-trip during the challenge. One final selfie is sent with your documents for InsightFace review.
         </Text>
-        {livenessActive ? (
+        {livenessUiUnavailable ? (
+          <View style={[styles.webUnavailable, { borderColor: colors.border }]}>
+            <Text style={{ color: colors.textSecondary, textAlign: 'center' }}>
+              {Platform.OS === 'web'
+                ? 'Liveness runs in the native app (Android/iOS) only.'
+                : 'No front camera found. Use a physical device.'}
+            </Text>
+          </View>
+        ) : livenessActive ? (
           <View style={styles.livenessContainer}>
             <View style={styles.livenessCameraBox}>
-              <CameraView ref={cameraRef} style={styles.livenessCamera} facing="front" />
+              <Camera
+                ref={cameraRef}
+                style={styles.livenessCamera}
+                device={device}
+                isActive={livenessActive}
+                photo
+                enableZoomGesture={false}
+              />
             </View>
             <Text style={[styles.livenessInstruction, { color: colors.text }]}>
               {`${currentLivenessStep + 1}. ${LIVENESS_STEPS[currentLivenessStep]?.label ?? 'Done'}`}
@@ -437,9 +580,10 @@ export default function DriverRegisterStep3() {
             <Text style={[styles.livenessProgressText, { color: colors.primary }]}>
               Progress: {livenessProgress}%
             </Text>
-            <Text style={[styles.livenessSubHint, { color: colors.textTertiary }]}>
-              {livenessHint}
-            </Text>
+            <Text style={[styles.livenessSubHint, { color: colors.textTertiary }]}>{livenessHint}</Text>
+            {!mlReady ? (
+              <Text style={[styles.livenessSubHint, { color: colors.textTertiary }]}>Loading face detection…</Text>
+            ) : null}
             <TouchableOpacity
               style={[styles.secondaryActionBtn, { borderColor: colors.border, marginTop: 12, alignSelf: 'center' }]}
               onPress={cancelLiveness}
@@ -452,7 +596,12 @@ export default function DriverRegisterStep3() {
             {selfieImage ? (
               <Image source={{ uri: selfieImage }} style={styles.photoPreview} />
             ) : (
-              <View style={[styles.photoPlaceholder, { backgroundColor: isDark ? colors.primaryLight : '#f0f9ff', borderColor: colors.primary }]}>
+              <View
+                style={[
+                  styles.photoPlaceholder,
+                  { backgroundColor: isDark ? colors.primaryLight : '#f0f9ff', borderColor: colors.primary },
+                ]}
+              >
                 <Ionicons name="camera" size={40} color={colors.primary} />
                 <Text style={[styles.photoPlaceholderText, { color: colors.primary }]}>Start Liveness Check</Text>
               </View>
@@ -473,7 +622,12 @@ export default function DriverRegisterStep3() {
           {docImageTop ? (
             <Image source={{ uri: docImageTop }} style={styles.photoPreview} />
           ) : (
-            <View style={[styles.photoPlaceholder, { backgroundColor: isDark ? colors.primaryLight : '#f0f9ff', borderColor: colors.primary }]}>
+            <View
+              style={[
+                styles.photoPlaceholder,
+                { backgroundColor: isDark ? colors.primaryLight : '#f0f9ff', borderColor: colors.primary },
+              ]}
+            >
               <Ionicons name="document" size={40} color={colors.primary} />
               <Text style={[styles.photoPlaceholderText, { color: colors.primary }]}>Capture Front</Text>
             </View>
@@ -488,7 +642,12 @@ export default function DriverRegisterStep3() {
           {docImageBottom ? (
             <Image source={{ uri: docImageBottom }} style={styles.photoPreview} />
           ) : (
-            <View style={[styles.photoPlaceholder, { backgroundColor: isDark ? colors.primaryLight : '#f0f9ff', borderColor: colors.primary }]}>
+            <View
+              style={[
+                styles.photoPlaceholder,
+                { backgroundColor: isDark ? colors.primaryLight : '#f0f9ff', borderColor: colors.primary },
+              ]}
+            >
               <Ionicons name="document-outline" size={40} color={colors.primary} />
               <Text style={[styles.photoPlaceholderText, { color: colors.primary }]}>Capture Back</Text>
             </View>
@@ -667,6 +826,11 @@ const styles = StyleSheet.create({
   },
   secondaryActionText: {
     fontWeight: '600',
+  },
+  webUnavailable: {
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
   },
   submitButton: {
     padding: 16,
