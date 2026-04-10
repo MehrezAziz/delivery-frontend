@@ -10,7 +10,7 @@ import {
   Image,
   Platform,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
@@ -40,8 +40,8 @@ const LIVENESS_STEPS: Array<{
   // Labels swapped vs ML actions: front-camera preview mirrors left↔right for the driver.
   { action: 'TURN_RIGHT', label: 'Turn your face left', progress: 25 },
   { action: 'TURN_LEFT', label: 'Turn your face right', progress: 50 },
-  { action: 'HOLD_HIGH', label: 'Hold your head high', progress: 75 },
-  { action: 'BLINK', label: 'Blink your eyes', progress: 100 },
+  { action: 'HOLD_HIGH', label: 'Look directly at the camera', progress: 75 },
+  { action: 'BLINK', label: 'Single eye wink (left or right)', progress: 100 },
 ];
 
 /** Throttle ML Kit analysis (Vision Camera preview stays smooth). ~≤40s total with 4 steps if each step completes quickly. */
@@ -57,9 +57,10 @@ const MAX_MS_PER_STEP = 10_000;
  */
 const TURN_RIGHT_MAX_YAW = -7;
 const TURN_LEFT_MIN_YAW = 7;
-const HOLD_MAX_ABS_YAW = 16;
-const HOLD_MIN_PITCH_UP = -4;
-const HOLD_MAX_ABS_ROLL = 22;
+/** Frontal pose for “look at camera” (neutral yaw/pitch/roll). */
+const LOOK_MAX_ABS_YAW = 14;
+const LOOK_MAX_ABS_PITCH = 12;
+const LOOK_MAX_ABS_ROLL = 22;
 
 /**
  * If “turn right/left” feel reversed vs the on-screen hint numbers, set to `true`.
@@ -116,9 +117,16 @@ function poseMatched(
   const p = pitch ?? 0;
   const r = roll ?? 0;
   return (
-    Math.abs(yaw) <= HOLD_MAX_ABS_YAW &&
-    p <= HOLD_MIN_PITCH_UP &&
-    Math.abs(r) <= HOLD_MAX_ABS_ROLL
+    Math.abs(yaw) <= LOOK_MAX_ABS_YAW &&
+    Math.abs(p) <= LOOK_MAX_ABS_PITCH &&
+    Math.abs(r) <= LOOK_MAX_ABS_ROLL
+  );
+}
+
+function isOneEyeWink(leftOpen: number, rightOpen: number): boolean {
+  return (
+    (leftOpen <= EYE_CLOSED_MAX && rightOpen >= EYE_OPEN_MIN) ||
+    (rightOpen <= EYE_CLOSED_MAX && leftOpen >= EYE_OPEN_MIN)
   );
 }
 
@@ -138,6 +146,8 @@ function readEyeOpen(face: RNMLKitFace, side: 'left' | 'right'): number {
 
 export default function DriverRegisterStep3() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ source?: string }>();
+  const fromVerification = params.source === 'verification';
   const { colors, isDark } = useTheme();
   const [documentType, setDocumentType] = useState('');
   const [selfieImage, setSelfieImage] = useState<string | null>(null);
@@ -166,6 +176,11 @@ export default function DriverRegisterStep3() {
   const frameErrorCountRef = useRef(0);
   const stepStartMsRef = useRef(0);
   const thankYouPlayedRef = useRef(false);
+  const checkpointSentRef = useRef(false);
+
+  const [livenessSessionPayload, setLivenessSessionPayload] = useState<Record<string, unknown> | null>(null);
+  const [pendingFromServer, setPendingFromServer] = useState(false);
+  const [pendingExpiresAt, setPendingExpiresAt] = useState<string | null>(null);
 
   const { playStepCue, playThankYou, voiceReady } = useLivenessVoiceEN(livenessActive);
 
@@ -184,6 +199,64 @@ export default function DriverRegisterStep3() {
       thankYouPlayedRef.current = false;
     }
   }, [livenessPassed, playThankYou]);
+
+  useEffect(() => {
+    if (Platform.OS === 'web') return;
+    void (async () => {
+      try {
+        const token = await AsyncStorage.getItem('accessToken');
+        if (!token) return;
+        const res = await axios.get(`${API_URL}/auth/driver/register/verification-draft`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (res.data?.pendingLivenessValid) {
+          setPendingFromServer(true);
+          setLivenessPassed(true);
+          setPendingExpiresAt(res.data.pendingLivenessExpiresAt ?? null);
+          checkpointSentRef.current = true;
+        }
+      } catch {
+        // ignore
+      }
+    })();
+  }, []);
+
+  useEffect(() => {
+    if (
+      !livenessPassed ||
+      !selfieImage ||
+      !livenessSessionPayload ||
+      Platform.OS === 'web' ||
+      pendingFromServer
+    ) {
+      return;
+    }
+    if (checkpointSentRef.current) return;
+    checkpointSentRef.current = true;
+
+    void (async () => {
+      try {
+        const token = await AsyncStorage.getItem('accessToken');
+        if (!token) return;
+        const formData = new FormData();
+        formData.append('livenessSession', JSON.stringify(livenessSessionPayload));
+        formData.append('selfieImage', {
+          uri: selfieImage,
+          name: 'liveness-selfie.jpg',
+          type: 'image/jpeg',
+        } as any);
+        await axios.post(`${API_URL}/auth/driver/register/liveness-checkpoint`, formData, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'multipart/form-data',
+          },
+        });
+      } catch (e) {
+        console.warn('Liveness checkpoint save failed:', e);
+        checkpointSentRef.current = false;
+      }
+    })();
+  }, [livenessPassed, selfieImage, livenessSessionPayload, pendingFromServer]);
 
   useEffect(() => {
     if (Platform.OS === 'web') return;
@@ -210,14 +283,30 @@ export default function DriverRegisterStep3() {
   const advanceLivenessStep = useCallback((photoUri: string) => {
     const idx = stepIndexRef.current;
     const step = LIVENESS_STEPS[idx];
-    setLivenessSteps((prev) => [...prev, { action: step.action, passed: true, imageUri: photoUri }]);
+
+    setLivenessSteps((prev) => {
+      const nextSteps = [...prev, { action: step.action, passed: true, imageUri: photoUri }];
+
+      if (idx >= LIVENESS_STEPS.length - 1) {
+        setLivenessSessionPayload({
+          nonce: `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
+          timestamp: Date.now(),
+          passed: true,
+          steps: nextSteps,
+          mode: 'vision-camera-mlkit-ondevice',
+        });
+        setSelfieImage(photoUri);
+        setLivenessPassed(true);
+        setLivenessActive(false);
+        setTimeout(() => Alert.alert('Liveness Complete', 'Step 1 Completed successfully!'), 0);
+      }
+
+      return nextSteps;
+    });
+
     setLivenessProgress(step.progress);
 
     if (idx >= LIVENESS_STEPS.length - 1) {
-      setSelfieImage(photoUri);
-      setLivenessPassed(true);
-      setLivenessActive(false);
-      Alert.alert('Liveness Complete', 'Step 1 Completed successfully!');
       return;
     }
 
@@ -257,26 +346,26 @@ export default function DriverRegisterStep3() {
         if (step.action === 'BLINK') {
           const left = readEyeOpen(face, 'left');
           const right = readEyeOpen(face, 'right');
-          const minOpen = Math.min(left, right);
+          const bothOpen = left >= EYE_OPEN_MIN && right >= EYE_OPEN_MIN;
 
           if (blinkPhaseRef.current === 0) {
-            if (minOpen >= EYE_OPEN_MIN) {
+            if (bothOpen) {
               blinkPhaseRef.current = 1;
-              setLivenessHint('Now blink once.');
+              setLivenessHint('Wink with one eye (left or right).');
             } else {
-              setLivenessHint('Open your eyes and look at the camera.');
+              setLivenessHint('Open both eyes and look at the camera.');
             }
             return;
           }
           if (blinkPhaseRef.current === 1) {
-            if (minOpen <= EYE_CLOSED_MAX) {
+            if (isOneEyeWink(left, right)) {
               blinkPhaseRef.current = 2;
-              setLivenessHint('Great. Open your eyes again.');
+              setLivenessHint('Great. Open both eyes again.');
             }
             return;
           }
           if (blinkPhaseRef.current === 2) {
-            if (minOpen >= EYE_OPEN_MIN) {
+            if (bothOpen) {
               advanceLivenessStep(uri);
             }
             return;
@@ -359,6 +448,10 @@ export default function DriverRegisterStep3() {
     blinkPhaseRef.current = 0;
     setLivenessPassed(false);
     setSelfieImage(null);
+    setLivenessSessionPayload(null);
+    setPendingFromServer(false);
+    setPendingExpiresAt(null);
+    checkpointSentRef.current = false;
     setLivenessHint('Center your face in the frame.');
     frameErrorCountRef.current = 0;
     const token = await AsyncStorage.getItem('accessToken');
@@ -401,6 +494,7 @@ export default function DriverRegisterStep3() {
     setLivenessSteps([]);
     setLivenessPassed(false);
     setSelfieImage(null);
+    setLivenessSessionPayload(null);
     setLivenessHint('Center your face in the frame.');
     matchStreakRef.current = 0;
     blinkPhaseRef.current = 0;
@@ -430,7 +524,12 @@ export default function DriverRegisterStep3() {
       return;
     }
 
-    if (!livenessPassed || !selfieImage) {
+    if (!livenessPassed) {
+      Alert.alert('Error', 'Please complete the liveness check first');
+      return;
+    }
+
+    if (!pendingFromServer && (!selfieImage || !livenessSessionPayload)) {
       Alert.alert('Error', 'Please complete the liveness check first');
       return;
     }
@@ -453,25 +552,20 @@ export default function DriverRegisterStep3() {
 
       const formData = new FormData();
       formData.append('documentType', documentType);
-      formData.append(
-        'livenessSession',
-        JSON.stringify({
-          nonce: `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
-          timestamp: Date.now(),
-          passed: livenessPassed,
-          steps: livenessSteps,
-          mode: 'vision-camera-mlkit-ondevice',
-        }),
-      );
 
-      const selfieFilename = selfieImage.split('/').pop();
-      const selfieMatch = /\.(\w+)$/.exec(selfieFilename || '');
-      const selfieType = selfieMatch ? `image/${selfieMatch[1]}` : 'image/jpeg';
-      formData.append('selfieImage', {
-        uri: selfieImage,
-        name: selfieFilename || 'selfie.jpg',
-        type: selfieType,
-      } as any);
+      if (pendingFromServer) {
+        formData.append('usePendingLiveness', 'true');
+      } else {
+        formData.append('livenessSession', JSON.stringify(livenessSessionPayload));
+        const selfieFilename = selfieImage!.split('/').pop();
+        const selfieMatch = /\.(\w+)$/.exec(selfieFilename || '');
+        const selfieType = selfieMatch ? `image/${selfieMatch[1]}` : 'image/jpeg';
+        formData.append('selfieImage', {
+          uri: selfieImage!,
+          name: selfieFilename || 'selfie.jpg',
+          type: selfieType,
+        } as any);
+      }
 
       const docTopFilename = docImageTop.split('/').pop();
       const docTopMatch = /\.(\w+)$/.exec(docTopFilename || '');
@@ -519,6 +613,10 @@ export default function DriverRegisterStep3() {
   };
 
   const handleBack = () => {
+    if (fromVerification) {
+      router.replace('/(driver)/home');
+      return;
+    }
     router.canGoBack() ? router.back() : router.replace('/');
   };
 
@@ -530,17 +628,23 @@ export default function DriverRegisterStep3() {
         <TouchableOpacity onPress={handleBack} style={[styles.backBtn, { backgroundColor: colors.surfaceVariant }]}>
           <Ionicons name="chevron-back" size={22} color={colors.text} />
         </TouchableOpacity>
-        <Text style={[styles.title, { color: colors.text }]}>Driver Registration</Text>
-        <Text style={[styles.subtitle, { color: colors.textSecondary }]}>Step 3 of 3: Document Verification</Text>
+        <Text style={[styles.title, { color: colors.text }]}>
+          {fromVerification ? 'Complete verification' : 'Driver Registration'}
+        </Text>
+        <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
+          {fromVerification ? 'Identity & documents' : 'Step 3 of 3: Document Verification'}
+        </Text>
       </View>
 
-      <View style={styles.progressContainer}>
-        <View style={[styles.progressDot, styles.progressDotComplete]} />
-        <View style={[styles.progressLine, { backgroundColor: colors.border }]} />
-        <View style={[styles.progressDot, styles.progressDotComplete]} />
-        <View style={[styles.progressLine, { backgroundColor: colors.border }]} />
-        <View style={[styles.progressDot, styles.progressActive, { backgroundColor: colors.primary }]} />
-      </View>
+      {!fromVerification ? (
+        <View style={styles.progressContainer}>
+          <View style={[styles.progressDot, styles.progressDotComplete]} />
+          <View style={[styles.progressLine, { backgroundColor: colors.border }]} />
+          <View style={[styles.progressDot, styles.progressDotComplete]} />
+          <View style={[styles.progressLine, { backgroundColor: colors.border }]} />
+          <View style={[styles.progressDot, styles.progressActive, { backgroundColor: colors.primary }]} />
+        </View>
+      ) : null}
 
       <View style={styles.inputGroup}>
         <Text style={[styles.label, { color: colors.text }]}>Document Type *</Text>
@@ -572,8 +676,9 @@ export default function DriverRegisterStep3() {
       <View style={styles.inputGroup}>
         <Text style={[styles.label, { color: colors.text }]}>Realtime Liveness Check *</Text>
         <Text style={[styles.hint, { color: colors.textTertiary }]}>
-          Follow each pose. Pose and blink are verified on-device (Google ML Kit) with a smooth camera preview — no
+          Follow each pose. Pose and wink are verified on-device (Google ML Kit) with a smooth camera preview — no
           server round-trip during the challenge. One final selfie is sent with your documents for InsightFace review.
+          If you finish liveness before uploading documents, we keep it for 24 hours.
         </Text>
         {livenessUiUnavailable ? (
           <View style={[styles.webUnavailable, { borderColor: colors.border }]}>
@@ -617,6 +722,28 @@ export default function DriverRegisterStep3() {
               onPress={cancelLiveness}
             >
               <Text style={[styles.secondaryActionText, { color: colors.text }]}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        ) : livenessPassed && pendingFromServer && !selfieImage ? (
+          <View
+            style={[
+              styles.photoButton,
+              styles.serverLivenessBox,
+              {
+                backgroundColor: isDark ? 'rgba(52,199,89,0.12)' : '#ecfdf5',
+                borderColor: '#34C759',
+              },
+            ]}
+          >
+            <Ionicons name="checkmark-circle" size={44} color="#34C759" />
+            <Text style={[styles.serverLivenessTitle, { color: colors.text }]}>Liveness saved (24h)</Text>
+            {pendingExpiresAt ? (
+              <Text style={[styles.hint, { color: colors.textTertiary, textAlign: 'center', marginTop: 6 }]}>
+                Upload documents before {new Date(pendingExpiresAt).toLocaleString()}
+              </Text>
+            ) : null}
+            <TouchableOpacity style={{ marginTop: 14 }} onPress={startLivenessChallenge} hitSlop={8}>
+              <Text style={{ color: colors.primary, fontWeight: '600' }}>Redo liveness check</Text>
             </TouchableOpacity>
           </View>
         ) : (
@@ -695,9 +822,15 @@ export default function DriverRegisterStep3() {
         )}
       </TouchableOpacity>
 
-      <TouchableOpacity style={[styles.skipButton, { borderColor: colors.primary }]} onPress={handleSkip} disabled={loading}>
-        <Text style={[styles.skipButtonText, { color: colors.primary }]}>Skip for Now</Text>
-      </TouchableOpacity>
+      {!fromVerification ? (
+        <TouchableOpacity
+          style={[styles.skipButton, { borderColor: colors.primary }]}
+          onPress={handleSkip}
+          disabled={loading}
+        >
+          <Text style={[styles.skipButtonText, { color: colors.primary }]}>Skip for Now</Text>
+        </TouchableOpacity>
+      ) : null}
 
       <View style={[styles.infoBox, { backgroundColor: isDark ? colors.primaryLight : '#f0f9ff' }]}>
         <Ionicons name="information-circle" size={24} color={colors.primary} />
@@ -810,6 +943,19 @@ const styles = StyleSheet.create({
     marginTop: 12,
     fontSize: 16,
     fontWeight: '600',
+  },
+  serverLivenessBox: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderStyle: 'solid',
+    paddingHorizontal: 16,
+  },
+  serverLivenessTitle: {
+    marginTop: 10,
+    fontSize: 17,
+    fontWeight: '700',
+    textAlign: 'center',
   },
   livenessContainer: {
     width: '100%',

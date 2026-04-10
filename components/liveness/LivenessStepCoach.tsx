@@ -15,7 +15,7 @@ type LivenessAction = 'TURN_RIGHT' | 'TURN_LEFT' | 'HOLD_HIGH' | 'BLINK';
 const EMOJI: Record<LivenessAction, string> = {
   TURN_RIGHT: '👈',
   TURN_LEFT: '👉',
-  HOLD_HIGH: '👆',
+  HOLD_HIGH: '🙂',
   BLINK: '😉',
 };
 
@@ -55,8 +55,8 @@ export function LivenessStepCoach({ action, accentColor, isDark }: Props) {
     } else if (action === 'HOLD_HIGH') {
       t.value = withRepeat(
         withSequence(
-          withTiming(1, { duration: 700, easing: Easing.inOut(Easing.quad) }),
-          withTiming(0, { duration: 700, easing: Easing.inOut(Easing.quad) }),
+          withTiming(1, { duration: 800, easing: Easing.inOut(Easing.quad) }),
+          withTiming(0, { duration: 800, easing: Easing.inOut(Easing.quad) }),
         ),
         -1,
         false,
@@ -64,8 +64,8 @@ export function LivenessStepCoach({ action, accentColor, isDark }: Props) {
     } else if (action === 'BLINK') {
       t.value = withRepeat(
         withSequence(
-          withTiming(1, { duration: 280, easing: Easing.linear }),
-          withTiming(0, { duration: 380, easing: Easing.linear }),
+          withTiming(1, { duration: 350, easing: Easing.inOut(Easing.sin) }),
+          withTiming(0, { duration: 550, easing: Easing.inOut(Easing.sin) }),
         ),
         -1,
         false,
@@ -85,10 +85,12 @@ export function LivenessStepCoach({ action, accentColor, isDark }: Props) {
       return { transform: [{ translateX: 10 - t.value * 20 }, { rotateZ: `${14 - t.value * 28}deg` }] };
     }
     if (action === 'HOLD_HIGH') {
-      return { transform: [{ translateY: 8 - t.value * 22 }, { scale: 0.92 + t.value * 0.16 }] };
+      return { transform: [{ scale: 0.94 + t.value * 0.08 }] };
     }
     if (action === 'BLINK') {
-      return { opacity: 0.35 + t.value * 0.65, transform: [{ scale: 0.9 + t.value * 0.2 }] };
+      return {
+        transform: [{ rotateZ: `${-5 + t.value * 10}deg` }, { scale: 0.92 + t.value * 0.1 }],
+      };
     }
     return {};
   }, [action]);

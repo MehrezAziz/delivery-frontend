@@ -2,12 +2,12 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Platform } from 'react-native';
 import { createAudioPlayer, setAudioModeAsync, type AudioPlayer } from 'expo-audio';
 
-/** Order matches `LIVENESS_STEPS` indices (mirrored labels: left, right, hold, blink). */
+/** Order matches `LIVENESS_STEPS` indices (mirrored labels: left, right, look at camera, wink). */
 const STEP_SOURCES = [
   require('../assets/audio/liveness/en/left.mp3'),
   require('../assets/audio/liveness/en/right.mp3'),
-  require('../assets/audio/liveness/en/high.mp3'),
-  require('../assets/audio/liveness/en/blink_eyes.mp3'),
+  require('../assets/audio/liveness/en/look_directly_at_the_camera.mp3'),
+  require('../assets/audio/liveness/en/signle_eye_wink.mp3'),
 ] as const;
 
 const THANK_YOU_SOURCE = require('../assets/audio/liveness/en/thank_you.mp3');
