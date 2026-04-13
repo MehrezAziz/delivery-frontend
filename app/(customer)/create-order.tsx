@@ -7,6 +7,7 @@ import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Location from 'expo-location';
 import { api } from '../../services/api/client';
 import { orderService, Order } from '../../services/api/order.service';
 import { startOrderTracking } from '../../services/notifications';
@@ -53,6 +54,8 @@ export default function CreateOrderScreen() {
   const [activeOrders, setActiveOrders] = useState<Order[]>([]);
   const [cancelAfterMinutes, setCancelAfterMinutes] = useState(15);
   const [walletBalance, setWalletBalance] = useState(0);
+  const [pickupNickSave, setPickupNickSave] = useState('');
+  const [dropoffNickSave, setDropoffNickSave] = useState('');
 
   const ACTIVE_STATUSES = ['SEARCHING_DRIVER', 'DRIVER_ASSIGNED', 'DRIVER_ARRIVED', 'PICKED_UP', 'DELIVERING'];
 
@@ -156,6 +159,49 @@ export default function CreateOrderScreen() {
 
   const openMapPicker = (type: 'pickup' | 'dropoff') => {
     router.push(`/(customer)/pick-location?type=${type}`);
+  };
+
+  const useMyLocation = async (which: 'pickup' | 'dropoff') => {
+    const { status } = await Location.requestForegroundPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Location', 'We need your permission to use the current position.');
+      return;
+    }
+    const pos = await Location.getCurrentPositionAsync({});
+    await resolveAddress(
+      pos.coords.latitude,
+      pos.coords.longitude,
+      'Current location',
+      which === 'pickup' ? setPickupAddress : setDropoffAddress,
+      which === 'pickup' ? setResolvingPickup : setResolvingDropoff,
+    );
+  };
+
+  const saveAddressLabel = async (addr: SavedAddress | null, nickname: string) => {
+    const n = nickname.trim();
+    if (!addr) {
+      Alert.alert('Address', 'Select a location first.');
+      return;
+    }
+    if (n.length < 2) {
+      Alert.alert('Name', 'Enter a short name (at least 2 characters) for this address.');
+      return;
+    }
+    try {
+      const delegation = await api.get<{ id: string }>(
+        `/geography/delegations/by-coordinates?lat=${addr.lat}&lng=${addr.lng}`,
+      );
+      await api.post('/addresses', {
+        latitude: addr.lat,
+        longitude: addr.lng,
+        street: addr.label,
+        delegationId: delegation.id,
+        nickname: n,
+      });
+      Alert.alert('Saved', 'This address is now in your saved list.');
+    } catch (e: any) {
+      Alert.alert('Error', e.message || 'Could not save');
+    }
   };
 
   // Calculate price
@@ -409,7 +455,9 @@ export default function CreateOrderScreen() {
             <Ionicons name="chevron-back" size={22} color="#fff" />
           </TouchableOpacity>
           <Text style={s.headerTitle}>New Order</Text>
-          <View style={{ width: 36 }} />
+          <TouchableOpacity onPress={() => router.push('/(customer)/local-pickup-order')} style={{ padding: 8 }}>
+            <Ionicons name="cube-outline" size={22} color="#fff" />
+          </TouchableOpacity>
         </View>
 
         <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 20, paddingBottom: 40 }} keyboardShouldPersistTaps="handled">
@@ -464,6 +512,15 @@ export default function CreateOrderScreen() {
               </View>
               <Ionicons name="map-outline" size={20} color={pickupAddress ? '#22c55e' : '#9ca3af'} />
             </TouchableOpacity>
+            <TouchableOpacity
+              style={[s.addressBtn, { marginTop: 8, borderStyle: 'dashed' as const }]}
+              onPress={() => useMyLocation('pickup')}
+              disabled={resolvingPickup}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="navigate" size={18} color="#2563eb" />
+              <Text style={{ flex: 1, marginLeft: 8, color: colors.text }}>Use my current position (pickup)</Text>
+            </TouchableOpacity>
 
             {/* Connector line */}
             <View style={s.connectorLine} />
@@ -489,7 +546,61 @@ export default function CreateOrderScreen() {
               </View>
               <Ionicons name="map-outline" size={20} color={dropoffAddress ? '#ef4444' : '#9ca3af'} />
             </TouchableOpacity>
+            <TouchableOpacity
+              style={[s.addressBtn, { marginTop: 8, borderStyle: 'dashed' as const }]}
+              onPress={() => useMyLocation('dropoff')}
+              disabled={resolvingDropoff}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="navigate" size={18} color="#2563eb" />
+              <Text style={{ flex: 1, marginLeft: 8, color: colors.text }}>Use my current position (delivery)</Text>
+            </TouchableOpacity>
           </View>
+
+          {(pickupAddress || dropoffAddress) && (
+            <View style={[s.card, { backgroundColor: colors.card }]}>
+              <Text style={[s.cardTitle, { color: colors.text }]}>Save address for later</Text>
+              <Text style={[s.inputLabel, { color: colors.textSecondary, marginBottom: 8 }]}>
+                Give a pseudo name to an address you selected — it appears in your saved list for the next order.
+              </Text>
+              {pickupAddress && (
+                <View style={{ marginBottom: 12 }}>
+                  <Text style={[s.inputLabel, { color: colors.text }]}>Pickup</Text>
+                  <TextInput
+                    style={[s.descInput, { color: colors.text, borderColor: colors.inputBorder }]}
+                    placeholder="e.g. Home, Office…"
+                    placeholderTextColor={colors.textTertiary}
+                    value={pickupNickSave}
+                    onChangeText={setPickupNickSave}
+                  />
+                  <TouchableOpacity
+                    style={{ marginTop: 6, alignSelf: 'flex-start', paddingVertical: 6, paddingHorizontal: 12, backgroundColor: '#dbeafe', borderRadius: 8 }}
+                    onPress={() => saveAddressLabel(pickupAddress, pickupNickSave)}
+                  >
+                    <Text style={{ color: '#1e40af', fontWeight: '600' }}>Save pickup</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+              {dropoffAddress && (
+                <View>
+                  <Text style={[s.inputLabel, { color: colors.text }]}>Delivery</Text>
+                  <TextInput
+                    style={[s.descInput, { color: colors.text, borderColor: colors.inputBorder }]}
+                    placeholder="e.g. Father's house…"
+                    placeholderTextColor={colors.textTertiary}
+                    value={dropoffNickSave}
+                    onChangeText={setDropoffNickSave}
+                  />
+                  <TouchableOpacity
+                    style={{ marginTop: 6, alignSelf: 'flex-start', paddingVertical: 6, paddingHorizontal: 12, backgroundColor: '#dbeafe', borderRadius: 8 }}
+                    onPress={() => saveAddressLabel(dropoffAddress, dropoffNickSave)}
+                  >
+                    <Text style={{ color: '#1e40af', fontWeight: '600' }}>Save delivery</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+            </View>
+          )}
 
           {/* ── Payment Method ── */}
           <View style={[s.card, { backgroundColor: colors.card }]}>

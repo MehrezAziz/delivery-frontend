@@ -29,6 +29,7 @@ export default function CustomerLayout() {
       <Tabs.Screen name="support" options={{ href: null }} />
       <Tabs.Screen name="support-chat" options={{ href: null }} />
       <Tabs.Screen name="create-order" options={{ href: null }} />
+      <Tabs.Screen name="local-pickup-order" options={{ href: null }} />
       <Tabs.Screen name="pick-location" options={{ href: null }} />
       <Tabs.Screen name="order-detail" options={{ href: null }} />
       <Tabs.Screen name="order-chat" options={{ href: null }} />

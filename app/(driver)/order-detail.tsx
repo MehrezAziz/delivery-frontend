@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, ActivityIndicator,
-  RefreshControl, StyleSheet,
+  RefreshControl, StyleSheet, TextInput, Alert,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
@@ -38,6 +38,8 @@ export default function DriverOrderDetailScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [statusUpdating, setStatusUpdating] = useState(false);
+  const [conflictFeedback, setConflictFeedback] = useState('');
+  const [conflictSubmitting, setConflictSubmitting] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
 
   const load = useCallback(async () => {
@@ -91,6 +93,26 @@ export default function DriverOrderDetailScreen() {
       console.error(e);
     } finally {
       setStatusUpdating(false);
+    }
+  };
+
+  const submitConflictFeedback = async () => {
+    if (!order) return;
+    const t = conflictFeedback.trim();
+    if (t.length < 5) {
+      Alert.alert('Too short', 'Please write at least 5 characters.');
+      return;
+    }
+    try {
+      setConflictSubmitting(true);
+      await orderService.submitArrivalConflictFeedback(order.id, t);
+      setConflictFeedback('');
+      await load();
+      Alert.alert('Sent', 'Your response was saved. Customer service will review if needed.');
+    } catch (e: any) {
+      Alert.alert('Error', e?.message || 'Could not submit feedback');
+    } finally {
+      setConflictSubmitting(false);
     }
   };
 
@@ -174,14 +196,72 @@ export default function DriverOrderDetailScreen() {
               </View>
               <View>
                 <Text style={[s.routeLabel, { color: colors.textTertiary }]}>DELIVERY</Text>
-                <Text style={[s.routeAddress, { color: colors.text }]} numberOfLines={2}>{order.dropoffAddress?.street || 'Dropoff'}</Text>
-                <Text style={[s.routeSub, { color: colors.textSecondary }]}>
-                  {order.dropoffAddress?.delegation?.nameDelegation}, {order.dropoffAddress?.delegation?.governorate?.nameGovernorate}
-                </Text>
+                {order.localPickupOnly ? (
+                  <Text style={[s.routeAddress, { color: colors.textSecondary }]}>
+                    Local pickup only — bring items to the pickup address (no separate drop-off).
+                  </Text>
+                ) : (
+                  <>
+                    <Text style={[s.routeAddress, { color: colors.text }]} numberOfLines={2}>{order.dropoffAddress?.street || 'Dropoff'}</Text>
+                    <Text style={[s.routeSub, { color: colors.textSecondary }]}>
+                      {order.dropoffAddress?.delegation?.nameDelegation}, {order.dropoffAddress?.delegation?.governorate?.nameGovernorate}
+                    </Text>
+                  </>
+                )}
               </View>
             </View>
           </View>
         </View>
+
+        {order.arrivalConflict && (
+          <View style={[s.card, { backgroundColor: colors.card, borderLeftWidth: 4, borderLeftColor: '#dc2626' }]}>
+            <Text style={[s.cardTitle, { color: colors.text }]}>Customer declined after arrival</Text>
+            <Text style={[s.routeLabel, { color: colors.textTertiary, marginBottom: 4 }]}>Reason given by customer</Text>
+            <Text style={{ color: colors.text, marginBottom: 14, lineHeight: 20 }}>{order.arrivalConflict.customerReason}</Text>
+            {order.arrivalConflict.driverFeedback ? (
+              <View>
+                <Text style={[s.routeLabel, { color: colors.textTertiary, marginBottom: 4 }]}>Your response</Text>
+                <Text style={{ color: colors.textSecondary, lineHeight: 20 }}>{order.arrivalConflict.driverFeedback}</Text>
+              </View>
+            ) : order.arrivalConflict.status === 'PENDING' ? (
+              <View style={{ gap: 10 }}>
+                <Text style={{ color: colors.textSecondary, fontSize: 13 }}>
+                  Share your side of the story. This is sent to customer service only.
+                </Text>
+                <TextInput
+                  style={{
+                    borderWidth: 1,
+                    borderColor: colors.border,
+                    borderRadius: 12,
+                    padding: 12,
+                    minHeight: 100,
+                    color: colors.text,
+                    backgroundColor: colors.background,
+                  }}
+                  placeholder="Your feedback (min. 5 characters)"
+                  placeholderTextColor={colors.textTertiary}
+                  value={conflictFeedback}
+                  onChangeText={setConflictFeedback}
+                  multiline
+                  textAlignVertical="top"
+                />
+                <TouchableOpacity
+                  style={[s.nextBtn, { backgroundColor: colors.primary }, conflictSubmitting && { opacity: 0.6 }]}
+                  onPress={submitConflictFeedback}
+                  disabled={conflictSubmitting}
+                >
+                  {conflictSubmitting ? (
+                    <ActivityIndicator color="#fff" size="small" />
+                  ) : (
+                    <Text style={s.nextBtnText}>Submit response</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <Text style={{ color: colors.textSecondary, fontSize: 13 }}>This incident was closed by support.</Text>
+            )}
+          </View>
+        )}
 
         {/* Info chips */}
         <View style={s.chipsRow}>

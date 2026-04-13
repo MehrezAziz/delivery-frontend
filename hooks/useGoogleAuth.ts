@@ -25,7 +25,12 @@ GoogleSignin.configure({
   offlineAccess: true, // If you need to access Google API on behalf of the user FROM YOUR SERVER
 });
 
-export const useGoogleAuth = (role: 'CUSTOMER' | 'DRIVER', referralCode?: string, isLogin: boolean = false) => {
+export const useGoogleAuth = (
+  role: 'CUSTOMER' | 'DRIVER',
+  referralCode?: string,
+  isLogin: boolean = false,
+  acceptTerms?: boolean,
+) => {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -78,6 +83,7 @@ export const useGoogleAuth = (role: 'CUSTOMER' | 'DRIVER', referralCode?: string
           role,
           referralCode: isLogin ? undefined : referralCode, // Only send referral code for registration
           isLoginOnly: isLogin, // Tell backend whether this is login-only
+          ...(role === 'CUSTOMER' && !isLogin ? { acceptTerms: acceptTerms === true } : {}),
         }),
       });
 

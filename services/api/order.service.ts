@@ -3,6 +3,7 @@ import { api } from './client';
 export interface OrderAddress {
   id: string;
   street: string | null;
+  nickname?: string | null;
   latitude: number | null;
   longitude: number | null;
   delegation: {
@@ -48,6 +49,8 @@ export interface Order {
   nightFee: number;
   extraWeightFee: number;
   isNightDelivery: boolean;
+  localPickupOnly?: boolean;
+  cancelAfterMinutes?: number;
   deliveryZoneType: string | null;
   createdAt: string;
   pickupAddress: OrderAddress | null;
@@ -56,6 +59,23 @@ export interface Order {
   chatRoom: { id: string; status: string } | null;
   dispute: { id: string; status: string; reason: string; resolution: string | null } | null;
   rating: { id: string; score: number; comment: string | null; createdAt: string } | null;
+  driverAvailability?: {
+    availableInDelegation: number | string;
+    availableNearDelegationApprox: number | string;
+  };
+  urgentNotify?: {
+    canStartNewCycle: boolean;
+    nextButtonEnabledAt: string | null;
+    wavesSentThisCycle: number;
+    cycleInProgress: boolean;
+  };
+  arrivalConflict?: {
+    id: string;
+    status: string;
+    customerReason: string;
+    driverFeedback: string | null;
+    createdAt: string;
+  } | null;
 }
 
 export interface AvailableOrders {
@@ -92,10 +112,24 @@ export interface ChatRoom {
 
 export const orderService = {
   // Customer endpoints
-  createOrder: (data: { pickupAddressId: string; dropoffAddressId: string; paymentType: 'COD' | 'WALLET'; weight: number; description?: string; cancelAfterMinutes?: number }) =>
+  createOrder: (data: {
+    pickupAddressId: string;
+    dropoffAddressId?: string;
+    localPickupOnly?: boolean;
+    paymentType: 'COD' | 'WALLET';
+    weight: number;
+    description?: string;
+    cancelAfterMinutes?: number;
+  }) =>
     api.post<Order>('/orders', data),
 
-  previewOrder: (data: { pickupAddressId: string; dropoffAddressId: string; paymentType: 'COD' | 'WALLET'; weight: number }) =>
+  previewOrder: (data: {
+    pickupAddressId: string;
+    dropoffAddressId?: string;
+    localPickupOnly?: boolean;
+    paymentType: 'COD' | 'WALLET';
+    weight: number;
+  }) =>
     api.post<{
       isNightDelivery: boolean;
       distanceKm: number;
@@ -183,6 +217,13 @@ export const orderService = {
   // Customer reject driver
   rejectDriver: (orderId: string, reason?: string) =>
     api.post(`/orders/${orderId}/reject-driver`, { reason }),
+
+  notifyDriversUrgent: (orderId: string) =>
+    api.post<{ message: string }>(`/orders/${orderId}/notify-drivers`),
+
+  /** Driver: respond to customer rejection after arrival */
+  submitArrivalConflictFeedback: (orderId: string, feedback: string) =>
+    api.post<{ message: string }>(`/orders/${orderId}/arrival-conflict/feedback`, { feedback }),
 
   // Customer approve driver
   approveDriver: (orderId: string) =>

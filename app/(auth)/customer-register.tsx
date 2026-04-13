@@ -44,11 +44,14 @@ export default function CustomerRegisterScreen() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [showAccountExistsModal, setShowAccountExistsModal] = useState(false);
+  const [acceptTerms, setAcceptTerms] = useState(false);
 
   // Google Auth hook
   const { handleGoogleSignIn, isLoading: isGoogleLoading, error: googleError } = useGoogleAuth(
     'CUSTOMER',
-    formData.referralCode.trim() || undefined
+    formData.referralCode.trim() || undefined,
+    false,
+    acceptTerms,
   );
 
   const handleValidateReferralCode = async () => {
@@ -121,6 +124,11 @@ export default function CustomerRegisterScreen() {
       return;
     }
 
+    if (!acceptTerms) {
+      setSubmitError('You must read and accept the application terms');
+      return;
+    }
+
     // Start submission
     setIsSubmitting(true);
 
@@ -134,6 +142,7 @@ export default function CustomerRegisterScreen() {
         myEmail: formData.email || undefined,
         userGender: formData.userGender ? (formData.userGender as 'MALE' | 'FEMALE') : undefined,
         referralCode: formData.referralCode.trim() || undefined,
+        acceptTerms: true,
       };
 
       // Call registration API using fetch
@@ -201,6 +210,10 @@ export default function CustomerRegisterScreen() {
 
   const handleGoogleRegister = async () => {
     setSubmitError(null);
+    if (!acceptTerms) {
+      setSubmitError('You must read and accept the application terms');
+      return;
+    }
     const result = await handleGoogleSignIn();
     
     if (result.success) {
@@ -444,6 +457,28 @@ export default function CustomerRegisterScreen() {
               />
             </View>
 
+            <TouchableOpacity
+              style={styles.termsRow}
+              onPress={() => setAcceptTerms(!acceptTerms)}
+              activeOpacity={0.7}
+            >
+              <View style={[styles.termsBox, acceptTerms && styles.termsBoxOn]}>
+                {acceptTerms ? <Text style={{ color: '#fff' }}>✓</Text> : null}
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.termsText, { color: colors.text }]}>
+                  I agree to the{' '}
+                  <Text
+                    style={{ color: colors.primary, fontWeight: '700' }}
+                    onPress={() => router.push('/(auth)/terms')}
+                  >
+                    application terms
+                  </Text>
+                  , including rules on prohibited items and honest use of support.
+                </Text>
+              </View>
+            </TouchableOpacity>
+
             {/* Error Display */}
             {(submitError || googleError) && (
               <View style={styles.errorContainer}>
@@ -573,6 +608,30 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 16,
     fontSize: 16,
+  },
+  termsRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+    marginTop: 8,
+  },
+  termsBox: {
+    width: 22,
+    height: 22,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: '#94a3b8',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 2,
+  },
+  termsBoxOn: {
+    backgroundColor: '#2563eb',
+    borderColor: '#2563eb',
+  },
+  termsText: {
+    fontSize: 14,
+    lineHeight: 20,
   },
   registerButton: {
     paddingVertical: 16,

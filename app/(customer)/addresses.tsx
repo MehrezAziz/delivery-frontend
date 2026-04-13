@@ -25,6 +25,7 @@ interface Address {
   latitude: number | null;
   longitude: number | null;
   street: string | null;
+  nickname?: string | null;
   delegation: {
     id: string;
     nameDelegation: string;
@@ -46,6 +47,7 @@ export default function CustomerAddressesScreen() {
 
   // Edit form state
   const [editStreet, setEditStreet] = useState('');
+  const [editNickname, setEditNickname] = useState('');
   const [countries, setCountries] = useState<Country[]>([]);
   const [governorates, setGovernorates] = useState<Governorate[]>([]);
   const [delegations, setDelegations] = useState<Delegation[]>([]);
@@ -107,6 +109,7 @@ export default function CustomerAddressesScreen() {
   const startEdit = async (addr: Address) => {
     setEditingId(addr.id);
     setEditStreet(addr.street || '');
+    setEditNickname(addr.nickname || '');
     setSelectedDelegationId(addr.delegation.id);
     setSelectedGovernorateId(addr.delegation.governorate.id);
     setSelectedCountryId(addr.delegation.governorate.country?.id || null);
@@ -122,6 +125,7 @@ export default function CustomerAddressesScreen() {
   const cancelEdit = () => {
     setEditingId(null);
     setEditStreet('');
+    setEditNickname('');
     setSelectedCountryId(null);
     setSelectedGovernorateId(null);
     setSelectedDelegationId(null);
@@ -137,7 +141,11 @@ export default function CustomerAddressesScreen() {
     try {
       const token = await AsyncStorage.getItem('accessToken');
       await axios.patch(`${API_URL}/addresses/${addressId}`,
-        { street: editStreet.trim(), delegationId: selectedDelegationId },
+        {
+          street: editStreet.trim(),
+          delegationId: selectedDelegationId,
+          nickname: editNickname.trim() || null,
+        },
         { headers: { Authorization: `Bearer ${token}` } },
       );
       cancelEdit();
@@ -272,6 +280,13 @@ export default function CustomerAddressesScreen() {
                   <Ionicons name="chevron-down" size={18} color="#6b7280" />
                 </TouchableOpacity>
 
+                <Text style={s.fieldLabel}>Your name for this address</Text>
+                <TextInput
+                  style={s.editInput}
+                  value={editNickname}
+                  onChangeText={setEditNickname}
+                  placeholder="e.g. Father's house"
+                />
                 {/* Street Input */}
                 <Text style={s.fieldLabel}>Street</Text>
                 <TextInput
@@ -291,6 +306,9 @@ export default function CustomerAddressesScreen() {
               </View>
             ) : (
               <>
+                {addr.nickname ? (
+                  <Text style={{ fontWeight: '700', color: colors.text, marginBottom: 4 }}>{addr.nickname}</Text>
+                ) : null}
                 <Text style={[s.streetText, { color: colors.textSecondary }]}>{addr.street || 'No street specified'}</Text>
                 {addr.latitude && addr.longitude && (
                   <Text style={[s.coordText, { color: colors.textTertiary }]}>📍 {addr.latitude.toFixed(4)}, {addr.longitude.toFixed(4)}</Text>

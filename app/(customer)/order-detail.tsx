@@ -47,6 +47,9 @@ export default function OrderDetailScreen() {
   const [ratingSubmitting, setRatingSubmitting] = useState(false);
   const [reviewsModalVisible, setReviewsModalVisible] = useState(false);
   const [driverReviews, setDriverReviews] = useState<{ id: string; score: number; comment: string | null; createdAt: string; customerName: string }[]>([]);
+  const [rejectModalVisible, setRejectModalVisible] = useState(false);
+  const [rejectReason, setRejectReason] = useState('');
+  const [notifyLoading, setNotifyLoading] = useState(false);
 
   const scrollViewRef = useRef<ScrollView>(null);
   const [driverCardY, setDriverCardY] = useState<number | null>(null);
@@ -165,20 +168,53 @@ export default function OrderDetailScreen() {
     ]);
   };
 
+  const submitRejectDriver = async (reason?: string) => {
+    try {
+      await orderService.rejectDriver(orderId, reason);
+      setRejectModalVisible(false);
+      setRejectReason('');
+      loadOrder();
+    } catch (e: any) {
+      Alert.alert('Error', e.message);
+    }
+  };
+
   const handleRejectDriver = () => {
+    if (order?.status === 'DRIVER_ARRIVED') {
+      setRejectReason('');
+      setRejectModalVisible(true);
+      return;
+    }
     Alert.alert(
       'Reject Driver',
-      'Are you sure you want to reject this driver? The order will go back to searching for a new driver. This driver will not be able to accept this order again.',
+      'Are you sure? The order will go back to searching. This driver cannot accept this order again.',
       [
         { text: 'No', style: 'cancel' },
-        { text: 'Yes, Reject', style: 'destructive', onPress: async () => {
-          try {
-            await orderService.rejectDriver(orderId);
-            loadOrder();
-          } catch (e: any) { Alert.alert('Error', e.message); }
-        }},
+        { text: 'Yes, Reject', style: 'destructive', onPress: () => submitRejectDriver(undefined) },
       ],
     );
+  };
+
+  const confirmRejectArrived = () => {
+    const r = rejectReason.trim();
+    if (r.length < 10) {
+      Alert.alert('Reason required', 'Please explain in at least 10 characters. Support may review this.');
+      return;
+    }
+    submitRejectDriver(r);
+  };
+
+  const handleNotifyDrivers = async () => {
+    setNotifyLoading(true);
+    try {
+      await orderService.notifyDriversUrgent(orderId);
+      Alert.alert('Sent', 'Drivers are being notified in groups.');
+      loadOrder();
+    } catch (e: any) {
+      Alert.alert('Cannot notify', e.message || 'Try again later');
+    } finally {
+      setNotifyLoading(false);
+    }
   };
 
   const handleApproveDriver = async () => {
@@ -282,6 +318,52 @@ export default function OrderDetailScreen() {
           </View>
         )}
 
+        {order.status === 'SEARCHING_DRIVER' && order.driverAvailability && (
+          <View style={[s.card, { backgroundColor: colors.card }]}>
+            <Text style={[s.cardTitle, { color: colors.text }]}>Drivers nearby</Text>
+            <Text style={{ color: colors.textSecondary, marginBottom: 8 }}>
+              Available in your delegation:{' '}
+              <Text style={{ fontWeight: '800', color: colors.text }}>{order.driverAvailability.availableInDelegation}</Text>
+            </Text>
+            <Text style={{ color: colors.textSecondary, marginBottom: 12 }}>
+              Approx. in same governorate (other delegations):{' '}
+              <Text style={{ fontWeight: '800', color: colors.text }}>{order.driverAvailability.availableNearDelegationApprox}</Text>
+            </Text>
+            {order.urgentNotify && (
+              <>
+                <TouchableOpacity
+                  style={{
+                    padding: 14,
+                    borderRadius: 12,
+                    backgroundColor: order.urgentNotify.canStartNewCycle && !order.urgentNotify.cycleInProgress ? '#f59e0b' : '#e5e7eb',
+                    alignItems: 'center',
+                  }}
+                  disabled={!order.urgentNotify.canStartNewCycle || !!order.urgentNotify.cycleInProgress || notifyLoading}
+                  onPress={handleNotifyDrivers}
+                >
+                  {notifyLoading ? (
+                    <ActivityIndicator color="#fff" />
+                  ) : (
+                    <Text style={{
+                      color: order.urgentNotify.canStartNewCycle && !order.urgentNotify.cycleInProgress ? '#fff' : '#9ca3af',
+                      fontWeight: '700',
+                    }}>
+                      Notify drivers (urgent)
+                    </Text>
+                  )}
+                </TouchableOpacity>
+                {order.urgentNotify.nextButtonEnabledAt && (
+                  <Text style={{ fontSize: 12, color: colors.textTertiary, marginTop: 8 }}>
+                    {order.urgentNotify.cycleInProgress
+                      ? 'A notify cycle is running (waves 1–3).'
+                      : `Next action: ${new Date(order.urgentNotify.nextButtonEnabledAt).toLocaleString()}`}
+                  </Text>
+                )}
+              </>
+            )}
+          </View>
+        )}
+
         {/* ── Quick Actions (chat + track) ── */}
         {(hasChat || canTrack) && (
           <View style={s.quickActionsRow}>
@@ -314,18 +396,30 @@ export default function OrderDetailScreen() {
             <View style={{ flex: 1 }}>
               <View style={{ marginBottom: 22 }}>
                 <Text style={s.routeLabel}>PICKUP</Text>
-                <Text style={[s.routeAddress, { color: colors.text }]} numberOfLines={2}>{order.pickupAddress?.street || 'Pickup location'}</Text>
+                <Text style={[s.routeAddress, { color: colors.text }]} numberOfLines={2}>
+                  {(order.pickupAddress as any)?.nickname ? `${(order.pickupAddress as any).nickname} — ` : ''}
+                  {order.pickupAddress?.street || 'Pickup location'}
+                </Text>
                 <Text style={[s.routeSub, { color: colors.textSecondary }]}>
                   {order.pickupAddress?.delegation?.nameDelegation}, {order.pickupAddress?.delegation?.governorate?.nameGovernorate}
                 </Text>
               </View>
-              <View>
-                <Text style={s.routeLabel}>DELIVERY</Text>
-                <Text style={[s.routeAddress, { color: colors.text }]} numberOfLines={2}>{order.dropoffAddress?.street || 'Delivery location'}</Text>
-                <Text style={[s.routeSub, { color: colors.textSecondary }]}>
-                  {order.dropoffAddress?.delegation?.nameDelegation}, {order.dropoffAddress?.delegation?.governorate?.nameGovernorate}
+              {order.localPickupOnly ? (
+                <Text style={[s.routeSub, { color: colors.textSecondary, fontStyle: 'italic' }]}>
+                  Local pickup — driver brings items to you (no separate delivery address).
                 </Text>
-              </View>
+              ) : (
+                <View>
+                  <Text style={s.routeLabel}>DELIVERY</Text>
+                  <Text style={[s.routeAddress, { color: colors.text }]} numberOfLines={2}>
+                    {(order.dropoffAddress as any)?.nickname ? `${(order.dropoffAddress as any).nickname} — ` : ''}
+                    {order.dropoffAddress?.street || 'Delivery location'}
+                  </Text>
+                  <Text style={[s.routeSub, { color: colors.textSecondary }]}>
+                    {order.dropoffAddress?.delegation?.nameDelegation}, {order.dropoffAddress?.delegation?.governorate?.nameGovernorate}
+                  </Text>
+                </View>
+              )}
             </View>
           </View>
         </View>
@@ -613,6 +707,19 @@ export default function OrderDetailScreen() {
               <Ionicons name="chevron-forward" size={18} color="#fca5a5" />
             </TouchableOpacity>
           )}
+          {order.status === 'DRIVER_ARRIVED' && order.driverAssignment && (
+            <TouchableOpacity style={[s.actionBtn, { borderColor: '#fecaca' }]}
+              onPress={handleRejectDriver} activeOpacity={0.8}>
+              <View style={[s.actionIconCircle, { backgroundColor: '#fef2f2' }]}>
+                <Ionicons name="person-remove" size={18} color="#dc2626" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[s.actionTitle, { color: '#dc2626' }]}>Reject driver (after arrival)</Text>
+                <Text style={s.actionSub}>You must give a reason — support will be notified</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color="#fca5a5" />
+            </TouchableOpacity>
+          )}
           {order.status === 'PENDING_CUSTOMER_APPROVAL' && order.driverAssignment && (
             <>
               <TouchableOpacity style={[s.actionBtn, { borderColor: '#bbf7d0', backgroundColor: '#f0fdf4' }]}
@@ -667,6 +774,39 @@ export default function OrderDetailScreen() {
           )}
         </View>
       </ScrollView>
+
+      <Modal visible={rejectModalVisible} transparent animationType="fade">
+        <View style={s.modalOverlay}>
+          <View style={[s.modalCard, { backgroundColor: colors.card }]}>
+            <Text style={[s.modalTitle, { color: colors.text }]}>Reject driver after arrival</Text>
+            <Text style={[s.modalSub, { color: colors.textSecondary }]}>
+              This is serious. Describe what happened (min. 10 characters). The driver and customer service will be notified.
+            </Text>
+            <TextInput
+              style={[s.modalInput, { backgroundColor: colors.inputBg, color: colors.text, borderColor: colors.inputBorder }]}
+              value={rejectReason}
+              onChangeText={setRejectReason}
+              placeholder="Your reason..."
+              placeholderTextColor={colors.textTertiary}
+              multiline
+              numberOfLines={4}
+              textAlignVertical="top"
+            />
+            <View style={s.modalActions}>
+              <TouchableOpacity style={s.modalCancelBtn} onPress={() => setRejectModalVisible(false)}>
+                <Text style={s.modalCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[s.modalSubmitBtn, rejectReason.trim().length < 10 && { opacity: 0.5 }]}
+                onPress={confirmRejectArrived}
+                disabled={rejectReason.trim().length < 10}
+              >
+                <Text style={s.modalSubmitText}>Submit</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       {/* ── Dispute Reason Modal ── */}
       <Modal visible={disputeModalVisible} transparent animationType="fade">
