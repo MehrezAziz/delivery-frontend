@@ -200,7 +200,7 @@ export default function CreateOrderScreen() {
   }, [resolveAddress]);
 
   const openMapPicker = (type: 'pickup' | 'dropoff') => {
-    router.push(`/(customer)/pick-location?type=${type}&returnTo=/(customer)/create-order`);
+    router.push(`/(customer)/pick-location?type=${type}&returnTo=${encodeURIComponent('/(customer)/create-order')}`);
   };
 
   const openSavedPicker = (target: 'pickup' | 'dropoff') => {
@@ -532,7 +532,7 @@ export default function CreateOrderScreen() {
             <Ionicons name="chevron-back" size={22} color="#fff" />
           </TouchableOpacity>
           <Text style={s.headerTitle}>New Order</Text>
-          <TouchableOpacity onPress={() => router.push('/(customer)/local-pickup-order?returnTo=/(customer)/create-order')} style={{ padding: 8 }}>
+          <TouchableOpacity onPress={() => router.push(`/(customer)/local-pickup-order?returnTo=${encodeURIComponent('/(customer)/create-order')}`)} style={{ padding: 8 }}>
             <Ionicons name="cube-outline" size={22} color="#fff" />
           </TouchableOpacity>
         </View>

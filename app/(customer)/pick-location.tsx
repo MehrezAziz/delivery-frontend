@@ -160,7 +160,9 @@ export default function PickLocationScreen() {
     } catch {}
   };
 
-  const returnTo = params.returnTo || '/(customer)/create-order';
+  const returnTo = params.returnTo
+    ? decodeURIComponent(params.returnTo)
+    : '/(customer)/create-order';
 
   // Confirm selection → save to AsyncStorage and return to previous screen
   const handleConfirm = async () => {
@@ -172,8 +174,7 @@ export default function PickLocationScreen() {
       timestamp: Date.now(),
     };
     await AsyncStorage.setItem(`picked_${params.type}`, JSON.stringify(data));
-    if (router.canGoBack()) router.back();
-    else router.replace(returnTo as any);
+    router.replace(returnTo as any);
   };
 
   const accentColor = isPickup ? '#22c55e' : '#ef4444';
@@ -198,7 +199,7 @@ export default function PickLocationScreen() {
       {/* Top bar with search */}
       <View style={styles.topBar}>
         <View style={styles.headerRow}>
-          <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace(returnTo as any)} style={[styles.backBtn, { backgroundColor: colors.card }]}>
+          <TouchableOpacity onPress={() => router.replace(returnTo as any)} style={[styles.backBtn, { backgroundColor: colors.card }]}>
             <Ionicons name="arrow-back" size={22} color={colors.text} />
           </TouchableOpacity>
           <Text style={[styles.title, { color: accentColor }]}>{title}</Text>

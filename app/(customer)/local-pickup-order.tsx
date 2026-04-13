@@ -29,7 +29,9 @@ const RECENT_LOCAL_ADDR_KEY = 'recent_local_pickup_addresses';
 export default function LocalPickupOrderScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ returnTo?: string }>();
-  const returnTo = params.returnTo || '/(customer)/create-order';
+  const returnTo = params.returnTo
+    ? decodeURIComponent(params.returnTo)
+    : '/(customer)/create-order';
   const { colors } = useTheme();
   const [source, setSource] = useState<SavedAddress | null>(null);
   const [paymentType, setPaymentType] = useState<'COD' | 'WALLET'>('COD');
@@ -218,7 +220,7 @@ export default function LocalPickupOrderScreen() {
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <View style={[s.container, { backgroundColor: colors.background }]}>
         <View style={[s.header, { backgroundColor: colors.headerBg }]}>
-          <TouchableOpacity onPress={() => (router.canGoBack() ? router.back() : router.replace(returnTo as any))} style={s.back}>
+          <TouchableOpacity onPress={() => router.replace(returnTo as any)} style={s.back}>
             <Ionicons name="chevron-back" size={22} color="#fff" />
           </TouchableOpacity>
           <Text style={s.title}>Local pickup</Text>
@@ -236,7 +238,7 @@ export default function LocalPickupOrderScreen() {
               <Text style={{ color: colors.text, marginLeft: 8, flex: 1 }}>Use my current position</Text>
               {resolving ? <ActivityIndicator /> : null}
             </TouchableOpacity>
-            <TouchableOpacity style={s.row} onPress={() => router.push('/(customer)/pick-location?type=pickup&returnTo=/(customer)/local-pickup-order')}>
+            <TouchableOpacity style={s.row} onPress={() => router.push(`/(customer)/pick-location?type=pickup&returnTo=${encodeURIComponent('/(customer)/local-pickup-order')}`)}>
               <Ionicons name="map" size={20} color="#16a34a" />
               <Text style={{ color: colors.text, marginLeft: 8 }}>Choose on map</Text>
             </TouchableOpacity>
