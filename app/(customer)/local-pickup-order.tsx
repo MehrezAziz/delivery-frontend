@@ -5,9 +5,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, ActivityIndicator,
-  Alert, TextInput, KeyboardAvoidingView, Platform, StyleSheet,
+  Alert, TextInput, KeyboardAvoidingView, Platform, StyleSheet, Modal, FlatList,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -24,9 +24,12 @@ interface SavedAddress {
   lat: number;
   lng: number;
 }
+const RECENT_LOCAL_ADDR_KEY = 'recent_local_pickup_addresses';
 
 export default function LocalPickupOrderScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ returnTo?: string }>();
+  const returnTo = params.returnTo || '/(customer)/create-order';
   const { colors } = useTheme();
   const [source, setSource] = useState<SavedAddress | null>(null);
   const [paymentType, setPaymentType] = useState<'COD' | 'WALLET'>('COD');
@@ -36,6 +39,9 @@ export default function LocalPickupOrderScreen() {
   const [submitting, setSubmitting] = useState(false);
   const [resolving, setResolving] = useState(false);
   const [savedList, setSavedList] = useState<SavedAddress[]>([]);
+  const [savedPickerVisible, setSavedPickerVisible] = useState(false);
+  const [savedSearch, setSavedSearch] = useState('');
+  const [recentAddressIds, setRecentAddressIds] = useState<string[]>([]);
   const [walletBalance, setWalletBalance] = useState(0);
   const [cancelAfterMinutes, setCancelAfterMinutes] = useState(15);
 
@@ -68,6 +74,14 @@ export default function LocalPickupOrderScreen() {
     } catch { setSavedList([]); }
   }, []);
   useEffect(() => { loadSaved(); }, [loadSaved]);
+  useEffect(() => {
+    (async () => {
+      try {
+        const raw = await AsyncStorage.getItem(RECENT_LOCAL_ADDR_KEY);
+        if (raw) setRecentAddressIds(JSON.parse(raw));
+      } catch {}
+    })();
+  }, []);
 
   const resolveFromCoords = async (lat: number, lng: number, label: string) => {
     setResolving(true);
@@ -90,13 +104,18 @@ export default function LocalPickupOrderScreen() {
   };
 
   const useCurrent = async () => {
-    const { status } = await Location.requestForegroundPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Location', 'Permission is required to use your current position.');
-      return;
+    setResolving(true);
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Location', 'Permission is required to use your current position.');
+        return;
+      }
+      const pos = await Location.getCurrentPositionAsync({});
+      await resolveFromCoords(pos.coords.latitude, pos.coords.longitude, 'Current location');
+    } finally {
+      setResolving(false);
     }
-    const pos = await Location.getCurrentPositionAsync({});
-    await resolveFromCoords(pos.coords.latitude, pos.coords.longitude, 'Current location');
   };
 
   useEffect(() => {
@@ -123,6 +142,10 @@ export default function LocalPickupOrderScreen() {
       Alert.alert('Weight', 'Enter a valid weight.');
       return;
     }
+    if (!description.trim()) {
+      Alert.alert('Required', 'Please describe what you need.');
+      return;
+    }
     setLoading(true);
     try {
       const preview = await orderService.previewOrder({
@@ -147,7 +170,7 @@ export default function LocalPickupOrderScreen() {
                   localPickupOnly: true,
                   paymentType,
                   weight: w,
-                  description: description || undefined,
+                  description: description.trim(),
                   cancelAfterMinutes,
                 });
                 startOrderTracking(
@@ -176,11 +199,26 @@ export default function LocalPickupOrderScreen() {
     } finally { setLoading(false); }
   };
 
+  const filteredSaved = savedList.filter((a) => {
+    const q = savedSearch.trim().toLowerCase();
+    if (!q) return true;
+    const hay = `${a.label} ${a.sublabel}`.toLowerCase();
+    return hay.includes(q);
+  });
+  const recentAddresses = recentAddressIds
+    .map((id) => savedList.find((a) => a.addressId === id))
+    .filter((a): a is SavedAddress => !!a);
+  const markRecentAddress = async (addressId: string) => {
+    const next = [addressId, ...recentAddressIds.filter((id) => id !== addressId)].slice(0, 6);
+    setRecentAddressIds(next);
+    try { await AsyncStorage.setItem(RECENT_LOCAL_ADDR_KEY, JSON.stringify(next)); } catch {}
+  };
+
   return (
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <View style={[s.container, { backgroundColor: colors.background }]}>
         <View style={[s.header, { backgroundColor: colors.headerBg }]}>
-          <TouchableOpacity onPress={() => router.back()} style={s.back}>
+          <TouchableOpacity onPress={() => (router.canGoBack() ? router.back() : router.replace(returnTo as any))} style={s.back}>
             <Ionicons name="chevron-back" size={22} color="#fff" />
           </TouchableOpacity>
           <Text style={s.title}>Local pickup</Text>
@@ -198,23 +236,17 @@ export default function LocalPickupOrderScreen() {
               <Text style={{ color: colors.text, marginLeft: 8, flex: 1 }}>Use my current position</Text>
               {resolving ? <ActivityIndicator /> : null}
             </TouchableOpacity>
-            <TouchableOpacity style={s.row} onPress={() => router.push('/(customer)/pick-location?type=pickup')}>
+            <TouchableOpacity style={s.row} onPress={() => router.push('/(customer)/pick-location?type=pickup&returnTo=/(customer)/local-pickup-order')}>
               <Ionicons name="map" size={20} color="#16a34a" />
               <Text style={{ color: colors.text, marginLeft: 8 }}>Choose on map</Text>
             </TouchableOpacity>
             {savedList.length > 0 && (
               <>
                 <Text style={[s.sub, { color: colors.textSecondary, marginTop: 12 }]}>Saved addresses</Text>
-                {savedList.map((a) => (
-                  <TouchableOpacity
-                    key={a.addressId}
-                    style={s.saved}
-                    onPress={() => setSource(a)}
-                  >
-                    <Text style={{ color: colors.text, fontWeight: '600' }}>{a.label}</Text>
-                    <Text style={{ color: colors.textSecondary, fontSize: 12 }}>{a.sublabel}</Text>
-                  </TouchableOpacity>
-                ))}
+                <TouchableOpacity style={s.savedPickerBtn} onPress={() => { setSavedSearch(''); setSavedPickerVisible(true); }}>
+                  <Ionicons name="search-outline" size={16} color="#166534" />
+                  <Text style={s.savedPickerBtnText}>Search in saved addresses</Text>
+                </TouchableOpacity>
               </>
             )}
             {source && (
@@ -248,7 +280,7 @@ export default function LocalPickupOrderScreen() {
             <Text style={[s.cardTitle, { color: colors.text }]}>Details</Text>
             <Text style={s.lab}>Weight (kg)</Text>
             <TextInput style={[s.inp, { color: colors.text }]} value={weight} onChangeText={setWeight} keyboardType="numeric" />
-            <Text style={[s.lab, { marginTop: 12 }]}>What you need (optional)</Text>
+            <Text style={[s.lab, { marginTop: 12 }]}>What you need *</Text>
             <TextInput
               style={[s.inp, { minHeight: 72, textAlignVertical: 'top' }]}
               value={description}
@@ -263,6 +295,71 @@ export default function LocalPickupOrderScreen() {
             {loading || submitting ? <ActivityIndicator color="#fff" /> : <Text style={s.ctaText}>Preview & create</Text>}
           </TouchableOpacity>
         </ScrollView>
+
+        <Modal visible={savedPickerVisible} transparent animationType="slide" onRequestClose={() => setSavedPickerVisible(false)}>
+          <View style={s.modalOverlay}>
+            <View style={[s.modalCard, { backgroundColor: colors.card }]}>
+              <View style={s.modalHead}>
+                <Text style={[s.modalTitle, { color: colors.text }]}>Select saved address</Text>
+                <TouchableOpacity onPress={() => setSavedPickerVisible(false)}>
+                  <Ionicons name="close-circle" size={24} color={colors.textSecondary} />
+                </TouchableOpacity>
+              </View>
+              <View style={[s.modalSearch, { borderColor: colors.border, backgroundColor: colors.inputBg }]}>
+                <Ionicons name="search" size={16} color={colors.textTertiary} />
+                <TextInput
+                  style={[s.modalSearchInput, { color: colors.text }]}
+                  placeholder="Search nickname, street, area..."
+                  placeholderTextColor={colors.textTertiary}
+                  value={savedSearch}
+                  onChangeText={setSavedSearch}
+                />
+              </View>
+              <FlatList
+                data={filteredSaved}
+                keyExtractor={(item) => item.addressId}
+                style={{ maxHeight: 340 }}
+                keyboardShouldPersistTaps="handled"
+                ListHeaderComponent={
+                  recentAddresses.length > 0 ? (
+                    <View style={{ marginBottom: 8 }}>
+                      <Text style={[s.recentTitle, { color: colors.textSecondary }]}>Recently used</Text>
+                      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingBottom: 6 }}>
+                        {recentAddresses.map((r) => (
+                          <TouchableOpacity
+                            key={r.addressId}
+                            style={[s.recentChip, { borderColor: colors.border, backgroundColor: colors.inputBg }]}
+                            onPress={() => {
+                              setSource(r);
+                              markRecentAddress(r.addressId);
+                              setSavedPickerVisible(false);
+                            }}
+                          >
+                            <Text style={[s.recentChipText, { color: colors.text }]} numberOfLines={1}>{r.label}</Text>
+                          </TouchableOpacity>
+                        ))}
+                      </ScrollView>
+                    </View>
+                  ) : null
+                }
+                renderItem={({ item }) => (
+                  <TouchableOpacity
+                    style={[s.modalItem, { borderBottomColor: colors.border }]}
+                    onPress={() => {
+                      setSource(item);
+                      markRecentAddress(item.addressId);
+                      setSavedPickerVisible(false);
+                    }}
+                  >
+                    <Text style={[s.modalItemTitle, { color: colors.text }]}>{item.label}</Text>
+                    <Text style={[s.modalItemSub, { color: colors.textSecondary }]} numberOfLines={1}>{item.sublabel}</Text>
+                  </TouchableOpacity>
+                )}
+                ListEmptyComponent={<Text style={[s.modalEmpty, { color: colors.textTertiary }]}>No matching addresses</Text>}
+              />
+            </View>
+          </View>
+        </Modal>
       </View>
     </KeyboardAvoidingView>
   );
@@ -279,10 +376,28 @@ const s = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#e5e7eb' },
   sub: { fontSize: 13, marginBottom: 6 },
   saved: { paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#f3f4f6' },
+  savedPickerBtn: {
+    marginTop: 6, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 6, backgroundColor: '#dcfce7', borderRadius: 10, paddingVertical: 10,
+  },
+  savedPickerBtnText: { color: '#166534', fontSize: 12, fontWeight: '700' },
   pay: { flex: 1, padding: 12, borderRadius: 10, borderWidth: 1, borderColor: '#e5e7eb', alignItems: 'center' },
   payOn: { backgroundColor: '#2563eb', borderColor: '#2563eb' },
   lab: { fontSize: 13, color: '#6b7280', marginBottom: 4 },
   inp: { borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 8, padding: 10, fontSize: 16 },
   cta: { backgroundColor: '#16a34a', padding: 16, borderRadius: 12, alignItems: 'center' },
   ctaText: { color: '#fff', fontWeight: '700', fontSize: 16 },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
+  modalCard: { borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: 16, paddingBottom: 20 },
+  modalHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },
+  modalTitle: { fontSize: 16, fontWeight: '800' },
+  modalSearch: { flexDirection: 'row', alignItems: 'center', gap: 8, borderWidth: 1, borderRadius: 10, paddingHorizontal: 10, marginBottom: 10 },
+  modalSearchInput: { flex: 1, height: 42, fontSize: 14 },
+  modalItem: { paddingVertical: 10, borderBottomWidth: 1 },
+  modalItemTitle: { fontSize: 14, fontWeight: '700' },
+  modalItemSub: { fontSize: 12, marginTop: 2 },
+  modalEmpty: { textAlign: 'center', paddingVertical: 22, fontSize: 13 },
+  recentTitle: { fontSize: 12, fontWeight: '700', marginBottom: 6 },
+  recentChip: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 6, maxWidth: 180 },
+  recentChipText: { fontSize: 12, fontWeight: '600' },
 });

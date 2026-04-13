@@ -76,7 +76,11 @@ export default function DriverNotifications() {
       notificationService.markAsRead(item.id).catch(() => {});
     }
     if (item.relatedEntityType === 'Order' && item.relatedEntityId) {
-      router.push(`/(driver)/order-detail?orderId=${item.relatedEntityId}`);
+      if (item.type === 'NEW_ORDER_AVAILABLE') {
+        router.push(`/(driver)/available-orders?urgentOrderId=${item.relatedEntityId}`);
+      } else {
+        router.push(`/(driver)/order-detail?orderId=${item.relatedEntityId}`);
+      }
     } else if (item.relatedEntityType === 'ChatRoom' && item.relatedEntityId) {
       router.push(`/(driver)/order-chat?orderId=${item.relatedEntityId}`);
     } else if (item.relatedEntityType === 'SupportTicket' && item.relatedEntityId) {

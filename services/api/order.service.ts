@@ -219,7 +219,10 @@ export const orderService = {
     api.post(`/orders/${orderId}/reject-driver`, { reason }),
 
   notifyDriversUrgent: (orderId: string) =>
-    api.post<{ message: string }>(`/orders/${orderId}/notify-drivers`),
+    api.post<{ message: string; notifiedDrivers: number }>(`/orders/${orderId}/notify-drivers`),
+
+  updateCancelAfter: (orderId: string, cancelAfterMinutes: number) =>
+    api.patch<Order>(`/orders/${orderId}/cancel-after`, { cancelAfterMinutes }),
 
   /** Driver: respond to customer rejection after arrival */
   submitArrivalConflictFeedback: (orderId: string, feedback: string) =>

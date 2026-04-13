@@ -50,6 +50,7 @@ export default function OrderDetailScreen() {
   const [rejectModalVisible, setRejectModalVisible] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
   const [notifyLoading, setNotifyLoading] = useState(false);
+  const [nowTs, setNowTs] = useState(Date.now());
 
   const scrollViewRef = useRef<ScrollView>(null);
   const [driverCardY, setDriverCardY] = useState<number | null>(null);
@@ -69,6 +70,10 @@ export default function OrderDetailScreen() {
     const interval = setInterval(loadOrder, 5000);
     return () => clearInterval(interval);
   }, [loadOrder]);
+  useEffect(() => {
+    const t = setInterval(() => setNowTs(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, []);
 
   // Deep-link support from notification actions
   useEffect(() => {
@@ -85,7 +90,7 @@ export default function OrderDetailScreen() {
     // Wait a bit to ensure layout is measured correctly
     setTimeout(() => {
       hasAutoScrolledRef.current = true;
-      scrollView.scrollTo({ y: driverCardY, animated: true });
+      scrollView?.scrollTo({ y: driverCardY, animated: true });
     }, 150);
   }, [order, scrollTo, driverCardY]);
 
@@ -207,8 +212,8 @@ export default function OrderDetailScreen() {
   const handleNotifyDrivers = async () => {
     setNotifyLoading(true);
     try {
-      await orderService.notifyDriversUrgent(orderId);
-      Alert.alert('Sent', 'Drivers are being notified in groups.');
+      const res = await orderService.notifyDriversUrgent(orderId);
+      Alert.alert('Sent', res.message || `We notified ${res.notifiedDrivers} drivers for you.`);
       loadOrder();
     } catch (e: any) {
       Alert.alert('Cannot notify', e.message || 'Try again later');
@@ -250,6 +255,12 @@ export default function OrderDetailScreen() {
   const createdDate = new Date(order.createdAt);
   const dateStr = createdDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   const timeStr = createdDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+  const autoCancelAt = createdDate.getTime() + ((order.cancelAfterMinutes || 15) * 60_000);
+  const cancelRemainingSec = Math.max(0, Math.floor((autoCancelAt - nowTs) / 1000));
+  const cancelRemainingText = `${Math.floor(cancelRemainingSec / 60)}:${String(cancelRemainingSec % 60).padStart(2, '0')}`;
+  const urgentRemainingSec = order.urgentNotify?.nextButtonEnabledAt
+    ? Math.max(0, Math.floor((new Date(order.urgentNotify.nextButtonEnabledAt).getTime() - nowTs) / 1000))
+    : 0;
 
   return (
     <View style={[s.container, { backgroundColor: colors.background }]}>
@@ -354,13 +365,47 @@ export default function OrderDetailScreen() {
                 </TouchableOpacity>
                 {order.urgentNotify.nextButtonEnabledAt && (
                   <Text style={{ fontSize: 12, color: colors.textTertiary, marginTop: 8 }}>
-                    {order.urgentNotify.cycleInProgress
-                      ? 'A notify cycle is running (waves 1–3).'
+                    {urgentRemainingSec > 0
+                      ? `Enabled in ${Math.floor(urgentRemainingSec / 60)}:${String(urgentRemainingSec % 60).padStart(2, '0')}`
                       : `Next action: ${new Date(order.urgentNotify.nextButtonEnabledAt).toLocaleString()}`}
                   </Text>
                 )}
               </>
             )}
+          </View>
+        )}
+
+        {(order.status === 'SEARCHING_DRIVER' || order.status === 'PENDING_CUSTOMER_APPROVAL' || order.status === 'DRIVER_ASSIGNED') && (
+          <View style={[s.card, { backgroundColor: colors.card }]}>
+            <Text style={[s.cardTitle, { color: colors.text }]}>Auto-cancel timer</Text>
+            <Text style={{ color: colors.textSecondary, marginBottom: 10 }}>
+              Remaining: <Text style={{ fontWeight: '800', color: colors.text }}>{cancelRemainingText}</Text>
+            </Text>
+            <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
+              {[15, 30, 60, 120, 360, 720, 1440].map((m) => (
+                <TouchableOpacity
+                  key={m}
+                  style={{
+                    paddingHorizontal: 10,
+                    paddingVertical: 7,
+                    borderRadius: 999,
+                    backgroundColor: (order.cancelAfterMinutes || 15) === m ? '#0ea5e9' : '#f3f4f6',
+                  }}
+                  onPress={async () => {
+                    try {
+                      await orderService.updateCancelAfter(order.id, m);
+                      await loadOrder();
+                    } catch (e: any) {
+                      Alert.alert('Error', e.message || 'Unable to update timer');
+                    }
+                  }}
+                >
+                  <Text style={{ color: (order.cancelAfterMinutes || 15) === m ? '#fff' : '#374151', fontWeight: '700', fontSize: 12 }}>
+                    {m >= 60 ? `${Math.round(m / 60)}h` : `${m}m`}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
           </View>
         )}
 

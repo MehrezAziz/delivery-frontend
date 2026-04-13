@@ -21,7 +21,7 @@ interface PlacePrediction {
 
 export default function PickLocationScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ type: string }>();
+  const params = useLocalSearchParams<{ type: string; returnTo?: string }>();
   const { colors, isDark } = useTheme();
   const isPickup = params.type === 'pickup';
   const mapRef = useRef<MapView>(null);
@@ -160,7 +160,9 @@ export default function PickLocationScreen() {
     } catch {}
   };
 
-  // Confirm selection → save to AsyncStorage and go back to create-order
+  const returnTo = params.returnTo || '/(customer)/create-order';
+
+  // Confirm selection → save to AsyncStorage and return to previous screen
   const handleConfirm = async () => {
     if (!marker) return;
     const data = {
@@ -170,7 +172,8 @@ export default function PickLocationScreen() {
       timestamp: Date.now(),
     };
     await AsyncStorage.setItem(`picked_${params.type}`, JSON.stringify(data));
-    router.replace('/(customer)/create-order');
+    if (router.canGoBack()) router.back();
+    else router.replace(returnTo as any);
   };
 
   const accentColor = isPickup ? '#22c55e' : '#ef4444';
@@ -195,7 +198,7 @@ export default function PickLocationScreen() {
       {/* Top bar with search */}
       <View style={styles.topBar}>
         <View style={styles.headerRow}>
-          <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace('/(customer)/home')} style={[styles.backBtn, { backgroundColor: colors.card }]}>
+          <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace(returnTo as any)} style={[styles.backBtn, { backgroundColor: colors.card }]}>
             <Ionicons name="arrow-back" size={22} color={colors.text} />
           </TouchableOpacity>
           <Text style={[styles.title, { color: accentColor }]}>{title}</Text>

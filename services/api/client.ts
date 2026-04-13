@@ -67,9 +67,9 @@ export const apiClient = async <T = any>(
   const { requiresAuth = true, headers = {}, ...restOptions } = options;
 
   // Build request headers
-  const requestHeaders: HeadersInit = {
+  const requestHeaders: Record<string, string> = {
     'Content-Type': 'application/json',
-    ...headers,
+    ...(headers as Record<string, string>),
   };
 
   // Add JWT token for authenticated requests
@@ -87,7 +87,7 @@ export const apiClient = async <T = any>(
     // Make the request
     const response = await fetch(url, {
       ...restOptions,
-      headers: requestHeaders,
+      headers: requestHeaders as HeadersInit,
     });
 
     // Parse response body

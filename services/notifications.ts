@@ -814,6 +814,9 @@ export async function notificationDataToRoute(
         'NEW_MESSAGE_FROM_CUSTOMER',
       ];
       if (driverTypes.includes(type || '')) {
+        if (type === 'NEW_ORDER_AVAILABLE') {
+          return `/(driver)/available-orders?urgentOrderId=${relatedEntityId}`;
+        }
         return `/(driver)/order-detail?orderId=${relatedEntityId}`;
       }
       let role: string | undefined;
@@ -827,7 +830,7 @@ export async function notificationDataToRoute(
       }
       if (!role) role = (await AsyncStorage.getItem('userRole')) || 'CUSTOMER';
       if (role === 'DRIVER') {
-        return `/(driver)/order-detail?orderId=${relatedEntityId}`;
+        return `/(driver)/available-orders?urgentOrderId=${relatedEntityId}`;
       }
       return `/(customer)/order-detail?orderId=${relatedEntityId}`;
     }
@@ -874,9 +877,21 @@ async function routeFromNotifeeInitialForNavigation(initial: NotifeeInitial): Pr
   const actionId = initial.pressAction?.id;
   const data = coerceFcmData(initial.notification?.data as Record<string, unknown>);
   const orderId = data.orderId || data.relatedEntityId || '';
+  let role: string | undefined;
+  try {
+    const u = await AsyncStorage.getItem('user');
+    if (u) role = JSON.parse(u).role;
+  } catch {
+    role = undefined;
+  }
+  if (!role) role = (await AsyncStorage.getItem('userRole')) || 'CUSTOMER';
 
   if (actionId === 'see_driver' && orderId) return getOrderRoute(orderId, true);
-  if (actionId === 'view_order' && orderId) return getOrderRoute(orderId);
+  if (actionId === 'view_order' && orderId) {
+    return role === 'DRIVER'
+      ? `/(driver)/available-orders?urgentOrderId=${orderId}`
+      : getOrderRoute(orderId);
+  }
   if (actionId === 'view_order_driver' && orderId) return getDriverOrderRoute(orderId);
   if (actionId === 'driver_open_deliver' && orderId) return getDriverOrderRoute(orderId, 'proof');
   if (actionId === 'driver_contact_customer' && orderId) {
@@ -1050,7 +1065,19 @@ export function setupNotificationListeners() {
         return;
       }
       if (actionId === 'view_order' && orderId) {
-        router.push(getOrderRoute(orderId) as any);
+        (async () => {
+          let role: string | undefined;
+          try {
+            const u = await AsyncStorage.getItem('user');
+            if (u) role = JSON.parse(u).role;
+          } catch {
+            role = undefined;
+          }
+          if (!role) role = (await AsyncStorage.getItem('userRole')) || 'CUSTOMER';
+          router.push((role === 'DRIVER'
+            ? `/(driver)/available-orders?urgentOrderId=${orderId}`
+            : getOrderRoute(orderId)) as any);
+        })();
         return;
       }
     }
@@ -1126,7 +1153,19 @@ export function setupBackgroundHandler() {
         return;
       }
       if (actionId === 'view_order' && orderId) {
-        await savePendingNotificationRoute(getOrderRoute(orderId));
+        let role: string | undefined;
+        try {
+          const u = await AsyncStorage.getItem('user');
+          if (u) role = JSON.parse(u).role;
+        } catch {
+          role = undefined;
+        }
+        if (!role) role = (await AsyncStorage.getItem('userRole')) || 'CUSTOMER';
+        await savePendingNotificationRoute(
+          role === 'DRIVER'
+            ? `/(driver)/available-orders?urgentOrderId=${orderId}`
+            : getOrderRoute(orderId),
+        );
         return;
       }
     }

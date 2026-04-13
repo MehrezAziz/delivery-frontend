@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, ActivityIndicator,
-  Alert, TextInput, KeyboardAvoidingView, Platform, StyleSheet,
+  Alert, TextInput, KeyboardAvoidingView, Platform, StyleSheet, Modal, FlatList,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
@@ -16,10 +16,15 @@ import { useTheme } from '../../contexts/ThemeContext';
 interface SavedAddress {
   addressId: string;
   label: string;
+  street?: string;
+  nickname?: string | null;
   sublabel: string;
   lat: number;
   lng: number;
 }
+
+const COORD_MATCH_EPSILON = 0.00015;
+const RECENT_ADDR_KEY = 'recent_customer_addresses';
 
 interface PricePreview {
   isNightDelivery: boolean;
@@ -56,6 +61,11 @@ export default function CreateOrderScreen() {
   const [walletBalance, setWalletBalance] = useState(0);
   const [pickupNickSave, setPickupNickSave] = useState('');
   const [dropoffNickSave, setDropoffNickSave] = useState('');
+  const [savedAddresses, setSavedAddresses] = useState<SavedAddress[]>([]);
+  const [savedPickerVisible, setSavedPickerVisible] = useState(false);
+  const [savedPickerTarget, setSavedPickerTarget] = useState<'pickup' | 'dropoff'>('pickup');
+  const [savedSearch, setSavedSearch] = useState('');
+  const [recentAddressIds, setRecentAddressIds] = useState<string[]>([]);
 
   const ACTIVE_STATUSES = ['SEARCHING_DRIVER', 'DRIVER_ASSIGNED', 'DRIVER_ARRIVED', 'PICKED_UP', 'DELIVERING'];
 
@@ -85,6 +95,38 @@ export default function CreateOrderScreen() {
   // Fetch wallet balance on mount and when screen regains focus
   useEffect(() => { fetchWalletBalance(); }, [fetchWalletBalance]);
   useFocusEffect(useCallback(() => { fetchWalletBalance(); }, [fetchWalletBalance]));
+
+  const loadSavedAddresses = useCallback(async () => {
+    try {
+      const rows = await api.get<
+        { id: string; latitude: number | null; longitude: number | null; street: string | null; nickname: string | null; delegation: { nameDelegation: string; governorate: { nameGovernorate: string } } }[]
+      >('/addresses');
+      setSavedAddresses(
+        rows
+          .filter((a) => a.latitude != null && a.longitude != null)
+          .map((a) => ({
+            addressId: a.id,
+            label: a.nickname || a.street || 'Saved address',
+            street: a.street || undefined,
+            nickname: a.nickname,
+            sublabel: `${a.delegation.nameDelegation}, ${a.delegation.governorate.nameGovernorate}`,
+            lat: a.latitude as number,
+            lng: a.longitude as number,
+          })),
+      );
+    } catch {
+      setSavedAddresses([]);
+    }
+  }, []);
+  useEffect(() => { loadSavedAddresses(); }, [loadSavedAddresses]);
+  useEffect(() => {
+    (async () => {
+      try {
+        const raw = await AsyncStorage.getItem(RECENT_ADDR_KEY);
+        if (raw) setRecentAddressIds(JSON.parse(raw));
+      } catch {}
+    })();
+  }, []);
 
   // Resolve address from map picker params
   const resolveAddress = useCallback(async (
@@ -158,23 +200,58 @@ export default function CreateOrderScreen() {
   }, [resolveAddress]);
 
   const openMapPicker = (type: 'pickup' | 'dropoff') => {
-    router.push(`/(customer)/pick-location?type=${type}`);
+    router.push(`/(customer)/pick-location?type=${type}&returnTo=/(customer)/create-order`);
+  };
+
+  const openSavedPicker = (target: 'pickup' | 'dropoff') => {
+    setSavedPickerTarget(target);
+    setSavedSearch('');
+    setSavedPickerVisible(true);
+  };
+
+  const filteredSavedAddresses = savedAddresses.filter((a) => {
+    const q = savedSearch.trim().toLowerCase();
+    if (!q) return true;
+    const hay = `${a.nickname || ''} ${a.street || ''} ${a.label || ''} ${a.sublabel || ''}`.toLowerCase();
+    return hay.includes(q);
+  });
+  const recentAddresses = recentAddressIds
+    .map((id) => savedAddresses.find((a) => a.addressId === id))
+    .filter((a): a is SavedAddress => !!a);
+  const isAlreadySavedAddress = (addr: SavedAddress | null) => {
+    if (!addr) return false;
+    return savedAddresses.some((s) =>
+      Math.abs(s.lat - addr.lat) <= COORD_MATCH_EPSILON &&
+      Math.abs(s.lng - addr.lng) <= COORD_MATCH_EPSILON,
+    );
+  };
+
+  const markRecentAddress = async (addressId: string) => {
+    const next = [addressId, ...recentAddressIds.filter((id) => id !== addressId)].slice(0, 6);
+    setRecentAddressIds(next);
+    try { await AsyncStorage.setItem(RECENT_ADDR_KEY, JSON.stringify(next)); } catch {}
   };
 
   const useMyLocation = async (which: 'pickup' | 'dropoff') => {
-    const { status } = await Location.requestForegroundPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Location', 'We need your permission to use the current position.');
-      return;
+    const setResolving = which === 'pickup' ? setResolvingPickup : setResolvingDropoff;
+    setResolving(true);
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Location', 'We need your permission to use the current position.');
+        return;
+      }
+      const pos = await Location.getCurrentPositionAsync({});
+      await resolveAddress(
+        pos.coords.latitude,
+        pos.coords.longitude,
+        'Current location',
+        which === 'pickup' ? setPickupAddress : setDropoffAddress,
+        which === 'pickup' ? setResolvingPickup : setResolvingDropoff,
+      );
+    } finally {
+      setResolving(false);
     }
-    const pos = await Location.getCurrentPositionAsync({});
-    await resolveAddress(
-      pos.coords.latitude,
-      pos.coords.longitude,
-      'Current location',
-      which === 'pickup' ? setPickupAddress : setDropoffAddress,
-      which === 'pickup' ? setResolvingPickup : setResolvingDropoff,
-    );
   };
 
   const saveAddressLabel = async (addr: SavedAddress | null, nickname: string) => {
@@ -219,8 +296,8 @@ export default function CreateOrderScreen() {
       Alert.alert('Invalid Weight', 'Please enter a valid package weight.');
       return;
     }
-    if (cancelAfterMinutes < 5 || cancelAfterMinutes > 60) {
-      Alert.alert('Invalid Timer', 'Auto-cancel time must be between 5 and 60 minutes.');
+    if (cancelAfterMinutes < 15 || cancelAfterMinutes > 1440) {
+      Alert.alert('Invalid Timer', 'Auto-cancel time must be between 15 minutes and 24 hours.');
       return;
     }
     setLoading(true);
@@ -455,7 +532,7 @@ export default function CreateOrderScreen() {
             <Ionicons name="chevron-back" size={22} color="#fff" />
           </TouchableOpacity>
           <Text style={s.headerTitle}>New Order</Text>
-          <TouchableOpacity onPress={() => router.push('/(customer)/local-pickup-order')} style={{ padding: 8 }}>
+          <TouchableOpacity onPress={() => router.push('/(customer)/local-pickup-order?returnTo=/(customer)/create-order')} style={{ padding: 8 }}>
             <Ionicons name="cube-outline" size={22} color="#fff" />
           </TouchableOpacity>
         </View>
@@ -492,15 +569,11 @@ export default function CreateOrderScreen() {
             <Text style={[s.cardTitle, { color: colors.text }]}>Route</Text>
 
             {/* Pickup */}
-            <TouchableOpacity
-              style={[s.addressBtn, pickupAddress && s.addressBtnActive]}
-              onPress={() => openMapPicker('pickup')}
-              activeOpacity={0.7}
-            >
+            <View style={[s.addressBtn, pickupAddress && s.addressBtnActive]}>
               <View style={[s.addressDot, { backgroundColor: pickupAddress ? '#22c55e' : '#d1d5db' }]} />
               <View style={{ flex: 1 }}>
                 {resolvingPickup ? (
-                  <ActivityIndicator size="small" color="#22c55e" />
+                  <Text style={s.addressPlaceholder}>Fetching your current location...</Text>
                 ) : pickupAddress ? (
                   <>
                     <Text style={s.addressMainText}>{pickupAddress.label}</Text>
@@ -509,32 +582,34 @@ export default function CreateOrderScreen() {
                 ) : (
                   <Text style={s.addressPlaceholder}>Tap to select pickup location</Text>
                 )}
+                <View style={{ flexDirection: 'row', gap: 8, marginTop: 10 }}>
+                  <TouchableOpacity style={s.inlineActionBtn} onPress={() => openMapPicker('pickup')} activeOpacity={0.7}>
+                    <Ionicons name="map-outline" size={16} color="#16a34a" />
+                    <Text style={s.inlineActionTxt}>Map</Text>
+                  </TouchableOpacity>
+                  {savedAddresses.length > 0 && (
+                    <TouchableOpacity style={s.inlineActionBtn} onPress={() => openSavedPicker('pickup')} activeOpacity={0.7}>
+                      <Ionicons name="list-outline" size={16} color="#166534" />
+                      <Text style={s.inlineActionTxt}>Choose from list</Text>
+                    </TouchableOpacity>
+                  )}
+                  <TouchableOpacity style={s.inlineActionBtn} onPress={() => useMyLocation('pickup')} disabled={resolvingPickup} activeOpacity={0.7}>
+                    <Ionicons name="locate" size={16} color="#2563eb" />
+                    <Text style={s.inlineActionTxt}>My Position</Text>
+                  </TouchableOpacity>
+                </View>
               </View>
-              <Ionicons name="map-outline" size={20} color={pickupAddress ? '#22c55e' : '#9ca3af'} />
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[s.addressBtn, { marginTop: 8, borderStyle: 'dashed' as const }]}
-              onPress={() => useMyLocation('pickup')}
-              disabled={resolvingPickup}
-              activeOpacity={0.7}
-            >
-              <Ionicons name="navigate" size={18} color="#2563eb" />
-              <Text style={{ flex: 1, marginLeft: 8, color: colors.text }}>Use my current position (pickup)</Text>
-            </TouchableOpacity>
+            </View>
 
             {/* Connector line */}
             <View style={s.connectorLine} />
 
             {/* Dropoff */}
-            <TouchableOpacity
-              style={[s.addressBtn, dropoffAddress && { borderColor: '#fecaca' }]}
-              onPress={() => openMapPicker('dropoff')}
-              activeOpacity={0.7}
-            >
+            <View style={[s.addressBtn, dropoffAddress && { borderColor: '#fecaca', backgroundColor: '#fff7f7' }]}>
               <View style={[s.addressDot, { backgroundColor: dropoffAddress ? '#ef4444' : '#d1d5db' }]} />
               <View style={{ flex: 1 }}>
                 {resolvingDropoff ? (
-                  <ActivityIndicator size="small" color="#ef4444" />
+                  <Text style={s.addressPlaceholder}>Fetching your current location...</Text>
                 ) : dropoffAddress ? (
                   <>
                     <Text style={s.addressMainText}>{dropoffAddress.label}</Text>
@@ -543,27 +618,34 @@ export default function CreateOrderScreen() {
                 ) : (
                   <Text style={s.addressPlaceholder}>Tap to select delivery location</Text>
                 )}
+                <View style={{ flexDirection: 'row', gap: 8, marginTop: 10 }}>
+                  <TouchableOpacity style={s.inlineActionBtn} onPress={() => openMapPicker('dropoff')} activeOpacity={0.7}>
+                    <Ionicons name="map-outline" size={16} color="#ef4444" />
+                    <Text style={s.inlineActionTxt}>Map</Text>
+                  </TouchableOpacity>
+                  {savedAddresses.length > 0 && (
+                    <TouchableOpacity style={s.inlineActionBtn} onPress={() => openSavedPicker('dropoff')} activeOpacity={0.7}>
+                      <Ionicons name="list-outline" size={16} color="#b91c1c" />
+                      <Text style={s.inlineActionTxt}>Choose from list</Text>
+                    </TouchableOpacity>
+                  )}
+                  <TouchableOpacity style={s.inlineActionBtn} onPress={() => useMyLocation('dropoff')} disabled={resolvingDropoff} activeOpacity={0.7}>
+                    <Ionicons name="locate" size={16} color="#2563eb" />
+                    <Text style={s.inlineActionTxt}>My Position</Text>
+                  </TouchableOpacity>
+                </View>
               </View>
-              <Ionicons name="map-outline" size={20} color={dropoffAddress ? '#ef4444' : '#9ca3af'} />
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[s.addressBtn, { marginTop: 8, borderStyle: 'dashed' as const }]}
-              onPress={() => useMyLocation('dropoff')}
-              disabled={resolvingDropoff}
-              activeOpacity={0.7}
-            >
-              <Ionicons name="navigate" size={18} color="#2563eb" />
-              <Text style={{ flex: 1, marginLeft: 8, color: colors.text }}>Use my current position (delivery)</Text>
-            </TouchableOpacity>
+            </View>
+
           </View>
 
-          {(pickupAddress || dropoffAddress) && (
+          {((pickupAddress && !isAlreadySavedAddress(pickupAddress)) || (dropoffAddress && !isAlreadySavedAddress(dropoffAddress))) && (
             <View style={[s.card, { backgroundColor: colors.card }]}>
               <Text style={[s.cardTitle, { color: colors.text }]}>Save address for later</Text>
               <Text style={[s.inputLabel, { color: colors.textSecondary, marginBottom: 8 }]}>
                 Give a pseudo name to an address you selected — it appears in your saved list for the next order.
               </Text>
-              {pickupAddress && (
+              {pickupAddress && !isAlreadySavedAddress(pickupAddress) && (
                 <View style={{ marginBottom: 12 }}>
                   <Text style={[s.inputLabel, { color: colors.text }]}>Pickup</Text>
                   <TextInput
@@ -581,7 +663,7 @@ export default function CreateOrderScreen() {
                   </TouchableOpacity>
                 </View>
               )}
-              {dropoffAddress && (
+              {dropoffAddress && !isAlreadySavedAddress(dropoffAddress) && (
                 <View>
                   <Text style={[s.inputLabel, { color: colors.text }]}>Delivery</Text>
                   <TextInput
@@ -674,7 +756,7 @@ export default function CreateOrderScreen() {
             <Text style={s.inputLabel}>Cancel if no driver responds (minutes)</Text>
             <View style={s.weightRow}>
               <TouchableOpacity style={s.weightBtn} onPress={() => {
-                setCancelAfterMinutes(prev => Math.max(5, prev - 1));
+                setCancelAfterMinutes(prev => Math.max(15, prev - 1));
               }}>
                 <Ionicons name="remove" size={20} color="#374151" />
               </TouchableOpacity>
@@ -689,13 +771,13 @@ export default function CreateOrderScreen() {
                 textAlign="center"
               />
               <TouchableOpacity style={s.weightBtn} onPress={() => {
-                setCancelAfterMinutes(prev => Math.min(60, prev + 1));
+                setCancelAfterMinutes(prev => Math.min(1440, prev + 1));
               }}>
                 <Ionicons name="add" size={20} color="#374151" />
               </TouchableOpacity>
             </View>
-            {(cancelAfterMinutes < 5 || cancelAfterMinutes > 60) && (
-              <Text style={s.validationError}>Must be between 5 and 60 minutes</Text>
+            {(cancelAfterMinutes < 15 || cancelAfterMinutes > 1440) && (
+              <Text style={s.validationError}>Must be between 15 and 1440 minutes (24h)</Text>
             )}
           </View>
 
@@ -717,6 +799,76 @@ export default function CreateOrderScreen() {
           </TouchableOpacity>
         </ScrollView>
       </View>
+      <Modal visible={savedPickerVisible} transparent animationType="slide" onRequestClose={() => setSavedPickerVisible(false)}>
+        <View style={s.modalOverlay}>
+          <View style={[s.modalCard, { backgroundColor: colors.card }]}>
+            <View style={s.modalHeadRow}>
+              <Text style={[s.modalTitle, { color: colors.text }]}>
+                Select saved address for {savedPickerTarget === 'pickup' ? 'pickup' : 'delivery'}
+              </Text>
+              <TouchableOpacity onPress={() => setSavedPickerVisible(false)}>
+                <Ionicons name="close-circle" size={24} color={colors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+            <View style={[s.modalSearchBox, { borderColor: colors.border, backgroundColor: colors.inputBg }]}>
+              <Ionicons name="search" size={16} color={colors.textTertiary} />
+              <TextInput
+                style={[s.modalSearchInput, { color: colors.text }]}
+                placeholder="Search by nickname, street, area..."
+                placeholderTextColor={colors.textTertiary}
+                value={savedSearch}
+                onChangeText={setSavedSearch}
+              />
+            </View>
+            <FlatList
+              data={filteredSavedAddresses}
+              keyExtractor={(item) => item.addressId}
+              keyboardShouldPersistTaps="handled"
+              style={{ maxHeight: 340 }}
+              ListHeaderComponent={
+                recentAddresses.length > 0 ? (
+                  <View style={{ marginBottom: 8 }}>
+                    <Text style={[s.recentTitle, { color: colors.textSecondary }]}>Recently used</Text>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingBottom: 6 }}>
+                      {recentAddresses.map((r) => (
+                        <TouchableOpacity
+                          key={r.addressId}
+                          style={[s.recentChip, { borderColor: colors.border, backgroundColor: colors.inputBg }]}
+                          onPress={() => {
+                            if (savedPickerTarget === 'pickup') setPickupAddress(r);
+                            else setDropoffAddress(r);
+                            markRecentAddress(r.addressId);
+                            setSavedPickerVisible(false);
+                          }}
+                        >
+                          <Text style={[s.recentChipText, { color: colors.text }]} numberOfLines={1}>
+                            {r.nickname || r.street || r.label}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </ScrollView>
+                  </View>
+                ) : null
+              }
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  style={[s.modalItem, { borderBottomColor: colors.border }]}
+                  onPress={() => {
+                    if (savedPickerTarget === 'pickup') setPickupAddress(item);
+                    else setDropoffAddress(item);
+                    markRecentAddress(item.addressId);
+                    setSavedPickerVisible(false);
+                  }}
+                >
+                  <Text style={[s.modalItemTitle, { color: colors.text }]}>{item.nickname || item.street || item.label}</Text>
+                  <Text style={[s.modalItemSub, { color: colors.textSecondary }]} numberOfLines={1}>{item.sublabel}</Text>
+                </TouchableOpacity>
+              )}
+              ListEmptyComponent={<Text style={[s.modalEmpty, { color: colors.textTertiary }]}>No matching addresses</Text>}
+            />
+          </View>
+        </View>
+      </Modal>
     </KeyboardAvoidingView>
   );
 }
@@ -764,6 +916,41 @@ const s = StyleSheet.create({
   addressMainText: { fontSize: 14, fontWeight: '600', color: '#111827' },
   addressSubText: { fontSize: 12, color: '#6b7280', marginTop: 2 },
   addressPlaceholder: { fontSize: 14, color: '#9ca3af' },
+  inlineActionBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 6,
+    borderRadius: 999, backgroundColor: '#f3f4f6',
+  },
+  inlineActionTxt: { fontSize: 12, fontWeight: '700', color: '#374151' },
+  smallSelectBtn: {
+    paddingHorizontal: 10, paddingVertical: 8, borderRadius: 10, backgroundColor: '#dcfce7', alignSelf: 'center',
+  },
+  smallSelectTxt: { color: '#166534', fontSize: 12, fontWeight: '700' },
+  savedPickerBtn: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 6, paddingVertical: 10, borderRadius: 10, backgroundColor: '#dcfce7',
+  },
+  savedPickerBtnTxt: { fontSize: 12, fontWeight: '700' },
+  modalOverlay: {
+    flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end',
+  },
+  modalCard: {
+    borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: 16, paddingBottom: 20,
+  },
+  modalHeadRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10,
+  },
+  modalTitle: { fontSize: 16, fontWeight: '800' },
+  modalSearchBox: {
+    flexDirection: 'row', alignItems: 'center', gap: 8, borderWidth: 1, borderRadius: 10, paddingHorizontal: 10, marginBottom: 10,
+  },
+  modalSearchInput: { flex: 1, height: 42, fontSize: 14 },
+  modalItem: { paddingVertical: 10, borderBottomWidth: 1 },
+  modalItemTitle: { fontSize: 14, fontWeight: '700' },
+  modalItemSub: { fontSize: 12, marginTop: 2 },
+  modalEmpty: { textAlign: 'center', paddingVertical: 22, fontSize: 13 },
+  recentTitle: { fontSize: 12, fontWeight: '700', marginBottom: 6 },
+  recentChip: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 6, maxWidth: 180 },
+  recentChipText: { fontSize: 12, fontWeight: '600' },
   connectorLine: {
     width: 2, height: 20, backgroundColor: '#e5e7eb', marginLeft: 19, marginVertical: 2,
   },

@@ -3,7 +3,7 @@ import {
   View, Text, ScrollView, TouchableOpacity, ActivityIndicator,
   Alert, RefreshControl, StyleSheet, Modal, TextInput, FlatList,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { orderService, AvailableOrders, FilteredOrders, Order } from '../../services/api/order.service';
@@ -67,6 +67,7 @@ function SearchPicker({ visible, title, data, onSelect, onClose, search, setSear
 
 export default function AvailableOrdersScreen() {
   const router = useRouter();
+  const { urgentOrderId } = useLocalSearchParams<{ urgentOrderId?: string }>();
   const { colors, isDark } = useTheme();
   const [data, setData] = useState<AvailableOrders | null>(null);
   const [filteredData, setFilteredData] = useState<FilteredOrders | null>(null);
@@ -333,11 +334,24 @@ export default function AvailableOrdersScreen() {
   // ── Render helpers ──
   const renderOrderCard = (order: Order) => {
     const isAccepting = accepting === order.id;
+    const isUrgentHighlighted = !!urgentOrderId && order.id === urgentOrderId;
     return (
-      <View key={order.id} style={[s.card, { backgroundColor: colors.card }]}>
+      <View
+        key={order.id}
+        style={[
+          s.card,
+          { backgroundColor: colors.card },
+          isUrgentHighlighted && { borderWidth: 2, borderColor: '#f59e0b', backgroundColor: '#fffbeb' },
+        ]}
+      >
+        {isUrgentHighlighted && (
+          <View style={{ alignSelf: 'flex-start', marginBottom: 8, backgroundColor: '#f59e0b', borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 }}>
+            <Text style={{ color: '#fff', fontSize: 11, fontWeight: '700' }}>URGENT NOTIFICATION</Text>
+          </View>
+        )}
         <View style={s.cardTop}>
           <Text style={[s.orderId, { color: colors.text }]}>#{order.id.slice(0, 8)}</Text>
-          <View style={[s.priceTag, { color: colors.primary }]}>
+          <View style={s.priceTag}>
             <Text style={[s.priceText, { color: colors.primary }]}>{order.price.toFixed(2)}</Text>
             <Text style={[s.priceCurrency, { color: colors.textSecondary }]}>TND</Text>
           </View>
@@ -556,9 +570,34 @@ export default function AvailableOrdersScreen() {
             <Text style={s.emptySub}>{filterActive ? 'Try a different location' : 'Pull down to refresh'}</Text>
           </View>
         ) : isFlat ? (
-          <>{filteredData?.orders.map(renderOrderCard)}</>
+          <>
+            {[...(filteredData?.orders || [])]
+              .sort((a, b) => {
+                if (!urgentOrderId) return 0;
+                if (a.id === urgentOrderId) return -1;
+                if (b.id === urgentOrderId) return 1;
+                return 0;
+              })
+              .map(renderOrderCard)}
+          </>
         ) : (
           <>
+            {urgentOrderId && (() => {
+              const all = [
+                ...(data?.sameDelegation || []),
+                ...(data?.sameGovernorate || []),
+                ...(data?.differentGovernorate || []),
+                ...(data?.differentCountry || []),
+              ];
+              const urgent = all.find((o) => o.id === urgentOrderId);
+              if (!urgent) return null;
+              return (
+                <View style={{ marginBottom: 16 }}>
+                  <Text style={{ color: '#b45309', fontWeight: '800', marginBottom: 8 }}>Urgent order on top</Text>
+                  {renderOrderCard(urgent)}
+                </View>
+              );
+            })()}
             {renderSection('Same Delegation', data?.sameDelegation || [])}
             {renderSection('Same Governorate', data?.sameGovernorate || [])}
             {renderSection('Different Governorate', data?.differentGovernorate || [])}
