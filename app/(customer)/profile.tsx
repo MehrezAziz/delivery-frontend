@@ -6,6 +6,7 @@ import * as Clipboard from 'expo-clipboard';
 import { clearPushToken } from '../../services/api/notification.service';
 import { stopOrderTrackingSilently } from '../../services/notifications';
 import { useTheme } from '../../contexts/ThemeContext';
+import { getCustomerStatusLabel, getCustomerStatusTextColor } from '../../utils/customerStatus';
 
 // Get API URL from environment variable
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api';
@@ -570,7 +571,14 @@ export default function CustomerProfileScreen() {
             </View>
             <View style={styles.detailRow}>
               <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>Status</Text>
-              <Text style={[styles.detailValue, { color: colors.text }]}>{customer.customerStatus}</Text>
+              <Text
+                style={[
+                  styles.detailValue,
+                  { color: getCustomerStatusTextColor(customer.customerStatus), fontWeight: '700' },
+                ]}
+              >
+                {getCustomerStatusLabel(customer.customerStatus)}
+              </Text>
             </View>
             <View style={styles.detailRow}>
               <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>Completed Orders</Text>

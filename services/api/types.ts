@@ -24,7 +24,7 @@ export interface Customer {
   id: string;
   userId: string;
   completedOrders: number;
-  customerStatus: 'ACTIVE' | 'INACTIVE' | 'SUSPENDED';
+  customerStatus: 'CREATED' | 'VERIFIED' | 'ACTIVE' | 'SUSPENDED' | 'BLOCKED';
   myReferralCodeId?: string;
   referredByCodeId?: string;
 }

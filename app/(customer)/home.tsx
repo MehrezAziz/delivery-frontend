@@ -13,6 +13,7 @@ import { ThemeToggle } from '../../components/ThemeToggle';
 import { orderService, Order } from '../../services/api/order.service';
 import { notificationService } from '../../services/api/notification.service';
 import { restoreOrderTrackingForCustomer } from '../../services/notifications';
+import { getCustomerStatusDotColor } from '../../utils/customerStatus';
 
 const ACTIVE_STATUSES = [
   'SEARCHING_DRIVER', 'PENDING_CUSTOMER_APPROVAL', 'DRIVER_ASSIGNED', 'DRIVER_ARRIVED', 'PICKED_UP', 'DELIVERING',
@@ -32,20 +33,32 @@ export default function CustomerHomeScreen() {
   const insets = useSafeAreaInsets();
   const { colors, isDark } = useTheme();
   const [userName, setUserName] = useState('');
+  const [customerStatus, setCustomerStatus] = useState<string>('ACTIVE');
   const [activeOrders, setActiveOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
 
-  useEffect(() => {
-    AsyncStorage.getItem('user').then(u => {
+  const loadHeaderIdentity = useCallback(async () => {
+    try {
+      const [u, c] = await Promise.all([AsyncStorage.getItem('user'), AsyncStorage.getItem('customer')]);
       if (u) {
         const user = JSON.parse(u);
-        setUserName(user.firstName || user.secondName || '');
+        setUserName([user.firstName, user.secondName].filter(Boolean).join(' ').trim() || user.firstName || user.secondName || '');
       }
-    });
-    restoreOrderTrackingForCustomer();
+      if (c) {
+        const cust = JSON.parse(c);
+        if (cust?.customerStatus) setCustomerStatus(cust.customerStatus);
+      }
+    } catch {
+      /* ignore */
+    }
   }, []);
+
+  useEffect(() => {
+    void loadHeaderIdentity();
+    restoreOrderTrackingForCustomer();
+  }, [loadHeaderIdentity]);
 
   const loadOrders = useCallback(async () => {
     try {
@@ -63,7 +76,12 @@ export default function CustomerHomeScreen() {
     }
   }, []);
 
-  useFocusEffect(useCallback(() => { loadOrders(); }, [loadOrders]));
+  useFocusEffect(
+    useCallback(() => {
+      void loadHeaderIdentity();
+      loadOrders();
+    }, [loadHeaderIdentity, loadOrders]),
+  );
 
   useEffect(() => {
     const interval = setInterval(loadOrders, 10000);
@@ -77,8 +95,16 @@ export default function CustomerHomeScreen() {
       {/* Header */}
       <View style={[s.header, { backgroundColor: colors.headerBg }]}>
         <View style={s.headerContent}>
-          <View>
-            <Text style={s.greeting}>Hello{userName ? `, ${userName}` : ''} 👋</Text>
+          <View style={s.headerTitleBlock}>
+            <View style={s.nameRow}>
+              <View
+                style={[s.headerStatusDot, { backgroundColor: getCustomerStatusDotColor(customerStatus) }]}
+                accessibilityLabel={`Account status: ${customerStatus}`}
+              />
+              <Text style={s.userName} numberOfLines={1}>
+                {userName || 'Customer'}
+              </Text>
+            </View>
             <Text style={s.subtitle}>Where should we deliver today?</Text>
           </View>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
@@ -210,7 +236,20 @@ const s = StyleSheet.create({
   headerContent: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 24,
   },
-  greeting: { fontSize: 26, fontWeight: '800', color: '#fff', marginBottom: 4 },
+  headerTitleBlock: { flex: 1, marginRight: 12, minWidth: 0 },
+  nameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  headerStatusDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    flexShrink: 0,
+    marginRight: 10,
+  },
+  userName: { fontSize: 26, fontWeight: '800', color: '#fff', flex: 1, minWidth: 0 },
   subtitle: { fontSize: 14, color: 'rgba(255,255,255,0.75)', fontWeight: '500' },
   notifBtn: {
     width: 42, height: 42, borderRadius: 21, backgroundColor: 'rgba(255,255,255,0.2)',
