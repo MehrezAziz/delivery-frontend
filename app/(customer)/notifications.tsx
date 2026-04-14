@@ -63,7 +63,10 @@ export default function CustomerNotifications() {
         grouped.push(item);
         continue;
       }
-      const conversationKey = `${item.type}:${item.relatedEntityType || 'none'}:${item.relatedEntityId || item.id}`;
+      // Prefer backend-provided group key to keep chat-room grouping stable.
+      const conversationKey = item.groupKey
+        ? `${item.type}:${item.groupKey}`
+        : `${item.type}:${item.relatedEntityType || 'none'}:${item.relatedEntityId || item.id}`;
       const existing = groupedByConversation.get(conversationKey);
       if (!existing) {
         const first: DisplayNotification = { ...item, unseenCount: 1 };
