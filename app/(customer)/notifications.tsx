@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import {
   View, Text, FlatList, StyleSheet, TouchableOpacity,
   ActivityIndicator, RefreshControl,
@@ -38,6 +38,12 @@ const TYPE_ICONS: Record<string, string> = {
   NEW_MESSAGE_FROM_DRIVER: 'chatbubble-ellipses-outline',
 };
 
+const GROUP_UNSEEN_TYPES = new Set(['SUPPORT_TICKET_REPLY', 'NEW_MESSAGE_FROM_DRIVER']);
+
+type DisplayNotification = Notification & {
+  unseenCount?: number;
+};
+
 export default function CustomerNotifications() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -47,6 +53,28 @@ export default function CustomerNotifications() {
   const [refreshing, setRefreshing] = useState(false);
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
+
+  const displayedNotifications = useMemo<DisplayNotification[]>(() => {
+    const grouped: DisplayNotification[] = [];
+    const groupedByConversation = new Map<string, DisplayNotification>();
+    for (const item of notifications) {
+      const canGroup = !item.readAt && GROUP_UNSEEN_TYPES.has(item.type);
+      if (!canGroup) {
+        grouped.push(item);
+        continue;
+      }
+      const conversationKey = `${item.type}:${item.relatedEntityType || 'none'}:${item.relatedEntityId || item.id}`;
+      const existing = groupedByConversation.get(conversationKey);
+      if (!existing) {
+        const first: DisplayNotification = { ...item, unseenCount: 1 };
+        groupedByConversation.set(conversationKey, first);
+        grouped.push(first);
+      } else {
+        existing.unseenCount = (existing.unseenCount || 1) + 1;
+      }
+    }
+    return grouped;
+  }, [notifications]);
 
   const loadNotifications = useCallback(async (pageNum = 1, append = false) => {
     try {
@@ -103,7 +131,7 @@ export default function CustomerNotifications() {
     return date.toLocaleDateString();
   };
 
-  const renderItem = ({ item }: { item: Notification }) => {
+  const renderItem = ({ item }: { item: DisplayNotification }) => {
     const iconName = TYPE_ICONS[item.type] || 'notifications-outline';
     const priorityColor = PRIORITY_COLORS[item.priority] || '#6b7280';
     const isUnread = !item.readAt;
@@ -124,7 +152,13 @@ export default function CustomerNotifications() {
           <Text style={[s.notifBody, { color: colors.textSecondary }]} numberOfLines={2}>{item.body}</Text>
           <Text style={[s.notifTime, { color: colors.textTertiary }]}>{formatTime(item.sentAt)}</Text>
         </View>
-        {isUnread && <View style={[s.unreadDot, { backgroundColor: colors.primary }]} />}
+        {isUnread && item.unseenCount && item.unseenCount > 1 ? (
+          <View style={[s.countBadge, { backgroundColor: colors.primary }]}>
+            <Text style={s.countBadgeText}>{item.unseenCount}</Text>
+          </View>
+        ) : isUnread ? (
+          <View style={[s.unreadDot, { backgroundColor: colors.primary }]} />
+        ) : null}
       </TouchableOpacity>
     );
   };
@@ -155,10 +189,10 @@ export default function CustomerNotifications() {
       </View>
 
       <FlatList
-        data={notifications}
+        data={displayedNotifications}
         keyExtractor={(item) => item.id}
         renderItem={renderItem}
-        contentContainerStyle={notifications.length === 0 ? s.emptyContainer : { paddingBottom: 40 }}
+        contentContainerStyle={displayedNotifications.length === 0 ? s.emptyContainer : { paddingBottom: 40 }}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); loadNotifications(1); }} />
         }
@@ -208,6 +242,20 @@ const s = StyleSheet.create({
   notifTime: { fontSize: 11, color: '#9ca3af', marginTop: 4 },
   unreadDot: {
     width: 10, height: 10, borderRadius: 5, backgroundColor: '#0284c7', marginLeft: 8,
+  },
+  countBadge: {
+    minWidth: 22,
+    height: 22,
+    borderRadius: 11,
+    paddingHorizontal: 6,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 8,
+  },
+  countBadgeText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '700',
   },
   emptyContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   emptyState: { alignItems: 'center', paddingTop: 100 },
