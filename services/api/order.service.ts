@@ -46,6 +46,8 @@ export interface Order {
   weight: number;
   distanceKm: number;
   price: number;
+  /** Optional extra chosen by customer (errand / long service); charged in addition to calculated delivery price. */
+  customerExtraAmount?: number;
   nightFee: number;
   extraWeightFee: number;
   isNightDelivery: boolean;
@@ -120,6 +122,7 @@ export const orderService = {
     weight: number;
     description?: string;
     cancelAfterMinutes?: number;
+    customerExtraAmount?: number;
   }) =>
     api.post<Order>('/orders', data),
 
@@ -129,6 +132,7 @@ export const orderService = {
     localPickupOnly?: boolean;
     paymentType: 'COD' | 'WALLET';
     weight: number;
+    customerExtraAmount?: number;
   }) =>
     api.post<{
       isNightDelivery: boolean;
@@ -138,6 +142,8 @@ export const orderService = {
       distanceFee: number;
       extraWeightFee: number;
       nightFee: number;
+      calculatedPrice: number;
+      customerExtraAmount: number;
       totalPrice: number;
       currency: string;
       currencySymbol: string;

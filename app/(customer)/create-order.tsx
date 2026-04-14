@@ -25,6 +25,7 @@ interface SavedAddress {
 
 const COORD_MATCH_EPSILON = 0.00015;
 const RECENT_ADDR_KEY = 'recent_customer_addresses';
+const MAX_CUSTOMER_EXTRA = 10000;
 
 interface PricePreview {
   isNightDelivery: boolean;
@@ -34,6 +35,8 @@ interface PricePreview {
   distanceFee: number;
   extraWeightFee: number;
   nightFee: number;
+  calculatedPrice: number;
+  customerExtraAmount: number;
   totalPrice: number;
   currency: string;
   currencySymbol: string;
@@ -58,6 +61,8 @@ export default function CreateOrderScreen() {
   const [resolvingDropoff, setResolvingDropoff] = useState(false);
   const [activeOrders, setActiveOrders] = useState<Order[]>([]);
   const [cancelAfterMinutes, setCancelAfterMinutes] = useState(15);
+  /** Optional extra (same currency as delivery) for long errands / driver time; added to calculated delivery price. */
+  const [customerExtraAmount, setCustomerExtraAmount] = useState('0');
   const [walletBalance, setWalletBalance] = useState(0);
   const [pickupNickSave, setPickupNickSave] = useState('');
   const [dropoffNickSave, setDropoffNickSave] = useState('');
@@ -300,14 +305,25 @@ export default function CreateOrderScreen() {
       Alert.alert('Invalid Timer', 'Auto-cancel time must be between 15 minutes and 24 hours.');
       return;
     }
+    const ex = parseFloat((customerExtraAmount || '0').replace(',', '.'));
+    if (Number.isNaN(ex) || ex < 0) {
+      Alert.alert('Amount', 'Enter a valid optional extra amount (0 or more).');
+      return;
+    }
+    if (ex > MAX_CUSTOMER_EXTRA) {
+      Alert.alert('Amount', `Optional extra cannot exceed ${MAX_CUSTOMER_EXTRA}.`);
+      return;
+    }
     setLoading(true);
     try {
       const result = await orderService.previewOrder({
         pickupAddressId: pickupAddress.addressId,
         dropoffAddressId: dropoffAddress.addressId,
         paymentType, weight: w,
+        customerExtraAmount: ex,
       });
       setPreview(result);
+      setCustomerExtraAmount(String(result.customerExtraAmount ?? ex));
       setStep('preview');
     } catch (e: any) {
       Alert.alert('Error', e.message || 'Failed to calculate price');
@@ -319,6 +335,11 @@ export default function CreateOrderScreen() {
   // Confirm order
   const handleConfirmOrder = async () => {
     if (!pickupAddress || !dropoffAddress || !preview) return;
+    const ex = parseFloat((customerExtraAmount || '0').replace(',', '.'));
+    if (Number.isNaN(ex) || ex < 0 || ex > MAX_CUSTOMER_EXTRA) {
+      Alert.alert('Amount', `Enter a valid optional extra (0–${MAX_CUSTOMER_EXTRA}).`);
+      return;
+    }
     setSubmitting(true);
     try {
       const order = await orderService.createOrder({
@@ -327,6 +348,7 @@ export default function CreateOrderScreen() {
         paymentType, weight: parseFloat(weight),
         description: description || undefined,
         cancelAfterMinutes,
+        customerExtraAmount: ex,
       });
       // Reset form for next order
       setPickupAddress(null);
@@ -335,6 +357,7 @@ export default function CreateOrderScreen() {
       setWeight('1');
       setDescription('');
       setCancelAfterMinutes(15);
+      setCustomerExtraAmount('0');
       setPreview(null);
       setStep('form');
       // Refresh active orders
@@ -373,15 +396,54 @@ export default function CreateOrderScreen() {
     if (!pickupAddress || !dropoffAddress) return;
     setPaymentType('COD');
     try {
+      const ex = parseFloat((customerExtraAmount || '0').replace(',', '.'));
+      const extraOk = !Number.isNaN(ex) && ex >= 0 && ex <= MAX_CUSTOMER_EXTRA ? ex : 0;
       const result = await orderService.previewOrder({
         pickupAddressId: pickupAddress.addressId,
         dropoffAddressId: dropoffAddress.addressId,
         paymentType: 'COD',
         weight: parseFloat(weight),
+        customerExtraAmount: extraOk,
       });
       setPreview(result);
+      setCustomerExtraAmount(String(result.customerExtraAmount ?? extraOk));
     } catch (e: any) {
       Alert.alert('Error', e.message || 'Failed to recalculate price');
+    }
+  };
+
+  /** Re-run preview after customer changes optional extra on the summary screen. */
+  const handleUpdatePreviewExtra = async () => {
+    if (!pickupAddress || !dropoffAddress) return;
+    const ex = parseFloat((customerExtraAmount || '0').replace(',', '.'));
+    if (Number.isNaN(ex) || ex < 0) {
+      Alert.alert('Amount', 'Enter a valid optional extra amount (0 or more).');
+      return;
+    }
+    if (ex > MAX_CUSTOMER_EXTRA) {
+      Alert.alert('Amount', `Optional extra cannot exceed ${MAX_CUSTOMER_EXTRA}.`);
+      return;
+    }
+    const w = parseFloat(weight);
+    if (Number.isNaN(w) || w <= 0) {
+      Alert.alert('Weight', 'Go back and enter a valid weight.');
+      return;
+    }
+    setLoading(true);
+    try {
+      const result = await orderService.previewOrder({
+        pickupAddressId: pickupAddress.addressId,
+        dropoffAddressId: dropoffAddress.addressId,
+        paymentType,
+        weight: w,
+        customerExtraAmount: ex,
+      });
+      setPreview(result);
+      setCustomerExtraAmount(String(result.customerExtraAmount ?? ex));
+    } catch (e: any) {
+      Alert.alert('Error', e.message || 'Failed to update price');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -452,6 +514,34 @@ export default function CreateOrderScreen() {
             )}
           </View>
 
+          {/* Optional extra for long errands / driver time (added to calculated delivery price) */}
+          <View style={[s.card, { backgroundColor: colors.card }]}>
+            <Text style={[s.cardTitle, { color: colors.text }]}>Driver time / errand (optional)</Text>
+            <Text style={[s.inputLabel, { color: colors.textSecondary, marginBottom: 8 }]}>
+              Add an amount for long waits or services (e.g. paying a bill at an office). Max {MAX_CUSTOMER_EXTRA} {unit}.
+            </Text>
+            <TextInput
+              style={[s.descInput, { color: colors.text, borderColor: colors.inputBorder }]}
+              value={customerExtraAmount}
+              onChangeText={setCustomerExtraAmount}
+              keyboardType="decimal-pad"
+              placeholder="0"
+              placeholderTextColor={colors.textTertiary}
+            />
+            <TouchableOpacity
+              style={[s.insufficientBtn, { backgroundColor: colors.primary, marginTop: 12, justifyContent: 'center' }]}
+              onPress={handleUpdatePreviewExtra}
+              disabled={loading}
+              activeOpacity={0.7}
+            >
+              {loading ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text style={[s.insufficientBtnText, { color: '#fff' }]}>Update total</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+
           {/* Price breakdown */}
           <View style={[s.card, { backgroundColor: colors.card }]}>
             <Text style={[s.cardTitle, { color: colors.text }]}>Price Breakdown</Text>
@@ -459,6 +549,11 @@ export default function CreateOrderScreen() {
             <PriceRow label="Distance Fee" value={preview.distanceFee} unit={unit} />
             {preview.extraWeightFee > 0 && <PriceRow label="Extra Weight" value={preview.extraWeightFee} unit={unit} />}
             {preview.nightFee > 0 && <PriceRow label="Night Fee 🌙" value={preview.nightFee} unit={unit} />}
+            <View style={[s.divider, { backgroundColor: colors.border }]} />
+            <PriceRow label="Delivery (calculated)" value={preview.calculatedPrice} unit={unit} />
+            {preview.customerExtraAmount > 0 && (
+              <PriceRow label="Your extra (driver time / errand)" value={preview.customerExtraAmount} unit={unit} />
+            )}
             <View style={[s.divider, { backgroundColor: colors.border }]} />
             <View style={s.priceRow}>
               <Text style={[s.totalLabel, { color: colors.text }]}>Total</Text>

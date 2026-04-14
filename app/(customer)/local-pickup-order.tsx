@@ -25,6 +25,7 @@ interface SavedAddress {
   lng: number;
 }
 const RECENT_LOCAL_ADDR_KEY = 'recent_local_pickup_addresses';
+const MAX_CUSTOMER_EXTRA = 10000;
 
 export default function LocalPickupOrderScreen() {
   const router = useRouter();
@@ -46,6 +47,7 @@ export default function LocalPickupOrderScreen() {
   const [recentAddressIds, setRecentAddressIds] = useState<string[]>([]);
   const [walletBalance, setWalletBalance] = useState(0);
   const [cancelAfterMinutes, setCancelAfterMinutes] = useState(15);
+  const [customerExtraAmount, setCustomerExtraAmount] = useState('0');
 
   const fetchWallet = useCallback(async () => {
     try {
@@ -148,6 +150,19 @@ export default function LocalPickupOrderScreen() {
       Alert.alert('Required', 'Please describe what you need.');
       return;
     }
+    const ex = parseFloat((customerExtraAmount || '0').replace(',', '.'));
+    if (Number.isNaN(ex) || ex < 0) {
+      Alert.alert('Amount', 'Enter a valid optional extra amount (0 or more).');
+      return;
+    }
+    if (ex > MAX_CUSTOMER_EXTRA) {
+      Alert.alert('Amount', `Optional extra cannot exceed ${MAX_CUSTOMER_EXTRA}.`);
+      return;
+    }
+    if (cancelAfterMinutes < 15 || cancelAfterMinutes > 1440) {
+      Alert.alert('Invalid Timer', 'Auto-cancel time must be between 15 minutes and 24 hours.');
+      return;
+    }
     setLoading(true);
     try {
       const preview = await orderService.previewOrder({
@@ -155,11 +170,16 @@ export default function LocalPickupOrderScreen() {
         localPickupOnly: true,
         paymentType,
         weight: w,
+        customerExtraAmount: ex,
       });
       setLoading(false);
+      const extraLine =
+        preview.customerExtraAmount > 0
+          ? `\nDelivery ${preview.calculatedPrice.toFixed(2)} + your extra ${preview.customerExtraAmount.toFixed(2)}`
+          : '';
       Alert.alert(
         'Confirm',
-        `Total ${preview.totalPrice.toFixed(2)} ${preview.currencySymbol}. Create this local pickup order?`,
+        `${extraLine ? extraLine + '\n' : ''}Total ${preview.totalPrice.toFixed(2)} ${preview.currencySymbol}. Create this local pickup order?`,
         [
           { text: 'Cancel', style: 'cancel' },
           {
@@ -174,6 +194,7 @@ export default function LocalPickupOrderScreen() {
                   weight: w,
                   description: description.trim(),
                   cancelAfterMinutes,
+                  customerExtraAmount: ex,
                 });
                 startOrderTracking(
                   order.id,
@@ -291,6 +312,43 @@ export default function LocalPickupOrderScreen() {
               placeholder="e.g. fever medicine from pharmacy"
               placeholderTextColor={colors.textTertiary}
             />
+            <Text style={[s.lab, { marginTop: 12 }]}>Optional extra for driver time / errand ({MAX_CUSTOMER_EXTRA} max)</Text>
+            <TextInput
+              style={[s.inp, { color: colors.text }]}
+              value={customerExtraAmount}
+              onChangeText={setCustomerExtraAmount}
+              keyboardType="decimal-pad"
+              placeholder="0"
+              placeholderTextColor={colors.textTertiary}
+            />
+          </View>
+
+          <View style={[s.card, { backgroundColor: colors.card }]}>
+            <Text style={[s.cardTitle, { color: colors.text }]}>Auto-Cancel Timer</Text>
+            <Text style={s.lab}>Cancel if no driver responds (minutes)</Text>
+            <View style={s.timerRow}>
+              <TouchableOpacity style={s.timerBtn} onPress={() => setCancelAfterMinutes((prev) => Math.max(15, prev - 1))}>
+                <Ionicons name="remove" size={20} color="#374151" />
+              </TouchableOpacity>
+              <TextInput
+                style={[s.timerInput, { color: colors.text }]}
+                value={String(cancelAfterMinutes)}
+                onChangeText={(text) => {
+                  const num = parseInt(text, 10);
+                  setCancelAfterMinutes(Number.isNaN(num) ? 0 : num);
+                }}
+                keyboardType="numeric"
+                textAlign="center"
+              />
+              <TouchableOpacity style={s.timerBtn} onPress={() => setCancelAfterMinutes((prev) => Math.min(1440, prev + 1))}>
+                <Ionicons name="add" size={20} color="#374151" />
+              </TouchableOpacity>
+            </View>
+            {(cancelAfterMinutes < 15 || cancelAfterMinutes > 1440) && (
+              <Text style={{ color: '#dc2626', marginTop: 8, fontSize: 12 }}>
+                Must be between 15 and 1440 minutes (24h)
+              </Text>
+            )}
           </View>
 
           <TouchableOpacity style={[s.cta, loading && { opacity: 0.6 }]} onPress={submit} disabled={loading || submitting}>
@@ -386,6 +444,25 @@ const s = StyleSheet.create({
   pay: { flex: 1, padding: 12, borderRadius: 10, borderWidth: 1, borderColor: '#e5e7eb', alignItems: 'center' },
   payOn: { backgroundColor: '#2563eb', borderColor: '#2563eb' },
   lab: { fontSize: 13, color: '#6b7280', marginBottom: 4 },
+  timerRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  timerBtn: {
+    width: 42,
+    height: 42,
+    borderRadius: 10,
+    backgroundColor: '#f3f4f6',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  timerInput: {
+    flex: 1,
+    height: 42,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: 8,
+    fontSize: 16,
+    fontWeight: '700',
+    backgroundColor: '#f9fafb',
+  },
   inp: { borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 8, padding: 10, fontSize: 16 },
   cta: { backgroundColor: '#16a34a', padding: 16, borderRadius: 12, alignItems: 'center' },
   ctaText: { color: '#fff', fontWeight: '700', fontSize: 16 },

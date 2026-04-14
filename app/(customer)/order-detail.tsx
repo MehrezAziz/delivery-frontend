@@ -516,6 +516,9 @@ export default function OrderDetailScreen() {
           )}
           {order.extraWeightFee > 0 && <PriceRow label="Extra Weight Fee" value={order.extraWeightFee} />}
           {order.nightFee > 0 && <PriceRow label="Night Fee 🌙" value={order.nightFee} />}
+          {(order.customerExtraAmount ?? 0) > 0 && (
+            <PriceRow label="Your extra (driver time / errand)" value={order.customerExtraAmount ?? 0} />
+          )}
           <View style={[s.divider, { backgroundColor: colors.border }]} />
           <View style={s.priceRow}>
             <Text style={[s.totalLabel, { color: colors.text }]}>Total</Text>
