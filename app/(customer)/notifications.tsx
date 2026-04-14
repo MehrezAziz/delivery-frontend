@@ -73,7 +73,7 @@ export default function CustomerNotifications() {
         existing.unseenCount = (existing.unseenCount || 1) + 1;
       }
     }
-    return grouped;
+    return grouped.sort((a, b) => new Date(b.sentAt).getTime() - new Date(a.sentAt).getTime());
   }, [notifications]);
 
   const loadNotifications = useCallback(async (pageNum = 1, append = false) => {
@@ -152,9 +152,9 @@ export default function CustomerNotifications() {
           <Text style={[s.notifBody, { color: colors.textSecondary }]} numberOfLines={2}>{item.body}</Text>
           <Text style={[s.notifTime, { color: colors.textTertiary }]}>{formatTime(item.sentAt)}</Text>
         </View>
-        {isUnread && item.unseenCount && item.unseenCount > 1 ? (
+        {isUnread && GROUP_UNSEEN_TYPES.has(item.type) ? (
           <View style={[s.countBadge, { backgroundColor: colors.primary }]}>
-            <Text style={s.countBadgeText}>{item.unseenCount}</Text>
+            <Text style={s.countBadgeText}>{item.unseenCount || 1}</Text>
           </View>
         ) : isUnread ? (
           <View style={[s.unreadDot, { backgroundColor: colors.primary }]} />
