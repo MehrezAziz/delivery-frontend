@@ -26,6 +26,8 @@ interface SavedAddress {
 }
 const RECENT_LOCAL_ADDR_KEY = 'recent_local_pickup_addresses';
 const MAX_CUSTOMER_EXTRA = 10000;
+const LOCAL_PICKUP_MIN_CANCEL_MINUTES = 5;
+const LOCAL_PICKUP_MAX_CANCEL_MINUTES = 240;
 
 export default function LocalPickupOrderScreen() {
   const router = useRouter();
@@ -46,7 +48,7 @@ export default function LocalPickupOrderScreen() {
   const [savedSearch, setSavedSearch] = useState('');
   const [recentAddressIds, setRecentAddressIds] = useState<string[]>([]);
   const [walletBalance, setWalletBalance] = useState(0);
-  const [cancelAfterMinutes, setCancelAfterMinutes] = useState(15);
+  const [cancelAfterMinutes, setCancelAfterMinutes] = useState(LOCAL_PICKUP_MIN_CANCEL_MINUTES);
   const [customerExtraAmount, setCustomerExtraAmount] = useState('0');
 
   const fetchWallet = useCallback(async () => {
@@ -159,8 +161,8 @@ export default function LocalPickupOrderScreen() {
       Alert.alert('Amount', `Optional extra cannot exceed ${MAX_CUSTOMER_EXTRA}.`);
       return;
     }
-    if (cancelAfterMinutes < 15 || cancelAfterMinutes > 1440) {
-      Alert.alert('Invalid Timer', 'Auto-cancel time must be between 15 minutes and 24 hours.');
+    if (cancelAfterMinutes < LOCAL_PICKUP_MIN_CANCEL_MINUTES || cancelAfterMinutes > LOCAL_PICKUP_MAX_CANCEL_MINUTES) {
+      Alert.alert('Invalid Timer', `Auto-cancel time must be between ${LOCAL_PICKUP_MIN_CANCEL_MINUTES} minutes and 4 hours.`);
       return;
     }
     setLoading(true);
@@ -214,7 +216,7 @@ export default function LocalPickupOrderScreen() {
                 setWeight('1');
                 setDescription('');
                 setCustomerExtraAmount('0');
-                setCancelAfterMinutes(15);
+                setCancelAfterMinutes(LOCAL_PICKUP_MIN_CANCEL_MINUTES);
                 router.replace(`/(customer)/order-detail?orderId=${order.id}`);
               } catch (e: any) {
                 Alert.alert('Error', e.message || 'Failed');
@@ -333,7 +335,7 @@ export default function LocalPickupOrderScreen() {
             <Text style={[s.cardTitle, { color: colors.text }]}>Auto-Cancel Timer</Text>
             <Text style={s.lab}>Cancel if no driver responds (minutes)</Text>
             <View style={s.timerRow}>
-              <TouchableOpacity style={s.timerBtn} onPress={() => setCancelAfterMinutes((prev) => Math.max(15, prev - 1))}>
+              <TouchableOpacity style={s.timerBtn} onPress={() => setCancelAfterMinutes((prev) => Math.max(LOCAL_PICKUP_MIN_CANCEL_MINUTES, prev - 1))}>
                 <Ionicons name="remove" size={20} color="#374151" />
               </TouchableOpacity>
               <TextInput
@@ -346,13 +348,13 @@ export default function LocalPickupOrderScreen() {
                 keyboardType="numeric"
                 textAlign="center"
               />
-              <TouchableOpacity style={s.timerBtn} onPress={() => setCancelAfterMinutes((prev) => Math.min(1440, prev + 1))}>
+              <TouchableOpacity style={s.timerBtn} onPress={() => setCancelAfterMinutes((prev) => Math.min(LOCAL_PICKUP_MAX_CANCEL_MINUTES, prev + 1))}>
                 <Ionicons name="add" size={20} color="#374151" />
               </TouchableOpacity>
             </View>
-            {(cancelAfterMinutes < 15 || cancelAfterMinutes > 1440) && (
+            {(cancelAfterMinutes < LOCAL_PICKUP_MIN_CANCEL_MINUTES || cancelAfterMinutes > LOCAL_PICKUP_MAX_CANCEL_MINUTES) && (
               <Text style={{ color: '#dc2626', marginTop: 8, fontSize: 12 }}>
-                Must be between 15 and 1440 minutes (24h)
+                Must be between {LOCAL_PICKUP_MIN_CANCEL_MINUTES} and {LOCAL_PICKUP_MAX_CANCEL_MINUTES} minutes (4h)
               </Text>
             )}
           </View>
