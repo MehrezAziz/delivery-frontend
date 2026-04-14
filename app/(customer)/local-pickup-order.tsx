@@ -209,6 +209,12 @@ export default function LocalPickupOrderScreen() {
                     ongoing: 'true',
                   },
                 );
+                setSource(null);
+                setPaymentType('COD');
+                setWeight('1');
+                setDescription('');
+                setCustomerExtraAmount('0');
+                setCancelAfterMinutes(15);
                 router.replace(`/(customer)/order-detail?orderId=${order.id}`);
               } catch (e: any) {
                 Alert.alert('Error', e.message || 'Failed');

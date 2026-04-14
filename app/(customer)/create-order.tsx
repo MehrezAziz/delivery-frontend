@@ -685,7 +685,7 @@ export default function CreateOrderScreen() {
                   {savedAddresses.length > 0 && (
                     <TouchableOpacity style={s.inlineActionBtn} onPress={() => openSavedPicker('pickup')} activeOpacity={0.7}>
                       <Ionicons name="list-outline" size={16} color="#166534" />
-                      <Text style={s.inlineActionTxt}>Choose from list</Text>
+                      <Text style={s.inlineActionTxt}>List</Text>
                     </TouchableOpacity>
                   )}
                   <TouchableOpacity style={s.inlineActionBtn} onPress={() => useMyLocation('pickup')} disabled={resolvingPickup} activeOpacity={0.7}>
@@ -721,7 +721,7 @@ export default function CreateOrderScreen() {
                   {savedAddresses.length > 0 && (
                     <TouchableOpacity style={s.inlineActionBtn} onPress={() => openSavedPicker('dropoff')} activeOpacity={0.7}>
                       <Ionicons name="list-outline" size={16} color="#b91c1c" />
-                      <Text style={s.inlineActionTxt}>Choose from list</Text>
+                      <Text style={s.inlineActionTxt}>List</Text>
                     </TouchableOpacity>
                   )}
                   <TouchableOpacity style={s.inlineActionBtn} onPress={() => useMyLocation('dropoff')} disabled={resolvingDropoff} activeOpacity={0.7}>

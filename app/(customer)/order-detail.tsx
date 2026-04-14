@@ -255,7 +255,8 @@ export default function OrderDetailScreen() {
   const createdDate = new Date(order.createdAt);
   const dateStr = createdDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   const timeStr = createdDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
-  const autoCancelAt = createdDate.getTime() + ((order.cancelAfterMinutes || 15) * 60_000);
+  const currentCancelMinutes = order.cancelAfterMinutes || 15;
+  const autoCancelAt = createdDate.getTime() + (currentCancelMinutes * 60_000);
   const cancelRemainingSec = Math.max(0, Math.floor((autoCancelAt - nowTs) / 1000));
   const cancelRemainingText = `${Math.floor(cancelRemainingSec / 60)}:${String(cancelRemainingSec % 60).padStart(2, '0')}`;
   const urgentRemainingSec = order.urgentNotify?.nextButtonEnabledAt
@@ -383,27 +384,38 @@ export default function OrderDetailScreen() {
             </Text>
             <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
               {[15, 30, 60, 120, 360, 720, 1440].map((m) => (
-                <TouchableOpacity
-                  key={m}
-                  style={{
-                    paddingHorizontal: 10,
-                    paddingVertical: 7,
-                    borderRadius: 999,
-                    backgroundColor: (order.cancelAfterMinutes || 15) === m ? '#0ea5e9' : '#f3f4f6',
-                  }}
-                  onPress={async () => {
-                    try {
-                      await orderService.updateCancelAfter(order.id, m);
-                      await loadOrder();
-                    } catch (e: any) {
-                      Alert.alert('Error', e.message || 'Unable to update timer');
-                    }
-                  }}
-                >
-                  <Text style={{ color: (order.cancelAfterMinutes || 15) === m ? '#fff' : '#374151', fontWeight: '700', fontSize: 12 }}>
-                    {m >= 60 ? `${Math.round(m / 60)}h` : `${m}m`}
-                  </Text>
-                </TouchableOpacity>
+                (() => {
+                  const deltaMinutes = m - currentCancelMinutes;
+                  const nextRemainingSec = cancelRemainingSec + (deltaMinutes * 60);
+                  const disabledByNegativeTimer = order.status === 'SEARCHING_DRIVER' && nextRemainingSec < 0;
+                  const isSelected = currentCancelMinutes === m;
+                  return (
+                    <TouchableOpacity
+                      key={m}
+                      style={{
+                        paddingHorizontal: 10,
+                        paddingVertical: 7,
+                        borderRadius: 999,
+                        backgroundColor: isSelected ? '#0ea5e9' : '#f3f4f6',
+                        opacity: disabledByNegativeTimer ? 0.45 : 1,
+                      }}
+                      disabled={disabledByNegativeTimer}
+                      onPress={async () => {
+                        if (disabledByNegativeTimer) return;
+                        try {
+                          await orderService.updateCancelAfter(order.id, m);
+                          await loadOrder();
+                        } catch (e: any) {
+                          Alert.alert('Error', e.message || 'Unable to update timer');
+                        }
+                      }}
+                    >
+                      <Text style={{ color: isSelected ? '#fff' : '#374151', fontWeight: '700', fontSize: 12 }}>
+                        {m >= 60 ? `${Math.round(m / 60)}h` : `${m}m`}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })()
               ))}
             </View>
           </View>
