@@ -3,6 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 // API Configuration
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api';
 const TOKEN_STORAGE_KEY = 'accessToken';
+let globalApiErrorHandler: ((error: ApiError) => void) | null = null;
 
 // Custom error class for API errors
 export class ApiError extends Error {
@@ -16,6 +17,10 @@ export class ApiError extends Error {
     this.name = 'ApiError';
   }
 }
+
+export const setGlobalApiErrorHandler = (handler: ((error: ApiError) => void) | null) => {
+  globalApiErrorHandler = handler;
+};
 
 // Type for API request options
 interface RequestOptions extends RequestInit {
@@ -122,19 +127,23 @@ export const apiClient = async <T = any>(
 
     // Handle network errors
     if (error instanceof TypeError && error.message === 'Network request failed') {
-      throw new ApiError(
+      const apiError = new ApiError(
         'Network error. Please check your internet connection.',
         0,
         'NETWORK_ERROR'
       );
+      globalApiErrorHandler?.(apiError);
+      throw apiError;
     }
 
     // Handle other errors
-    throw new ApiError(
+    const apiError = new ApiError(
       error instanceof Error ? error.message : 'An unexpected error occurred',
       500,
       'UNKNOWN_ERROR'
     );
+    globalApiErrorHandler?.(apiError);
+    throw apiError;
   }
 };
 

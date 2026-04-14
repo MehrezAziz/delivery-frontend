@@ -1,10 +1,13 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { AppState, type AppStateStatus } from 'react-native';
 import { Stack } from 'expo-router';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ThemeProvider, useTheme } from '../contexts/ThemeContext';
+import GlobalErrorBoundary from '../components/GlobalErrorBoundary';
+import FriendlyErrorModal from '../components/FriendlyErrorModal';
+import { ApiError, setGlobalApiErrorHandler } from '../services/api/client';
 import {
   registerForPushNotifications,
   setupNotificationListeners,
@@ -24,8 +27,61 @@ registerOrderForegroundService();
 function RootContent() {
   const { isDark } = useTheme();
   const cleanupRef = useRef<(() => void) | null>(null);
+  const lastErrorShownAtRef = useRef(0);
+  const [friendlyError, setFriendlyError] = useState<{
+    visible: boolean;
+    title: string;
+    message: string;
+  }>({
+    visible: false,
+    title: '',
+    message: '',
+  });
 
   useEffect(() => {
+    const showFriendlyError = (title: string, message: string) => {
+      const now = Date.now();
+      if (now - lastErrorShownAtRef.current < 2500) return;
+      lastErrorShownAtRef.current = now;
+      setFriendlyError({ visible: true, title, message });
+    };
+
+    const onApiError = (error: ApiError) => {
+      if (error.errorCode === 'NETWORK_ERROR' || error.statusCode === 0) {
+        showFriendlyError(
+          'Connection issue 🌐',
+          'We could not reach the server right now. Please check your internet and try again in a moment.',
+        );
+      } else if (error.errorCode === 'UNKNOWN_ERROR' || error.statusCode >= 500) {
+        showFriendlyError(
+          'Server busy 🛠️',
+          'Our service is temporarily unavailable. Please try again shortly.',
+        );
+      }
+    };
+    setGlobalApiErrorHandler(onApiError);
+
+    const prevJsHandler = (global as any).ErrorUtils?.getGlobalHandler?.();
+    const jsHandler = (error: Error, isFatal?: boolean) => {
+      const title = isFatal ? 'Unexpected app error 😵‍💫' : 'Something went wrong ⚠️';
+      showFriendlyError(
+        title,
+        'An unexpected error happened. Please retry. If the issue continues, restart the app.',
+      );
+      console.error('Global JS Error:', error);
+    };
+    (global as any).ErrorUtils?.setGlobalHandler?.(jsHandler);
+
+    const previousUnhandledRejection = (globalThis as any).onunhandledrejection;
+    (globalThis as any).onunhandledrejection = (event: any) => {
+      showFriendlyError(
+        'Request failed ⚠️',
+        'A background request failed unexpectedly. Please try your action again.',
+      );
+      console.error('Unhandled promise rejection:', event?.reason || event);
+      if (event?.preventDefault) event.preventDefault();
+    };
+
     // Create notification channels
     createNotificationChannels();
 
@@ -56,14 +112,27 @@ function RootContent() {
     return () => {
       appStateSub.remove();
       cleanupRef.current?.();
+      setGlobalApiErrorHandler(null);
+      if ((global as any).ErrorUtils?.setGlobalHandler && prevJsHandler) {
+        (global as any).ErrorUtils.setGlobalHandler(prevJsHandler);
+      }
+      (globalThis as any).onunhandledrejection = previousUnhandledRejection;
     };
   }, []);
 
   return (
-    <>
-      <StatusBar style={isDark ? 'light' : 'dark'} />
-      <Stack screenOptions={{ headerShown: false }} />
-    </>
+    <GlobalErrorBoundary>
+      <>
+        <StatusBar style={isDark ? 'light' : 'dark'} />
+        <Stack screenOptions={{ headerShown: false }} />
+        <FriendlyErrorModal
+          visible={friendlyError.visible}
+          title={friendlyError.title}
+          message={friendlyError.message}
+          onClose={() => setFriendlyError((prev) => ({ ...prev, visible: false }))}
+        />
+      </>
+    </GlobalErrorBoundary>
   );
 }
 
