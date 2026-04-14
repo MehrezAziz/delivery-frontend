@@ -53,6 +53,9 @@ export interface Order {
   isNightDelivery: boolean;
   localPickupOnly?: boolean;
   cancelAfterMinutes?: number;
+  cancelRemainingSeconds?: number;
+  cancelTimerRunning?: boolean;
+  cancelTimerLastResumedAt?: string | null;
   deliveryZoneType: string | null;
   createdAt: string;
   pickupAddress: OrderAddress | null;

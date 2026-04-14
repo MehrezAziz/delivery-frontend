@@ -256,8 +256,12 @@ export default function OrderDetailScreen() {
   const dateStr = createdDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   const timeStr = createdDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
   const currentCancelMinutes = order.cancelAfterMinutes || 15;
-  const autoCancelAt = createdDate.getTime() + (currentCancelMinutes * 60_000);
-  const cancelRemainingSec = Math.max(0, Math.floor((autoCancelAt - nowTs) / 1000));
+  const cancelBaseSec = Math.max(0, Math.floor(order.cancelRemainingSeconds ?? currentCancelMinutes * 60));
+  const cancelElapsedSinceResumeSec =
+    order.cancelTimerRunning && order.cancelTimerLastResumedAt
+      ? Math.max(0, Math.floor((nowTs - new Date(order.cancelTimerLastResumedAt).getTime()) / 1000))
+      : 0;
+  const cancelRemainingSec = Math.max(0, cancelBaseSec - cancelElapsedSinceResumeSec);
   const cancelRemainingText = `${Math.floor(cancelRemainingSec / 60)}:${String(cancelRemainingSec % 60).padStart(2, '0')}`;
   const urgentRemainingSec = order.urgentNotify?.nextButtonEnabledAt
     ? Math.max(0, Math.floor((new Date(order.urgentNotify.nextButtonEnabledAt).getTime() - nowTs) / 1000))
@@ -376,7 +380,7 @@ export default function OrderDetailScreen() {
           </View>
         )}
 
-        {(order.status === 'SEARCHING_DRIVER' || order.status === 'PENDING_CUSTOMER_APPROVAL' || order.status === 'DRIVER_ASSIGNED') && (
+        {order.status === 'SEARCHING_DRIVER' && (
           <View style={[s.card, { backgroundColor: colors.card }]}>
             <Text style={[s.cardTitle, { color: colors.text }]}>Auto-cancel timer</Text>
             <Text style={{ color: colors.textSecondary, marginBottom: 10 }}>
