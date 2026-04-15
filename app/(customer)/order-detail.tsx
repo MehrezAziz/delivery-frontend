@@ -248,7 +248,8 @@ export default function OrderDetailScreen() {
   const meta = STATUS_META[order.status] || STATUS_META.DRAFT;
   const canCancel = ['SEARCHING_DRIVER', 'DRAFT'].includes(order.status);
   const canChangePayment = ['SEARCHING_DRIVER', 'PENDING_CUSTOMER_APPROVAL', 'DRIVER_ASSIGNED', 'DRIVER_ARRIVED'].includes(order.status);
-  const hasChat = !!order.chatRoom && order.chatRoom.status === 'ACTIVE';
+  const chatFriendlyClosedStatuses = ['DELIVERED', 'REFUNDED', 'FAILED', 'DISPUTED', 'CANCELLED'];
+  const canOpenChat = !!order.chatRoom || chatFriendlyClosedStatuses.includes(order.status);
   const canTrack = ['PICKED_UP', 'DELIVERING'].includes(order.status);
   const isActive = STATUS_FLOW.includes(order.status) && order.status !== 'DELIVERED';
   const currentStepIndex = STATUS_FLOW.indexOf(order.status);
@@ -426,9 +427,9 @@ export default function OrderDetailScreen() {
         )}
 
         {/* ── Quick Actions (chat + track) ── */}
-        {(hasChat || canTrack) && (
+        {(canOpenChat || canTrack) && (
           <View style={s.quickActionsRow}>
-            {hasChat && (
+            {canOpenChat && (
               <TouchableOpacity style={[s.quickAction, { backgroundColor: '#3b82f6' }]}
                 onPress={() => router.push(`/(customer)/order-chat?orderId=${order.id}`)} activeOpacity={0.8}>
                 <Ionicons name="chatbubbles" size={20} color="#fff" />
@@ -576,7 +577,7 @@ export default function OrderDetailScreen() {
                   </TouchableOpacity>
                 )}
               </View>
-              {hasChat && (
+              {canOpenChat && (
                 <TouchableOpacity style={s.driverChatBtn}
                   onPress={() => router.push(`/(customer)/order-chat?orderId=${order.id}`)}>
                   <Ionicons name="chatbubble-ellipses" size={18} color="#3b82f6" />

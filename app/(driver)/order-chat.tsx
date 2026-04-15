@@ -41,7 +41,8 @@ export default function DriverOrderChatScreen() {
   const loadChat = useCallback(async () => {
     try {
       const room = await orderService.driverGetChatRoom(orderId);
-      if (room) { setChatRoom(room); setMessages(room.messages || []); }
+      setChatRoom(room || null);
+      setMessages(room?.messages || []);
     } catch (e) { console.error(e); }
     finally { setLoading(false); }
   }, [orderId]);
@@ -132,7 +133,7 @@ export default function DriverOrderChatScreen() {
       {isClosed ? (
         <View style={[s.closedBar, { backgroundColor: colors.surfaceVariant }]}>
           <Ionicons name="lock-closed-outline" size={16} color={colors.textTertiary} />
-          <Text style={[s.closedText, { color: colors.textTertiary }]}>Chat is closed</Text>
+          <Text style={[s.closedText, { color: colors.textTertiary }]}>chatroom closed</Text>
         </View>
       ) : (
         <View style={[s.inputBar, { backgroundColor: colors.card, borderTopColor: colors.border }]}>

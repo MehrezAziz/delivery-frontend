@@ -143,6 +143,8 @@ export default function DriverOrderDetailScreen() {
   const da = order.driverAssignment;
   const showProofSection = ['DRIVER_ARRIVED', 'PICKED_UP', 'DELIVERING', 'DELIVERED'].includes(order.status);
   const canRevert = ['DRIVER_ARRIVED', 'PICKED_UP', 'DELIVERING'].includes(order.status);
+  const chatFriendlyClosedStatuses = ['DELIVERED', 'REFUNDED', 'FAILED', 'DISPUTED', 'CANCELLED'];
+  const canOpenChat = !!order.chatRoom || chatFriendlyClosedStatuses.includes(order.status);
   const nextActionLabel: Record<string, string> = {
     DRIVER_ASSIGNED: "I've arrived",
     DRIVER_ARRIVED: 'Package picked up',
@@ -296,6 +298,17 @@ export default function DriverOrderDetailScreen() {
           {da?.pickedUpAt && <TimelineItem label="Package Picked Up" time={da.pickedUpAt} color="#ea580c" />}
           {da?.deliveredAt && <TimelineItem label="Delivered" time={da.deliveredAt} color="#16a34a" />}
         </View>
+
+        {canOpenChat && (
+          <TouchableOpacity
+            style={[s.card, { backgroundColor: '#16a34a', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 }]}
+            onPress={() => router.push(`/(driver)/order-chat?orderId=${order.id}`)}
+            activeOpacity={0.85}
+          >
+            <Ionicons name="chatbubbles" size={20} color="#fff" />
+            <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700' }}>Chat</Text>
+          </TouchableOpacity>
+        )}
 
         {(canRevert || canGoNext || order.status === 'DELIVERING') && (
           <View style={[s.card, { backgroundColor: colors.card }]}>
