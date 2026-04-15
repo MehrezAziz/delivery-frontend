@@ -813,6 +813,10 @@ export async function notificationDataToRoute(
         'PAYMENT_CREDITED_WALLET',
         'NEW_MESSAGE_FROM_CUSTOMER',
       ];
+      // Foreground order-tracking (Notifee) — no `type`; must not fall through to generic driver routing.
+      if (data.trackingAudience === 'DRIVER') {
+        return getDriverOrderRoute(relatedEntityId);
+      }
       if (driverTypes.includes(type || '')) {
         if (type === 'NEW_ORDER_AVAILABLE') {
           return `/(driver)/available-orders?urgentOrderId=${relatedEntityId}`;
@@ -830,7 +834,8 @@ export async function notificationDataToRoute(
       }
       if (!role) role = (await AsyncStorage.getItem('userRole')) || 'CUSTOMER';
       if (role === 'DRIVER') {
-        return `/(driver)/available-orders?urgentOrderId=${relatedEntityId}`;
+        // Specific order id: open that order (tracking / status pushes often omit `type`).
+        return `/(driver)/order-detail?orderId=${relatedEntityId}`;
       }
       return `/(customer)/order-detail?orderId=${relatedEntityId}`;
     }
@@ -888,9 +893,7 @@ async function routeFromNotifeeInitialForNavigation(initial: NotifeeInitial): Pr
 
   if (actionId === 'see_driver' && orderId) return getOrderRoute(orderId, true);
   if (actionId === 'view_order' && orderId) {
-    return role === 'DRIVER'
-      ? `/(driver)/available-orders?urgentOrderId=${orderId}`
-      : getOrderRoute(orderId);
+    return role === 'DRIVER' ? getDriverOrderRoute(orderId) : getOrderRoute(orderId);
   }
   if (actionId === 'view_order_driver' && orderId) return getDriverOrderRoute(orderId);
   if (actionId === 'driver_open_deliver' && orderId) return getDriverOrderRoute(orderId, 'proof');
@@ -1074,9 +1077,9 @@ export function setupNotificationListeners() {
             role = undefined;
           }
           if (!role) role = (await AsyncStorage.getItem('userRole')) || 'CUSTOMER';
-          router.push((role === 'DRIVER'
-            ? `/(driver)/available-orders?urgentOrderId=${orderId}`
-            : getOrderRoute(orderId)) as any);
+          router.push(
+            (role === 'DRIVER' ? getDriverOrderRoute(orderId) : getOrderRoute(orderId)) as any,
+          );
         })();
         return;
       }
@@ -1162,9 +1165,7 @@ export function setupBackgroundHandler() {
         }
         if (!role) role = (await AsyncStorage.getItem('userRole')) || 'CUSTOMER';
         await savePendingNotificationRoute(
-          role === 'DRIVER'
-            ? `/(driver)/available-orders?urgentOrderId=${orderId}`
-            : getOrderRoute(orderId),
+          role === 'DRIVER' ? getDriverOrderRoute(orderId) : getOrderRoute(orderId),
         );
         return;
       }

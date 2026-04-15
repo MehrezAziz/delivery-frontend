@@ -15,6 +15,7 @@ import { clearPushToken } from '../../services/api/notification.service';
 import { useTheme } from '../../contexts/ThemeContext';
 import { ThemeToggle } from '../../components/ThemeToggle';
 import { restoreOrderTrackingForDriver, stopOrderTrackingSilently } from '../../services/notifications';
+import { syncDriverLocationTracking } from '../../services/driverLocationTracking';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
 
@@ -50,7 +51,9 @@ export default function DriverHome() {
         orderService.getDriverMyOrders().catch(() => [] as Order[]),
       ]);
       setDriver(profileRes.data);
-      setActiveOrders(orders.filter(o => ACTIVE_STATUSES.includes(o.status)));
+      const list = Array.isArray(orders) ? orders : [];
+      syncDriverLocationTracking(list);
+      setActiveOrders(list.filter((o) => ACTIVE_STATUSES.includes(o.status)));
 
       // Fetch order availability indicator for driver
       try {

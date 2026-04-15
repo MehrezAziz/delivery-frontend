@@ -1,6 +1,21 @@
+import { useEffect } from 'react';
 import { Stack } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { ensureDriverPushNotificationSetup } from '../../services/driverPushSetup';
 
 export default function DriverLayout() {
+  useEffect(() => {
+    void (async () => {
+      const [token, role] = await Promise.all([
+        AsyncStorage.getItem('accessToken'),
+        AsyncStorage.getItem('userRole'),
+      ]);
+      if (token && role === 'DRIVER') {
+        await ensureDriverPushNotificationSetup();
+      }
+    })();
+  }, []);
+
   return (
     <Stack screenOptions={{ headerShown: false }}>
       <Stack.Screen name="home" />

@@ -7,6 +7,8 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { orderService, AvailableOrders, FilteredOrders, Order } from '../../services/api/order.service';
+import { startDriverLocationTracking } from '../../services/driverLocationTracking';
+import { ensureDriverPushNotificationSetup } from '../../services/driverPushSetup';
 import { api } from '../../services/api/client';
 import { useTheme } from '../../contexts/ThemeContext';
 
@@ -308,7 +310,19 @@ export default function AvailableOrdersScreen() {
       { text: 'Cancel', style: 'cancel' },
       { text: 'Accept', onPress: async () => {
         setAccepting(orderId);
-        try { await orderService.acceptOrder(orderId); Alert.alert('Success', 'Order accepted!'); router.replace('/(driver)/my-orders'); }
+        try {
+          await orderService.acceptOrder(orderId);
+          const locOk = await startDriverLocationTracking(orderId);
+          await ensureDriverPushNotificationSetup();
+          if (!locOk) {
+            Alert.alert(
+              'Location permission',
+              'Please allow location access so the customer can see your position on the map during delivery. You can enable it in Settings.',
+            );
+          }
+          Alert.alert('Success', 'Order accepted!');
+          router.replace('/(driver)/my-orders');
+        }
         catch (e: any) {
           const msg = e.message || '';
           if (msg.toLowerCase().includes('phone number')) {

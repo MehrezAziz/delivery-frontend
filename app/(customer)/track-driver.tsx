@@ -8,6 +8,23 @@ import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 import { orderService, Order } from '../../services/api/order.service';
 import { useTheme } from '../../contexts/ThemeContext';
 
+function normalizeDriverLocationPayload(loc: unknown): { latitude: number; longitude: number } | null {
+  if (loc == null || typeof loc !== 'object') return null;
+  const o = loc as Record<string, unknown>;
+  const nested = o.driverLocation;
+  if (nested && typeof nested === 'object') {
+    const inner = normalizeDriverLocationPayload(nested);
+    if (inner) return inner;
+  }
+  const lat = o.latitude ?? o.lat;
+  const lng = o.longitude ?? o.lng ?? o.long;
+  if (lat == null || lng == null) return null;
+  const la = typeof lat === 'string' ? parseFloat(lat) : Number(lat);
+  const ln = typeof lng === 'string' ? parseFloat(lng) : Number(lng);
+  if (!Number.isFinite(la) || !Number.isFinite(ln)) return null;
+  return { latitude: la, longitude: ln };
+}
+
 export default function TrackDriverScreen() {
   const router = useRouter();
   const { orderId } = useLocalSearchParams<{ orderId: string }>();
@@ -39,9 +56,8 @@ export default function TrackDriverScreen() {
         orderService.getDriverLocation(orderId).catch(() => null),
       ]);
       setOrder(orderData);
-      if (loc && (loc as any).latitude) {
-        setDriverLoc({ latitude: (loc as any).latitude, longitude: (loc as any).longitude });
-      }
+      const coords = normalizeDriverLocationPayload(loc);
+      if (coords) setDriverLoc(coords);
     } catch (e: any) {
       Alert.alert('Error', e.message || 'Failed to load tracking data');
     } finally {
@@ -56,9 +72,8 @@ export default function TrackDriverScreen() {
     const interval = setInterval(async () => {
       try {
         const loc = await orderService.getDriverLocation(orderId);
-        if (loc && (loc as any).latitude) {
-          setDriverLoc({ latitude: (loc as any).latitude, longitude: (loc as any).longitude });
-        }
+        const coords = normalizeDriverLocationPayload(loc);
+        if (coords) setDriverLoc(coords);
       } catch {}
     }, 5000);
     return () => clearInterval(interval);
@@ -66,11 +81,11 @@ export default function TrackDriverScreen() {
 
   // Track whether we've centered on driver
   const [mapRegion, setMapRegion] = useState<any>(null);
-  const hasCentered = useRef(false);
+  const hasCenteredOnDriver = useRef(false);
   useEffect(() => {
-    if (hasCentered.current || !driverLoc) return;
-    hasCentered.current = true;
-    setMapRegion({ ...driverLoc, latitudeDelta: 0.008, longitudeDelta: 0.008 });
+    if (!driverLoc || hasCenteredOnDriver.current) return;
+    hasCenteredOnDriver.current = true;
+    setMapRegion({ ...driverLoc, latitudeDelta: 0.012, longitudeDelta: 0.012 });
   }, [driverLoc]);
 
   if (loading || !order) {
@@ -101,21 +116,36 @@ export default function TrackDriverScreen() {
         style={s.map}
         provider={PROVIDER_GOOGLE}
         region={mapRegion || { ...centerCoord, latitudeDelta: zoomDelta, longitudeDelta: zoomDelta }}
-        onRegionChangeComplete={(r) => { if (hasCentered.current) setMapRegion(r); }}
+        onRegionChangeComplete={(r) => {
+          if (hasCenteredOnDriver.current) setMapRegion(r);
+        }}
         showsUserLocation
       >
         {driverLoc && (
-          <Marker coordinate={driverLoc} title={driverName} description="Driver location">
+          <Marker
+            coordinate={driverLoc}
+            title={driverName}
+            description="Live driver position"
+            tracksViewChanges={false}
+          >
             <View style={s.driverMarker}>
-              <Ionicons name="car" size={20} color="#fff" />
+              <Ionicons name="car" size={22} color="#fff" />
             </View>
           </Marker>
         )}
         {pickupCoord && (
-          <Marker coordinate={pickupCoord} title="Pickup" pinColor="#22c55e" />
+          <Marker coordinate={pickupCoord} title="Pickup" tracksViewChanges={false}>
+            <View style={s.pickupMarker}>
+              <Ionicons name="flag" size={18} color="#fff" />
+            </View>
+          </Marker>
         )}
         {dropoffCoord && (
-          <Marker coordinate={dropoffCoord} title="Delivery" pinColor="#ef4444" />
+          <Marker coordinate={dropoffCoord} title="Delivery" description="Drop-off" tracksViewChanges={false}>
+            <View style={s.deliveryMarker}>
+              <Ionicons name="cube" size={20} color="#fff" />
+            </View>
+          </Marker>
         )}
       </MapView>
 
@@ -209,10 +239,22 @@ const s = StyleSheet.create({
   headerTitle: { fontSize: 18, fontWeight: '700', color: '#111827' },
 
   driverMarker: {
-    width: 40, height: 40, borderRadius: 20, backgroundColor: '#0284c7',
+    width: 44, height: 44, borderRadius: 22, backgroundColor: '#0284c7',
     alignItems: 'center', justifyContent: 'center',
     borderWidth: 3, borderColor: '#fff',
-    shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 5,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 6,
+  },
+  pickupMarker: {
+    width: 36, height: 36, borderRadius: 18, backgroundColor: '#22c55e',
+    alignItems: 'center', justifyContent: 'center',
+    borderWidth: 2, borderColor: '#fff',
+    elevation: 4,
+  },
+  deliveryMarker: {
+    width: 44, height: 44, borderRadius: 22, backgroundColor: '#ea580c',
+    alignItems: 'center', justifyContent: 'center',
+    borderWidth: 3, borderColor: '#fff',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.35, shadowRadius: 4, elevation: 6,
   },
 
   bottomCard: {
