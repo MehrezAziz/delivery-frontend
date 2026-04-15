@@ -24,15 +24,36 @@ export interface NotificationPage {
   meta: { page: number; limit: number; total: number; totalPages: number };
 }
 
+export interface NotificationPreviewGroup {
+  groupKey: string;
+  latest: Notification;
+  unreadCount: number;
+  itemCount: number;
+}
+
+export interface NotificationPreviewResponse {
+  data: NotificationPreviewGroup[];
+  meta: { limit: number; totalGroups: number };
+}
+
 export const notificationService = {
   registerToken: (token: string, platform: 'android' | 'ios') =>
     api.post('/notifications/register-token', { token, platform }),
 
-  getNotifications: (page = 1, limit = 20, status?: 'read' | 'unread' | 'all') => {
+  getNotifications: (
+    page = 1,
+    limit = 20,
+    status?: 'read' | 'unread' | 'all',
+    sortBy?: 'sentAt' | 'type',
+  ) => {
     const params = new URLSearchParams({ page: String(page), limit: String(limit) });
     if (status && status !== 'all') params.set('status', status);
+    if (sortBy && sortBy !== 'sentAt') params.set('sortBy', sortBy);
     return api.get<NotificationPage>(`/notifications?${params.toString()}`);
   },
+
+  getPreview: (limit = 8) =>
+    api.get<NotificationPreviewResponse>(`/notifications/preview?limit=${limit}`),
 
   getUnreadCount: () =>
     api.get<{ count: number }>('/notifications/unread-count'),

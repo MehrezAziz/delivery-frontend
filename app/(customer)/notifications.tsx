@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import {
   View, Text, FlatList, StyleSheet, TouchableOpacity,
   ActivityIndicator, RefreshControl,
@@ -9,6 +9,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { notificationService, Notification } from '../../services/api/notification.service';
 import { useTheme } from '../../contexts/ThemeContext';
+import { groupNotificationsByThread, sortGroups, type NotificationGroup } from '../../utils/notificationGrouping';
 
 const PRIORITY_COLORS: Record<string, string> = {
   LOW: '#6b7280',
@@ -38,50 +39,25 @@ const TYPE_ICONS: Record<string, string> = {
   NEW_MESSAGE_FROM_DRIVER: 'chatbubble-ellipses-outline',
 };
 
-const GROUP_UNSEEN_TYPES = new Set(['SUPPORT_TICKET_REPLY', 'NEW_MESSAGE_FROM_DRIVER']);
-
-type DisplayNotification = Notification & {
-  unseenCount?: number;
-};
-
 export default function CustomerNotifications() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { colors, isDark } = useTheme();
+  const { colors } = useTheme();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
+  const [sortBy, setSortBy] = useState<'sentAt' | 'type'>('sentAt');
 
-  const displayedNotifications = useMemo<DisplayNotification[]>(() => {
-    const grouped: DisplayNotification[] = [];
-    const groupedByConversation = new Map<string, DisplayNotification>();
-    for (const item of notifications) {
-      const canGroup = !item.readAt && GROUP_UNSEEN_TYPES.has(item.type);
-      if (!canGroup) {
-        grouped.push(item);
-        continue;
-      }
-      // Prefer backend-provided group key to keep chat-room grouping stable.
-      const conversationKey = item.groupKey
-        ? `${item.type}:${item.groupKey}`
-        : `${item.type}:${item.relatedEntityType || 'none'}:${item.relatedEntityId || item.id}`;
-      const existing = groupedByConversation.get(conversationKey);
-      if (!existing) {
-        const first: DisplayNotification = { ...item, unseenCount: 1 };
-        groupedByConversation.set(conversationKey, first);
-        grouped.push(first);
-      } else {
-        existing.unseenCount = (existing.unseenCount || 1) + 1;
-      }
-    }
-    return grouped.sort((a, b) => new Date(b.sentAt).getTime() - new Date(a.sentAt).getTime());
-  }, [notifications]);
+  const grouped = useMemo(() => {
+    const g = groupNotificationsByThread(notifications);
+    return sortGroups(g, sortBy);
+  }, [notifications, sortBy]);
 
   const loadNotifications = useCallback(async (pageNum = 1, append = false) => {
     try {
-      const result = await notificationService.getNotifications(pageNum, 20);
+      const result = await notificationService.getNotifications(pageNum, 25, 'all', sortBy);
       if (append) {
         setNotifications((prev) => [...prev, ...result.data]);
       } else {
@@ -95,17 +71,16 @@ export default function CustomerNotifications() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [sortBy]);
 
   useFocusEffect(
     useCallback(() => {
-      loadNotifications(1);
-      // Mark all as read when opening
-      notificationService.markAllAsRead().catch(() => {});
+      loadNotifications(1, false);
     }, [loadNotifications]),
   );
 
-  const handleNotificationPress = (item: Notification) => {
+  const handleGroupPress = (g: NotificationGroup) => {
+    const item = g.latest;
     if (!item.readAt) {
       notificationService.markAsRead(item.id).catch(() => {});
     }
@@ -122,9 +97,7 @@ export default function CustomerNotifications() {
 
   const formatTime = (dateStr: string) => {
     const date = new Date(dateStr);
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffMin = Math.floor(diffMs / 60000);
+    const diffMin = Math.floor((Date.now() - date.getTime()) / 60000);
     if (diffMin < 1) return 'Just now';
     if (diffMin < 60) return `${diffMin}m ago`;
     const diffHr = Math.floor(diffMin / 60);
@@ -134,39 +107,43 @@ export default function CustomerNotifications() {
     return date.toLocaleDateString();
   };
 
-  const renderItem = ({ item }: { item: DisplayNotification }) => {
+  const renderItem = ({ item: g }: { item: NotificationGroup }) => {
+    const item = g.latest;
     const iconName = TYPE_ICONS[item.type] || 'notifications-outline';
     const priorityColor = PRIORITY_COLORS[item.priority] || '#6b7280';
-    const isUnread = !item.readAt;
+    const unread = g.unreadCount > 0;
 
     return (
       <TouchableOpacity
-        style={[s.notifItem, { backgroundColor: colors.card, borderBottomColor: colors.border }, isUnread && s.unread]}
-        onPress={() => handleNotificationPress(item)}
+        style={[s.notifItem, { backgroundColor: colors.card, borderBottomColor: colors.border }, unread && s.unread]}
+        onPress={() => handleGroupPress(g)}
         activeOpacity={0.7}
       >
         <View style={[s.iconCircle, { backgroundColor: priorityColor + '18' }]}>
           <Ionicons name={iconName as any} size={22} color={priorityColor} />
         </View>
         <View style={s.notifContent}>
-          <Text style={[s.notifTitle, { color: colors.text }, isUnread && s.boldText]} numberOfLines={1}>
+          <Text style={[s.notifTitle, { color: colors.text }, unread && s.boldText]} numberOfLines={1}>
             {item.title}
           </Text>
           <Text style={[s.notifBody, { color: colors.textSecondary }]} numberOfLines={2}>{item.body}</Text>
-          <Text style={[s.notifTime, { color: colors.textTertiary }]}>{formatTime(item.sentAt)}</Text>
+          <Text style={[s.notifTime, { color: colors.textTertiary }]}>
+            {formatTime(item.sentAt)}
+            {g.itemCount > 1 ? ` · ${g.itemCount} in thread` : ''}
+          </Text>
         </View>
-        {isUnread && GROUP_UNSEEN_TYPES.has(item.type) ? (
+        {unread && g.unreadCount > 1 ? (
           <View style={[s.countBadge, { backgroundColor: colors.primary }]}>
-            <Text style={s.countBadgeText}>{item.unseenCount || 1}</Text>
+            <Text style={s.countBadgeText}>{g.unreadCount > 99 ? '99+' : g.unreadCount}</Text>
           </View>
-        ) : isUnread ? (
+        ) : unread ? (
           <View style={[s.unreadDot, { backgroundColor: colors.primary }]} />
         ) : null}
       </TouchableOpacity>
     );
   };
 
-  if (loading) {
+  if (loading && notifications.length === 0) {
     return (
       <View style={[s.center, { backgroundColor: colors.background }]}>
         <ActivityIndicator size="large" color={colors.primary} />
@@ -180,7 +157,10 @@ export default function CustomerNotifications() {
         <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace('/(customer)/home')} style={[s.backBtn, { backgroundColor: colors.surfaceVariant }]}>
           <Ionicons name="chevron-back" size={24} color={colors.text} />
         </TouchableOpacity>
-        <Text style={[s.headerTitle, { color: colors.text }]}>Notifications</Text>
+        <View style={{ flex: 1, marginHorizontal: 8 }}>
+          <Text style={[s.headerTitle, { color: colors.text }]}>All notifications</Text>
+          <Text style={[s.headerSub, { color: colors.textSecondary }]}>Grouped by chat, order, ticket…</Text>
+        </View>
         <TouchableOpacity
           onPress={() => {
             notificationService.markAllAsRead();
@@ -191,13 +171,29 @@ export default function CustomerNotifications() {
         </TouchableOpacity>
       </View>
 
+      <View style={[s.sortRow, { borderBottomColor: colors.border, backgroundColor: colors.card }]}>
+        <Text style={[s.sortLabel, { color: colors.textSecondary }]}>Sort</Text>
+        <TouchableOpacity
+          style={[s.sortChip, sortBy === 'sentAt' && { backgroundColor: colors.primary + '22' }]}
+          onPress={() => setSortBy('sentAt')}
+        >
+          <Text style={[s.sortChipText, { color: sortBy === 'sentAt' ? colors.primary : colors.text }]}>Time</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[s.sortChip, sortBy === 'type' && { backgroundColor: colors.primary + '22' }]}
+          onPress={() => setSortBy('type')}
+        >
+          <Text style={[s.sortChipText, { color: sortBy === 'type' ? colors.primary : colors.text }]}>Type</Text>
+        </TouchableOpacity>
+      </View>
+
       <FlatList
-        data={displayedNotifications}
-        keyExtractor={(item) => item.id}
+        data={grouped}
+        keyExtractor={(g) => g.groupKey}
         renderItem={renderItem}
-        contentContainerStyle={displayedNotifications.length === 0 ? s.emptyContainer : { paddingBottom: 40 }}
+        contentContainerStyle={grouped.length === 0 ? s.emptyContainer : { paddingBottom: 40 }}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); loadNotifications(1); }} />
+          <RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); loadNotifications(1, false); }} />
         }
         onEndReached={() => {
           if (hasMore && !loading) loadNotifications(page + 1, true);
@@ -218,20 +214,30 @@ const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f9fafb' },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   header: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 16, paddingTop: 16, paddingBottom: 16, backgroundColor: '#fff',
-    borderBottomWidth: 1, borderBottomColor: '#f3f4f6',
+    flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: 12, paddingTop: 16, paddingBottom: 12,
+    borderBottomWidth: 1,
   },
   backBtn: {
-    width: 40, height: 40, borderRadius: 20, backgroundColor: '#f3f4f6',
-    justifyContent: 'center', alignItems: 'center',
+    width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center',
   },
-  headerTitle: { fontSize: 18, fontWeight: '700', color: '#111' },
-  markAllText: { fontSize: 13, color: '#0284c7', fontWeight: '600' },
+  headerTitle: { fontSize: 17, fontWeight: '700' },
+  headerSub: { fontSize: 11, marginTop: 2 },
+  markAllText: { fontSize: 12, fontWeight: '600' },
+  sortRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+  },
+  sortLabel: { fontSize: 12, fontWeight: '600', marginRight: 4 },
+  sortChip: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 999, backgroundColor: '#f3f4f6' },
+  sortChipText: { fontSize: 13, fontWeight: '600' },
   notifItem: {
     flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16,
-    paddingVertical: 14, backgroundColor: '#fff', borderBottomWidth: 1,
-    borderBottomColor: '#f3f4f6',
+    paddingVertical: 14, borderBottomWidth: 1,
   },
   unread: { backgroundColor: '#eff6ff' },
   iconCircle: {
@@ -239,12 +245,12 @@ const s = StyleSheet.create({
     alignItems: 'center', marginRight: 12,
   },
   notifContent: { flex: 1 },
-  notifTitle: { fontSize: 15, color: '#111', marginBottom: 2 },
+  notifTitle: { fontSize: 15, marginBottom: 2 },
   boldText: { fontWeight: '700' },
-  notifBody: { fontSize: 13, color: '#6b7280', lineHeight: 18 },
-  notifTime: { fontSize: 11, color: '#9ca3af', marginTop: 4 },
+  notifBody: { fontSize: 13, lineHeight: 18 },
+  notifTime: { fontSize: 11, marginTop: 4 },
   unreadDot: {
-    width: 10, height: 10, borderRadius: 5, backgroundColor: '#0284c7', marginLeft: 8,
+    width: 10, height: 10, borderRadius: 5, marginLeft: 8,
   },
   countBadge: {
     minWidth: 22,
@@ -262,5 +268,5 @@ const s = StyleSheet.create({
   },
   emptyContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   emptyState: { alignItems: 'center', paddingTop: 100 },
-  emptyText: { fontSize: 16, color: '#9ca3af', marginTop: 12 },
+  emptyText: { fontSize: 16, marginTop: 12 },
 });

@@ -16,6 +16,7 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { ThemeToggle } from '../../components/ThemeToggle';
 import { restoreOrderTrackingForDriver, stopOrderTrackingSilently } from '../../services/notifications';
 import { syncDriverLocationTracking } from '../../services/driverLocationTracking';
+import { NotificationPreviewModal } from '../../components/NotificationPreviewModal';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
 
@@ -40,6 +41,7 @@ export default function DriverHome() {
   const [refreshing, setRefreshing] = useState(false);
   const [hasAvailableOrders, setHasAvailableOrders] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [notifPreviewOpen, setNotifPreviewOpen] = useState(false);
 
   const loadData = useCallback(async () => {
     try {
@@ -121,6 +123,12 @@ export default function DriverHome() {
 
   return (
     <View style={[s.container, { backgroundColor: colors.background }]}>
+      <NotificationPreviewModal
+        visible={notifPreviewOpen}
+        onClose={() => setNotifPreviewOpen(false)}
+        variant="driver"
+        onOpenFullInbox={() => router.push('/(driver)/notifications')}
+      />
       {/* Status bar background */}
       <View style={{ backgroundColor: colors.headerBg, height: insets.top }} />
       {/* Header */}
@@ -135,7 +143,7 @@ export default function DriverHome() {
           </View>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
             <ThemeToggle color="#fff" style={{ backgroundColor: 'rgba(255,255,255,0.2)' }} />
-            <TouchableOpacity onPress={() => router.push('/(driver)/notifications')} style={s.logoutBtn}>
+            <TouchableOpacity onPress={() => setNotifPreviewOpen(true)} style={s.logoutBtn}>
               <Ionicons name="notifications-outline" size={20} color="#fff" />
               {unreadCount > 0 && (
                 <View style={s.badge}>

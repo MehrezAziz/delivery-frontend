@@ -13,6 +13,7 @@ import { ThemeToggle } from '../../components/ThemeToggle';
 import { orderService, Order } from '../../services/api/order.service';
 import { notificationService } from '../../services/api/notification.service';
 import { restoreOrderTrackingForCustomer } from '../../services/notifications';
+import { NotificationPreviewModal } from '../../components/NotificationPreviewModal';
 import { getCustomerStatusDotColor } from '../../utils/customerStatus';
 
 const ACTIVE_STATUSES = [
@@ -38,6 +39,7 @@ export default function CustomerHomeScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [notifPreviewOpen, setNotifPreviewOpen] = useState(false);
 
   const loadHeaderIdentity = useCallback(async () => {
     try {
@@ -90,6 +92,12 @@ export default function CustomerHomeScreen() {
 
   return (
     <View style={[s.container, { backgroundColor: colors.background }]}>
+      <NotificationPreviewModal
+        visible={notifPreviewOpen}
+        onClose={() => setNotifPreviewOpen(false)}
+        variant="customer"
+        onOpenFullInbox={() => router.push('/(customer)/notifications')}
+      />
       {/* Status bar background */}
       <View style={{ backgroundColor: colors.headerBg, height: insets.top }} />
       {/* Header */}
@@ -109,7 +117,7 @@ export default function CustomerHomeScreen() {
           </View>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
             <ThemeToggle color="#fff" style={{ backgroundColor: 'rgba(255,255,255,0.2)' }} />
-            <TouchableOpacity style={s.notifBtn} onPress={() => router.push('/(customer)/notifications')}>
+            <TouchableOpacity style={s.notifBtn} onPress={() => setNotifPreviewOpen(true)}>
               <Ionicons name="notifications-outline" size={22} color="#fff" />
               {unreadCount > 0 && (
                 <View style={s.badge}>
