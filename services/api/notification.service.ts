@@ -61,6 +61,10 @@ export const notificationService = {
   markAsRead: (id: string) =>
     api.patch(`/notifications/${id}/read`),
 
+  /** Marks every unread row in the same thread as the mobile `groupKey` (chat, order, etc.). */
+  markThreadAsRead: (groupKey: string) =>
+    api.patch('/notifications/thread/read', { groupKey }),
+
   markAllAsRead: () =>
     api.patch('/notifications/read-all'),
 };

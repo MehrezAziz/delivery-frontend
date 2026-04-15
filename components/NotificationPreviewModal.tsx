@@ -98,8 +98,16 @@ export function NotificationPreviewModal({ visible, onClose, variant, onOpenFull
 
   const onRowPress = (g: NotificationPreviewGroup) => {
     const item = g.latest;
-    if (!item.readAt) {
-      notificationService.markAsRead(item.id).catch(() => {});
+    if (g.unreadCount > 0) {
+      const now = new Date().toISOString();
+      setGroups((prev) =>
+        prev.map((row) =>
+          row.groupKey === g.groupKey
+            ? { ...row, unreadCount: 0, latest: { ...row.latest, readAt: row.latest.readAt || now } }
+            : row,
+        ),
+      );
+      notificationService.markThreadAsRead(g.groupKey).catch(() => {});
     }
     onClose();
     navigateFromNotification(router, item, variant);

@@ -9,7 +9,12 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { notificationService, Notification } from '../../services/api/notification.service';
 import { useTheme } from '../../contexts/ThemeContext';
-import { groupNotificationsByThread, sortGroups, type NotificationGroup } from '../../utils/notificationGrouping';
+import {
+  groupNotificationsByThread,
+  inboxGroupKey,
+  sortGroups,
+  type NotificationGroup,
+} from '../../utils/notificationGrouping';
 
 const PRIORITY_COLORS: Record<string, string> = {
   LOW: '#6b7280',
@@ -79,8 +84,12 @@ export default function DriverNotifications() {
 
   const handleGroupPress = (g: NotificationGroup) => {
     const item = g.latest;
-    if (!item.readAt) {
-      notificationService.markAsRead(item.id).catch(() => {});
+    if (g.unreadCount > 0) {
+      const now = new Date().toISOString();
+      setNotifications((prev) =>
+        prev.map((n) => (inboxGroupKey(n) === g.groupKey && !n.readAt ? { ...n, readAt: now } : n)),
+      );
+      notificationService.markThreadAsRead(g.groupKey).catch(() => {});
     }
     if (item.relatedEntityType === 'Order' && item.relatedEntityId) {
       if (item.type === 'NEW_ORDER_AVAILABLE') {
