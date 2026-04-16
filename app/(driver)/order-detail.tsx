@@ -18,6 +18,8 @@ const STATUS_META: Record<string, { icon: string; color: string; bg: string; lab
   DRIVER_ARRIVED:   { icon: 'flag-outline',        color: '#7c3aed', bg: '#ede9fe', label: 'Arrived' },
   PICKED_UP:        { icon: 'cube-outline',        color: '#ea580c', bg: '#ffedd5', label: 'Picked Up' },
   DELIVERING:       { icon: 'bicycle-outline',     color: '#4f46e5', bg: '#e0e7ff', label: 'Delivering' },
+  RETURNED:         { icon: 'return-up-back-outline', color: '#b45309', bg: '#fef3c7', label: 'Returned' },
+  RETURN_DEPOSIT:   { icon: 'archive-outline',     color: '#0f766e', bg: '#ccfbf1', label: 'Return Deposited' },
   DELIVERED:        { icon: 'checkmark-circle',    color: '#16a34a', bg: '#dcfce7', label: 'Delivered' },
   CANCELLED:        { icon: 'close-circle',        color: '#dc2626', bg: '#fee2e2', label: 'Cancelled' },
   DISPUTED:         { icon: 'warning-outline',     color: '#dc2626', bg: '#fee2e2', label: 'Disputed' },
@@ -67,6 +69,7 @@ export default function DriverOrderDetailScreen() {
       DRIVER_ASSIGNED: 'DRIVER_ARRIVED',
       DRIVER_ARRIVED: 'PICKED_UP',
       PICKED_UP: 'DELIVERING',
+      RETURNED: 'RETURN_DEPOSIT',
     };
     const next = nextByStatus[order.status];
     if (!next) return;
@@ -135,20 +138,40 @@ export default function DriverOrderDetailScreen() {
     }
   };
 
+  const handleReturned = async () => {
+    if (!order || statusUpdating) return;
+    const hasProof1 = Boolean(order.driverAssignment?.image1Proof);
+    if (!hasProof1) {
+      router.push(`/(driver)/upload-proofs?orderId=${order.id}` as any);
+      return;
+    }
+    try {
+      setStatusUpdating(true);
+      await orderService.updateOrderStatus(order.id, 'RETURNED');
+      await load();
+      await restoreOrderTrackingForDriver();
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setStatusUpdating(false);
+    }
+  };
+
   if (loading || !order) {
     return <View style={[s.center, { backgroundColor: colors.background }]}><ActivityIndicator size="large" color={colors.primary} /></View>;
   }
 
   const meta = STATUS_META[order.status] || STATUS_META.DELIVERED;
   const da = order.driverAssignment;
-  const showProofSection = ['DRIVER_ARRIVED', 'PICKED_UP', 'DELIVERING', 'DELIVERED'].includes(order.status);
+  const showProofSection = ['DRIVER_ARRIVED', 'PICKED_UP', 'DELIVERING', 'RETURNED', 'RETURN_DEPOSIT', 'DELIVERED'].includes(order.status);
   const canRevert = ['DRIVER_ARRIVED', 'PICKED_UP', 'DELIVERING'].includes(order.status);
-  const chatFriendlyClosedStatuses = ['DELIVERED', 'REFUNDED', 'FAILED', 'DISPUTED', 'CANCELLED'];
+  const chatFriendlyClosedStatuses = ['DELIVERED', 'RETURN_DEPOSIT', 'REFUNDED', 'FAILED', 'DISPUTED', 'CANCELLED'];
   const canOpenChat = !!order.chatRoom || chatFriendlyClosedStatuses.includes(order.status);
   const nextActionLabel: Record<string, string> = {
     DRIVER_ASSIGNED: "I've arrived",
     DRIVER_ARRIVED: 'Package picked up',
     PICKED_UP: 'Start delivering now',
+    RETURNED: 'Confirm return deposit',
   };
   const canGoNext = Boolean(nextActionLabel[order.status]);
 
@@ -334,13 +357,22 @@ export default function DriverOrderDetailScreen() {
                 </TouchableOpacity>
               )}
               {order.status === 'DELIVERING' && (
-                <TouchableOpacity
-                  style={[s.nextBtn, { backgroundColor: '#16a34a' }, statusUpdating && { opacity: 0.6 }]}
-                  onPress={handleDelivered}
-                  disabled={statusUpdating}
-                >
-                  <Text style={s.nextBtnText}>Delivered</Text>
-                </TouchableOpacity>
+                <>
+                  <TouchableOpacity
+                    style={[s.nextBtn, { backgroundColor: '#16a34a' }, statusUpdating && { opacity: 0.6 }]}
+                    onPress={handleDelivered}
+                    disabled={statusUpdating}
+                  >
+                    <Text style={s.nextBtnText}>Delivered</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[s.nextBtn, { backgroundColor: '#b45309' }, statusUpdating && { opacity: 0.6 }]}
+                    onPress={handleReturned}
+                    disabled={statusUpdating}
+                  >
+                    <Text style={s.nextBtnText}>Returned</Text>
+                  </TouchableOpacity>
+                </>
               )}
             </View>
           </View>

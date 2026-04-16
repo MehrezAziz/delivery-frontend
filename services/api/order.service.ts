@@ -42,6 +42,8 @@ export interface Order {
   customerId: string;
   status: string;
   paymentType: 'COD' | 'WALLET';
+  sourceType?: 'NORMAL_CUSTOMER' | 'DELIVERY_COMPANY';
+  deliveryCompanyId?: string | null;
   description: string | null;
   weight: number;
   distanceKm: number;
@@ -79,6 +81,13 @@ export interface Order {
     status: string;
     customerReason: string;
     driverFeedback: string | null;
+    createdAt: string;
+  } | null;
+  returnDepositFeedback?: {
+    id: string;
+    reportedByUserId: string;
+    conditionIssue: boolean;
+    feedback: string;
     createdAt: string;
   } | null;
 }

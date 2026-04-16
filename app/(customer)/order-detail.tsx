@@ -9,7 +9,7 @@ import { orderService, Order } from '../../services/api/order.service';
 import { useTheme } from '../../contexts/ThemeContext';
 
 const STATUS_FLOW = [
-  'SEARCHING_DRIVER', 'PENDING_CUSTOMER_APPROVAL', 'DRIVER_ASSIGNED', 'DRIVER_ARRIVED', 'PICKED_UP', 'DELIVERING', 'DELIVERED',
+  'SEARCHING_DRIVER', 'PENDING_CUSTOMER_APPROVAL', 'DRIVER_ASSIGNED', 'DRIVER_ARRIVED', 'PICKED_UP', 'DELIVERING', 'RETURNED', 'RETURN_DEPOSIT', 'DELIVERED',
 ];
 
 const STATUS_META: Record<string, { icon: string; color: string; bg: string; label: string }> = {
@@ -20,6 +20,8 @@ const STATUS_META: Record<string, { icon: string; color: string; bg: string; lab
   DRIVER_ARRIVED:   { icon: 'flag-outline',       color: '#7c3aed', bg: '#ede9fe', label: 'Driver Arrived' },
   PICKED_UP:        { icon: 'cube-outline',       color: '#ea580c', bg: '#ffedd5', label: 'Picked Up' },
   DELIVERING:       { icon: 'bicycle-outline',    color: '#4f46e5', bg: '#e0e7ff', label: 'On the Way' },
+  RETURNED:         { icon: 'return-up-back-outline', color: '#b45309', bg: '#fef3c7', label: 'Returned' },
+  RETURN_DEPOSIT:   { icon: 'archive-outline', color: '#0f766e', bg: '#ccfbf1', label: 'Return Deposited' },
   DELIVERED:        { icon: 'checkmark-circle',    color: '#16a34a', bg: '#dcfce7', label: 'Delivered' },
   CANCELLED:        { icon: 'close-circle',        color: '#dc2626', bg: '#fee2e2', label: 'Cancelled' },
   DISPUTED:         { icon: 'warning-outline',     color: '#dc2626', bg: '#fee2e2', label: 'Disputed' },
@@ -324,13 +326,11 @@ export default function OrderDetailScreen() {
               })}
             </View>
             <View style={s.stepsLabels}>
-              <Text style={[s.stepLabel, { color: meta.color }]}>Search</Text>
-              <Text style={s.stepLabel}>Approve</Text>
-              <Text style={s.stepLabel}>Assign</Text>
-              <Text style={s.stepLabel}>Arrive</Text>
-              <Text style={s.stepLabel}>Pickup</Text>
-              <Text style={s.stepLabel}>Deliver</Text>
-              <Text style={s.stepLabel}>Done</Text>
+              {STATUS_FLOW.map((step, idx) => (
+                <Text key={step} style={[s.stepLabel, idx === currentStepIndex ? { color: meta.color } : null]}>
+                  {STATUS_META[step]?.label.split(' ')[0] || step}
+                </Text>
+              ))}
             </View>
           </View>
         )}
@@ -1005,7 +1005,7 @@ const s = StyleSheet.create({
   },
   stepLine: { width: 28, height: 3, backgroundColor: '#e5e7eb', borderRadius: 2, marginHorizontal: 2 },
   stepsLabels: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 2 },
-  stepLabel: { fontSize: 9, color: '#9ca3af', fontWeight: '600', textAlign: 'center', width: 42 },
+  stepLabel: { flex: 1, fontSize: 8, color: '#9ca3af', fontWeight: '600', textAlign: 'center' },
 
   // Quick actions
   quickActionsRow: { flexDirection: 'row', gap: 10, marginBottom: 14 },
