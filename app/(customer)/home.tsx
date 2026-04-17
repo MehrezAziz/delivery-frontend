@@ -97,6 +97,7 @@ export default function CustomerHomeScreen() {
         onClose={() => setNotifPreviewOpen(false)}
         variant="customer"
         onOpenFullInbox={() => router.push('/(customer)/notifications')}
+        onMarkAllRead={() => setUnreadCount(0)}
       />
       {/* Status bar background */}
       <View style={{ backgroundColor: colors.headerBg, height: insets.top }} />

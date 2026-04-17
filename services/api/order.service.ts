@@ -44,6 +44,8 @@ export interface Order {
   paymentType: 'COD' | 'WALLET';
   sourceType?: 'NORMAL_CUSTOMER' | 'DELIVERY_COMPANY';
   deliveryCompanyId?: string | null;
+  /** Present on company-sourced orders for driver UI (e.g. available list label). */
+  deliveryCompanyName?: string | null;
   description: string | null;
   weight: number;
   distanceKm: number;

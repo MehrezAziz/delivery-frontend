@@ -364,7 +364,12 @@ export default function AvailableOrdersScreen() {
           </View>
         )}
         <View style={s.cardTop}>
-          <Text style={[s.orderId, { color: colors.text }]}>#{order.id.slice(0, 8)}</Text>
+          <Text style={[s.orderId, { color: colors.text }]} numberOfLines={1}>
+            #{order.id.slice(0, 8)}
+            {order.sourceType === 'DELIVERY_COMPANY' && order.deliveryCompanyName
+              ? ` (${order.deliveryCompanyName})`
+              : ''}
+          </Text>
           <View style={s.priceTag}>
             <Text style={[s.priceText, { color: colors.primary }]}>{order.price.toFixed(2)}</Text>
             <Text style={[s.priceCurrency, { color: colors.textSecondary }]}>TND</Text>
@@ -372,6 +377,15 @@ export default function AvailableOrdersScreen() {
         </View>
         <View style={s.routeSection}>
           <View style={s.routeIconCol}>
+            <View style={{ marginBottom: 8, alignSelf: 'flex-start' }}>
+              {order.sourceType === 'DELIVERY_COMPANY' ? (
+                <View style={[s.chip, { backgroundColor: '#e0e7ff' }]}>
+                  <Text style={[s.chipText, { color: '#1d4ed8', fontWeight: '800' }]}>C</Text>
+                </View>
+              ) : (
+                <View />
+              )}
+            </View>
             <View style={[s.routeDot, { backgroundColor: '#22c55e' }]} />
             <View style={[s.routeLine, { backgroundColor: colors.border }]} />
             <View style={[s.routeDot, { backgroundColor: '#ef4444' }]} />
@@ -380,6 +394,13 @@ export default function AvailableOrdersScreen() {
             <Text style={[s.routeText, { color: colors.text }]} numberOfLines={1}>
               {order.pickupAddress?.street || order.pickupAddress?.delegation?.nameDelegation || 'Pickup'}
             </Text>
+            {order.sourceType === 'DELIVERY_COMPANY' &&
+              typeof order.pickupAddress?.latitude === 'number' &&
+              typeof order.pickupAddress?.longitude === 'number' && (
+                <Text style={[s.chipText, { color: colors.textSecondary, marginTop: 2 }]}>
+                  Exact source: {order.pickupAddress.latitude.toFixed(5)}, {order.pickupAddress.longitude.toFixed(5)}
+                </Text>
+              )}
             <View style={{ height: 14 }} />
             <Text style={[s.routeText, { color: colors.text }]} numberOfLines={1}>
               {order.dropoffAddress?.street || order.dropoffAddress?.delegation?.nameDelegation || 'Dropoff'}

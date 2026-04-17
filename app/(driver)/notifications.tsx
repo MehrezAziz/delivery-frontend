@@ -91,6 +91,13 @@ export default function DriverNotifications() {
       );
       notificationService.markThreadAsRead(g.groupKey).catch(() => {});
     }
+    const isRejectedOrderNotice =
+      item.type === 'ORDER_CANCELLED_BY_CUSTOMER' &&
+      ((item.title || '').toLowerCase().includes('another driver') ||
+        (item.body || '').toLowerCase().includes('no longer assigned'));
+    if (isRejectedOrderNotice) {
+      return;
+    }
     if (item.relatedEntityType === 'Order' && item.relatedEntityId) {
       if (item.type === 'NEW_ORDER_AVAILABLE') {
         router.push(`/(driver)/available-orders?urgentOrderId=${item.relatedEntityId}`);
@@ -182,7 +189,7 @@ export default function DriverNotifications() {
             setNotifications((prev) => prev.map((n) => ({ ...n, readAt: n.readAt || new Date().toISOString() })));
           }}
         >
-          <Text style={[s.markAllText, { color: colors.primary }]}>Mark all read</Text>
+          <Text style={[s.markAllText, { color: colors.primary }]}>Make all as read</Text>
         </TouchableOpacity>
       </View>
 

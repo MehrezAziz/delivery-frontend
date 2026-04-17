@@ -128,6 +128,7 @@ export default function DriverHome() {
         onClose={() => setNotifPreviewOpen(false)}
         variant="driver"
         onOpenFullInbox={() => router.push('/(driver)/notifications')}
+        onMarkAllRead={() => setUnreadCount(0)}
       />
       {/* Status bar background */}
       <View style={{ backgroundColor: colors.headerBg, height: insets.top }} />

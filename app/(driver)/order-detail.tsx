@@ -45,10 +45,24 @@ export default function DriverOrderDetailScreen() {
   const scrollRef = useRef<ScrollView>(null);
 
   const load = useCallback(async () => {
-    try { setOrder(await orderService.getOrder(orderId)); }
-    catch (e: any) { console.error(e); }
-    finally { setLoading(false); setRefreshing(false); }
-  }, [orderId]);
+    try {
+      setOrder(await orderService.getOrder(orderId));
+    } catch (e: any) {
+      const status = e?.response?.status;
+      if (status === 403 || status === 404) {
+        Alert.alert(
+          'No access',
+          'You were removed from this order or it is no longer available.',
+          [{ text: 'OK', onPress: () => router.replace('/(driver)/available-orders') }],
+        );
+        return;
+      }
+      console.error(e);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, [orderId, router]);
 
   useEffect(() => { load(); }, [load]);
   useEffect(() => {

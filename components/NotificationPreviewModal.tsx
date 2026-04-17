@@ -61,9 +61,11 @@ type Props = {
   onClose: () => void;
   variant: Variant;
   onOpenFullInbox: () => void;
+  /** Called after mark-all-read succeeds so parent can clear header badge immediately. */
+  onMarkAllRead?: () => void;
 };
 
-export function NotificationPreviewModal({ visible, onClose, variant, onOpenFullInbox }: Props) {
+export function NotificationPreviewModal({ visible, onClose, variant, onOpenFullInbox, onMarkAllRead }: Props) {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { colors, isDark } = useTheme();
@@ -133,9 +135,33 @@ export function NotificationPreviewModal({ visible, onClose, variant, onOpenFull
           </View>
           <View style={s.sheetHeader}>
             <Text style={[s.sheetTitle, { color: colors.text }]}>Recent activity</Text>
-            <TouchableOpacity onPress={onClose} hitSlop={12}>
-              <Ionicons name="close" size={26} color={colors.textSecondary} />
-            </TouchableOpacity>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+              <TouchableOpacity
+                onPress={async () => {
+                  try {
+                    await notificationService.markAllAsRead();
+                  } catch {
+                    /* ignore */
+                  }
+                  const now = new Date().toISOString();
+                  setGroups((prev) =>
+                    prev.map((g) => ({
+                      ...g,
+                      unreadCount: 0,
+                      latest: { ...g.latest, readAt: g.latest.readAt || now },
+                    })),
+                  );
+                  onMarkAllRead?.();
+                  void load();
+                }}
+                hitSlop={12}
+              >
+                <Text style={{ fontSize: 13, color: colors.primary, fontWeight: '600' }}>Mark all read</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={onClose} hitSlop={12}>
+                <Ionicons name="close" size={26} color={colors.textSecondary} />
+              </TouchableOpacity>
+            </View>
           </View>
           <Text style={[s.sheetHint, { color: colors.textSecondary }]}>
             Grouped by conversation & order. Open the full inbox for your complete history.

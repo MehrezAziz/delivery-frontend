@@ -58,6 +58,7 @@ const STATUS_BY_NOTIFICATION_TYPE: Record<string, string> = {
   DELIVERY_IN_PROGRESS: 'DELIVERING',
   ORDER_DELIVERED: 'DELIVERED',
   ORDER_CANCELLED: 'CANCELLED',
+  ORDER_CANCELLED_BY_CUSTOMER: 'FAILED',
   NO_DRIVER_FOUND: 'FAILED',
   DISPUTE_OPENED: 'DISPUTED',
 };
@@ -783,7 +784,7 @@ function shouldSuppressChatNotification(data: Record<string, string>): boolean {
   if (!activeChatContext || !relId) return false;
 
   if (
-    relType === 'ChatRoom' &&
+    (relType === 'ChatRoom' || relType === 'Order') &&
     (type === 'NEW_MESSAGE_FROM_DRIVER' || type === 'NEW_MESSAGE_FROM_CUSTOMER')
   ) {
     return activeChatContext.kind === 'order' && activeChatContext.id === relId;
@@ -804,6 +805,9 @@ export async function notificationDataToRoute(
 
   switch (relatedEntityType) {
     case 'Order': {
+      if (type === 'ORDER_CANCELLED_BY_CUSTOMER' && data.orderStatus === 'FAILED') {
+        return null;
+      }
       const driverTypes = [
         'NEW_ORDER_AVAILABLE',
         'ORDER_EXPIRED',
@@ -820,6 +824,12 @@ export async function notificationDataToRoute(
       if (driverTypes.includes(type || '')) {
         if (type === 'NEW_ORDER_AVAILABLE') {
           return `/(driver)/available-orders?urgentOrderId=${relatedEntityId}`;
+        }
+        if (
+          type === 'ORDER_CANCELLED_BY_CUSTOMER' &&
+          data.orderStatus === 'SEARCHING_DRIVER'
+        ) {
+          return '/(driver)/available-orders';
         }
         return `/(driver)/order-detail?orderId=${relatedEntityId}`;
       }
@@ -991,7 +1001,21 @@ async function handleOrderFCMData(rawData: Record<string, unknown>) {
   if (!resolved) return;
 
   if (isTerminal) {
-    await stopOrderTracking(resolved.title, resolved.body, oid);
+    const isCompanyDriverRemoval =
+      data.type === 'ORDER_CANCELLED_BY_CUSTOMER' &&
+      data.orderStatus === 'FAILED';
+    if (isCompanyDriverRemoval) {
+      if (Platform.OS === 'android') {
+        await stopOrderTrackingWithOptions(resolved.title, resolved.body, false, oid);
+      }
+      await displayRegularNotification({
+        title: resolved.title,
+        body: resolved.body,
+        type: data.type || '',
+      });
+    } else {
+      await stopOrderTracking(resolved.title, resolved.body, oid);
+    }
     emitOrderDetailAndDriverListRefresh(oid);
     return;
   }
@@ -1004,12 +1028,13 @@ async function handleOrderFCMData(rawData: Record<string, unknown>) {
   emitOrderDetailAndDriverListRefresh(oid);
 }
 
-async function displayRegularNotification(data: Record<string, string>) {
+async function displayRegularNotification(data: Record<string, string>, androidId?: string) {
   const { title, body } = data;
   if (!title || !body) return;
   if (shouldSuppressChatNotification(data)) return;
 
   await notifee.displayNotification({
+    ...(androidId ? { id: androidId } : {}),
     title,
     body,
     android: {
@@ -1112,6 +1137,15 @@ export function setupBackgroundHandler() {
     const { groupKey } = data;
     if (groupKey?.startsWith('order:')) {
       await handleOrderFCMData(raw);
+      return;
+    }
+    if (groupKey?.startsWith('chat:')) {
+      if (shouldSuppressChatNotification(data)) return;
+      // If Firebase already attached a visible notification payload, let the OS show it once.
+      if (fcmHasNativeNotificationTrayPayload(remoteMessage)) return;
+      const oid = data.orderId || groupKey.replace('chat:', '');
+      // Separate lightweight message banner — does not replace the persistent order-track notification.
+      await displayRegularNotification(data, oid ? `chat-msg-${oid}` : undefined);
       return;
     }
     // Non-order pushes use notification+data in firebase.service — OS shows native tray; skip Notifee to avoid duplicates.
