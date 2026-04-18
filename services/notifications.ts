@@ -863,7 +863,8 @@ export async function notificationDataToRoute(
 
   switch (relatedEntityType) {
     case 'Order': {
-      if (type === 'ORDER_CANCELLED_BY_CUSTOMER' && data.orderStatus === 'FAILED') {
+      /** Backend sets this when the driver was removed before arrival — they no longer have API access to the order. */
+      if (data.suppressDriverTapNavigation === 'true') {
         return null;
       }
       const driverTypes = [
@@ -885,7 +886,8 @@ export async function notificationDataToRoute(
         }
         if (
           type === 'ORDER_CANCELLED_BY_CUSTOMER' &&
-          data.orderStatus === 'SEARCHING_DRIVER'
+          data.orderStatus === 'SEARCHING_DRIVER' &&
+          data.suppressDriverTapNavigation !== 'true'
         ) {
           return '/(driver)/available-orders';
         }
@@ -953,6 +955,7 @@ type NotifeeInitial = NonNullable<Awaited<ReturnType<typeof notifee.getInitialNo
 async function routeFromNotifeeInitialForNavigation(initial: NotifeeInitial): Promise<string | null> {
   const actionId = initial.pressAction?.id;
   const data = coerceFcmData(initial.notification?.data as Record<string, unknown>);
+  if (data.suppressDriverTapNavigation === 'true') return null;
   const orderId = data.orderId || data.relatedEntityId || '';
   let role: string | undefined;
   try {
@@ -1072,6 +1075,7 @@ async function handleOrderFCMData(rawData: Record<string, unknown>) {
           type: data.type || '',
           groupKey: data.groupKey || `order:${oid}`,
           ...(data.notificationId ? { notificationId: data.notificationId } : {}),
+          ...(data.suppressDriverTapNavigation ? { suppressDriverTapNavigation: data.suppressDriverTapNavigation } : {}),
         });
       } else {
         await displayRegularNotification({
@@ -1137,6 +1141,7 @@ export function setupNotificationListeners() {
     if (type === EventType.ACTION_PRESS) {
       const actionId = detail.pressAction?.id;
       const data = detail.notification?.data as Record<string, string> | undefined;
+      if (data?.suppressDriverTapNavigation === 'true') return;
       const orderId = data?.orderId || data?.relatedEntityId || '';
 
       if (actionId === 'accept_driver' && orderId) {
@@ -1240,6 +1245,7 @@ export function setupBackgroundHandler() {
     if (type === EventType.ACTION_PRESS) {
       const actionId = detail.pressAction?.id;
       const data = detail.notification?.data as Record<string, string> | undefined;
+      if (data?.suppressDriverTapNavigation === 'true') return;
       const orderId = data?.orderId || data?.relatedEntityId || '';
 
       if (actionId === 'accept_driver' && orderId) {

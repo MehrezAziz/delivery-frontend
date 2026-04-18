@@ -15,6 +15,7 @@ import {
   sortGroups,
   type NotificationGroup,
 } from '../../utils/notificationGrouping';
+import { shouldSuppressDriverOrderDetailNavigation } from '../../utils/driverInboxNavigation';
 
 const PRIORITY_COLORS: Record<string, string> = {
   LOW: '#6b7280',
@@ -91,11 +92,7 @@ export default function DriverNotifications() {
       );
       notificationService.markThreadAsRead(g.groupKey).catch(() => {});
     }
-    const isRejectedOrderNotice =
-      item.type === 'ORDER_CANCELLED_BY_CUSTOMER' &&
-      ((item.title || '').toLowerCase().includes('another driver') ||
-        (item.body || '').toLowerCase().includes('no longer assigned'));
-    if (isRejectedOrderNotice) {
+    if (shouldSuppressDriverOrderDetailNavigation(item)) {
       return;
     }
     if (item.relatedEntityType === 'Order' && item.relatedEntityId) {

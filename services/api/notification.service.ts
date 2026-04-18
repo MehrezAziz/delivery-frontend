@@ -17,6 +17,8 @@ export interface Notification {
   sentAt: string;
   readAt: string | null;
   deliveryStatus: string;
+  /** From API `notification_metadata` — e.g. suppress opening order detail after pre-arrival removal. */
+  notificationMetadata?: { suppressDriverOrderNavigation?: boolean } | null;
 }
 
 export interface NotificationPage {
