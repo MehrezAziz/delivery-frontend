@@ -531,6 +531,41 @@ async function stopOrderTrackingWithOptions(title: string, body: string, showFin
 }
 
 /**
+ * Company/department rejected the driver: keep the same Notifee id as live order tracking, show FAILED,
+ * and make the notification removable (not ongoing). Matches customer-reject UX without a second tray entry.
+ */
+async function replaceOrderTrackingWithDismissibleFailed(
+  orderId: string,
+  title: string,
+  body: string,
+  extraData: Record<string, string>,
+) {
+  if (Platform.OS !== 'android') return;
+  await clearTrackedOrder(orderId);
+  await notifee.displayNotification({
+    id: getOrderNotificationId(orderId),
+    title,
+    body,
+    android: {
+      channelId: CHANNEL_ORDER,
+      ongoing: false,
+      autoCancel: true,
+      importance: AndroidImportance.HIGH,
+      pressAction: { id: 'view_order_driver', launchActivity: 'default' },
+    },
+    data: {
+      orderId,
+      relatedEntityType: 'Order',
+      relatedEntityId: orderId,
+      orderStatus: 'FAILED',
+      ongoing: 'false',
+      trackingAudience: 'DRIVER',
+      ...extraData,
+    },
+  });
+}
+
+/**
  * Restore customer order tracking notification after login/reopen.
  * If there is no active order, foreground service is stopped silently.
  */
@@ -777,20 +812,43 @@ async function flushPendingNotificationRoute() {
   if (route) router.push(route as any);
 }
 
+/** Resolve order id from FCM data (payloads differ: ChatRoom uses relatedEntityId; some builds only send groupKey chat:<id>). */
+function effectiveOrderIdFromChatPayload(data: Record<string, string>): string {
+  const rel = (data.relatedEntityId || '').trim();
+  if (rel) return rel;
+  const oid = (data.orderId || '').trim();
+  if (oid) return oid;
+  const gk = (data.groupKey || '').trim();
+  if (gk.toLowerCase().startsWith('chat:')) return gk.slice(5).trim();
+  return '';
+}
+
 function shouldSuppressChatNotification(data: Record<string, string>): boolean {
   const type = data.type || '';
   const relType = data.relatedEntityType || '';
-  const relId = data.relatedEntityId || '';
-  if (!activeChatContext || !relId) return false;
+  const orderId = effectiveOrderIdFromChatPayload(data);
+  if (!activeChatContext || !orderId) return false;
+
+  const ctxId = activeChatContext.id.trim().toLowerCase();
+  const targetId = orderId.trim().toLowerCase();
 
   if (
     (relType === 'ChatRoom' || relType === 'Order') &&
     (type === 'NEW_MESSAGE_FROM_DRIVER' || type === 'NEW_MESSAGE_FROM_CUSTOMER')
   ) {
-    return activeChatContext.kind === 'order' && activeChatContext.id === relId;
+    return activeChatContext.kind === 'order' && ctxId === targetId;
+  }
+  /** Title/body-only heuristics still carry type + groupKey chat:<orderId> from backend. */
+  if (
+    !relType &&
+    (data.groupKey || '').toLowerCase().startsWith('chat:') &&
+    (type === 'NEW_MESSAGE_FROM_DRIVER' || type === 'NEW_MESSAGE_FROM_CUSTOMER')
+  ) {
+    return activeChatContext.kind === 'order' && ctxId === targetId;
   }
   if (relType === 'SupportTicket' && type === 'SUPPORT_TICKET_REPLY') {
-    return activeChatContext.kind === 'support' && activeChatContext.id === relId;
+    const ticketId = (data.relatedEntityId || '').trim().toLowerCase();
+    return activeChatContext.kind === 'support' && activeChatContext.id.trim().toLowerCase() === ticketId;
   }
   return false;
 }
@@ -830,6 +888,10 @@ export async function notificationDataToRoute(
           data.orderStatus === 'SEARCHING_DRIVER'
         ) {
           return '/(driver)/available-orders';
+        }
+        /** Delivery-company portal sends chat with relatedEntityType Order + NEW_MESSAGE_FROM_CUSTOMER (see delivery-company.service). */
+        if (type === 'NEW_MESSAGE_FROM_CUSTOMER') {
+          return `/(driver)/order-chat?orderId=${relatedEntityId}`;
         }
         return `/(driver)/order-detail?orderId=${relatedEntityId}`;
       }
@@ -1006,13 +1068,18 @@ async function handleOrderFCMData(rawData: Record<string, unknown>) {
       data.orderStatus === 'FAILED';
     if (isCompanyDriverRemoval) {
       if (Platform.OS === 'android') {
-        await stopOrderTrackingWithOptions(resolved.title, resolved.body, false, oid);
+        await replaceOrderTrackingWithDismissibleFailed(oid, resolved.title, resolved.body, {
+          type: data.type || '',
+          groupKey: data.groupKey || `order:${oid}`,
+          ...(data.notificationId ? { notificationId: data.notificationId } : {}),
+        });
+      } else {
+        await displayRegularNotification({
+          title: resolved.title,
+          body: resolved.body,
+          type: data.type || '',
+        });
       }
-      await displayRegularNotification({
-        title: resolved.title,
-        body: resolved.body,
-        type: data.type || '',
-      });
     } else {
       await stopOrderTracking(resolved.title, resolved.body, oid);
     }
@@ -1134,13 +1201,19 @@ export function setupBackgroundHandler() {
     const raw = remoteMessage?.data as Record<string, unknown> | undefined;
     if (!raw || typeof raw !== 'object') return;
     const data = coerceFcmData(raw);
+    /** Driver/customer in order chat: skip Notifee banner for this thread (see activeChatContext). */
+    if (
+      (data.type === 'NEW_MESSAGE_FROM_DRIVER' || data.type === 'NEW_MESSAGE_FROM_CUSTOMER') &&
+      shouldSuppressChatNotification(data)
+    ) {
+      return;
+    }
     const { groupKey } = data;
     if (groupKey?.startsWith('order:')) {
       await handleOrderFCMData(raw);
       return;
     }
     if (groupKey?.startsWith('chat:')) {
-      if (shouldSuppressChatNotification(data)) return;
       // If Firebase already attached a visible notification payload, let the OS show it once.
       if (fcmHasNativeNotificationTrayPayload(remoteMessage)) return;
       const oid = data.orderId || groupKey.replace('chat:', '');
@@ -1231,6 +1304,12 @@ export function setupNotificationReceivedListener(callback?: any) {
 export async function handleFCMMessage(remoteMessage: any) {
   const data = remoteMessage?.data as Record<string, string> | undefined;
   if (!data) return;
+  if (
+    (data.type === 'NEW_MESSAGE_FROM_DRIVER' || data.type === 'NEW_MESSAGE_FROM_CUSTOMER') &&
+    shouldSuppressChatNotification(data)
+  ) {
+    return;
+  }
   if (data.groupKey?.startsWith('order:')) await handleOrderFCMData(data);
   else if (!fcmHasNativeNotificationTrayPayload(remoteMessage))
     await displayRegularNotification(data);

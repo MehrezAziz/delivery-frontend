@@ -101,6 +101,9 @@ export default function DriverNotifications() {
     if (item.relatedEntityType === 'Order' && item.relatedEntityId) {
       if (item.type === 'NEW_ORDER_AVAILABLE') {
         router.push(`/(driver)/available-orders?urgentOrderId=${item.relatedEntityId}`);
+      } else if (item.type === 'NEW_MESSAGE_FROM_CUSTOMER') {
+        /** Company portal chat uses Order + this type (same as delivery-company.service). */
+        router.push(`/(driver)/order-chat?orderId=${item.relatedEntityId}`);
       } else {
         router.push(`/(driver)/order-detail?orderId=${item.relatedEntityId}`);
       }

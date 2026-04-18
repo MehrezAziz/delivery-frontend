@@ -7,12 +7,14 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { orderService, ChatMessage, ChatRoom } from '../../services/api/order.service';
+import { notificationService } from '../../services/api/notification.service';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useActiveChatForNotifications } from '../../hooks/useActiveChatForNotifications';
 
 export default function OrderChatScreen() {
   const router = useRouter();
-  const { orderId } = useLocalSearchParams<{ orderId: string }>();
+  const { orderId: orderIdParam } = useLocalSearchParams<{ orderId: string | string[] }>();
+  const orderId = typeof orderIdParam === 'string' ? orderIdParam : orderIdParam?.[0] ?? '';
   const handleBack = () => {
     if (router.canGoBack()) router.back();
     else router.replace('/(customer)/home');
@@ -32,9 +34,25 @@ export default function OrderChatScreen() {
     });
   }, []);
 
-  useActiveChatForNotifications('order', orderId);
+  useActiveChatForNotifications('order', orderId || undefined);
+
+  const markChatThreadRead = useCallback(() => {
+    if (!orderId) return;
+    void notificationService.markThreadAsRead(`chat:${orderId}`).catch(() => {});
+  }, [orderId]);
+
+  useEffect(() => {
+    markChatThreadRead();
+  }, [orderId, messages.length, markChatThreadRead]);
+
+  useEffect(() => {
+    return () => {
+      if (orderId) void notificationService.markThreadAsRead(`chat:${orderId}`).catch(() => {});
+    };
+  }, [orderId]);
 
   const loadChat = useCallback(async () => {
+    if (!orderId) return;
     try {
       const room = await orderService.getChatRoom(orderId);
       setChatRoom(room || null);

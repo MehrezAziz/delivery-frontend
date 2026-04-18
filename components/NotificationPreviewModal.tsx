@@ -26,6 +26,8 @@ function navigateFromNotification(router: ReturnType<typeof useRouter>, item: No
       router.push(`/(driver)/available-orders?urgentOrderId=${item.relatedEntityId}` as any);
     } else if (variant === 'customer') {
       router.push(`/(customer)/order-detail?orderId=${item.relatedEntityId}` as any);
+    } else if (variant === 'driver' && item.type === 'NEW_MESSAGE_FROM_CUSTOMER') {
+      router.push(`/(driver)/order-chat?orderId=${item.relatedEntityId}` as any);
     } else {
       router.push(`/(driver)/order-detail?orderId=${item.relatedEntityId}` as any);
     }

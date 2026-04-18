@@ -16,7 +16,10 @@ export function useActiveChatForNotifications(
 ) {
   useEffect(() => {
     const id = Array.isArray(rawId) ? rawId[0] : rawId;
-    if (!id) return;
+    if (!id || typeof id !== 'string') return;
+
+    /** Set immediately so foreground FCM runs after this effect, not only after AppState events. */
+    setActiveChatContext({ kind, id });
 
     const apply = (state: AppStateStatus) => {
       if (state === 'active') setActiveChatContext({ kind, id });
