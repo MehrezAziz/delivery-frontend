@@ -542,7 +542,7 @@ export default function AvailableOrdersScreen() {
 
       {showDeclinedFlash && (
         <View style={s.declinedFlashOverlay} pointerEvents="none" accessibilityRole="alert">
-          <Text style={s.declinedFlashCenterText}>Declined</Text>
+          <Text style={s.declinedFlashCenterText}>declined</Text>
         </View>
       )}
 

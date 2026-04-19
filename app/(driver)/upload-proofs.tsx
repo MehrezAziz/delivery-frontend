@@ -12,7 +12,9 @@ import { useTheme } from '../../contexts/ThemeContext';
 
 export default function UploadProofsScreen() {
   const router = useRouter();
-  const { orderId } = useLocalSearchParams<{ orderId: string }>();
+  const { orderId, afterProof: afterProofParam } = useLocalSearchParams<{ orderId: string; afterProof?: string | string[] }>();
+  const afterProofRaw = typeof afterProofParam === 'string' ? afterProofParam : Array.isArray(afterProofParam) ? afterProofParam[0] : undefined;
+  const markMode = afterProofRaw === 'delivered' || afterProofRaw === 'returned' ? afterProofRaw : undefined;
   const { colors, isDark } = useTheme();
   const [image1, setImage1] = useState<string | null>(null);
   const [image2, setImage2] = useState<string | null>(null);
@@ -88,12 +90,15 @@ export default function UploadProofsScreen() {
     }
   };
 
+  const goOrderDetail = () => {
+    router.replace(`/(driver)/order-detail?orderId=${orderId}` as any);
+  };
+
   const handleSubmit = async () => {
     if (!image1) {
       Alert.alert('Required', 'Please provide the first proof image');
       return;
     }
-    // Only send images that are new (not already uploaded)
     const sendImage1 = existingImage1 ? undefined : image1;
     const sendImage2 = existingImage2 ? undefined : (image2 || undefined);
     if (!sendImage1 && !sendImage2) {
@@ -104,10 +109,57 @@ export default function UploadProofsScreen() {
     try {
       await orderService.uploadProofs(orderId, sendImage1 || image1, sendImage2);
       Alert.alert('Success', 'Proofs uploaded successfully', [
-        { text: 'OK', onPress: () => router.canGoBack() ? router.back() : router.replace('/(driver)/home') },
+        { text: 'OK', onPress: () => (router.canGoBack() ? router.back() : router.replace('/(driver)/home')) },
       ]);
     } catch (e: any) {
       Alert.alert('Error', e.message);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const uploadOnlyNavigate = async () => {
+    if (!image1) {
+      Alert.alert('Required', 'Please provide the first proof image');
+      return;
+    }
+    const sendImage1 = existingImage1 ? undefined : image1;
+    const sendImage2 = existingImage2 ? undefined : (image2 || undefined);
+    if (!sendImage1 && !sendImage2) {
+      goOrderDetail();
+      return;
+    }
+    setSubmitting(true);
+    try {
+      await orderService.uploadProofs(orderId, sendImage1 || image1, sendImage2);
+      goOrderDetail();
+    } catch (e: any) {
+      Alert.alert('Error', e.message);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const uploadAndMarkStatus = async () => {
+    if (!image1) {
+      Alert.alert('Required', 'Please provide the first proof image');
+      return;
+    }
+    const sendImage1 = existingImage1 ? undefined : image1;
+    const sendImage2 = existingImage2 ? undefined : (image2 || undefined);
+    setSubmitting(true);
+    try {
+      if (sendImage1 || sendImage2) {
+        await orderService.uploadProofs(orderId, sendImage1 || image1, sendImage2);
+      }
+      if (markMode === 'delivered') {
+        await orderService.updateOrderStatus(orderId, 'DELIVERED');
+      } else if (markMode === 'returned') {
+        await orderService.updateOrderStatus(orderId, 'RETURNED');
+      }
+      goOrderDetail();
+    } catch (e: any) {
+      Alert.alert('Error', e?.message || 'Could not update order');
     } finally {
       setSubmitting(false);
     }
@@ -203,30 +255,68 @@ export default function UploadProofsScreen() {
             <Ionicons name="shield-checkmark" size={24} color="#0284c7" />
           </View>
           <Text style={s.infoText}>
-            Upload delivery proof images. The first image is required before you can mark the order as delivered.
+            {markMode === 'delivered'
+              ? 'Add at least the first proof image. You can upload only, or upload and mark the order as delivered in one step.'
+              : markMode === 'returned'
+                ? 'Add at least the first proof image before marking the order as returned.'
+                : 'Upload delivery proof images. The first image is required before you can mark the order as delivered.'}
           </Text>
         </View>
 
         {renderImageSlot(1, image1, setImage1, true)}
         {renderImageSlot(2, image2, setImage2, false)}
 
-        <TouchableOpacity
-          style={[s.submitBtn, (!image1 || (existingImage1 && existingImage2)) && s.submitBtnDisabled]}
-          onPress={handleSubmit}
-          disabled={submitting || !image1 || (existingImage1 && existingImage2)}
-          activeOpacity={0.85}
-        >
-          {submitting ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <>
-              <Ionicons name="cloud-upload-outline" size={20} color="#fff" />
-              <Text style={s.submitText}>
-                {existingImage1 && existingImage2 ? 'All Uploaded' : existingImage1 ? 'Upload Image 2' : 'Upload Proofs'}
-              </Text>
-            </>
-          )}
-        </TouchableOpacity>
+        {markMode ? (
+          <View style={{ gap: 12, marginTop: 8 }}>
+            <TouchableOpacity
+              style={[s.secondaryOutlineBtn, { borderColor: colors.border, backgroundColor: colors.background }]}
+              onPress={uploadOnlyNavigate}
+              disabled={submitting || !image1}
+              activeOpacity={0.85}
+            >
+              {submitting ? (
+                <ActivityIndicator color={colors.primary} />
+              ) : (
+                <Text style={[s.secondaryOutlineBtnText, { color: colors.primary }]}>Upload image</Text>
+              )}
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[s.submitBtn, !image1 && s.submitBtnDisabled]}
+              onPress={uploadAndMarkStatus}
+              disabled={submitting || !image1}
+              activeOpacity={0.85}
+            >
+              {submitting ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
+                  <Text style={s.submitText}>Upload image and Mark as </Text>
+                  <Text style={markMode === 'delivered' ? s.markWordDelivered : s.markWordReturned}>
+                    {markMode === 'delivered' ? 'Delivered' : 'Returned'}
+                  </Text>
+                </View>
+              )}
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <TouchableOpacity
+            style={[s.submitBtn, (!image1 || (existingImage1 && existingImage2)) && s.submitBtnDisabled]}
+            onPress={handleSubmit}
+            disabled={submitting || !image1 || (existingImage1 && existingImage2)}
+            activeOpacity={0.85}
+          >
+            {submitting ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <>
+                <Ionicons name="cloud-upload-outline" size={20} color="#fff" />
+                <Text style={s.submitText}>
+                  {existingImage1 && existingImage2 ? 'All Uploaded' : existingImage1 ? 'Upload Image 2' : 'Upload Proofs'}
+                </Text>
+              </>
+            )}
+          </TouchableOpacity>
+        )}
       </ScrollView>
     </View>
   );
@@ -285,6 +375,16 @@ const s = StyleSheet.create({
   },
   submitBtnDisabled: { backgroundColor: '#9ca3af', shadowOpacity: 0 },
   submitText: { color: '#fff', fontSize: 17, fontWeight: '700' },
+  secondaryOutlineBtn: {
+    borderRadius: 16,
+    paddingVertical: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+  },
+  secondaryOutlineBtnText: { fontSize: 15, fontWeight: '700' },
+  markWordDelivered: { color: '#bbf7d0', fontSize: 18, fontWeight: '900', letterSpacing: 0.3 },
+  markWordReturned: { color: '#fde68a', fontSize: 18, fontWeight: '900', letterSpacing: 0.3 },
   // Camera
   cameraOverlay: {
     position: 'absolute', bottom: 0, left: 0, right: 0,

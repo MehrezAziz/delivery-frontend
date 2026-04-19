@@ -88,7 +88,6 @@ export default function DriverOrderDetailScreen() {
       DRIVER_ASSIGNED: 'DRIVER_ARRIVED',
       DRIVER_ARRIVED: 'PICKED_UP',
       PICKED_UP: 'DELIVERING',
-      RETURNED: 'RETURN_DEPOSIT',
     };
     const next = nextByStatus[order.status];
     if (!next) return;
@@ -199,7 +198,7 @@ export default function DriverOrderDetailScreen() {
     if (!order || statusUpdating) return;
     const hasProof1 = Boolean(order.driverAssignment?.image1Proof);
     if (!hasProof1) {
-      router.push(`/(driver)/upload-proofs?orderId=${order.id}` as any);
+      router.push(`/(driver)/upload-proofs?orderId=${order.id}&afterProof=delivered` as any);
       return;
     }
     try {
@@ -218,9 +217,23 @@ export default function DriverOrderDetailScreen() {
     if (!order || statusUpdating) return;
     const hasProof1 = Boolean(order.driverAssignment?.image1Proof);
     if (!hasProof1) {
-      router.push(`/(driver)/upload-proofs?orderId=${order.id}` as any);
+      router.push(`/(driver)/upload-proofs?orderId=${order.id}&afterProof=returned` as any);
       return;
     }
+    try {
+      setStatusUpdating(true);
+      await orderService.updateOrderStatus(order.id, 'RETURNED');
+      await load();
+      await restoreOrderTrackingForDriver();
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setStatusUpdating(false);
+    }
+  };
+
+  const confirmReturnDeposit = async () => {
+    if (!order || statusUpdating) return;
     const n = parseInt(returnCallCount.trim(), 10);
     const extra: { customerCallCountBeforeReturn?: number; returnEvidenceImageUrl?: string } = {};
     if (returnCallCount.trim() !== '' && !Number.isNaN(n) && n >= 0) {
@@ -231,7 +244,7 @@ export default function DriverOrderDetailScreen() {
     }
     try {
       setStatusUpdating(true);
-      await orderService.updateOrderStatus(order.id, 'RETURNED', extra);
+      await orderService.updateOrderStatus(order.id, 'RETURN_DEPOSIT', extra);
       await load();
       await restoreOrderTrackingForDriver();
     } catch (e) {
@@ -257,7 +270,6 @@ export default function DriverOrderDetailScreen() {
     DRIVER_ASSIGNED: "I've arrived",
     DRIVER_ARRIVED: 'Package picked up',
     PICKED_UP: 'Start delivering now',
-    RETURNED: 'Confirm return deposit',
   };
   const canGoNext = Boolean(nextActionLabel[order.status]);
 
@@ -477,23 +489,11 @@ export default function DriverOrderDetailScreen() {
           </TouchableOpacity>
         )}
 
-        {canCancelAssignment && (
-          <TouchableOpacity
-            style={[s.card, { backgroundColor: colors.dangerBg, borderWidth: 1, borderColor: colors.danger }]}
-            onPress={cancelAssignment}
-            activeOpacity={0.85}
-          >
-            <Text style={{ color: colors.danger, fontSize: 15, fontWeight: '700', textAlign: 'center' }}>
-              Cancel assignment
-            </Text>
-          </TouchableOpacity>
-        )}
-
-        {order.status === 'DELIVERING' && (
+        {order.status === 'RETURNED' && (
           <View style={[s.card, { backgroundColor: colors.card }]}>
             <Text style={[s.cardTitle, { color: colors.text }]}>Return details (optional)</Text>
             <Text style={{ fontSize: 12, color: colors.textSecondary, marginBottom: 8 }}>
-              How many times you called the customer before returning, and an optional photo from your gallery.
+              Before confirming deposit: how many times you called the customer, and an optional photo from your gallery.
             </Text>
             <TextInput
               style={{
@@ -543,20 +543,10 @@ export default function DriverOrderDetailScreen() {
           </View>
         )}
 
-        {(canRevert || canGoNext || order.status === 'DELIVERING') && (
+        {(canGoNext || order.status === 'DELIVERING' || order.status === 'RETURNED') && (
           <View style={[s.card, { backgroundColor: colors.card }]}>
             <Text style={[s.cardTitle, { color: colors.text }]}>Delivery Actions</Text>
             <View style={s.stepActionsRow}>
-              {canRevert && (
-                <TouchableOpacity
-                  style={[s.revertBtn, statusUpdating && { opacity: 0.6 }]}
-                  onPress={revertStatus}
-                  disabled={statusUpdating}
-                >
-                  <Ionicons name="return-up-back-outline" size={16} color="#6b7280" />
-                  <Text style={s.revertBtnText}>Return</Text>
-                </TouchableOpacity>
-              )}
               {canGoNext && (
                 <TouchableOpacity
                   style={[s.nextBtn, { backgroundColor: colors.primary }, statusUpdating && { opacity: 0.6 }]}
@@ -583,6 +573,15 @@ export default function DriverOrderDetailScreen() {
                     <Text style={s.nextBtnText}>Returned</Text>
                   </TouchableOpacity>
                 </>
+              )}
+              {order.status === 'RETURNED' && (
+                <TouchableOpacity
+                  style={[s.nextBtn, { backgroundColor: colors.primary }, statusUpdating && { opacity: 0.6 }]}
+                  onPress={confirmReturnDeposit}
+                  disabled={statusUpdating}
+                >
+                  <Text style={s.nextBtnText}>Confirm return deposit</Text>
+                </TouchableOpacity>
               )}
             </View>
           </View>
@@ -657,6 +656,27 @@ export default function DriverOrderDetailScreen() {
                 {da.image1Proof ? 'Update proof images' : 'Add proof images'}
               </Text>
             </TouchableOpacity>
+          </View>
+        )}
+
+        {(canRevert || canCancelAssignment) && (
+          <View style={s.footerActionsRow}>
+            {canRevert && (
+              <TouchableOpacity
+                style={[s.footerMiniBtn, statusUpdating && { opacity: 0.6 }]}
+                onPress={revertStatus}
+                disabled={statusUpdating}
+                activeOpacity={0.85}
+              >
+                <Ionicons name="return-up-back-outline" size={14} color="#6b7280" />
+                <Text style={s.footerMiniBtnText}>Back</Text>
+              </TouchableOpacity>
+            )}
+            {canCancelAssignment && (
+              <TouchableOpacity style={s.footerMiniBtnDanger} onPress={cancelAssignment} activeOpacity={0.85}>
+                <Text style={s.footerMiniBtnDangerText}>Cancel assignment</Text>
+              </TouchableOpacity>
+            )}
           </View>
         )}
       </ScrollView>
@@ -776,4 +796,34 @@ const s = StyleSheet.create({
     fontSize: 13,
     fontWeight: '700',
   },
+  footerActionsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 4,
+    marginBottom: 28,
+  },
+  footerMiniBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    backgroundColor: '#f9fafb',
+  },
+  footerMiniBtnText: { fontSize: 12, fontWeight: '600', color: '#6b7280' },
+  footerMiniBtnDanger: {
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#fecaca',
+    backgroundColor: '#fef2f2',
+  },
+  footerMiniBtnDangerText: { fontSize: 12, fontWeight: '600', color: '#b91c1c' },
 });

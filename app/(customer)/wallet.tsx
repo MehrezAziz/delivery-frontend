@@ -173,6 +173,13 @@ export default function WalletScreen() {
         </TouchableOpacity>
       </View>
 
+      <View style={[styles.comingSoonBanner, { backgroundColor: colors.card, borderColor: colors.border }]}>
+        <Text style={[styles.comingSoonTitle, { color: colors.text }]}>Buy coins</Text>
+        <Text style={[styles.comingSoonText, { color: colors.textSecondary }]}>
+          Top up your wallet with coins. <Text style={{ fontWeight: '700', color: colors.text }}>Coming soon.</Text>
+        </Text>
+      </View>
+
       {/* Tabs */}
       <View style={[styles.tabs, { backgroundColor: colors.card }]}>
         {(['overview', 'transactions', 'withdrawals'] as Tab[]).map((t) => (
@@ -498,4 +505,13 @@ const styles = StyleSheet.create({
   },
   modalSubmitText: { color: '#fff', fontWeight: '700', fontSize: 15 },
   btnDisabled: { backgroundColor: '#9ca3af' },
+  comingSoonBanner: {
+    marginHorizontal: 16,
+    marginBottom: 12,
+    padding: 14,
+    borderRadius: 14,
+    borderWidth: 1,
+  },
+  comingSoonTitle: { fontSize: 15, fontWeight: '700', marginBottom: 4 },
+  comingSoonText: { fontSize: 13, lineHeight: 18 },
 });

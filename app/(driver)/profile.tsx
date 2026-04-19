@@ -192,6 +192,21 @@ export default function DriverProfileScreen() {
                 </View>
               </View>
             )}
+            <View
+              style={{
+                padding: 12,
+                borderRadius: 12,
+                borderWidth: 1,
+                borderColor: colors.border,
+                backgroundColor: colors.surfaceVariant,
+                marginBottom: 8,
+              }}
+            >
+              <Text style={{ fontSize: 12, fontWeight: '700', color: colors.text }}>Buy coins</Text>
+              <Text style={{ fontSize: 11, color: colors.textSecondary, marginTop: 4 }}>
+                Top up your driver balance. <Text style={{ fontWeight: '700', color: colors.text }}>Coming soon.</Text>
+              </Text>
+            </View>
 
             {/* Negative balance warning */}
             {driver?.account?.balance < 0 && driver?.account?.daysRemainingToPay !== undefined && (
