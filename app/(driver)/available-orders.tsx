@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback, useMemo } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, ActivityIndicator,
   Alert, RefreshControl, StyleSheet, Modal, TextInput, FlatList,
+  InteractionManager,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -342,8 +343,9 @@ export default function AvailableOrdersScreen() {
               'Please allow location access so the customer can see your position on the map during delivery. You can enable it in Settings.',
             );
           }
-          Alert.alert('Success', 'Order accepted!');
-          router.replace('/(driver)/my-orders');
+          InteractionManager.runAfterInteractions(() => {
+            router.replace(`/(driver)/order-detail?orderId=${orderId}`);
+          });
         }
         catch (e: any) {
           const msg = e.message || '';

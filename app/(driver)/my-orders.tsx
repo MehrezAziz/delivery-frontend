@@ -7,7 +7,11 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { orderService, Order } from '../../services/api/order.service';
 import { useTheme } from '../../contexts/ThemeContext';
-import { restoreOrderTrackingForDriver, subscribeDriverMyOrdersRefresh } from '../../services/notifications';
+import {
+  restoreOrderTrackingForDriver,
+  stopOrderTrackingSilently,
+  subscribeDriverMyOrdersRefresh,
+} from '../../services/notifications';
 
 const STATUS_META: Record<string, { color: string; bg: string; label: string; icon: string }> = {
   PENDING_CUSTOMER_APPROVAL: { color: '#ea580c', bg: '#ffedd5', label: 'Waiting for Customer', icon: 'hourglass-outline' },
@@ -99,7 +103,11 @@ export default function DriverMyOrdersScreen() {
     Alert.alert('Cancel Assignment', 'Are you sure you want to cancel this delivery?', [
       { text: 'No', style: 'cancel' },
       { text: 'Yes, Cancel', style: 'destructive', onPress: async () => {
-        try { await orderService.cancelAssignment(orderId, 'Driver cancelled'); load(); }
+        try {
+          await orderService.cancelAssignment(orderId, 'Driver cancelled');
+          await stopOrderTrackingSilently();
+          load();
+        }
         catch (e: any) { Alert.alert('Error', e.message); }
       }},
     ]);
@@ -215,13 +223,7 @@ export default function DriverMyOrdersScreen() {
                   {isUpdating ? (
                     <ActivityIndicator size="small" color="#fff" />
                   ) : (
-                    <>
-                      <Ionicons name="arrow-undo" size={18} color="#fff" />
-                      <Text style={s.actionBtnText}>Mark as return</Text>
-                      {!order.driverAssignment?.image1Proof && (
-                        <Ionicons name="alert-circle" size={16} color="#fbbf24" />
-                      )}
-                    </>
+                    <Text style={s.actionBtnText}>rejected</Text>
                   )}
                 </TouchableOpacity>
                 <TouchableOpacity
