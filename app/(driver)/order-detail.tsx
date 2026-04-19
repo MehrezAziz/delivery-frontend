@@ -1,14 +1,19 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, ActivityIndicator,
-  RefreshControl, StyleSheet, TextInput, Alert,
+  RefreshControl, StyleSheet, TextInput, Alert, Image,
 } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { orderService, Order } from '../../services/api/order.service';
 import { useTheme } from '../../contexts/ThemeContext';
-import { restoreOrderTrackingForDriver, subscribeOrderDetailRefresh } from '../../services/notifications';
+import {
+  restoreOrderTrackingForDriver,
+  stopOrderTrackingSilently,
+  subscribeOrderDetailRefresh,
+} from '../../services/notifications';
 
 const STATUS_META: Record<string, { icon: string; color: string; bg: string; label: string }> = {
   DRAFT:            { icon: 'document-outline',    color: '#6b7280', bg: '#f3f4f6', label: 'Draft' },
@@ -42,6 +47,10 @@ export default function DriverOrderDetailScreen() {
   const [statusUpdating, setStatusUpdating] = useState(false);
   const [conflictFeedback, setConflictFeedback] = useState('');
   const [conflictSubmitting, setConflictSubmitting] = useState(false);
+  const [returnCallCount, setReturnCallCount] = useState('');
+  const [returnEvidenceUrl, setReturnEvidenceUrl] = useState('');
+  const [companyRejectionDraft, setCompanyRejectionDraft] = useState('');
+  const [companyRejectionSubmitting, setCompanyRejectionSubmitting] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
 
   const load = useCallback(async () => {
@@ -109,6 +118,63 @@ export default function DriverOrderDetailScreen() {
     }
   };
 
+  const pickReturnEvidenceImage = async () => {
+    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!perm.granted) {
+      Alert.alert('Permission needed', 'Allow photo library access to attach a photo.');
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      quality: 0.65,
+      base64: true,
+    });
+    if (result.canceled || !result.assets[0]) return;
+    const a = result.assets[0];
+    const uri = a.base64 ? `data:image/jpeg;base64,${a.base64}` : (a.uri || '');
+    if (uri) setReturnEvidenceUrl(uri);
+  };
+
+  const submitCompanyRejectionResponse = async () => {
+    if (!order) return;
+    const t = companyRejectionDraft.trim();
+    if (t.length < 5) {
+      Alert.alert('Too short', 'Please write at least 5 characters.');
+      return;
+    }
+    try {
+      setCompanyRejectionSubmitting(true);
+      await orderService.respondToOrderDriverRejection(order.id, t);
+      setCompanyRejectionDraft('');
+      await load();
+      Alert.alert('Sent', 'Your response was saved.');
+    } catch (e: any) {
+      Alert.alert('Error', e?.message || 'Could not save response');
+    } finally {
+      setCompanyRejectionSubmitting(false);
+    }
+  };
+
+  const cancelAssignment = () => {
+    if (!order) return;
+    Alert.alert('Cancel', 'Cancel your assignment for this order?', [
+      { text: 'No', style: 'cancel' },
+      {
+        text: 'Yes',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await orderService.cancelAssignment(order.id, 'Driver cancelled');
+            await stopOrderTrackingSilently();
+            router.replace('/(driver)/my-orders');
+          } catch (e: any) {
+            Alert.alert('Error', e?.message || 'Could not cancel');
+          }
+        },
+      },
+    ]);
+  };
+
   const submitConflictFeedback = async () => {
     if (!order) return;
     const t = conflictFeedback.trim();
@@ -155,9 +221,17 @@ export default function DriverOrderDetailScreen() {
       router.push(`/(driver)/upload-proofs?orderId=${order.id}` as any);
       return;
     }
+    const n = parseInt(returnCallCount.trim(), 10);
+    const extra: { customerCallCountBeforeReturn?: number; returnEvidenceImageUrl?: string } = {};
+    if (returnCallCount.trim() !== '' && !Number.isNaN(n) && n >= 0) {
+      extra.customerCallCountBeforeReturn = n;
+    }
+    if (returnEvidenceUrl.trim()) {
+      extra.returnEvidenceImageUrl = returnEvidenceUrl.trim();
+    }
     try {
       setStatusUpdating(true);
-      await orderService.updateOrderStatus(order.id, 'RETURNED');
+      await orderService.updateOrderStatus(order.id, 'RETURNED', extra);
       await load();
       await restoreOrderTrackingForDriver();
     } catch (e) {
@@ -174,7 +248,9 @@ export default function DriverOrderDetailScreen() {
   const meta = STATUS_META[order.status] || STATUS_META.DELIVERED;
   const da = order.driverAssignment;
   const showProofSection = ['DRIVER_ARRIVED', 'PICKED_UP', 'DELIVERING', 'RETURNED', 'RETURN_DEPOSIT', 'DELIVERED'].includes(order.status);
-  const canRevert = ['DRIVER_ARRIVED', 'PICKED_UP', 'DELIVERING'].includes(order.status);
+  const canRevert = ['DRIVER_ARRIVED', 'PICKED_UP', 'DELIVERING', 'RETURNED'].includes(order.status);
+  const canCancelAssignment =
+    order.status === 'PENDING_CUSTOMER_APPROVAL' || order.status === 'DRIVER_ASSIGNED';
   const chatFriendlyClosedStatuses = ['DELIVERED', 'RETURN_DEPOSIT', 'REFUNDED', 'FAILED', 'DISPUTED', 'CANCELLED'];
   const canOpenChat = !!order.chatRoom || chatFriendlyClosedStatuses.includes(order.status);
   const nextActionLabel: Record<string, string> = {
@@ -247,6 +323,64 @@ export default function DriverOrderDetailScreen() {
             </View>
           </View>
         </View>
+
+        {order.myOrderDriverRejection && !order.arrivalConflict && (
+          <View style={[s.card, { backgroundColor: colors.card, borderLeftWidth: 4, borderLeftColor: '#ea580c' }]}>
+            <Text style={[s.cardTitle, { color: colors.text }]}>Feedback on your assignment</Text>
+            {order.myOrderDriverRejection.reason ? (
+              <>
+                <Text style={{ fontSize: 12, color: colors.textSecondary, marginBottom: 6 }}>
+                  {order.sourceType === 'DELIVERY_COMPANY'
+                    ? 'The company / department indicated:'
+                    : 'The customer indicated:'}
+                </Text>
+                <Text style={{ color: colors.text, lineHeight: 20 }}>{order.myOrderDriverRejection.reason}</Text>
+              </>
+            ) : (
+              <Text style={{ color: colors.textSecondary, fontSize: 13 }}>You were unassigned from this order.</Text>
+            )}
+            {order.myOrderDriverRejection.driverResponse ? (
+              <View style={{ marginTop: 12 }}>
+                <Text style={[s.routeLabel, { color: colors.textTertiary, marginBottom: 4 }]}>Your response</Text>
+                <Text style={{ color: colors.textSecondary, lineHeight: 20 }}>{order.myOrderDriverRejection.driverResponse}</Text>
+              </View>
+            ) : (
+              <View style={{ gap: 10, marginTop: 12 }}>
+                <Text style={{ color: colors.textSecondary, fontSize: 13 }}>
+                  Optional: add your side (min. 5 characters).
+                </Text>
+                <TextInput
+                  style={{
+                    borderWidth: 1,
+                    borderColor: colors.border,
+                    borderRadius: 12,
+                    padding: 12,
+                    minHeight: 88,
+                    color: colors.text,
+                    backgroundColor: colors.background,
+                  }}
+                  placeholder="Your response…"
+                  placeholderTextColor={colors.textTertiary}
+                  value={companyRejectionDraft}
+                  onChangeText={setCompanyRejectionDraft}
+                  multiline
+                  textAlignVertical="top"
+                />
+                <TouchableOpacity
+                  style={[s.nextBtn, { backgroundColor: colors.primary }, companyRejectionSubmitting && { opacity: 0.6 }]}
+                  onPress={submitCompanyRejectionResponse}
+                  disabled={companyRejectionSubmitting}
+                >
+                  {companyRejectionSubmitting ? (
+                    <ActivityIndicator color="#fff" size="small" />
+                  ) : (
+                    <Text style={s.nextBtnText}>Submit response</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
+        )}
 
         {order.arrivalConflict && (
           <View style={[s.card, { backgroundColor: colors.card, borderLeftWidth: 4, borderLeftColor: '#dc2626' }]}>
@@ -341,6 +475,72 @@ export default function DriverOrderDetailScreen() {
             <Ionicons name="chatbubbles" size={20} color="#fff" />
             <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700' }}>Chat</Text>
           </TouchableOpacity>
+        )}
+
+        {canCancelAssignment && (
+          <TouchableOpacity
+            style={[s.card, { backgroundColor: colors.dangerBg, borderWidth: 1, borderColor: colors.danger }]}
+            onPress={cancelAssignment}
+            activeOpacity={0.85}
+          >
+            <Text style={{ color: colors.danger, fontSize: 15, fontWeight: '700', textAlign: 'center' }}>
+              Cancel assignment
+            </Text>
+          </TouchableOpacity>
+        )}
+
+        {order.status === 'DELIVERING' && (
+          <View style={[s.card, { backgroundColor: colors.card }]}>
+            <Text style={[s.cardTitle, { color: colors.text }]}>Return details (optional)</Text>
+            <Text style={{ fontSize: 12, color: colors.textSecondary, marginBottom: 8 }}>
+              How many times you called the customer before returning, and an optional photo from your gallery.
+            </Text>
+            <TextInput
+              style={{
+                borderWidth: 1,
+                borderColor: colors.border,
+                borderRadius: 10,
+                padding: 10,
+                marginBottom: 10,
+                color: colors.text,
+                backgroundColor: colors.background,
+              }}
+              placeholder="Number of calls (optional)"
+              placeholderTextColor={colors.textTertiary}
+              keyboardType="number-pad"
+              value={returnCallCount}
+              onChangeText={setReturnCallCount}
+            />
+            <TouchableOpacity
+              style={{
+                borderWidth: 1,
+                borderColor: colors.border,
+                borderRadius: 10,
+                padding: 12,
+                marginBottom: 10,
+                backgroundColor: colors.surfaceVariant,
+              }}
+              onPress={pickReturnEvidenceImage}
+            >
+              <Text style={{ color: colors.primary, fontWeight: '600', textAlign: 'center' }}>
+                Choose photo from gallery
+              </Text>
+            </TouchableOpacity>
+            {returnEvidenceUrl ? (
+              <View style={{ gap: 8 }}>
+                {returnEvidenceUrl.startsWith('data:') || returnEvidenceUrl.startsWith('file') || returnEvidenceUrl.startsWith('http') ? (
+                  <Image
+                    source={{ uri: returnEvidenceUrl }}
+                    style={{ width: '100%', height: 160, borderRadius: 10, backgroundColor: '#f3f4f6' }}
+                    resizeMode="contain"
+                  />
+                ) : null}
+                <TouchableOpacity onPress={() => setReturnEvidenceUrl('')}>
+                  <Text style={{ color: '#dc2626', fontSize: 13, textAlign: 'center' }}>Remove image</Text>
+                </TouchableOpacity>
+              </View>
+            ) : null}
+          </View>
         )}
 
         {(canRevert || canGoNext || order.status === 'DELIVERING') && (

@@ -37,6 +37,7 @@ const STATUS_REVERT: Record<string, { prev: string; label: string }> = {
   DRIVER_ARRIVED: { prev: 'DRIVER_ASSIGNED', label: 'Back to Assigned' },
   PICKED_UP:      { prev: 'DRIVER_ARRIVED',  label: 'Back to Arrived' },
   DELIVERING:     { prev: 'PICKED_UP',       label: 'Back to Picked Up' },
+  RETURNED:       { prev: 'DELIVERING',      label: 'Back to Delivering' },
 };
 
 export default function DriverMyOrdersScreen() {
@@ -117,8 +118,12 @@ export default function DriverMyOrdersScreen() {
     return <View style={[s.center, { backgroundColor: colors.background }]}><ActivityIndicator size="large" color={colors.primary} /></View>;
   }
 
-  const activeOrders = orders.filter(o => !['DELIVERED', 'CANCELLED'].includes(o.status));
-  const pastOrders = orders.filter(o => ['DELIVERED', 'CANCELLED'].includes(o.status));
+  const activeOrders = orders.filter(
+    o => !['DELIVERED', 'CANCELLED', 'RETURN_DEPOSIT'].includes(o.status),
+  );
+  const pastOrders = orders.filter(o =>
+    ['DELIVERED', 'CANCELLED', 'RETURN_DEPOSIT'].includes(o.status),
+  );
 
   const renderOrder = (order: Order) => {
     const meta = STATUS_META[order.status] || STATUS_META.DELIVERED;

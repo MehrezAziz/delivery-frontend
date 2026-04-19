@@ -2,7 +2,6 @@ import { useEffect, useState, useCallback, useMemo } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, ActivityIndicator,
   Alert, RefreshControl, StyleSheet, Modal, TextInput, FlatList,
-  InteractionManager,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -82,6 +81,8 @@ export default function AvailableOrdersScreen() {
   const [accepting, setAccepting] = useState<string | null>(null);
   const [initDone, setInitDone] = useState(false);
   const [rejectedOrders, setRejectedOrders] = useState<any[]>([]);
+  const [rejectionDrafts, setRejectionDrafts] = useState<Record<string, string>>({});
+  const [rejectionSubmitting, setRejectionSubmitting] = useState<string | null>(null);
   const [showDeclinedFlash, setShowDeclinedFlash] = useState(false);
 
   // "I'm available now" state — default TRUE
@@ -335,17 +336,16 @@ export default function AvailableOrdersScreen() {
         setAccepting(orderId);
         try {
           await orderService.acceptOrder(orderId);
-          const locOk = await startDriverLocationTracking(orderId);
-          await ensureDriverPushNotificationSetup();
-          if (!locOk) {
-            Alert.alert(
-              'Location permission',
-              'Please allow location access so the customer can see your position on the map during delivery. You can enable it in Settings.',
-            );
-          }
-          InteractionManager.runAfterInteractions(() => {
-            router.replace(`/(driver)/order-detail?orderId=${orderId}`);
+          router.replace(`/(driver)/order-detail?orderId=${orderId}`);
+          void startDriverLocationTracking(orderId).then((locOk) => {
+            if (!locOk) {
+              Alert.alert(
+                'Location permission',
+                'Please allow location access so the customer can see your position on the map during delivery. You can enable it in Settings.',
+              );
+            }
           });
+          void ensureDriverPushNotificationSetup();
         }
         catch (e: any) {
           const msg = e.message || '';
@@ -677,7 +677,7 @@ export default function AvailableOrdersScreen() {
               <View style={[s.sectionIcon, { backgroundColor: '#fee2e2' }]}>
                 <Ionicons name="ban" size={14} color="#dc2626" />
               </View>
-              <Text style={[s.sectionTitle, { color: '#dc2626' }]}>Rejected by Customer</Text>
+              <Text style={[s.sectionTitle, { color: '#dc2626' }]}>No longer assigned</Text>
               <View style={[s.sectionBadge, { backgroundColor: '#fee2e2' }]}>
                 <Text style={[s.sectionBadgeText, { color: '#dc2626' }]}>{rejectedOrders.length}</Text>
               </View>
@@ -708,10 +708,81 @@ export default function AvailableOrdersScreen() {
                 </View>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 }}>
                   <Ionicons name="information-circle-outline" size={16} color="#dc2626" />
-                  <Text style={{ fontSize: 13, color: '#dc2626', fontWeight: '500' }}>
-                    The customer declined working with you on this order
+                  <Text style={{ fontSize: 13, color: '#dc2626', fontWeight: '500', flex: 1 }}>
+                    {r.order?.sourceType === 'DELIVERY_COMPANY'
+                      ? 'The company / department removed you from this order.'
+                      : 'The customer declined working with you on this order.'}
                   </Text>
                 </View>
+                {r.reason ? (
+                  <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 6 }}>
+                    Reason: {r.reason}
+                  </Text>
+                ) : null}
+                {r.driverResponse ? (
+                  <Text style={{ fontSize: 12, color: colors.text, marginTop: 8 }}>
+                    Your response: {r.driverResponse}
+                  </Text>
+                ) : (
+                  <View style={{ marginTop: 10, gap: 8 }}>
+                    <TextInput
+                      style={{
+                        borderWidth: 1,
+                        borderColor: colors.border,
+                        borderRadius: 10,
+                        padding: 10,
+                        minHeight: 72,
+                        color: colors.text,
+                        backgroundColor: colors.background,
+                      }}
+                      placeholder="Your response (min. 5 characters, optional)"
+                      placeholderTextColor={colors.textTertiary}
+                      value={rejectionDrafts[r.rejectionId] ?? ''}
+                      onChangeText={(t) => setRejectionDrafts((prev) => ({ ...prev, [r.rejectionId]: t }))}
+                      multiline
+                      textAlignVertical="top"
+                    />
+                    <TouchableOpacity
+                      style={{
+                        alignSelf: 'flex-start',
+                        backgroundColor: colors.primary,
+                        paddingHorizontal: 16,
+                        paddingVertical: 10,
+                        borderRadius: 10,
+                        opacity: rejectionSubmitting === r.rejectionId ? 0.6 : 1,
+                      }}
+                      disabled={rejectionSubmitting === r.rejectionId}
+                      onPress={async () => {
+                        const text = (rejectionDrafts[r.rejectionId] ?? '').trim();
+                        if (text.length < 5) {
+                          Alert.alert('Too short', 'Please write at least 5 characters.');
+                          return;
+                        }
+                        try {
+                          setRejectionSubmitting(r.rejectionId);
+                          await orderService.respondToOrderDriverRejection(r.order.id, text);
+                          setRejectionDrafts((prev) => {
+                            const n = { ...prev };
+                            delete n[r.rejectionId];
+                            return n;
+                          });
+                          const list = await orderService.getDriverRejectedOrders();
+                          setRejectedOrders(list || []);
+                        } catch (e: any) {
+                          Alert.alert('Error', e?.message || 'Could not save');
+                        } finally {
+                          setRejectionSubmitting(null);
+                        }
+                      }}
+                    >
+                      {rejectionSubmitting === r.rejectionId ? (
+                        <ActivityIndicator color="#fff" size="small" />
+                      ) : (
+                        <Text style={{ color: '#fff', fontWeight: '700', fontSize: 14 }}>Submit response</Text>
+                      )}
+                    </TouchableOpacity>
+                  </View>
+                )}
                 <Text style={{ fontSize: 11, color: '#9ca3af', marginTop: 4 }}>
                   {new Date(r.rejectedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
                 </Text>

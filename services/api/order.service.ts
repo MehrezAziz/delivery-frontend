@@ -85,6 +85,12 @@ export interface Order {
     driverFeedback: string | null;
     createdAt: string;
   } | null;
+  myOrderDriverRejection?: {
+    id: string;
+    reason: string | null;
+    driverResponse: string | null;
+    driverRespondedAt: string | null;
+  } | null;
   returnDepositFeedback?: {
     id: string;
     reportedByUserId: string;
@@ -213,7 +219,11 @@ export const orderService = {
 
   acceptOrder: (id: string) => api.post(`/driver/orders/${id}/accept`),
 
-  updateOrderStatus: (id: string, status: string) => api.patch(`/driver/orders/${id}/status`, { status }),
+  updateOrderStatus: (
+    id: string,
+    status: string,
+    extra?: { customerCallCountBeforeReturn?: number; returnEvidenceImageUrl?: string },
+  ) => api.patch(`/driver/orders/${id}/status`, { status, ...extra }),
 
   cancelAssignment: (id: string, reason: string) => api.post(`/driver/orders/${id}/cancel-assignment`, { reason }),
 
@@ -261,10 +271,18 @@ export const orderService = {
     api.post(`/driver/orders/${orderId}/revert-status`),
 
   // Driver rejected orders
-  getDriverRejectedOrders: () => api.get<{
-    rejectionId: string; rejectedAt: string; reason: string | null;
-    order: Order;
-  }[]>('/driver/orders/rejected'),
+  getDriverRejectedOrders: () =>
+    api.get<{
+      rejectionId: string;
+      rejectedAt: string;
+      reason: string | null;
+      driverResponse: string | null;
+      driverRespondedAt: string | null;
+      order: Order;
+    }[]>('/driver/orders/rejected'),
+
+  respondToOrderDriverRejection: (orderId: string, response: string) =>
+    api.post<{ message: string }>(`/driver/orders/${orderId}/order-driver-rejection-response`, { response }),
 
   // Driver ratings
   getDriverRatings: () => api.get<{
