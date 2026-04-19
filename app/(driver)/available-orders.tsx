@@ -318,9 +318,14 @@ export default function AvailableOrdersScreen() {
     } catch {
       /* ignore */
     }
+  }, [declinedFlash, router]);
+
+  /** Separate effect so clearing `declinedFlash` does not cancel the 3s timer (cleanup would clear it). */
+  useEffect(() => {
+    if (!showDeclinedFlash) return;
     const t = setTimeout(() => setShowDeclinedFlash(false), 3000);
     return () => clearTimeout(t);
-  }, [declinedFlash, router]);
+  }, [showDeclinedFlash]);
 
   useEffect(() => { if (initDone) load(); }, [load, initDone]);
   useEffect(() => { if (!initDone) return; const i = setInterval(load, 10000); return () => clearInterval(i); }, [load, initDone]);
