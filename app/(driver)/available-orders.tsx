@@ -69,7 +69,10 @@ function SearchPicker({ visible, title, data, onSelect, onClose, search, setSear
 
 export default function AvailableOrdersScreen() {
   const router = useRouter();
-  const { urgentOrderId } = useLocalSearchParams<{ urgentOrderId?: string }>();
+  const { urgentOrderId, declinedFlash } = useLocalSearchParams<{
+    urgentOrderId?: string;
+    declinedFlash?: string | string[];
+  }>();
   const { colors, isDark } = useTheme();
   const [data, setData] = useState<AvailableOrders | null>(null);
   const [filteredData, setFilteredData] = useState<FilteredOrders | null>(null);
@@ -78,6 +81,7 @@ export default function AvailableOrdersScreen() {
   const [accepting, setAccepting] = useState<string | null>(null);
   const [initDone, setInitDone] = useState(false);
   const [rejectedOrders, setRejectedOrders] = useState<any[]>([]);
+  const [showDeclinedFlash, setShowDeclinedFlash] = useState(false);
 
   // "I'm available now" state — default TRUE
   const [availableNow, setAvailableNow] = useState(true);
@@ -298,6 +302,24 @@ export default function AvailableOrdersScreen() {
       .catch(() => {});
   }, []);
 
+  /** Red banner after tap from "Removed from company order" (pre-arrival) notification. */
+  useEffect(() => {
+    const raw = declinedFlash;
+    const on =
+      raw === '1' ||
+      raw === 'true' ||
+      (Array.isArray(raw) && (raw[0] === '1' || raw[0] === 'true'));
+    if (!on) return;
+    setShowDeclinedFlash(true);
+    try {
+      router.setParams({ declinedFlash: undefined });
+    } catch {
+      /* ignore */
+    }
+    const t = setTimeout(() => setShowDeclinedFlash(false), 3000);
+    return () => clearTimeout(t);
+  }, [declinedFlash, router]);
+
   useEffect(() => { if (initDone) load(); }, [load, initDone]);
   useEffect(() => { if (!initDone) return; const i = setInterval(load, 10000); return () => clearInterval(i); }, [load, initDone]);
 
@@ -515,6 +537,12 @@ export default function AvailableOrdersScreen() {
             : `${totalOrders} order${totalOrders !== 1 ? 's' : ''} near you`}
         </Text>
       </View>
+
+      {showDeclinedFlash && (
+        <View style={s.declinedFlashOverlay} pointerEvents="none" accessibilityRole="alert">
+          <Text style={s.declinedFlashCenterText}>Declined</Text>
+        </View>
+      )}
 
       {/* "I'm available now" toggle — only shown when driver is outside their schedule */}
       {driverGeo && !driverGeo.isAvailable && (
@@ -779,6 +807,20 @@ const s = StyleSheet.create({
   },
   headerTitle: { color: '#fff', fontSize: 20, fontWeight: '700' },
   headerSub: { color: 'rgba(255,255,255,0.75)', fontSize: 14, textAlign: 'center' },
+  /** Full-screen centered flash when company declines driver before arrival */
+  declinedFlashOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 1000,
+    backgroundColor: 'rgba(15, 23, 42, 0.25)',
+  },
+  declinedFlashCenterText: {
+    color: '#dc2626',
+    fontSize: 28,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
 
   // Available toggle
   availableToggle: {

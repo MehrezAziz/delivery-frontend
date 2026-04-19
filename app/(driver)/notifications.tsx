@@ -15,7 +15,10 @@ import {
   sortGroups,
   type NotificationGroup,
 } from '../../utils/notificationGrouping';
-import { shouldSuppressDriverOrderDetailNavigation } from '../../utils/driverInboxNavigation';
+import {
+  routeWhenDriverCannotOpenOrderDetail,
+  shouldSuppressDriverOrderDetailNavigation,
+} from '../../utils/driverInboxNavigation';
 
 const PRIORITY_COLORS: Record<string, string> = {
   LOW: '#6b7280',
@@ -91,6 +94,11 @@ export default function DriverNotifications() {
         prev.map((n) => (inboxGroupKey(n) === g.groupKey && !n.readAt ? { ...n, readAt: now } : n)),
       );
       notificationService.markThreadAsRead(g.groupKey).catch(() => {});
+    }
+    const suppressedRoute = routeWhenDriverCannotOpenOrderDetail(item);
+    if (suppressedRoute) {
+      router.push(suppressedRoute as any);
+      return;
     }
     if (shouldSuppressDriverOrderDetailNavigation(item)) {
       return;

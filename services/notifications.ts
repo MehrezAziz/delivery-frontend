@@ -865,6 +865,13 @@ export async function notificationDataToRoute(
     case 'Order': {
       /** Backend sets this when the driver was removed before arrival — they no longer have API access to the order. */
       if (data.suppressDriverTapNavigation === 'true') {
+        /** Delivery-company pre-arrival rejection: `orderStatus` is FAILED (see delivery-company.service). */
+        if (
+          (data.type || '') === 'ORDER_CANCELLED_BY_CUSTOMER' &&
+          (data.orderStatus || '') === 'FAILED'
+        ) {
+          return '/(driver)/available-orders?declinedFlash=1';
+        }
         return null;
       }
       const driverTypes = [
@@ -955,7 +962,11 @@ type NotifeeInitial = NonNullable<Awaited<ReturnType<typeof notifee.getInitialNo
 async function routeFromNotifeeInitialForNavigation(initial: NotifeeInitial): Promise<string | null> {
   const actionId = initial.pressAction?.id;
   const data = coerceFcmData(initial.notification?.data as Record<string, unknown>);
-  if (data.suppressDriverTapNavigation === 'true') return null;
+  if (data.suppressDriverTapNavigation === 'true') {
+    const r = await notificationDataToRoute(data);
+    if (r) return r;
+    return null;
+  }
   const orderId = data.orderId || data.relatedEntityId || '';
   let role: string | undefined;
   try {

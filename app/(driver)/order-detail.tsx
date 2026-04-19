@@ -50,11 +50,7 @@ export default function DriverOrderDetailScreen() {
     } catch (e: any) {
       const status = e?.response?.status;
       if (status === 403 || status === 404) {
-        Alert.alert(
-          'No access',
-          'You were removed from this order or it is no longer available.',
-          [{ text: 'OK', onPress: () => router.replace('/(driver)/available-orders') }],
-        );
+        router.replace('/(driver)/available-orders?declinedFlash=1');
         return;
       }
       console.error(e);

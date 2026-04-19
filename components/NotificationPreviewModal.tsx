@@ -16,14 +16,24 @@ import {
   type Notification,
   type NotificationPreviewGroup,
 } from '../services/api/notification.service';
-import { shouldSuppressDriverOrderDetailNavigation } from '../utils/driverInboxNavigation';
+import {
+  routeWhenDriverCannotOpenOrderDetail,
+  shouldSuppressDriverOrderDetailNavigation,
+} from '../utils/driverInboxNavigation';
 import { useTheme } from '../contexts/ThemeContext';
 
 type Variant = 'customer' | 'driver';
 
 function navigateFromNotification(router: ReturnType<typeof useRouter>, item: Notification, variant: Variant) {
-  if (variant === 'driver' && shouldSuppressDriverOrderDetailNavigation(item)) {
-    return;
+  if (variant === 'driver') {
+    const suppressedRoute = routeWhenDriverCannotOpenOrderDetail(item);
+    if (suppressedRoute) {
+      router.push(suppressedRoute as any);
+      return;
+    }
+    if (shouldSuppressDriverOrderDetailNavigation(item)) {
+      return;
+    }
   }
   if (item.relatedEntityType === 'Order' && item.relatedEntityId) {
     if (variant === 'driver' && item.type === 'NEW_ORDER_AVAILABLE') {
