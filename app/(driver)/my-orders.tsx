@@ -16,6 +16,8 @@ const STATUS_META: Record<string, { color: string; bg: string; label: string; ic
   PICKED_UP:       { color: '#ea580c', bg: '#ffedd5', label: 'Picked Up',   icon: 'cube-outline' },
   DELIVERING:      { color: '#4f46e5', bg: '#e0e7ff', label: 'Delivering',  icon: 'bicycle-outline' },
   DELIVERED:       { color: '#16a34a', bg: '#dcfce7', label: 'Delivered',    icon: 'checkmark-circle' },
+  RETURNED:        { color: '#e11d48', bg: '#ffe4e6', label: 'Returned',     icon: 'return-up-back-outline' },
+  RETURN_DEPOSIT:  { color: '#a21caf', bg: '#fae8ff', label: 'Return deposit', icon: 'archive-outline' },
   CANCELLED:       { color: '#dc2626', bg: '#fee2e2', label: 'Cancelled',   icon: 'close-circle' },
 };
 
@@ -24,6 +26,7 @@ const STATUS_ACTIONS: Record<string, { next: string; label: string; color: strin
   DRIVER_ARRIVED:  { next: 'PICKED_UP',     label: 'Package Picked Up', color: '#ea580c', icon: 'cube' },
   PICKED_UP:       { next: 'DELIVERING',    label: 'Start Delivering',  color: '#4f46e5', icon: 'bicycle' },
   DELIVERING:      { next: 'DELIVERED',     label: 'Mark Delivered',    color: '#16a34a', icon: 'checkmark-circle' },
+  RETURNED:        { next: 'RETURN_DEPOSIT', label: 'Mark return deposit', color: '#a21caf', icon: 'archive' },
 };
 
 const STATUS_REVERT: Record<string, { prev: string; label: string }> = {
@@ -56,12 +59,12 @@ export default function DriverMyOrdersScreen() {
 
   const handleStatusUpdate = async (orderId: string, status: string) => {
     // If marking as delivered, check if proof is uploaded first
-    if (status === 'DELIVERED') {
+    if (status === 'DELIVERED' || status === 'RETURNED') {
       const order = orders.find(o => o.id === orderId);
       if (order && !order.driverAssignment?.image1Proof) {
         Alert.alert(
           'Proof Required',
-          'You must upload at least the first proof image before marking the order as delivered.',
+          'You must upload at least the first proof image before marking this order.',
           [
             { text: 'Cancel', style: 'cancel' },
             { text: 'Upload Now', onPress: () => router.push(`/(driver)/upload-proofs?orderId=${orderId}`) },
@@ -201,24 +204,65 @@ export default function DriverMyOrdersScreen() {
                 <Ionicons name="arrow-undo" size={18} color={colors.textSecondary} />
               </TouchableOpacity>
             )}
-            <TouchableOpacity
-              style={[s.actionBtn, { backgroundColor: action.color, flex: 1, marginBottom: 0 }]}
-              onPress={() => handleStatusUpdate(order.id, action.next)}
-              disabled={isUpdating}
-              activeOpacity={0.8}
-            >
-              {isUpdating ? (
-                <ActivityIndicator size="small" color="#fff" />
-              ) : (
-                <>
-                  <Ionicons name={action.icon as any} size={18} color="#fff" />
-                  <Text style={s.actionBtnText}>{action.label}</Text>
-                  {action.next === 'DELIVERED' && !order.driverAssignment?.image1Proof && (
-                    <Ionicons name="alert-circle" size={16} color="#fbbf24" />
+            {order.status === 'DELIVERING' ? (
+              <View style={{ flex: 1, flexDirection: 'row', gap: 8 }}>
+                <TouchableOpacity
+                  style={[s.actionBtn, { backgroundColor: '#e11d48', flex: 1, marginBottom: 0 }]}
+                  onPress={() => handleStatusUpdate(order.id, 'RETURNED')}
+                  disabled={isUpdating}
+                  activeOpacity={0.8}
+                >
+                  {isUpdating ? (
+                    <ActivityIndicator size="small" color="#fff" />
+                  ) : (
+                    <>
+                      <Ionicons name="arrow-undo" size={18} color="#fff" />
+                      <Text style={s.actionBtnText}>Mark as return</Text>
+                      {!order.driverAssignment?.image1Proof && (
+                        <Ionicons name="alert-circle" size={16} color="#fbbf24" />
+                      )}
+                    </>
                   )}
-                </>
-              )}
-            </TouchableOpacity>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[s.actionBtn, { backgroundColor: action.color, flex: 1, marginBottom: 0 }]}
+                  onPress={() => handleStatusUpdate(order.id, action.next)}
+                  disabled={isUpdating}
+                  activeOpacity={0.8}
+                >
+                  {isUpdating ? (
+                    <ActivityIndicator size="small" color="#fff" />
+                  ) : (
+                    <>
+                      <Ionicons name={action.icon as any} size={18} color="#fff" />
+                      <Text style={s.actionBtnText}>{action.label}</Text>
+                      {action.next === 'DELIVERED' && !order.driverAssignment?.image1Proof && (
+                        <Ionicons name="alert-circle" size={16} color="#fbbf24" />
+                      )}
+                    </>
+                  )}
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <TouchableOpacity
+                style={[s.actionBtn, { backgroundColor: action.color, flex: 1, marginBottom: 0 }]}
+                onPress={() => handleStatusUpdate(order.id, action.next)}
+                disabled={isUpdating}
+                activeOpacity={0.8}
+              >
+                {isUpdating ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <>
+                    <Ionicons name={action.icon as any} size={18} color="#fff" />
+                    <Text style={s.actionBtnText}>{action.label}</Text>
+                    {action.next === 'DELIVERED' && !order.driverAssignment?.image1Proof && (
+                      <Ionicons name="alert-circle" size={16} color="#fbbf24" />
+                    )}
+                  </>
+                )}
+              </TouchableOpacity>
+            )}
           </View>
         )}
 
