@@ -286,6 +286,7 @@ const SILENT_NOTIFICATION_ACTION_IDS = new Set([
   'driver_mark_arrived',
   'driver_mark_picked_up',
   'driver_mark_delivering',
+  'driver_open_return_deposit',
 ]);
 
 function buildNotifeeActions(data: Record<string, string>) {
@@ -770,7 +771,9 @@ async function handleDriverNotificationPress(orderId: string, actionId: string |
         router.push(getDriverOrderRoute(orderId, 'proof') as any);
         return;
       case 'driver_open_return_deposit':
-        router.push(getDriverOrderRoute(orderId, 'return_deposit') as any);
+        await orderService.updateOrderStatus(orderId, 'RETURN_DEPOSIT');
+        emitOrderDetailAndDriverListRefresh(orderId);
+        await restoreOrderTrackingForDriver();
         return;
       case 'driver_mark_arrived':
         await orderService.updateOrderStatus(orderId, 'DRIVER_ARRIVED');
@@ -822,7 +825,9 @@ async function handleDriverNotificationPressBackground(orderId: string, actionId
         await savePendingNotificationRoute(getDriverOrderRoute(orderId, 'proof'));
         return;
       case 'driver_open_return_deposit':
-        await savePendingNotificationRoute(getDriverOrderRoute(orderId, 'return_deposit'));
+        await orderService.updateOrderStatus(orderId, 'RETURN_DEPOSIT');
+        emitOrderDetailAndDriverListRefresh(orderId);
+        await restoreOrderTrackingForDriver();
         return;
       default:
         return;
@@ -1032,7 +1037,6 @@ async function routeFromNotifeeInitialForNavigation(initial: NotifeeInitial): Pr
   }
   if (actionId === 'view_order_driver' && orderId) return getDriverOrderRoute(orderId);
   if (actionId === 'driver_open_deliver' && orderId) return getDriverOrderRoute(orderId, 'proof');
-  if (actionId === 'driver_open_return_deposit' && orderId) return getDriverOrderRoute(orderId, 'return_deposit');
   if (actionId === 'driver_contact_customer' && orderId) {
     return `/(driver)/order-chat?orderId=${orderId}`;
   }
@@ -1085,6 +1089,12 @@ export async function resolveLaunchRouteAfterLogin(): Promise<string | null> {
     const data = coerceFcmData(n.notification?.data as Record<string, unknown>);
     const orderId = data.orderId || data.relatedEntityId;
     if (orderId) await handleAcceptDriver(orderId);
+    return null;
+  }
+  if (n?.pressAction?.id === 'driver_open_return_deposit') {
+    const data = coerceFcmData(n.notification?.data as Record<string, unknown>);
+    const orderId = data.orderId || data.relatedEntityId;
+    if (orderId) await handleDriverNotificationPress(orderId, 'driver_open_return_deposit');
     return null;
   }
   if (
