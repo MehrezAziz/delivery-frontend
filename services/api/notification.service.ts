@@ -67,6 +67,10 @@ export const notificationService = {
   markThreadAsRead: (groupKey: string) =>
     api.patch('/notifications/thread/read', { groupKey }),
 
+  /** Unread counts per groupKey (e.g. `chat:<orderId>`) for chat badges. */
+  getBulkThreadUnreadCounts: (groupKeys: string[]) =>
+    api.post<{ counts: Record<string, number> }>('/notifications/thread/unread-bulk', { groupKeys }),
+
   markAllAsRead: () =>
     api.patch('/notifications/read-all'),
 };

@@ -12,6 +12,8 @@ import {
   stopOrderTrackingSilently,
   subscribeDriverMyOrdersRefresh,
 } from '../../services/notifications';
+import { fetchChatUnreadMapForOrders } from '../../hooks/useOrderChatUnread';
+import { ChatUnreadBadge } from '../../components/ChatUnreadBadge';
 
 const STATUS_META: Record<string, { color: string; bg: string; label: string; icon: string }> = {
   PENDING_CUSTOMER_APPROVAL: { color: '#ea580c', bg: '#ffedd5', label: 'Waiting for Customer', icon: 'hourglass-outline' },
@@ -47,6 +49,7 @@ export default function DriverMyOrdersScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [updatingStatus, setUpdatingStatus] = useState<string | null>(null);
+  const [chatUnreadMap, setChatUnreadMap] = useState<Record<string, number>>({});
 
   const load = useCallback(async () => {
     try { setOrders(await orderService.getDriverMyOrders()); }
@@ -61,6 +64,22 @@ export default function DriverMyOrdersScreen() {
     });
   }, [load]);
   useEffect(() => { const i = setInterval(load, 10000); return () => clearInterval(i); }, [load]);
+
+  useEffect(() => {
+    const ids = orders.filter((o) => o.chatRoom?.status === 'ACTIVE').map((o) => o.id);
+    if (ids.length === 0) {
+      setChatUnreadMap({});
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      const map = await fetchChatUnreadMapForOrders(ids);
+      if (!cancelled) setChatUnreadMap(map);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [orders]);
 
   const handleStatusUpdate = async (orderId: string, status: string) => {
     // If marking as delivered, check if proof is uploaded first
@@ -188,11 +207,14 @@ export default function DriverMyOrdersScreen() {
         {/* Quick actions: Chat + Assistance */}
         {hasChat && (
           <View style={s.quickRow}>
-            <TouchableOpacity style={[s.quickBtn, { backgroundColor: '#eff6ff' }]}
-              onPress={() => router.push(`/(driver)/order-chat?orderId=${order.id}`)} activeOpacity={0.7}>
-              <Ionicons name="chatbubbles" size={16} color="#2563eb" />
-              <Text style={[s.quickBtnText, { color: '#2563eb' }]}>Chat</Text>
-            </TouchableOpacity>
+            <View style={{ position: 'relative' }}>
+              <TouchableOpacity style={[s.quickBtn, { backgroundColor: '#eff6ff' }]}
+                onPress={() => router.push(`/(driver)/order-chat?orderId=${order.id}`)} activeOpacity={0.7}>
+                <Ionicons name="chatbubbles" size={16} color="#2563eb" />
+                <Text style={[s.quickBtnText, { color: '#2563eb' }]}>Chat</Text>
+              </TouchableOpacity>
+              <ChatUnreadBadge count={chatUnreadMap[order.id] ?? 0} />
+            </View>
             <TouchableOpacity style={[s.quickBtn, { backgroundColor: '#fff7ed' }]}
               onPress={async () => {
                 try { await orderService.driverRequestAssistance(order.id); router.push('/(driver)/support'); }

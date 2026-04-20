@@ -14,6 +14,8 @@ import {
   stopOrderTrackingSilently,
   subscribeOrderDetailRefresh,
 } from '../../services/notifications';
+import { useOrderChatUnread } from '../../hooks/useOrderChatUnread';
+import { ChatUnreadBadge } from '../../components/ChatUnreadBadge';
 
 const STATUS_META: Record<string, { icon: string; color: string; bg: string; label: string }> = {
   DRAFT:            { icon: 'document-outline',    color: '#6b7280', bg: '#f3f4f6', label: 'Draft' },
@@ -35,7 +37,9 @@ const STAR_LABELS = ['Terrible','Very Bad','Bad','Poor','Below Avg','Average','A
 
 export default function DriverOrderDetailScreen() {
   const router = useRouter();
-  const { orderId, scrollTo } = useLocalSearchParams<{ orderId: string; scrollTo?: string }>();
+  const { orderId: orderIdParam, scrollTo } = useLocalSearchParams<{ orderId: string; scrollTo?: string }>();
+  const orderId = Array.isArray(orderIdParam) ? orderIdParam[0] : orderIdParam;
+  const { unread: chatUnread } = useOrderChatUnread(orderId);
   const handleBack = () => {
     if (router.canGoBack()) router.back();
     else router.replace('/(driver)/home');
@@ -479,14 +483,17 @@ export default function DriverOrderDetailScreen() {
         </View>
 
         {canOpenChat && (
-          <TouchableOpacity
-            style={[s.card, { backgroundColor: '#16a34a', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 }]}
-            onPress={() => router.push(`/(driver)/order-chat?orderId=${order.id}`)}
-            activeOpacity={0.85}
-          >
-            <Ionicons name="chatbubbles" size={20} color="#fff" />
-            <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700' }}>Chat</Text>
-          </TouchableOpacity>
+          <View style={{ position: 'relative', alignSelf: 'stretch' }}>
+            <TouchableOpacity
+              style={[s.card, { backgroundColor: '#16a34a', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 }]}
+              onPress={() => router.push(`/(driver)/order-chat?orderId=${order.id}`)}
+              activeOpacity={0.85}
+            >
+              <Ionicons name="chatbubbles" size={20} color="#fff" />
+              <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700' }}>Chat</Text>
+            </TouchableOpacity>
+            <ChatUnreadBadge count={chatUnread} />
+          </View>
         )}
 
         {order.status === 'RETURNED' && (

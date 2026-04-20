@@ -7,6 +7,8 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { orderService, Order } from '../../services/api/order.service';
 import { useTheme } from '../../contexts/ThemeContext';
+import { useOrderChatUnread } from '../../hooks/useOrderChatUnread';
+import { ChatUnreadBadge } from '../../components/ChatUnreadBadge';
 
 const STATUS_FLOW = [
   'SEARCHING_DRIVER', 'PENDING_CUSTOMER_APPROVAL', 'DRIVER_ASSIGNED', 'DRIVER_ARRIVED', 'PICKED_UP', 'DELIVERING', 'RETURNED', 'RETURN_DEPOSIT', 'DELIVERED',
@@ -33,7 +35,9 @@ const STAR_LABELS = ['Terrible', 'Very Bad', 'Bad', 'Poor', 'Below Average', 'Av
 
 export default function OrderDetailScreen() {
   const router = useRouter();
-  const { orderId, scrollTo } = useLocalSearchParams<{ orderId: string; scrollTo?: string }>();
+  const { orderId: orderIdParam, scrollTo } = useLocalSearchParams<{ orderId: string; scrollTo?: string }>();
+  const orderId = Array.isArray(orderIdParam) ? orderIdParam[0] : orderIdParam;
+  const { unread: chatUnread } = useOrderChatUnread(orderId);
   const handleBack = () => {
     if (router.canGoBack()) router.back();
     else router.replace('/(customer)/home');
@@ -430,11 +434,14 @@ export default function OrderDetailScreen() {
         {(canOpenChat || canTrack) && (
           <View style={s.quickActionsRow}>
             {canOpenChat && (
-              <TouchableOpacity style={[s.quickAction, { backgroundColor: '#3b82f6' }]}
-                onPress={() => router.push(`/(customer)/order-chat?orderId=${order.id}`)} activeOpacity={0.8}>
-                <Ionicons name="chatbubbles" size={20} color="#fff" />
-                <Text style={s.quickActionText}>Chat</Text>
-              </TouchableOpacity>
+              <View style={{ position: 'relative' }}>
+                <TouchableOpacity style={[s.quickAction, { backgroundColor: '#3b82f6' }]}
+                  onPress={() => router.push(`/(customer)/order-chat?orderId=${order.id}`)} activeOpacity={0.8}>
+                  <Ionicons name="chatbubbles" size={20} color="#fff" />
+                  <Text style={s.quickActionText}>Chat</Text>
+                </TouchableOpacity>
+                <ChatUnreadBadge count={chatUnread} />
+              </View>
             )}
             {canTrack && (
               <TouchableOpacity style={[s.quickAction, { backgroundColor: '#6366f1' }]}
@@ -578,10 +585,13 @@ export default function OrderDetailScreen() {
                 )}
               </View>
               {canOpenChat && (
-                <TouchableOpacity style={s.driverChatBtn}
-                  onPress={() => router.push(`/(customer)/order-chat?orderId=${order.id}`)}>
-                  <Ionicons name="chatbubble-ellipses" size={18} color="#3b82f6" />
-                </TouchableOpacity>
+                <View style={{ position: 'relative' }}>
+                  <TouchableOpacity style={s.driverChatBtn}
+                    onPress={() => router.push(`/(customer)/order-chat?orderId=${order.id}`)}>
+                    <Ionicons name="chatbubble-ellipses" size={18} color="#3b82f6" />
+                  </TouchableOpacity>
+                  <ChatUnreadBadge count={chatUnread} />
+                </View>
               )}
             </View>
             {/* Performance metrics */}

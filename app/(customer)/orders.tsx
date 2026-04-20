@@ -9,6 +9,8 @@ import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import { orderService, Order } from '../../services/api/order.service';
 import { useTheme } from '../../contexts/ThemeContext';
+import { fetchChatUnreadMapForOrders } from '../../hooks/useOrderChatUnread';
+import { ChatUnreadBadge } from '../../components/ChatUnreadBadge';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const SIDEBAR_WIDTH = SCREEN_WIDTH * 0.65;
@@ -45,6 +47,7 @@ export default function CustomerOrdersScreen() {
   const overlayAnim = useRef(new Animated.Value(0)).current;
   const [trackModalOpen, setTrackModalOpen] = useState(false);
   const [trackCode, setTrackCode] = useState('');
+  const [chatUnreadMap, setChatUnreadMap] = useState<Record<string, number>>({});
 
   // Clear track code when leaving the page
   useFocusEffect(
@@ -90,6 +93,22 @@ export default function CustomerOrdersScreen() {
     const interval = setInterval(loadOrders, 10000);
     return () => clearInterval(interval);
   }, [loadOrders]);
+
+  useEffect(() => {
+    const ids = orders.filter((o) => !!o.chatRoom).map((o) => o.id);
+    if (ids.length === 0) {
+      setChatUnreadMap({});
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      const map = await fetchChatUnreadMapForOrders(ids);
+      if (!cancelled) setChatUnreadMap(map);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [orders]);
 
   const onRefresh = () => { setRefreshing(true); loadOrders(); };
 
@@ -252,6 +271,25 @@ export default function CustomerOrdersScreen() {
                   </Text>
                 </View>
               )}
+
+              {order.chatRoom && (
+                <View style={[st.chatQuickRow, { borderTopColor: colors.border }]}>
+                  <View style={{ position: 'relative', alignSelf: 'flex-start' }}>
+                    <TouchableOpacity
+                      style={[st.chatQuickBtn, { backgroundColor: '#eff6ff' }]}
+                      onPress={(e) => {
+                        e.stopPropagation?.();
+                        router.push(`/(customer)/order-chat?orderId=${order.id}`);
+                      }}
+                      activeOpacity={0.75}
+                    >
+                      <Ionicons name="chatbubbles" size={16} color="#2563eb" />
+                      <Text style={st.chatQuickBtnText}>Chat</Text>
+                    </TouchableOpacity>
+                    <ChatUnreadBadge count={chatUnreadMap[order.id] ?? 0} />
+                  </View>
+                </View>
+              )}
             </TouchableOpacity>
           );
         })}
@@ -347,6 +385,24 @@ const st = StyleSheet.create({
     paddingTop: 10, marginTop: 10,
   },
   driverText: { fontSize: 13, color: '#6b7280' },
+
+  chatQuickRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: '#f3f4f6',
+    paddingTop: 10,
+    marginTop: 10,
+  },
+  chatQuickBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 12,
+  },
+  chatQuickBtnText: { fontSize: 13, fontWeight: '700', color: '#2563eb' },
 
   // Sidebar
   overlay: {
