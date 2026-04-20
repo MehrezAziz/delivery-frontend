@@ -50,6 +50,9 @@ const ORDER_ACTIVE_STATUSES = [
   'DELIVERING',
 ];
 
+/** Driver foreground tracking includes return flow before return deposit is recorded. */
+const DRIVER_ORDER_TRACKING_STATUSES = [...ORDER_ACTIVE_STATUSES, 'RETURNED'];
+
 const STATUS_BY_NOTIFICATION_TYPE: Record<string, string> = {
   ORDER_CREATED: 'SEARCHING_DRIVER',
   DRIVER_ASSIGNED: 'DRIVER_ASSIGNED',
@@ -365,10 +368,14 @@ function getDriverFoundActionButtons() {
 }
 
 /** Driver persistent notification — primary tap opens driver order detail. */
-function getDriverOrderRoute(orderId: string, scrollTo?: 'proof') {
-  return scrollTo === 'proof'
-    ? `/(driver)/order-detail?orderId=${orderId}&scrollTo=proof`
-    : `/(driver)/order-detail?orderId=${orderId}`;
+function getDriverOrderRoute(orderId: string, scrollTo?: 'proof' | 'return_deposit') {
+  if (scrollTo === 'proof') {
+    return `/(driver)/order-detail?orderId=${orderId}&scrollTo=proof`;
+  }
+  if (scrollTo === 'return_deposit') {
+    return `/(driver)/order-detail?orderId=${orderId}&scrollTo=return_deposit`;
+  }
+  return `/(driver)/order-detail?orderId=${orderId}`;
 }
 
 function getDriverTrackingNotificationFromOrder(order: Order): { title: string; body: string } {
@@ -398,6 +405,11 @@ function getDriverTrackingNotificationFromOrder(order: Order): { title: string; 
         title: '🚚 Delivering — Add proof to finish',
         body: '◉———◉———◉———◉———◉———⛟———⌖',
       };
+    case 'RETURNED':
+      return {
+        title: '📦 Returned — Confirm return deposit',
+        body: '◉———◉———◉———◉———◉———⛟———⌖',
+      };
     default:
       return {
         title: '📦 Active order',
@@ -418,6 +430,11 @@ function getDriverActionButtonsForStatus(status: string): Array<{ id: string; ti
       return [{ id: 'driver_mark_delivering', title: '🚚 Start delivering', action: 'mark_delivering' }];
     case 'DELIVERING':
       return [{ id: 'driver_open_deliver', title: '✅ Delivered (add proof)', action: 'open_deliver_proofs' }];
+    case 'RETURNED':
+      return [
+        { id: 'driver_open_return_deposit', title: 'Return deposited', action: 'open_return_deposit' },
+        { id: 'view_order_driver', title: '📋 View order', action: 'view_order_driver' },
+      ];
     default:
       return null;
   }
@@ -663,7 +680,7 @@ export async function restoreOrderTrackingForDriver() {
 
     const orders = await orderService.getDriverMyOrders();
     const activeOrders = orders
-      .filter((order) => ORDER_ACTIVE_STATUSES.includes(order.status))
+      .filter((order) => DRIVER_ORDER_TRACKING_STATUSES.includes(order.status))
       .sort(
         (a, b) =>
           new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
@@ -752,6 +769,9 @@ async function handleDriverNotificationPress(orderId: string, actionId: string |
       case 'driver_open_deliver':
         router.push(getDriverOrderRoute(orderId, 'proof') as any);
         return;
+      case 'driver_open_return_deposit':
+        router.push(getDriverOrderRoute(orderId, 'return_deposit') as any);
+        return;
       case 'driver_mark_arrived':
         await orderService.updateOrderStatus(orderId, 'DRIVER_ARRIVED');
         emitOrderDetailAndDriverListRefresh(orderId);
@@ -800,6 +820,9 @@ async function handleDriverNotificationPressBackground(orderId: string, actionId
         return;
       case 'driver_open_deliver':
         await savePendingNotificationRoute(getDriverOrderRoute(orderId, 'proof'));
+        return;
+      case 'driver_open_return_deposit':
+        await savePendingNotificationRoute(getDriverOrderRoute(orderId, 'return_deposit'));
         return;
       default:
         return;
@@ -1009,6 +1032,7 @@ async function routeFromNotifeeInitialForNavigation(initial: NotifeeInitial): Pr
   }
   if (actionId === 'view_order_driver' && orderId) return getDriverOrderRoute(orderId);
   if (actionId === 'driver_open_deliver' && orderId) return getDriverOrderRoute(orderId, 'proof');
+  if (actionId === 'driver_open_return_deposit' && orderId) return getDriverOrderRoute(orderId, 'return_deposit');
   if (actionId === 'driver_contact_customer' && orderId) {
     return `/(driver)/order-chat?orderId=${orderId}`;
   }
@@ -1190,6 +1214,7 @@ export function setupNotificationListeners() {
         (actionId === 'view_order_driver' ||
           actionId === 'driver_contact_customer' ||
           actionId === 'driver_open_deliver' ||
+          actionId === 'driver_open_return_deposit' ||
           actionId === 'driver_mark_arrived' ||
           actionId === 'driver_mark_picked_up' ||
           actionId === 'driver_mark_delivering')
@@ -1294,6 +1319,7 @@ export function setupBackgroundHandler() {
         (actionId === 'view_order_driver' ||
           actionId === 'driver_contact_customer' ||
           actionId === 'driver_open_deliver' ||
+          actionId === 'driver_open_return_deposit' ||
           actionId === 'driver_mark_arrived' ||
           actionId === 'driver_mark_picked_up' ||
           actionId === 'driver_mark_delivering')

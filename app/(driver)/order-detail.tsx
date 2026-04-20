@@ -37,8 +37,9 @@ const STAR_LABELS = ['Terrible','Very Bad','Bad','Poor','Below Avg','Average','A
 
 export default function DriverOrderDetailScreen() {
   const router = useRouter();
-  const { orderId: orderIdParam, scrollTo } = useLocalSearchParams<{ orderId: string; scrollTo?: string }>();
+  const { orderId: orderIdParam, scrollTo: scrollToParam } = useLocalSearchParams<{ orderId: string; scrollTo?: string }>();
   const orderId = Array.isArray(orderIdParam) ? orderIdParam[0] : orderIdParam;
+  const scrollTo = Array.isArray(scrollToParam) ? scrollToParam[0] : scrollToParam;
   const { unread: chatUnread } = useOrderChatUnread(orderId);
   const handleBack = () => {
     if (router.canGoBack()) router.back();
@@ -497,7 +498,16 @@ export default function DriverOrderDetailScreen() {
         )}
 
         {order.status === 'RETURNED' && (
-          <View style={[s.card, { backgroundColor: colors.card }]}>
+          <View
+            style={[s.card, { backgroundColor: colors.card }]}
+            onLayout={(e) => {
+              if (scrollTo !== 'return_deposit') return;
+              const y = e.nativeEvent.layout.y;
+              requestAnimationFrame(() => {
+                scrollRef.current?.scrollTo({ y: Math.max(0, y - 16), animated: true });
+              });
+            }}
+          >
             <Text style={[s.cardTitle, { color: colors.text }]}>Return details (optional)</Text>
             <Text style={{ fontSize: 12, color: colors.textSecondary, marginBottom: 8 }}>
               Before confirming deposit: how many times you called the customer, and an optional photo from your gallery.
