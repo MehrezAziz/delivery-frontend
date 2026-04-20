@@ -170,7 +170,7 @@ export default function DriverOrderDetailScreen() {
           try {
             await orderService.cancelAssignment(order.id, 'Driver cancelled');
             await stopOrderTrackingSilently();
-            router.replace('/(driver)/my-orders');
+            router.replace('/(driver)/available-orders');
           } catch (e: any) {
             Alert.alert('Error', e?.message || 'Could not cancel');
           }

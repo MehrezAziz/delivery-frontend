@@ -126,7 +126,7 @@ export default function DriverMyOrdersScreen() {
         try {
           await orderService.cancelAssignment(orderId, 'Driver cancelled');
           await stopOrderTrackingSilently();
-          load();
+          router.replace('/(driver)/available-orders');
         }
         catch (e: any) { Alert.alert('Error', e.message); }
       }},
