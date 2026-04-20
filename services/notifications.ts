@@ -296,6 +296,14 @@ function buildNotifeeActions(data: Record<string, string>) {
           : { id: btn.id, launchActivity: 'default' },
     }));
   }
+  if (isDriverTrackingData(data) && data.orderStatus === 'DRIVER_ASSIGNED') {
+    return [
+      {
+        title: "📍 I'm arrived",
+        pressAction: { id: 'driver_mark_arrived', launchActivity: 'none' } as any,
+      },
+    ];
+  }
   const mainId = isDriverTrackingData(data) ? 'view_order_driver' : 'view_order';
   const mainTitle = isDriverTrackingData(data) ? '📋 View order' : '📍 View Order';
   return [{ title: mainTitle, pressAction: { id: mainId, launchActivity: 'default' } }];
@@ -427,8 +435,17 @@ export async function startOrderTracking(orderId: string, title: string, body: s
 
   await setTrackedOrderStatus(orderId, data?.orderStatus);
 
-  const mainPressId = isDriverTrackingData(data) ? 'view_order_driver' : 'view_order';
-  const mainTitle = isDriverTrackingData(data) ? '📋 View order' : '📍 View Order';
+  const driverAssignedFallback = isDriverTrackingData(data) && data?.orderStatus === 'DRIVER_ASSIGNED';
+  const mainPressId = driverAssignedFallback
+    ? 'driver_mark_arrived'
+    : isDriverTrackingData(data)
+      ? 'view_order_driver'
+      : 'view_order';
+  const mainTitle = driverAssignedFallback
+    ? "📍 I'm arrived"
+    : isDriverTrackingData(data)
+      ? '📋 View order'
+      : '📍 View Order';
 
   await notifee.displayNotification({
     id: getOrderNotificationId(orderId),
@@ -458,8 +475,17 @@ export async function updateOrderTracking(title: string, body: string, data?: Re
   if (!orderId) return;
   await setTrackedOrderStatus(orderId, data?.orderStatus);
 
-  const mainPressId = isDriverTrackingData(data) ? 'view_order_driver' : 'view_order';
-  const mainTitle = isDriverTrackingData(data) ? '📋 View order' : '📍 View Order';
+  const driverAssignedFallback = isDriverTrackingData(data) && data?.orderStatus === 'DRIVER_ASSIGNED';
+  const mainPressId = driverAssignedFallback
+    ? 'driver_mark_arrived'
+    : isDriverTrackingData(data)
+      ? 'view_order_driver'
+      : 'view_order';
+  const mainTitle = driverAssignedFallback
+    ? "📍 I'm arrived"
+    : isDriverTrackingData(data)
+      ? '📋 View order'
+      : '📍 View Order';
 
   await notifee.displayNotification({
     id: getOrderNotificationId(orderId),

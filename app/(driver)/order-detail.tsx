@@ -554,6 +554,16 @@ export default function DriverOrderDetailScreen() {
           <View style={[s.card, { backgroundColor: colors.card }]}>
             <Text style={[s.cardTitle, { color: colors.text }]}>Delivery Actions</Text>
             <View style={s.stepActionsRow}>
+              {canRevert && (
+                <TouchableOpacity
+                  style={[s.revertBtn, statusUpdating && { opacity: 0.6 }]}
+                  onPress={revertStatus}
+                  disabled={statusUpdating}
+                >
+                  <Ionicons name="return-up-back-outline" size={16} color="#6b7280" />
+                  <Text style={s.revertBtnText}>Go back</Text>
+                </TouchableOpacity>
+              )}
               {canGoNext && (
                 <TouchableOpacity
                   style={[s.nextBtn, { backgroundColor: colors.primary }, statusUpdating && { opacity: 0.6 }]}
