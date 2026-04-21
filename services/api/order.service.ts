@@ -1,5 +1,23 @@
 import { api } from './client';
 
+/** Matches backend `computeCancelRemainingSeconds` — do not subtract elapsed from `cancelRemainingSeconds` (that value is already computed). */
+export function computeOrderCancelRemainingSec(order: Order, nowMs: number): number {
+  if (order.status !== 'SEARCHING_DRIVER') {
+    return Math.max(0, Math.floor(order.cancelRemainingSeconds ?? 0));
+  }
+  const fallback = Math.max(0, (order.cancelAfterMinutes ?? 15) * 60);
+  const baseRemaining =
+    typeof order.cancelTimerRemainingSeconds === 'number'
+      ? order.cancelTimerRemainingSeconds
+      : fallback;
+  const lastResumed = order.cancelTimerLastResumedAt
+    ? new Date(order.cancelTimerLastResumedAt).getTime()
+    : null;
+  if (!lastResumed) return Math.max(0, baseRemaining);
+  const elapsedSec = Math.floor((nowMs - lastResumed) / 1000);
+  return Math.max(0, baseRemaining - elapsedSec);
+}
+
 export interface OrderAddress {
   id: string;
   street: string | null;
@@ -58,6 +76,8 @@ export interface Order {
   localPickupOnly?: boolean;
   cancelAfterMinutes?: number;
   cancelRemainingSeconds?: number;
+  /** Seconds budget when timer last resumed; pair with `cancelTimerLastResumedAt` for live countdown. */
+  cancelTimerRemainingSeconds?: number | null;
   cancelTimerRunning?: boolean;
   cancelTimerLastResumedAt?: string | null;
   deliveryZoneType: string | null;
@@ -181,6 +201,8 @@ export const orderService = {
   getOrder: (id: string) => api.get<Order>(`/orders/${id}`),
 
   cancelOrder: (id: string, reason: string) => api.delete(`/orders/${id}`, { method: 'DELETE', body: JSON.stringify({ reason }) }),
+
+  reactivateOrder: (id: string) => api.post<Order>(`/orders/${id}/reactivate`),
 
   changePaymentMethod: (id: string, paymentType: 'COD' | 'WALLET') =>
     api.patch<Order>(`/orders/${id}/payment-method`, { paymentType }),

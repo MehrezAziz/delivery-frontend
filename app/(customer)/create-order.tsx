@@ -722,7 +722,7 @@ export default function CreateOrderScreen() {
               <View style={[s.addressDot, { backgroundColor: pickupAddress ? '#22c55e' : '#d1d5db' }]} />
               <View style={{ flex: 1 }}>
                 {resolvingPickup ? (
-                  <Text style={s.addressPlaceholder}>Fetching your current location...</Text>
+                  <Text style={s.addressFetching}>Fetching your current position...</Text>
                 ) : pickupAddress ? (
                   <>
                     <Text style={s.addressMainText}>{pickupAddress.label}</Text>
@@ -758,7 +758,7 @@ export default function CreateOrderScreen() {
               <View style={[s.addressDot, { backgroundColor: dropoffAddress ? '#ef4444' : '#d1d5db' }]} />
               <View style={{ flex: 1 }}>
                 {resolvingDropoff ? (
-                  <Text style={s.addressPlaceholder}>Fetching your current location...</Text>
+                  <Text style={s.addressFetching}>Fetching your current position...</Text>
                 ) : dropoffAddress ? (
                   <>
                     <Text style={s.addressMainText}>{dropoffAddress.label}</Text>
@@ -1055,6 +1055,7 @@ const s = StyleSheet.create({
   addressMainText: { fontSize: 14, fontWeight: '600', color: '#111827' },
   addressSubText: { fontSize: 12, color: '#6b7280', marginTop: 2 },
   addressPlaceholder: { fontSize: 14, color: '#9ca3af' },
+  addressFetching: { fontSize: 14, color: '#2563eb', fontWeight: '600' },
   inlineActionBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 6,
     borderRadius: 999, backgroundColor: '#f3f4f6',

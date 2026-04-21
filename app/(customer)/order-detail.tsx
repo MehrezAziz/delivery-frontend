@@ -5,13 +5,14 @@ import {
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { orderService, Order } from '../../services/api/order.service';
+import { orderService, Order, computeOrderCancelRemainingSec } from '../../services/api/order.service';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useOrderChatUnread } from '../../hooks/useOrderChatUnread';
 import { ChatUnreadBadge } from '../../components/ChatUnreadBadge';
 
+/** Customer-facing delivery steps (no company return / deposit steps). */
 const STATUS_FLOW = [
-  'SEARCHING_DRIVER', 'PENDING_CUSTOMER_APPROVAL', 'DRIVER_ASSIGNED', 'DRIVER_ARRIVED', 'PICKED_UP', 'DELIVERING', 'RETURNED', 'RETURN_DEPOSIT', 'DELIVERED',
+  'SEARCHING_DRIVER', 'PENDING_CUSTOMER_APPROVAL', 'DRIVER_ASSIGNED', 'DRIVER_ARRIVED', 'PICKED_UP', 'DELIVERING', 'DELIVERED',
 ];
 
 const STATUS_META: Record<string, { icon: string; color: string; bg: string; label: string }> = {
@@ -25,6 +26,7 @@ const STATUS_META: Record<string, { icon: string; color: string; bg: string; lab
   RETURNED:         { icon: 'return-up-back-outline', color: '#b45309', bg: '#fef3c7', label: 'Returned' },
   RETURN_DEPOSIT:   { icon: 'archive-outline', color: '#0f766e', bg: '#ccfbf1', label: 'Return Deposited' },
   DELIVERED:        { icon: 'checkmark-circle',    color: '#16a34a', bg: '#dcfce7', label: 'Delivered' },
+  AUTO_CANCELLED:   { icon: 'timer-outline',       color: '#b91c1c', bg: '#fee2e2', label: 'Auto-cancelled' },
   CANCELLED:        { icon: 'close-circle',        color: '#dc2626', bg: '#fee2e2', label: 'Cancelled' },
   DISPUTED:         { icon: 'warning-outline',     color: '#dc2626', bg: '#fee2e2', label: 'Disputed' },
   REFUNDED:         { icon: 'arrow-undo-outline',  color: '#6b7280', bg: '#f3f4f6', label: 'Refunded' },
@@ -73,9 +75,23 @@ export default function OrderDetailScreen() {
 
   useEffect(() => { loadOrder(); }, [loadOrder]);
   useEffect(() => {
-    const interval = setInterval(loadOrder, 5000);
+    if (!orderId) return;
+    const pollMs = order?.status === 'SEARCHING_DRIVER' ? 3000 : 5000;
+    const interval = setInterval(loadOrder, pollMs);
     return () => clearInterval(interval);
-  }, [loadOrder]);
+  }, [orderId, order?.status, loadOrder]);
+
+  const prevCancelRemRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (!order || order.status !== 'SEARCHING_DRIVER') {
+      prevCancelRemRef.current = null;
+      return;
+    }
+    const rem = computeOrderCancelRemainingSec(order, nowTs);
+    const prev = prevCancelRemRef.current;
+    prevCancelRemRef.current = rem;
+    if (prev != null && prev > 0 && rem === 0) void loadOrder();
+  }, [order, nowTs, loadOrder]);
   useEffect(() => {
     const t = setInterval(() => setNowTs(Date.now()), 1000);
     return () => clearInterval(t);
@@ -253,8 +269,9 @@ export default function OrderDetailScreen() {
 
   const meta = STATUS_META[order.status] || STATUS_META.DRAFT;
   const canCancel = ['SEARCHING_DRIVER', 'DRAFT'].includes(order.status);
+  const canReactivate = ['CANCELLED', 'AUTO_CANCELLED'].includes(order.status);
   const canChangePayment = ['SEARCHING_DRIVER', 'PENDING_CUSTOMER_APPROVAL', 'DRIVER_ASSIGNED', 'DRIVER_ARRIVED'].includes(order.status);
-  const chatFriendlyClosedStatuses = ['DELIVERED', 'REFUNDED', 'FAILED', 'DISPUTED', 'CANCELLED'];
+  const chatFriendlyClosedStatuses = ['DELIVERED', 'REFUNDED', 'FAILED', 'DISPUTED', 'CANCELLED', 'AUTO_CANCELLED'];
   const canOpenChat = !!order.chatRoom || chatFriendlyClosedStatuses.includes(order.status);
   const canTrack = ['PICKED_UP', 'DELIVERING'].includes(order.status);
   const isActive = STATUS_FLOW.includes(order.status) && order.status !== 'DELIVERED';
@@ -263,13 +280,13 @@ export default function OrderDetailScreen() {
   const dateStr = createdDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   const timeStr = createdDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
   const currentCancelMinutes = order.cancelAfterMinutes || 15;
-  const cancelBaseSec = Math.max(0, Math.floor(order.cancelRemainingSeconds ?? currentCancelMinutes * 60));
-  const cancelElapsedSinceResumeSec =
-    order.cancelTimerRunning && order.cancelTimerLastResumedAt
-      ? Math.max(0, Math.floor((nowTs - new Date(order.cancelTimerLastResumedAt).getTime()) / 1000))
-      : 0;
-  const cancelRemainingSec = Math.max(0, cancelBaseSec - cancelElapsedSinceResumeSec);
+  const cancelRemainingSec = computeOrderCancelRemainingSec(order, nowTs);
   const cancelRemainingText = `${Math.floor(cancelRemainingSec / 60)}:${String(cancelRemainingSec % 60).padStart(2, '0')}`;
+  const cancelTimerAccentColor =
+    cancelRemainingSec < 300 ? '#dc2626'
+    : cancelRemainingSec < 600 ? '#ea580c'
+      : cancelRemainingSec < 900 ? '#16a34a'
+        : colors.textSecondary;
   const urgentRemainingSec = order.urgentNotify?.nextButtonEnabledAt
     ? Math.max(0, Math.floor((new Date(order.urgentNotify.nextButtonEnabledAt).getTime() - nowTs) / 1000))
     : 0;
@@ -306,35 +323,61 @@ export default function OrderDetailScreen() {
         {/* ── Progress Steps (only for active orders) ── */}
         {isActive && currentStepIndex >= 0 && (
           <View style={[s.card, { backgroundColor: colors.card }]}>
-            <Text style={[s.cardTitle, { color: colors.text }]}>Delivery Progress</Text>
-            <View style={s.stepsRow}>
+            <Text style={[s.cardTitle, { color: colors.text }]}>Delivery progress</Text>
+            <View style={s.progressOneLine}>
               {STATUS_FLOW.map((step, i) => {
-                const done = i <= currentStepIndex;
-                const isCurrent = i === currentStepIndex;
                 const stepMeta = STATUS_META[step];
+                const done = i < currentStepIndex;
+                const isCurrent = i === currentStepIndex;
+                const n = STATUS_FLOW.length;
+                const lineMuted = isDark ? '#334155' : '#e2e8f0';
+                const lineDone = meta.color;
                 return (
-                  <View key={step} style={s.stepItem}>
-                    <View style={[
-                      s.stepDot,
-                      done && { backgroundColor: meta.color },
-                      isCurrent && { transform: [{ scale: 1.3 }] },
-                      !done && { backgroundColor: '#e5e7eb' },
-                    ]}>
-                      {done && <Ionicons name="checkmark" size={10} color="#fff" />}
+                  <View key={step} style={s.progressOneLineCell}>
+                    <View style={s.progressOneLineDotsRow}>
+                      {i > 0 && (
+                        <View
+                          style={[
+                            s.progressOneLineBar,
+                            { backgroundColor: i - 1 < currentStepIndex ? lineDone : lineMuted },
+                          ]}
+                        />
+                      )}
+                      <View
+                        style={[
+                          s.progressHDot,
+                          done && { backgroundColor: '#22c55e' },
+                          isCurrent && { backgroundColor: meta.color, borderWidth: 2, borderColor: '#fff' },
+                          !done && !isCurrent && { backgroundColor: isDark ? '#475569' : '#e2e8f0' },
+                        ]}
+                      >
+                        {done && <Ionicons name="checkmark" size={11} color="#fff" />}
+                      </View>
+                      {i < n - 1 && (
+                        <View
+                          style={[
+                            s.progressOneLineBar,
+                            { backgroundColor: i < currentStepIndex ? lineDone : lineMuted },
+                          ]}
+                        />
+                      )}
                     </View>
-                    {i < STATUS_FLOW.length - 1 && (
-                      <View style={[s.stepLine, done && { backgroundColor: meta.color }]} />
-                    )}
+                    <Text
+                      numberOfLines={2}
+                      adjustsFontSizeToFit
+                      minimumFontScale={0.7}
+                      style={[
+                        s.progressOneLineLabel,
+                        { color: colors.textSecondary },
+                        isCurrent && { color: meta.color, fontWeight: '800' },
+                        done && !isCurrent && { color: colors.text },
+                      ]}
+                    >
+                      {stepMeta.label}
+                    </Text>
                   </View>
                 );
               })}
-            </View>
-            <View style={s.stepsLabels}>
-              {STATUS_FLOW.map((step, idx) => (
-                <Text key={step} style={[s.stepLabel, idx === currentStepIndex ? { color: meta.color } : null]}>
-                  {STATUS_META[step]?.label.split(' ')[0] || step}
-                </Text>
-              ))}
             </View>
           </View>
         )}
@@ -389,7 +432,10 @@ export default function OrderDetailScreen() {
           <View style={[s.card, { backgroundColor: colors.card }]}>
             <Text style={[s.cardTitle, { color: colors.text }]}>Auto-cancel timer</Text>
             <Text style={{ color: colors.textSecondary, marginBottom: 10 }}>
-              Remaining: <Text style={{ fontWeight: '800', color: colors.text }}>{cancelRemainingText}</Text>
+              Remaining:{' '}
+              <Text style={{ fontWeight: '800', color: cancelTimerAccentColor, fontVariant: ['tabular-nums'] }}>
+                {cancelRemainingText}
+              </Text>
             </Text>
             <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
               {[15, 30, 60, 120, 360, 720, 1440].map((m) => (
@@ -769,6 +815,29 @@ export default function OrderDetailScreen() {
               <Ionicons name="chevron-forward" size={18} color="#fca5a5" />
             </TouchableOpacity>
           )}
+          {canReactivate && (
+            <TouchableOpacity
+              style={[s.actionBtn, { borderColor: '#86efac', backgroundColor: '#f0fdf4' }]}
+              onPress={async () => {
+                try {
+                  await orderService.reactivateOrder(order.id);
+                  await loadOrder();
+                } catch (e: any) {
+                  Alert.alert('Error', e.message || 'Unable to reactivate order');
+                }
+              }}
+              activeOpacity={0.8}
+            >
+              <View style={[s.actionIconCircle, { backgroundColor: '#dcfce7' }]}>
+                <Ionicons name="refresh-circle" size={18} color="#16a34a" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[s.actionTitle, { color: '#16a34a' }]}>Reactivate Order</Text>
+                <Text style={s.actionSub}>Timer restarts from reactivation time</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color="#86efac" />
+            </TouchableOpacity>
+          )}
           {order.status === 'DRIVER_ASSIGNED' && order.driverAssignment && (
             <TouchableOpacity style={[s.actionBtn, { borderColor: '#fecaca' }]}
               onPress={handleRejectDriver} activeOpacity={0.8}>
@@ -1006,16 +1075,30 @@ const s = StyleSheet.create({
   },
   cardTitle: { fontSize: 15, fontWeight: '700', color: '#111827', marginBottom: 14 },
 
-  // Progress steps
-  stepsRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginBottom: 8 },
-  stepItem: { flexDirection: 'row', alignItems: 'center' },
-  stepDot: {
-    width: 20, height: 20, borderRadius: 10, alignItems: 'center', justifyContent: 'center',
-    backgroundColor: '#e5e7eb',
+  // Delivery progress — single row, all steps visible (flex-shrink labels)
+  progressOneLine: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    width: '100%',
+    paddingTop: 4,
   },
-  stepLine: { width: 28, height: 3, backgroundColor: '#e5e7eb', borderRadius: 2, marginHorizontal: 2 },
-  stepsLabels: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 2 },
-  stepLabel: { flex: 1, fontSize: 8, color: '#9ca3af', fontWeight: '600', textAlign: 'center' },
+  progressOneLineCell: { flex: 1, minWidth: 0, alignItems: 'center', paddingHorizontal: 0 },
+  progressOneLineDotsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    width: '100%',
+    marginBottom: 6,
+  },
+  progressOneLineBar: { flex: 1, height: 3, borderRadius: 2, minWidth: 2 },
+  progressHDot: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  progressOneLineLabel: { fontSize: 9, fontWeight: '600', textAlign: 'center', lineHeight: 11, width: '100%' },
 
   // Quick actions
   quickActionsRow: { flexDirection: 'row', gap: 10, marginBottom: 14 },

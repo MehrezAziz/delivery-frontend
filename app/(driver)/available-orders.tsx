@@ -1,12 +1,12 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, ActivityIndicator,
-  Alert, RefreshControl, StyleSheet, Modal, TextInput, FlatList, Linking,
+  Alert, RefreshControl, StyleSheet, Modal, TextInput, FlatList, Linking, Platform,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { orderService, AvailableOrders, FilteredOrders, Order } from '../../services/api/order.service';
+import { orderService, AvailableOrders, FilteredOrders, Order, computeOrderCancelRemainingSec } from '../../services/api/order.service';
 import { startDriverLocationTracking } from '../../services/driverLocationTracking';
 import { ensureDriverPushNotificationSetup } from '../../services/driverPushSetup';
 import { api } from '../../services/api/client';
@@ -21,6 +21,28 @@ const ZONE_META: Record<string, { icon: string; color: string; bg: string }> = {
 };
 
 type QuickFilterLevel = 'delegation' | 'governorate' | 'country' | null;
+
+/** Driver-facing address line: street/plus-code + area (nickname excluded — never shown to drivers). */
+function formatDriverAddressLine(addr: Order['pickupAddress'] | Order['dropoffAddress'] | null | undefined): string {
+  if (!addr) return '';
+  let street = (addr.street || '').trim();
+  const nick = (addr.nickname || '').trim();
+  if (nick && street === nick) street = '';
+  const del = addr.delegation?.nameDelegation || '';
+  const gov = addr.delegation?.governorate?.nameGovernorate || '';
+  const country = addr.delegation?.governorate?.country?.name || '';
+  const tail = [del, gov, country].filter(Boolean).join(', ');
+  if (street && tail) return `${street}, ${tail}`;
+  return tail || street || 'Address';
+}
+
+function mapQueryLabelForCoords(
+  addr: Order['pickupAddress'] | Order['dropoffAddress'] | null | undefined,
+  displayLine: string,
+): string {
+  if (!addr?.latitude || !addr?.longitude) return displayLine;
+  return `${displayLine} (${addr.latitude.toFixed(5)}, ${addr.longitude.toFixed(5)})`;
+}
 
 const STORAGE_KEY_FILTER_LEVEL = 'avail_quick_filter_level';
 const STORAGE_KEY_SELECTED_DELEGATIONS = 'avail_selected_delegations';
@@ -408,16 +430,8 @@ export default function AvailableOrdersScreen() {
       .slice(0, 2)
       .map((chunk) => chunk[0]?.toUpperCase() || '')
       .join('') || 'C';
-    const countdownSec = (() => {
-      if (order.status !== 'SEARCHING_DRIVER') return null;
-      const base = typeof order.cancelRemainingSeconds === 'number'
-        ? Math.max(0, order.cancelRemainingSeconds)
-        : Math.max(0, (order.cancelAfterMinutes ?? 15) * 60);
-      if (!order.cancelTimerRunning || !order.cancelTimerLastResumedAt) return base;
-      const startedAt = new Date(order.cancelTimerLastResumedAt).getTime();
-      const elapsed = Math.floor((nowMs - startedAt) / 1000);
-      return Math.max(0, base - elapsed);
-    })();
+    const countdownSec =
+      order.status !== 'SEARCHING_DRIVER' ? null : computeOrderCancelRemainingSec(order, nowMs);
     const countdownLabel = countdownSec == null
       ? null
       : `${String(Math.floor(countdownSec / 60)).padStart(2, '0')}:${String(countdownSec % 60).padStart(2, '0')}`;
@@ -442,14 +456,23 @@ export default function AvailableOrdersScreen() {
         return;
       }
       const encoded = encodeURIComponent(label || 'Address');
-      const url = `https://www.google.com/maps/search/?api=1&query=${latitude},${longitude}(${encoded})`;
-      const canOpen = await Linking.canOpenURL(url);
-      if (!canOpen) {
-        Alert.alert('Map', 'Could not open map application.');
+      const geoUrl = Platform.select({
+        ios: `maps:0,0?q=${latitude},${longitude}`,
+        default: `geo:${latitude},${longitude}?q=${latitude},${longitude}(${encoded})`,
+      });
+      const webUrl = `https://www.google.com/maps/search/?api=1&query=${latitude},${longitude}`;
+      if (geoUrl && await Linking.canOpenURL(geoUrl)) {
+        await Linking.openURL(geoUrl);
         return;
       }
-      await Linking.openURL(url);
+      if (await Linking.canOpenURL(webUrl)) {
+        await Linking.openURL(webUrl);
+        return;
+      }
+      Alert.alert('Map', 'Could not open map application.');
     };
+    const pickupLine = formatDriverAddressLine(order.pickupAddress);
+    const dropoffLine = formatDriverAddressLine(order.dropoffAddress);
     return (
       <View
         key={order.id}
@@ -501,27 +524,43 @@ export default function AvailableOrdersScreen() {
           </View>
           <View style={{ flex: 1 }}>
             <TouchableOpacity
-              onPress={() => openAddressOnMap(order.pickupAddress?.latitude ?? null, order.pickupAddress?.longitude ?? null, order.pickupAddress?.street)}
+              onPress={() => openAddressOnMap(
+                order.pickupAddress?.latitude ?? null,
+                order.pickupAddress?.longitude ?? null,
+                mapQueryLabelForCoords(order.pickupAddress, pickupLine),
+              )}
               activeOpacity={0.7}
             >
-              <Text style={[s.routeText, s.routeLinkText, { color: colors.text }]} numberOfLines={1}>
-                {order.pickupAddress?.street || order.pickupAddress?.delegation?.nameDelegation || 'Pickup'}
+              <Text style={[s.routeText, s.routeLinkText, { color: colors.text }]} numberOfLines={2}>
+                {pickupLine || 'Pickup'}
               </Text>
             </TouchableOpacity>
-            {order.sourceType === 'DELIVERY_COMPANY' &&
-              typeof order.pickupAddress?.latitude === 'number' &&
-              typeof order.pickupAddress?.longitude === 'number' && (
-                <Text style={[s.chipText, { color: colors.textSecondary, marginTop: 2 }]}>
-                  Exact source: {order.pickupAddress.latitude.toFixed(5)}, {order.pickupAddress.longitude.toFixed(5)}
-                </Text>
-              )}
+            {distanceToPickup !== null && (
+              <View style={[s.distanceToPickupCard, { borderColor: colors.border, backgroundColor: colors.surfaceVariant }]}>
+                <View style={[s.distanceToPickupIconWrap, { backgroundColor: isDark ? '#0c4a6e' : '#e0f2fe' }]}>
+                  <Ionicons name="navigate" size={16} color={isDark ? '#7dd3fc' : '#0369a1'} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={[s.distanceToPickupLabel, { color: colors.textSecondary }]}>Distance to pickup</Text>
+                  <Text style={[s.distanceToPickupValue, { color: colors.text }]}>
+                    {distanceToPickup < 1
+                      ? `${Math.round(distanceToPickup * 1000)} m`
+                      : `${distanceToPickup.toFixed(1)} km`}
+                  </Text>
+                </View>
+              </View>
+            )}
             <View style={{ height: 14 }} />
             <TouchableOpacity
-              onPress={() => openAddressOnMap(order.dropoffAddress?.latitude ?? null, order.dropoffAddress?.longitude ?? null, order.dropoffAddress?.street)}
+              onPress={() => openAddressOnMap(
+                order.dropoffAddress?.latitude ?? null,
+                order.dropoffAddress?.longitude ?? null,
+                mapQueryLabelForCoords(order.dropoffAddress, dropoffLine),
+              )}
               activeOpacity={0.7}
             >
-              <Text style={[s.routeText, s.routeLinkText, { color: colors.text }]} numberOfLines={1}>
-                {order.dropoffAddress?.street || order.dropoffAddress?.delegation?.nameDelegation || 'Dropoff'}
+              <Text style={[s.routeText, s.routeLinkText, { color: colors.text }]} numberOfLines={2}>
+                {dropoffLine || 'Dropoff'}
               </Text>
             </TouchableOpacity>
           </View>
@@ -531,14 +570,6 @@ export default function AvailableOrdersScreen() {
             <Ionicons name="resize-outline" size={12} color={colors.textSecondary} />
             <Text style={[s.chipText, { color: colors.textSecondary }]}>{order.distanceKm.toFixed(1)} km</Text>
           </View>
-          {distanceToPickup !== null && (
-            <View style={[s.chip, { backgroundColor: '#ecfeff' }]}>
-              <Ionicons name="navigate-outline" size={12} color="#0e7490" />
-              <Text style={[s.chipText, { color: '#0e7490' }]}>
-                {distanceToPickup.toFixed(1)} km to pickup
-              </Text>
-            </View>
-          )}
           {countdownLabel && (
             <View style={[s.chip, { backgroundColor: countdownSec === 0 ? '#fee2e2' : '#fef9c3' }]}>
               <Ionicons name="time-outline" size={12} color={countdownSec === 0 ? '#b91c1c' : '#92400e'} />
@@ -1094,6 +1125,25 @@ const s = StyleSheet.create({
   routeLine: { width: 2, flex: 1, backgroundColor: '#e5e7eb', marginVertical: 3 },
   routeText: { fontSize: 14, color: '#374151', fontWeight: '500' },
   routeLinkText: { textDecorationLine: 'underline' },
+  distanceToPickupCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginTop: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  distanceToPickupIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  distanceToPickupLabel: { fontSize: 11, fontWeight: '600', letterSpacing: 0.3, textTransform: 'uppercase' },
+  distanceToPickupValue: { fontSize: 17, fontWeight: '800', marginTop: 2 },
   chipsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 14 },
   chip: {
     flexDirection: 'row', alignItems: 'center', gap: 4,

@@ -17,7 +17,7 @@ const SIDEBAR_WIDTH = SCREEN_WIDTH * 0.65;
 
 const ALL_STATUSES = [
   'ALL', 'SEARCHING_DRIVER', 'DRIVER_ASSIGNED', 'DRIVER_ARRIVED',
-  'PICKED_UP', 'DELIVERING', 'DELIVERED', 'CANCELLED', 'DISPUTED', 'REFUNDED',
+  'PICKED_UP', 'DELIVERING', 'DELIVERED', 'AUTO_CANCELLED', 'CANCELLED', 'DISPUTED', 'REFUNDED',
 ];
 
 const STATUS_CONFIG: Record<string, { bg: string; text: string; label: string }> = {
@@ -27,6 +27,7 @@ const STATUS_CONFIG: Record<string, { bg: string; text: string; label: string }>
   PICKED_UP: { bg: '#ffedd5', text: '#9a3412', label: 'Picked Up' },
   DELIVERING: { bg: '#e0e7ff', text: '#3730a3', label: 'Delivering' },
   DELIVERED: { bg: '#dcfce7', text: '#166534', label: 'Delivered' },
+  AUTO_CANCELLED: { bg: '#fee2e2', text: '#991b1b', label: 'Auto-cancelled' },
   CANCELLED: { bg: '#fee2e2', text: '#991b1b', label: 'Cancelled' },
   DISPUTED: { bg: '#fee2e2', text: '#991b1b', label: 'Disputed' },
   REFUNDED: { bg: '#f3f4f6', text: '#374151', label: 'Refunded' },
