@@ -419,10 +419,26 @@ export default function AvailableOrdersScreen() {
 
   const canAccept = (filterActive || quickFilterLevel) ? filteredData?.canAccept : data?.canAccept;
 
+  const openAddressOnMap = (
+    lat: number | null | undefined,
+    lng: number | null | undefined,
+    kind: 'pickup' | 'dropoff',
+    mapTitle: string,
+  ) => {
+    if (lat == null || lng == null || !Number.isFinite(lat) || !Number.isFinite(lng)) {
+      Alert.alert('Location unavailable', 'Map coordinates are not available for this address.');
+      return;
+    }
+    router.push(
+      `/(driver)/address-map?lat=${lat}&lng=${lng}&kind=${kind}&title=${encodeURIComponent(mapTitle)}` as any,
+    );
+  };
+
   // ── Render helpers ──
   const renderOrderCard = (order: Order) => {
     const isAccepting = accepting === order.id;
     const isUrgentHighlighted = !!urgentOrderId && order.id === urgentOrderId;
+<<<<<<< HEAD
     const customerName = [order.customer?.firstName, order.customer?.secondName].filter(Boolean).join(' ').trim() || 'Customer';
     const customerInitials = customerName
       .split(' ')
@@ -473,6 +489,29 @@ export default function AvailableOrdersScreen() {
     };
     const pickupLine = formatDriverAddressLine(order.pickupAddress);
     const dropoffLine = formatDriverAddressLine(order.dropoffAddress);
+=======
+    const pickupLat = order.pickupAddress?.latitude;
+    const pickupLng = order.pickupAddress?.longitude;
+    const pickupHasCoords =
+      pickupLat != null &&
+      pickupLng != null &&
+      Number.isFinite(pickupLat) &&
+      Number.isFinite(pickupLng);
+    const dropLat = order.dropoffAddress?.latitude;
+    const dropLng = order.dropoffAddress?.longitude;
+    const dropoffHasCoords =
+      !order.localPickupOnly &&
+      dropLat != null &&
+      dropLng != null &&
+      Number.isFinite(dropLat) &&
+      Number.isFinite(dropLng);
+    const pickupMapTitle =
+      [order.pickupAddress?.street, order.pickupAddress?.delegation?.nameDelegation].filter(Boolean).join(', ') ||
+      'Pickup';
+    const dropoffMapTitle =
+      [order.dropoffAddress?.street, order.dropoffAddress?.delegation?.nameDelegation].filter(Boolean).join(', ') ||
+      'Delivery';
+>>>>>>> fixdriver
     return (
       <View
         key={order.id}
@@ -524,10 +563,40 @@ export default function AvailableOrdersScreen() {
           </View>
           <View style={{ flex: 1 }}>
             <TouchableOpacity
+<<<<<<< HEAD
               onPress={() => openAddressOnMap(
                 order.pickupAddress?.latitude ?? null,
                 order.pickupAddress?.longitude ?? null,
                 mapQueryLabelForCoords(order.pickupAddress, pickupLine),
+=======
+              style={s.addressTapRow}
+              onPress={() => openAddressOnMap(pickupLat, pickupLng, 'pickup', pickupMapTitle)}
+              activeOpacity={0.75}
+            >
+              <Text
+                style={[
+                  s.routeText,
+                  {
+                    flex: 1,
+                    color: pickupHasCoords ? colors.primary : colors.text,
+                    fontWeight: pickupHasCoords ? '600' : '500',
+                  },
+                ]}
+                numberOfLines={1}
+              >
+                {order.pickupAddress?.street || order.pickupAddress?.delegation?.nameDelegation || 'Pickup'}
+              </Text>
+              {pickupHasCoords ? (
+                <Ionicons name="map-outline" size={20} color={colors.primary} />
+              ) : null}
+            </TouchableOpacity>
+            {order.sourceType === 'DELIVERY_COMPANY' &&
+              typeof order.pickupAddress?.latitude === 'number' &&
+              typeof order.pickupAddress?.longitude === 'number' && (
+                <Text style={[s.chipText, { color: colors.textSecondary, marginTop: 2 }]}>
+                  Exact source: {order.pickupAddress.latitude.toFixed(5)}, {order.pickupAddress.longitude.toFixed(5)}
+                </Text>
+>>>>>>> fixdriver
               )}
               activeOpacity={0.7}
             >
@@ -551,6 +620,7 @@ export default function AvailableOrdersScreen() {
               </View>
             )}
             <View style={{ height: 14 }} />
+<<<<<<< HEAD
             <TouchableOpacity
               onPress={() => openAddressOnMap(
                 order.dropoffAddress?.latitude ?? null,
@@ -563,6 +633,36 @@ export default function AvailableOrdersScreen() {
                 {dropoffLine || 'Dropoff'}
               </Text>
             </TouchableOpacity>
+=======
+            {order.localPickupOnly ? (
+              <Text style={[s.routeText, { color: colors.textSecondary, fontWeight: '500' }]} numberOfLines={3}>
+                Local pickup only — bring items to the pickup address (no separate drop-off).
+              </Text>
+            ) : (
+              <TouchableOpacity
+                style={s.addressTapRow}
+                onPress={() => openAddressOnMap(dropLat, dropLng, 'dropoff', dropoffMapTitle)}
+                activeOpacity={0.75}
+              >
+                <Text
+                  style={[
+                    s.routeText,
+                    {
+                      flex: 1,
+                      color: dropoffHasCoords ? colors.primary : colors.text,
+                      fontWeight: dropoffHasCoords ? '600' : '500',
+                    },
+                  ]}
+                  numberOfLines={1}
+                >
+                  {order.dropoffAddress?.street || order.dropoffAddress?.delegation?.nameDelegation || 'Dropoff'}
+                </Text>
+                {dropoffHasCoords ? (
+                  <Ionicons name="map-outline" size={20} color={colors.primary} />
+                ) : null}
+              </TouchableOpacity>
+            )}
+>>>>>>> fixdriver
           </View>
         </View>
         <View style={s.chipsRow}>
@@ -824,7 +924,30 @@ export default function AvailableOrdersScreen() {
                 <Text style={[s.sectionBadgeText, { color: '#dc2626' }]}>{rejectedOrders.length}</Text>
               </View>
             </View>
-            {rejectedOrders.map((r: any) => (
+            {rejectedOrders.map((r: any) => {
+              const ro = r.order as Order;
+              const rPickupLat = ro.pickupAddress?.latitude;
+              const rPickupLng = ro.pickupAddress?.longitude;
+              const rPickupHas =
+                rPickupLat != null &&
+                rPickupLng != null &&
+                Number.isFinite(rPickupLat) &&
+                Number.isFinite(rPickupLng);
+              const rDropLat = ro.dropoffAddress?.latitude;
+              const rDropLng = ro.dropoffAddress?.longitude;
+              const rDropHas =
+                !ro.localPickupOnly &&
+                rDropLat != null &&
+                rDropLng != null &&
+                Number.isFinite(rDropLat) &&
+                Number.isFinite(rDropLng);
+              const rPickupTitle =
+                [ro.pickupAddress?.street, ro.pickupAddress?.delegation?.nameDelegation].filter(Boolean).join(', ') ||
+                'Pickup';
+              const rDropTitle =
+                [ro.dropoffAddress?.street, ro.dropoffAddress?.delegation?.nameDelegation].filter(Boolean).join(', ') ||
+                'Delivery';
+              return (
               <View key={r.rejectionId} style={[s.card, { borderLeftWidth: 4, borderLeftColor: '#dc2626', opacity: 0.7 }]}>
                 <View style={s.cardTop}>
                   <Text style={s.orderId}>#{r.order.id.slice(0, 8)}</Text>
@@ -839,13 +962,53 @@ export default function AvailableOrdersScreen() {
                     <View style={[s.routeDot, { backgroundColor: '#ef4444' }]} />
                   </View>
                   <View style={{ flex: 1 }}>
-                    <Text style={s.routeText} numberOfLines={1}>
-                      {r.order.pickupAddress?.street || r.order.pickupAddress?.delegation?.nameDelegation || 'Pickup'}
-                    </Text>
+                    <TouchableOpacity
+                      style={s.addressTapRow}
+                      onPress={() => openAddressOnMap(rPickupLat, rPickupLng, 'pickup', rPickupTitle)}
+                      activeOpacity={0.75}
+                    >
+                      <Text
+                        style={[
+                          s.routeText,
+                          {
+                            flex: 1,
+                            color: rPickupHas ? colors.primary : colors.text,
+                            fontWeight: rPickupHas ? '600' : '500',
+                          },
+                        ]}
+                        numberOfLines={1}
+                      >
+                        {ro.pickupAddress?.street || ro.pickupAddress?.delegation?.nameDelegation || 'Pickup'}
+                      </Text>
+                      {rPickupHas ? <Ionicons name="map-outline" size={20} color={colors.primary} /> : null}
+                    </TouchableOpacity>
                     <View style={{ height: 14 }} />
-                    <Text style={s.routeText} numberOfLines={1}>
-                      {r.order.dropoffAddress?.street || r.order.dropoffAddress?.delegation?.nameDelegation || 'Dropoff'}
-                    </Text>
+                    {ro.localPickupOnly ? (
+                      <Text style={[s.routeText, { color: colors.textSecondary, fontWeight: '500' }]} numberOfLines={3}>
+                        Local pickup only — bring items to the pickup address (no separate drop-off).
+                      </Text>
+                    ) : (
+                      <TouchableOpacity
+                        style={s.addressTapRow}
+                        onPress={() => openAddressOnMap(rDropLat, rDropLng, 'dropoff', rDropTitle)}
+                        activeOpacity={0.75}
+                      >
+                        <Text
+                          style={[
+                            s.routeText,
+                            {
+                              flex: 1,
+                              color: rDropHas ? colors.primary : colors.text,
+                              fontWeight: rDropHas ? '600' : '500',
+                            },
+                          ]}
+                          numberOfLines={1}
+                        >
+                          {ro.dropoffAddress?.street || ro.dropoffAddress?.delegation?.nameDelegation || 'Dropoff'}
+                        </Text>
+                        {rDropHas ? <Ionicons name="map-outline" size={20} color={colors.primary} /> : null}
+                      </TouchableOpacity>
+                    )}
                   </View>
                 </View>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 }}>
@@ -929,7 +1092,8 @@ export default function AvailableOrdersScreen() {
                   {new Date(r.rejectedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
                 </Text>
               </View>
-            ))}
+              );
+            })}
           </View>
         )}
       </ScrollView>
@@ -1124,6 +1288,7 @@ const s = StyleSheet.create({
   routeDot: { width: 10, height: 10, borderRadius: 5 },
   routeLine: { width: 2, flex: 1, backgroundColor: '#e5e7eb', marginVertical: 3 },
   routeText: { fontSize: 14, color: '#374151', fontWeight: '500' },
+<<<<<<< HEAD
   routeLinkText: { textDecorationLine: 'underline' },
   distanceToPickupCard: {
     flexDirection: 'row',
@@ -1144,6 +1309,9 @@ const s = StyleSheet.create({
   },
   distanceToPickupLabel: { fontSize: 11, fontWeight: '600', letterSpacing: 0.3, textTransform: 'uppercase' },
   distanceToPickupValue: { fontSize: 17, fontWeight: '800', marginTop: 2 },
+=======
+  addressTapRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+>>>>>>> fixdriver
   chipsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 14 },
   chip: {
     flexDirection: 'row', alignItems: 'center', gap: 4,
