@@ -230,6 +230,13 @@ export default function CreateOrderScreen() {
       Math.abs(s.lng - addr.lng) <= COORD_MATCH_EPSILON,
     );
   };
+  const getSavedAddressByCoords = (addr: SavedAddress | null) => {
+    if (!addr) return null;
+    return savedAddresses.find((s) =>
+      Math.abs(s.lat - addr.lat) <= COORD_MATCH_EPSILON &&
+      Math.abs(s.lng - addr.lng) <= COORD_MATCH_EPSILON,
+    ) || null;
+  };
 
   const markRecentAddress = async (addressId: string) => {
     const next = [addressId, ...recentAddressIds.filter((id) => id !== addressId)].slice(0, 6);
@@ -259,30 +266,48 @@ export default function CreateOrderScreen() {
     }
   };
 
-  const saveAddressLabel = async (addr: SavedAddress | null, nickname: string) => {
-    const n = nickname.trim();
-    if (!addr) {
-      Alert.alert('Address', 'Select a location first.');
-      return;
-    }
-    if (n.length < 2) {
-      Alert.alert('Name', 'Enter a short name (at least 2 characters) for this address.');
-      return;
-    }
+  const autoSaveAddressForLater = async (
+    addr: SavedAddress | null,
+    nickname: string,
+    fallbackLabel: string,
+  ): Promise<string | null> => {
+    if (!addr) return null;
+    const trimmedNickname = nickname.trim();
+    const existing = getSavedAddressByCoords(addr);
+    const fallbackNickname = (addr.street || addr.label || fallbackLabel).slice(0, 60);
+    const desiredNickname =
+      trimmedNickname.length >= 2
+        ? trimmedNickname
+        : (existing?.nickname || existing?.label || fallbackNickname);
     try {
       const delegation = await api.get<{ id: string }>(
         `/geography/delegations/by-coordinates?lat=${addr.lat}&lng=${addr.lng}`,
       );
-      await api.post('/addresses', {
-        latitude: addr.lat,
-        longitude: addr.lng,
-        street: addr.label,
-        delegationId: delegation.id,
-        nickname: n,
-      });
-      Alert.alert('Saved', 'This address is now in your saved list.');
-    } catch (e: any) {
-      Alert.alert('Error', e.message || 'Could not save');
+      if (existing) {
+        const shouldUpdateNickname =
+          trimmedNickname.length >= 2 && trimmedNickname !== (existing.nickname || existing.label);
+        const shouldUpdateStreet = (addr.label || '').trim() !== ((existing.street || '').trim());
+        if (shouldUpdateNickname || shouldUpdateStreet) {
+          await api.patch(`/addresses/${existing.addressId}`, {
+            street: addr.label,
+            delegationId: delegation.id,
+            nickname: shouldUpdateNickname ? trimmedNickname : (existing.nickname ?? null),
+          });
+        }
+      } else {
+        await api.post('/addresses', {
+          latitude: addr.lat,
+          longitude: addr.lng,
+          street: addr.label,
+          delegationId: delegation.id,
+          nickname: desiredNickname,
+        });
+      }
+      await loadSavedAddresses();
+      return desiredNickname;
+    } catch {
+      // Do not block price preview when auto-save fails.
+      return null;
     }
   };
 
@@ -301,8 +326,8 @@ export default function CreateOrderScreen() {
       Alert.alert('Invalid Weight', 'Please enter a valid package weight.');
       return;
     }
-    if (cancelAfterMinutes < 15 || cancelAfterMinutes > 1440) {
-      Alert.alert('Invalid Timer', 'Auto-cancel time must be between 15 minutes and 24 hours.');
+    if (cancelAfterMinutes > 1440) {
+      Alert.alert('Invalid Timer', 'Auto-cancel time must be 24 hours or less.');
       return;
     }
     const ex = parseFloat((customerExtraAmount || '0').replace(',', '.'));
@@ -316,6 +341,16 @@ export default function CreateOrderScreen() {
     }
     setLoading(true);
     try {
+      const [savedPickupNickname, savedDropoffNickname] = await Promise.all([
+        autoSaveAddressForLater(pickupAddress, pickupNickSave, 'Pickup'),
+        autoSaveAddressForLater(dropoffAddress, dropoffNickSave, 'Delivery'),
+      ]);
+      if (savedPickupNickname) {
+        setPickupAddress((prev) => (prev ? { ...prev, nickname: savedPickupNickname, label: savedPickupNickname } : prev));
+      }
+      if (savedDropoffNickname) {
+        setDropoffAddress((prev) => (prev ? { ...prev, nickname: savedDropoffNickname, label: savedDropoffNickname } : prev));
+      }
       const result = await orderService.previewOrder({
         pickupAddressId: pickupAddress.addressId,
         dropoffAddressId: dropoffAddress.addressId,
@@ -358,6 +393,8 @@ export default function CreateOrderScreen() {
       setDescription('');
       setCancelAfterMinutes(15);
       setCustomerExtraAmount('0');
+      setPickupNickSave('');
+      setDropoffNickSave('');
       setPreview(null);
       setStep('form');
       // Refresh active orders
@@ -413,9 +450,11 @@ export default function CreateOrderScreen() {
   };
 
   /** Re-run preview after customer changes optional extra on the summary screen. */
-  const handleUpdatePreviewExtra = async () => {
+  const handleUpdatePreviewExtra = async (overrideExtraAmount?: number) => {
     if (!pickupAddress || !dropoffAddress) return;
-    const ex = parseFloat((customerExtraAmount || '0').replace(',', '.'));
+    const ex = typeof overrideExtraAmount === 'number'
+      ? overrideExtraAmount
+      : parseFloat((customerExtraAmount || '0').replace(',', '.'));
     if (Number.isNaN(ex) || ex < 0) {
       Alert.alert('Amount', 'Enter a valid optional extra amount (0 or more).');
       return;
@@ -445,6 +484,14 @@ export default function CreateOrderScreen() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const adjustPreviewExtraByStep = async (delta: number) => {
+    const current = parseFloat((customerExtraAmount || '0').replace(',', '.'));
+    const safeCurrent = Number.isNaN(current) || current < 0 ? 0 : current;
+    const next = Math.max(0, Math.min(MAX_CUSTOMER_EXTRA, safeCurrent + delta));
+    setCustomerExtraAmount(String(next));
+    await handleUpdatePreviewExtra(next);
   };
 
   // ═══════════════════════════════════════════
@@ -520,26 +567,33 @@ export default function CreateOrderScreen() {
             <Text style={[s.inputLabel, { color: colors.textSecondary, marginBottom: 8 }]}>
               Add an amount for long waits or services (e.g. paying a bill at an office). Max {MAX_CUSTOMER_EXTRA} {unit}.
             </Text>
-            <TextInput
-              style={[s.descInput, { color: colors.text, borderColor: colors.inputBorder }]}
-              value={customerExtraAmount}
-              onChangeText={setCustomerExtraAmount}
-              keyboardType="decimal-pad"
-              placeholder="0"
-              placeholderTextColor={colors.textTertiary}
-            />
-            <TouchableOpacity
-              style={[s.insufficientBtn, { backgroundColor: colors.primary, marginTop: 12, justifyContent: 'center' }]}
-              onPress={handleUpdatePreviewExtra}
-              disabled={loading}
-              activeOpacity={0.7}
-            >
-              {loading ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <Text style={[s.insufficientBtnText, { color: '#fff' }]}>Update total</Text>
-              )}
-            </TouchableOpacity>
+            <View style={s.extraStepperRow}>
+              <TouchableOpacity
+                style={[
+                  s.extraStepperBtn,
+                  { backgroundColor: colors.inputBg, borderColor: colors.border },
+                  parseFloat((customerExtraAmount || '0').replace(',', '.')) <= 0 && s.extraStepperBtnDisabled,
+                ]}
+                onPress={() => adjustPreviewExtraByStep(-1)}
+                disabled={loading || parseFloat((customerExtraAmount || '0').replace(',', '.')) <= 0}
+                activeOpacity={0.7}
+              >
+                <Text style={s.extraStepperBtnText}>-</Text>
+              </TouchableOpacity>
+              <View style={[s.extraStepperValueBox, { backgroundColor: colors.inputBg, borderColor: colors.border }]}>
+                <Text style={[s.extraStepperValueText, { color: colors.text }]}>
+                  {Math.max(0, parseFloat((customerExtraAmount || '0').replace(',', '.')) || 0).toFixed(0)}
+                </Text>
+              </View>
+              <TouchableOpacity
+                style={[s.extraStepperBtn, { backgroundColor: colors.inputBg, borderColor: colors.border }]}
+                onPress={() => adjustPreviewExtraByStep(1)}
+                disabled={loading}
+                activeOpacity={0.7}
+              >
+                <Text style={s.extraStepperBtnText}>+</Text>
+              </TouchableOpacity>
+            </View>
           </View>
 
           {/* Price breakdown */}
@@ -734,15 +788,17 @@ export default function CreateOrderScreen() {
 
           </View>
 
-          {((pickupAddress && !isAlreadySavedAddress(pickupAddress)) || (dropoffAddress && !isAlreadySavedAddress(dropoffAddress))) && (
+          {(pickupAddress || dropoffAddress) && (
             <View style={[s.card, { backgroundColor: colors.card }]}>
-              <Text style={[s.cardTitle, { color: colors.text }]}>Save address for later</Text>
+              <Text style={[s.cardTitle, { color: colors.text }]}>Address nickname</Text>
               <Text style={[s.inputLabel, { color: colors.textSecondary, marginBottom: 8 }]}>
-                Give a pseudo name to an address you selected — it appears in your saved list for the next order.
+                {(pickupAddress && !isAlreadySavedAddress(pickupAddress)) || (dropoffAddress && !isAlreadySavedAddress(dropoffAddress))
+                  ? 'Add a short nickname. New addresses are saved automatically when you press Calculate Price.'
+                  : 'These addresses are already saved.'}
               </Text>
               {pickupAddress && !isAlreadySavedAddress(pickupAddress) && (
                 <View style={{ marginBottom: 12 }}>
-                  <Text style={[s.inputLabel, { color: colors.text }]}>Pickup</Text>
+                  <Text style={[s.inputLabel, { color: colors.text }]}>Pickup (new)</Text>
                   <TextInput
                     style={[s.descInput, { color: colors.text, borderColor: colors.inputBorder }]}
                     placeholder="e.g. Home, Office…"
@@ -750,17 +806,11 @@ export default function CreateOrderScreen() {
                     value={pickupNickSave}
                     onChangeText={setPickupNickSave}
                   />
-                  <TouchableOpacity
-                    style={{ marginTop: 6, alignSelf: 'flex-start', paddingVertical: 6, paddingHorizontal: 12, backgroundColor: '#dbeafe', borderRadius: 8 }}
-                    onPress={() => saveAddressLabel(pickupAddress, pickupNickSave)}
-                  >
-                    <Text style={{ color: '#1e40af', fontWeight: '600' }}>Save pickup</Text>
-                  </TouchableOpacity>
                 </View>
               )}
               {dropoffAddress && !isAlreadySavedAddress(dropoffAddress) && (
                 <View>
-                  <Text style={[s.inputLabel, { color: colors.text }]}>Delivery</Text>
+                  <Text style={[s.inputLabel, { color: colors.text }]}>Delivery (new)</Text>
                   <TextInput
                     style={[s.descInput, { color: colors.text, borderColor: colors.inputBorder }]}
                     placeholder="e.g. Father's house…"
@@ -768,12 +818,6 @@ export default function CreateOrderScreen() {
                     value={dropoffNickSave}
                     onChangeText={setDropoffNickSave}
                   />
-                  <TouchableOpacity
-                    style={{ marginTop: 6, alignSelf: 'flex-start', paddingVertical: 6, paddingHorizontal: 12, backgroundColor: '#dbeafe', borderRadius: 8 }}
-                    onPress={() => saveAddressLabel(dropoffAddress, dropoffNickSave)}
-                  >
-                    <Text style={{ color: '#1e40af', fontWeight: '600' }}>Save delivery</Text>
-                  </TouchableOpacity>
                 </View>
               )}
             </View>
@@ -871,8 +915,8 @@ export default function CreateOrderScreen() {
                 <Ionicons name="add" size={20} color="#374151" />
               </TouchableOpacity>
             </View>
-            {(cancelAfterMinutes < 15 || cancelAfterMinutes > 1440) && (
-              <Text style={s.validationError}>Must be between 15 and 1440 minutes (24h)</Text>
+            {cancelAfterMinutes > 1440 && (
+              <Text style={s.validationError}>Must be 1440 minutes (24h) or less</Text>
             )}
           </View>
 
@@ -1076,6 +1120,43 @@ const s = StyleSheet.create({
   descInput: {
     borderRadius: 12, backgroundColor: '#f9fafb', borderWidth: 1, borderColor: '#e5e7eb',
     padding: 12, fontSize: 14, color: '#111', minHeight: 80,
+  },
+  extraStepperRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    marginTop: 6,
+  },
+  extraStepperBtn: {
+    width: 46,
+    height: 46,
+    borderRadius: 12,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  extraStepperBtnDisabled: {
+    opacity: 0.45,
+  },
+  extraStepperBtnText: {
+    fontSize: 26,
+    fontWeight: '700',
+    color: '#334155',
+    lineHeight: 28,
+  },
+  extraStepperValueBox: {
+    minWidth: 92,
+    height: 46,
+    borderRadius: 12,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+  },
+  extraStepperValueText: {
+    fontSize: 20,
+    fontWeight: '700',
   },
 
   // Primary button

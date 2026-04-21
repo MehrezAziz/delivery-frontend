@@ -1,4 +1,4 @@
-import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, ScrollView } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -8,6 +8,7 @@ import { resolveLaunchRouteAfterLogin } from '../services/notifications';
 export default function RoleSelectionScreen() {
   const router = useRouter();
   const [checking, setChecking] = useState(true);
+  const [selectedRole, setSelectedRole] = useState<'CUSTOMER' | 'DRIVER'>('CUSTOMER');
 
   useEffect(() => {
     checkExistingSession();
@@ -57,58 +58,90 @@ export default function RoleSelectionScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={styles.content}>
-        <View style={styles.iconContainer}>
-          <Text style={styles.iconText}>🚚</Text>
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        <View style={styles.heroCard}>
+          <View style={styles.heroBadge}>
+            <Text style={styles.heroBadgeText}>Fast Delivery</Text>
+          </View>
+          <Text style={styles.title}>Deliver anything, faster and smarter</Text>
+          <Text style={styles.subtitle}>
+            Reliable pickup and delivery for customers, with earning opportunities for drivers.
+          </Text>
         </View>
-        
-        <Text style={styles.title}>Welcome to Fast Delivery</Text>
-        <Text style={styles.subtitle}>Choose how you want to continue</Text>
 
+        <View style={styles.introSection}>
+          <Text style={styles.introTitle}>Why use the app?</Text>
+          <Text style={styles.introItem}>- Live order tracking and transparent pricing</Text>
+          <Text style={styles.introItem}>- Secure payments and easy address management</Text>
+          <Text style={styles.introItem}>- Fast onboarding for both customers and drivers</Text>
+        </View>
+
+        <Text style={styles.roleHeading}>Choose your role</Text>
         <View style={styles.cardsContainer}>
-          {/* Customer Card */}
           <TouchableOpacity
-            style={[styles.card, styles.customerCard]}
-            onPress={() => router.push('/(auth)/customer-login')}
-            activeOpacity={0.8}
+            style={[
+              styles.card,
+              selectedRole === 'CUSTOMER' ? styles.cardActiveCustomer : styles.cardIdle,
+            ]}
+            onPress={() => setSelectedRole('CUSTOMER')}
+            activeOpacity={0.9}
           >
-            <View style={styles.cardIcon}>
+            <View style={[styles.cardIcon, selectedRole === 'CUSTOMER' && styles.cardIconActiveCustomer]}>
               <Text style={styles.cardIconText}>📦</Text>
             </View>
-            <Text style={styles.cardTitle}>I'm a Customer</Text>
-            <Text style={styles.cardDescription}>
-              Send packages and track deliveries
-            </Text>
-            <View style={styles.cardButton}>
-              <Text style={styles.cardButtonText}>Continue →</Text>
+            <View style={styles.cardTextBlock}>
+              <Text style={styles.cardTitle}>Customer</Text>
+              <Text style={styles.cardDescription}>
+                Create delivery orders, save frequent addresses, and track every step.
+              </Text>
             </View>
+            <Text style={[styles.cardState, selectedRole === 'CUSTOMER' && styles.cardStateActive]}>
+              {selectedRole === 'CUSTOMER' ? 'Selected' : 'Tap to select'}
+            </Text>
           </TouchableOpacity>
 
-          {/* Driver Card */}
           <TouchableOpacity
-            style={[styles.card, styles.driverCard]}
-            onPress={() => router.push('/(auth)/driver-login')}
-            activeOpacity={0.8}
+            style={[
+              styles.card,
+              selectedRole === 'DRIVER' ? styles.cardActiveDriver : styles.cardIdle,
+            ]}
+            onPress={() => setSelectedRole('DRIVER')}
+            activeOpacity={0.9}
           >
-            <View style={styles.cardIcon}>
+            <View style={[styles.cardIcon, selectedRole === 'DRIVER' && styles.cardIconActiveDriver]}>
               <Text style={styles.cardIconText}>🚗</Text>
             </View>
-            <Text style={styles.cardTitle}>I'm a Driver</Text>
-            <Text style={styles.cardDescription}>
-              Deliver packages and earn money
-            </Text>
-            <View style={styles.cardButton}>
-              <Text style={styles.cardButtonText}>Continue →</Text>
+            <View style={styles.cardTextBlock}>
+              <Text style={styles.cardTitle}>Driver</Text>
+              <Text style={styles.cardDescription}>
+                Accept nearby orders, optimize routes, and grow your daily earnings.
+              </Text>
             </View>
+            <Text style={[styles.cardState, selectedRole === 'DRIVER' && styles.cardStateActive]}>
+              {selectedRole === 'DRIVER' ? 'Selected' : 'Tap to select'}
+            </Text>
           </TouchableOpacity>
         </View>
-      </View>
 
-      <View style={styles.footer}>
-        <Text style={styles.footerText}>
-          By continuing, you agree to our Terms & Privacy Policy
-        </Text>
-      </View>
+        <TouchableOpacity
+          style={styles.continueBtn}
+          onPress={() => router.push(selectedRole === 'CUSTOMER' ? '/(auth)/customer-login' : '/(auth)/driver-login')}
+          activeOpacity={0.85}
+        >
+          <Text style={styles.continueBtnText}>
+            Continue as {selectedRole === 'CUSTOMER' ? 'Customer' : 'Driver'}
+          </Text>
+        </TouchableOpacity>
+
+        <View style={styles.footer}>
+          <Text style={styles.footerText}>
+            By continuing, you agree to our Terms & Privacy Policy
+          </Text>
+        </View>
+      </ScrollView>
+      <View style={styles.bgCircleTop} />
+      <View style={styles.bgCircleBottom} />
+      <View style={styles.bgCircleSide} />
     </View>
   );
 }
@@ -116,106 +149,189 @@ export default function RoleSelectionScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f9fafb',
+    backgroundColor: '#f3f7ff',
   },
   content: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 24,
+    paddingTop: 56,
+    paddingHorizontal: 20,
+    paddingBottom: 28,
+    gap: 18,
   },
-  iconContainer: {
-    width: 100,
-    height: 100,
-    backgroundColor: '#0284c7',
-    borderRadius: 50,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 24,
+  heroCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 22,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: '#dbeafe',
+    shadowColor: '#0f172a',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.08,
+    shadowRadius: 16,
+    elevation: 5,
   },
-  iconText: {
-    fontSize: 48,
+  heroBadge: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: '#e0f2fe',
+    marginBottom: 10,
+  },
+  heroBadgeText: {
+    color: '#0369a1',
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 0.3,
   },
   title: {
     fontSize: 28,
-    fontWeight: 'bold',
-    color: '#111827',
-    textAlign: 'center',
+    fontWeight: '800',
+    color: '#0f172a',
     marginBottom: 8,
   },
   subtitle: {
+    fontSize: 15,
+    color: '#475569',
+    lineHeight: 22,
+  },
+  introSection: {
+    backgroundColor: '#ffffff',
+    borderRadius: 18,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  introTitle: {
     fontSize: 16,
-    color: '#6b7280',
-    textAlign: 'center',
-    marginBottom: 48,
+    fontWeight: '700',
+    color: '#0f172a',
+    marginBottom: 8,
+  },
+  introItem: {
+    fontSize: 13,
+    color: '#475569',
+    marginBottom: 5,
+  },
+  roleHeading: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: '#0f172a',
+    marginTop: 4,
   },
   cardsContainer: {
     width: '100%',
-    gap: 16,
+    gap: 12,
   },
   card: {
-    backgroundColor: 'white',
-    borderRadius: 20,
-    padding: 24,
+    borderRadius: 18,
+    padding: 16,
+    flexDirection: 'row',
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 5,
-    borderWidth: 2,
+    borderWidth: 1.6,
   },
-  customerCard: {
-    borderColor: '#0284c7',
+  cardIdle: {
+    backgroundColor: '#ffffff',
+    borderColor: '#cbd5e1',
   },
-  driverCard: {
-    borderColor: '#c026d3',
+  cardActiveCustomer: {
+    backgroundColor: '#eff6ff',
+    borderColor: '#2563eb',
+  },
+  cardActiveDriver: {
+    backgroundColor: '#faf5ff',
+    borderColor: '#9333ea',
   },
   cardIcon: {
-    width: 80,
-    height: 80,
-    backgroundColor: '#f3f4f6',
-    borderRadius: 40,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 16,
+    backgroundColor: '#f1f5f9',
+    marginRight: 12,
+  },
+  cardIconActiveCustomer: {
+    backgroundColor: '#dbeafe',
+  },
+  cardIconActiveDriver: {
+    backgroundColor: '#f3e8ff',
   },
   cardIconText: {
-    fontSize: 40,
+    fontSize: 26,
+  },
+  cardTextBlock: {
+    flex: 1,
   },
   cardTitle: {
-    fontSize: 22,
-    fontWeight: 'bold',
-    color: '#111827',
-    marginBottom: 8,
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#0f172a',
+    marginBottom: 4,
   },
   cardDescription: {
-    fontSize: 14,
-    color: '#6b7280',
-    textAlign: 'center',
-    marginBottom: 16,
+    fontSize: 13,
+    color: '#64748b',
+    lineHeight: 18,
   },
-  cardButton: {
-    paddingHorizontal: 24,
-    paddingVertical: 10,
-    borderRadius: 20,
-    backgroundColor: '#f3f4f6',
+  cardState: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#64748b',
   },
-  cardButtonText: {
+  cardStateActive: {
+    color: '#0f172a',
+  },
+  continueBtn: {
+    height: 54,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#0284c7',
+    shadowColor: '#0284c7',
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
+    elevation: 5,
+    marginTop: 8,
+  },
+  continueBtnText: {
+    color: '#ffffff',
     fontSize: 16,
-    fontWeight: '600',
-    color: '#111827',
+    fontWeight: '700',
   },
   footer: {
-    paddingBottom: 32,
-    paddingHorizontal: 24,
+    paddingTop: 6,
   },
   footerText: {
-    color: '#9ca3af',
+    color: '#64748b',
     textAlign: 'center',
     fontSize: 12,
+  },
+  bgCircleTop: {
+    position: 'absolute',
+    top: -60,
+    right: -30,
+    width: 170,
+    height: 170,
+    borderRadius: 85,
+    backgroundColor: 'rgba(56, 189, 248, 0.16)',
+  },
+  bgCircleBottom: {
+    position: 'absolute',
+    bottom: -55,
+    left: -20,
+    width: 160,
+    height: 160,
+    borderRadius: 80,
+    backgroundColor: 'rgba(59, 130, 246, 0.12)',
+  },
+  bgCircleSide: {
+    position: 'absolute',
+    top: '44%',
+    right: -38,
+    width: 90,
+    height: 90,
+    borderRadius: 45,
+    backgroundColor: 'rgba(147, 51, 234, 0.12)',
   },
 });

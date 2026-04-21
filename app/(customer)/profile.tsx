@@ -146,8 +146,8 @@ export default function CustomerProfileScreen() {
       await AsyncStorage.removeItem('accessToken');
       await AsyncStorage.removeItem('user');
       await AsyncStorage.removeItem('customer');
-      // Navigate to login screen
-      router.replace('/');
+      // Navigate to customer login screen
+      router.replace('/(auth)/customer-login');
     } catch (err) {
       console.error('Error during logout:', err);
     }

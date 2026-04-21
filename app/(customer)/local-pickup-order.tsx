@@ -161,8 +161,8 @@ export default function LocalPickupOrderScreen() {
       Alert.alert('Amount', `Optional extra cannot exceed ${MAX_CUSTOMER_EXTRA}.`);
       return;
     }
-    if (cancelAfterMinutes < LOCAL_PICKUP_MIN_CANCEL_MINUTES || cancelAfterMinutes > LOCAL_PICKUP_MAX_CANCEL_MINUTES) {
-      Alert.alert('Invalid Timer', `Auto-cancel time must be between ${LOCAL_PICKUP_MIN_CANCEL_MINUTES} minutes and 4 hours.`);
+    if (cancelAfterMinutes > LOCAL_PICKUP_MAX_CANCEL_MINUTES) {
+      Alert.alert('Invalid Timer', `Auto-cancel time must be ${LOCAL_PICKUP_MAX_CANCEL_MINUTES} minutes or less.`);
       return;
     }
     setLoading(true);
@@ -352,9 +352,9 @@ export default function LocalPickupOrderScreen() {
                 <Ionicons name="add" size={20} color="#374151" />
               </TouchableOpacity>
             </View>
-            {(cancelAfterMinutes < LOCAL_PICKUP_MIN_CANCEL_MINUTES || cancelAfterMinutes > LOCAL_PICKUP_MAX_CANCEL_MINUTES) && (
+            {cancelAfterMinutes > LOCAL_PICKUP_MAX_CANCEL_MINUTES && (
               <Text style={{ color: '#dc2626', marginTop: 8, fontSize: 12 }}>
-                Must be between {LOCAL_PICKUP_MIN_CANCEL_MINUTES} and {LOCAL_PICKUP_MAX_CANCEL_MINUTES} minutes (4h)
+                Must be {LOCAL_PICKUP_MAX_CANCEL_MINUTES} minutes (4h) or less
               </Text>
             )}
           </View>
