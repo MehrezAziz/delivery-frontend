@@ -98,6 +98,11 @@ export interface Order {
     feedback: string;
     createdAt: string;
   } | null;
+  customer?: {
+    firstName: string | null;
+    secondName: string | null;
+    image?: string | null;
+  } | null;
 }
 
 export interface AvailableOrders {
