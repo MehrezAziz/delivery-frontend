@@ -119,6 +119,7 @@ const styles = StyleSheet.create({
   overlay: {
     flex: 1,
     flexDirection: 'row',
+    justifyContent: 'flex-end',
     backgroundColor: 'rgba(15, 23, 42, 0.45)',
   },
   sheet: {
@@ -126,7 +127,9 @@ const styles = StyleSheet.create({
     maxWidth: 340,
     marginTop: 56,
     marginBottom: 24,
-    marginLeft: 12,
+    marginRight: 12,
+    marginLeft: 0,
+    alignSelf: 'stretch',
     borderRadius: 18,
     borderWidth: StyleSheet.hairlineWidth,
     overflow: 'hidden',

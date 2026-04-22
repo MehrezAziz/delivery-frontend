@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState } from 'react';
 import { View, Text, TouchableOpacity, Image, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useRouter, usePathname } from 'expo-router';
+import { useRouter, usePathname, useSegments } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -15,6 +15,20 @@ import {
 } from '../constants/screenTitles';
 
 const API_ORIGIN = (process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api').replace(/\/?api\/?$/i, '');
+
+/** Main “home” tab only — avoids back → login confusion and limits chrome actions to home. */
+function isMainHomeScreen(role: AppChromeRole, segments: string[], pathname: string): boolean {
+  const norm = (pathname || '/').replace(/\/$/, '') || '/';
+  if (role === 'customer') {
+    if (segments.includes('(customer)') && segments[segments.length - 1] === 'home') return true;
+    return norm === '/(customer)/home' || norm.endsWith('/(customer)/home');
+  }
+  if (role === 'driver') {
+    if (segments.includes('(driver)') && segments[segments.length - 1] === 'home') return true;
+    return norm === '/(driver)/home' || norm.endsWith('/(driver)/home');
+  }
+  return false;
+}
 
 function resolveAvatarUri(image: string | null | undefined): string | null {
   if (!image || typeof image !== 'string') return null;
@@ -32,20 +46,25 @@ export function AppChromeHeader({
   role,
   subtitle,
   showMenu = true,
-  showProfile = true,
+  showProfile,
+  showThemeToggle,
   hideBack,
 }: {
   title?: string;
   role: AppChromeRole;
   subtitle?: string;
   showMenu?: boolean;
+  /** When omitted: only on main Home tab (customer/driver). */
   showProfile?: boolean;
-  /** When true, leaves space for alignment but no back action (e.g. welcome root). */
+  /** When omitted: only on main Home tab (customer/driver); guest screens set explicitly. */
+  showThemeToggle?: boolean;
+  /** When omitted: hidden on main Home tab (customer/driver); guest uses explicit value. */
   hideBack?: boolean;
 }) {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const pathname = usePathname();
+  const segments = useSegments() as string[];
   const { colors, isDark } = useTheme();
   const [menuOpen, setMenuOpen] = useState(false);
   const [avatarUri, setAvatarUri] = useState<string | null>(null);
@@ -74,6 +93,8 @@ export function AppChromeHeader({
     }, [loadAvatar]),
   );
 
+  const isMainHome = useMemo(() => isMainHomeScreen(role, segments, pathname), [role, segments, pathname]);
+
   const resolvedTitle = useMemo(() => {
     if (titleProp) return titleProp;
     const parts = pathname.replace(/^\//, '').split('/').filter(Boolean);
@@ -82,6 +103,15 @@ export function AppChromeHeader({
     if (role === 'driver') return DRIVER_ROUTE_TITLES[leaf] || leaf.replace(/-/g, ' ');
     return 'App';
   }, [titleProp, pathname, role]);
+
+  const resolvedHideBack =
+    role === 'guest' ? !!hideBack : hideBack === true || (hideBack !== false && isMainHome);
+
+  const resolvedShowProfile =
+    showProfile !== undefined ? showProfile : role !== 'guest' && isMainHome;
+
+  const resolvedShowTheme =
+    showThemeToggle !== undefined ? showThemeToggle : role !== 'guest' && isMainHome;
 
   const onBack = () => {
     if (router.canGoBack()) router.back();
@@ -109,7 +139,7 @@ export function AppChromeHeader({
     <>
       <View style={{ paddingTop: insets.top, backgroundColor: headerBg }}>
         <View style={styles.row}>
-          {hideBack ? (
+          {resolvedHideBack ? (
             <View style={styles.iconBtn} />
           ) : (
             <TouchableOpacity onPress={onBack} style={[styles.iconBtn, { backgroundColor: iconBtnBg }]} activeOpacity={0.75}>
@@ -129,7 +159,7 @@ export function AppChromeHeader({
           </View>
 
           <View style={styles.rightCluster}>
-            {showProfile && role !== 'guest' ? (
+            {resolvedShowProfile && role !== 'guest' ? (
               <TouchableOpacity onPress={onAvatar} style={[styles.avatarRing, { borderColor: textColor }]} activeOpacity={0.8}>
                 {avatarUri ? (
                   <Image source={{ uri: avatarUri }} style={styles.avatarImg} />
@@ -137,12 +167,10 @@ export function AppChromeHeader({
                   <Ionicons name="person" size={18} color={textColor} />
                 )}
               </TouchableOpacity>
-            ) : showProfile && role === 'guest' ? (
-              <View style={[styles.avatarRing, { borderColor: colors.border, opacity: 0.5 }]}>
-                <Ionicons name="person-outline" size={18} color={colors.textTertiary} />
-              </View>
             ) : null}
-            <ThemeToggle size={20} color={role === 'guest' ? colors.text : '#fff'} style={[styles.themeBtn, { backgroundColor: iconBtnBg }]} />
+            {resolvedShowTheme ? (
+              <ThemeToggle size={20} color={role === 'guest' ? colors.text : '#fff'} style={[styles.themeBtn, { backgroundColor: iconBtnBg }]} />
+            ) : null}
             {showMenu ? (
               <TouchableOpacity
                 onPress={() => setMenuOpen(true)}
@@ -165,7 +193,7 @@ export function AppChromeHeader({
 /** Use inside Stack `screenOptions` for auth routes. */
 export function AuthChromeHeader({ routeName }: { routeName: string }) {
   const title = AUTH_ROUTE_TITLES[routeName] || 'Account';
-  return <AppChromeHeader role="guest" title={title} showProfile />;
+  return <AppChromeHeader role="guest" title={title} showProfile={false} showThemeToggle={false} />;
 }
 
 export function CustomerTabsHeader() {

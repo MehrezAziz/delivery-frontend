@@ -1,10 +1,14 @@
 import { Tabs } from 'expo-router';
 import { Platform, StyleSheet } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../contexts/ThemeContext';
 import { CustomerTabsHeader } from '../../components/AppChromeHeader';
 
 export default function CustomerLayout() {
   const { colors, isDark } = useTheme();
+  const insets = useSafeAreaInsets();
+  /** Keep floating tab bar above Android gesture / 3-button system navigation. */
+  const tabBarBottom = 16 + Math.max(insets.bottom, 10);
 
   return (
     <Tabs
@@ -20,7 +24,7 @@ export default function CustomerLayout() {
           position: 'absolute',
           left: 16,
           right: 16,
-          bottom: 24,
+          bottom: tabBarBottom,
           height: 64,
           paddingBottom: 10,
           paddingTop: 10,

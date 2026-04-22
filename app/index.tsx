@@ -61,7 +61,7 @@ export default function RoleSelectionScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <AppChromeHeader role="guest" title="Welcome" hideBack />
+      <AppChromeHeader role="guest" title="Welcome" hideBack showThemeToggle={true} showProfile={false} />
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={[styles.heroCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <View style={[styles.heroBadge, { backgroundColor: colors.primaryLight }]}>

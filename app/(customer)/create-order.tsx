@@ -504,16 +504,16 @@ export default function CreateOrderScreen() {
 
     return (
       <View style={[s.container, { backgroundColor: colors.background }]}>
-        {/* Header */}
-        <View style={[s.header, { backgroundColor: colors.headerBg }]}>
-          <TouchableOpacity onPress={() => setStep('form')} style={s.headerBackBtn}>
-            <Ionicons name="chevron-back" size={22} color="#fff" />
-          </TouchableOpacity>
-          <Text style={s.headerTitle}>Order Summary</Text>
-          <View style={{ width: 36 }} />
-        </View>
-
         <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 20, paddingBottom: 40 }}>
+          <TouchableOpacity
+            style={[s.previewEditRow, { backgroundColor: colors.card, borderColor: colors.border }]}
+            onPress={() => setStep('form')}
+            activeOpacity={0.75}
+          >
+            <Ionicons name="chevron-back" size={20} color={colors.primary} />
+            <Text style={[s.previewEditText, { color: colors.primary }]}>Edit order details</Text>
+          </TouchableOpacity>
+
           {/* Route card */}
           <View style={[s.card, { backgroundColor: colors.card }]}>
             <View style={s.routeRow}>
@@ -675,18 +675,25 @@ export default function CreateOrderScreen() {
   return (
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <View style={[s.container, { backgroundColor: colors.background }]}>
-        {/* Header */}
-        <View style={[s.header, { backgroundColor: colors.headerBg }]}>
-          <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace('/(customer)/home')} style={s.headerBackBtn}>
-            <Ionicons name="chevron-back" size={22} color="#fff" />
-          </TouchableOpacity>
-          <Text style={s.headerTitle}>New Order</Text>
-          <TouchableOpacity onPress={() => router.push(`/(customer)/local-pickup-order?returnTo=${encodeURIComponent('/(customer)/create-order')}`)} style={{ padding: 8 }}>
-            <Ionicons name="cube-outline" size={22} color="#fff" />
-          </TouchableOpacity>
-        </View>
-
         <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 20, paddingBottom: 40 }} keyboardShouldPersistTaps="handled">
+          <TouchableOpacity
+            style={[s.localPickupCta, { backgroundColor: colors.card, borderColor: colors.border }]}
+            onPress={() =>
+              router.push(`/(customer)/local-pickup-order?returnTo=${encodeURIComponent('/(customer)/create-order')}`)
+            }
+            activeOpacity={0.8}
+          >
+            <View style={[s.localPickupIconWrap, { backgroundColor: colors.primaryLight }]}>
+              <Ionicons name="cube-outline" size={22} color={colors.primary} />
+            </View>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text style={[s.localPickupCtaTitle, { color: colors.text }]}>Create local pickup</Text>
+              <Text style={[s.localPickupCtaSub, { color: colors.textSecondary }]}>
+                Same-location pickup — quick flow for shop and carry orders
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color={colors.textTertiary} />
+          </TouchableOpacity>
 
           {/* ── Active Orders ── */}
           {activeOrders.length > 0 && (
@@ -1026,17 +1033,42 @@ function PriceRow({ label, value, unit }: { label: string; value: number; unit: 
 const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f8fafc' },
 
-  // Header
-  header: {
-    backgroundColor: '#0284c7', paddingTop: 54, paddingBottom: 18, paddingHorizontal: 20,
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    borderBottomLeftRadius: 20, borderBottomRightRadius: 20,
+  localPickupCta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    marginBottom: 18,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 2,
   },
-  headerBackBtn: {
-    width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.2)',
-    alignItems: 'center', justifyContent: 'center',
+  localPickupIconWrap: {
+    width: 48,
+    height: 48,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  headerTitle: { color: '#fff', fontSize: 20, fontWeight: '700' },
+  localPickupCtaTitle: { fontSize: 16, fontWeight: '800', letterSpacing: -0.2 },
+  localPickupCtaSub: { fontSize: 12, fontWeight: '500', marginTop: 3, lineHeight: 16 },
+  previewEditRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    alignSelf: 'flex-start',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    marginBottom: 16,
+  },
+  previewEditText: { fontSize: 15, fontWeight: '700' },
 
   // Cards
   card: {
