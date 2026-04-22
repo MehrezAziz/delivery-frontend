@@ -14,10 +14,6 @@ import { SupportChatMessageItem } from '../../components/support/SupportChatMess
 export default function SupportChatScreen() {
   const router = useRouter();
   const { ticketId } = useLocalSearchParams<{ ticketId: string }>();
-  const handleBack = () => {
-    if (router.canGoBack()) router.back();
-    else router.replace('/(customer)/home');
-  };
   const { colors } = useTheme();
   const [ticket, setTicket] = useState<(SupportTicket & { messages: SupportMessage[] }) | null>(null);
   const [loading, setLoading] = useState(true);
@@ -143,15 +139,15 @@ export default function SupportChatScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
     >
-      <View style={[styles.header, { backgroundColor: colors.card, borderBottomColor: colors.border }]}>
-        <TouchableOpacity onPress={handleBack}>
-          <Text style={[styles.backText, { color: colors.primary }]}>← Back</Text>
-        </TouchableOpacity>
-        <View style={{ flex: 1, alignItems: 'center' }}>
-          <Text style={[styles.headerTitle, { color: colors.text }]}>{ticket.category.replace('_', ' ')}</Text>
-          <Text style={[styles.headerStatus, { color: colors.textSecondary }]}>{ticket.status.replace('_', ' ')}</Text>
+      <View style={[styles.ticketToolbar, { backgroundColor: colors.card, borderColor: colors.border }]}>
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Text style={[styles.headerTitle, { color: colors.text }]} numberOfLines={1}>
+            {ticket.category.replace('_', ' ')}
+          </Text>
+          <Text style={[styles.headerStatus, { color: colors.textSecondary }]} numberOfLines={1}>
+            {ticket.status.replace('_', ' ')}
+          </Text>
         </View>
-        <View style={{ width: 50 }} />
       </View>
 
       <FlatList
@@ -219,19 +215,16 @@ export default function SupportChatScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f9fafb' },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingTop: 60,
-    paddingBottom: 12,
-    backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
+  ticketToolbar: {
+    marginHorizontal: 16,
+    marginTop: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 14,
+    borderWidth: StyleSheet.hairlineWidth,
   },
-  backText: { color: '#0284c7', fontSize: 16, fontWeight: '500', width: 50 },
-  headerTitle: { fontSize: 16, fontWeight: '600', color: '#111827' },
-  headerStatus: { fontSize: 12, color: '#6b7280' },
+  headerTitle: { fontSize: 15, fontWeight: '700' },
+  headerStatus: { fontSize: 12, fontWeight: '600', marginTop: 2 },
   messagesList: { padding: 16, paddingBottom: 8 },
   ticketInfo: { backgroundColor: '#eff6ff', borderRadius: 12, padding: 12, marginBottom: 16 },
   ticketInfoText: { fontSize: 14, color: '#1e40af', marginBottom: 4 },

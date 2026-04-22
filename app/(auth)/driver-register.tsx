@@ -22,27 +22,18 @@ export default function DriverRegisterScreen() {
   };
 
   return (
-    <KeyboardAvoidingView 
+    <KeyboardAvoidingView
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      style={[styles.container, { backgroundColor: colors.card }]}
+      style={[styles.container, { backgroundColor: colors.background }]}
     >
-      <ScrollView contentContainerStyle={styles.scrollContent}>
+      <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
         <View style={styles.content}>
-          {/* Back Button */}
-          <TouchableOpacity 
-            onPress={() => router.canGoBack() ? router.back() : router.replace('/')}
-            style={styles.backButton}
-          >
-            <Text style={[styles.backText, { color: '#c026d3' }]}>← Back</Text>
-          </TouchableOpacity>
-
-          {/* Header */}
-          <View style={styles.header}>
-            <View style={styles.iconContainer}>
+          <View style={[styles.heroCard, { backgroundColor: colors.surfaceVariant, borderColor: colors.border }]}>
+            <View style={[styles.iconContainer, { backgroundColor: '#7c3aed' }]}>
               <Text style={styles.iconText}>🚗</Text>
             </View>
-            <Text style={[styles.title, { color: colors.text }]}>Become a Driver</Text>
-            <Text style={[styles.subtitle, { color: colors.textSecondary }]}>Start earning by delivering packages</Text>
+            <Text style={[styles.title, { color: colors.text }]}>Become a driver</Text>
+            <Text style={[styles.subtitle, { color: colors.textSecondary }]}>Start earning with flexible deliveries near you.</Text>
           </View>
 
           {/* Form */}
@@ -141,46 +132,46 @@ export default function DriverRegisterScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    marginBottom:60,
   },
   scrollContent: {
     flexGrow: 1,
   },
   content: {
     flex: 1,
-    paddingHorizontal: 24,
-    paddingTop: 64,
-    paddingBottom: 32,
+    paddingHorizontal: 22,
+    paddingTop: 8,
+    paddingBottom: 36,
   },
-  backButton: {
-    marginBottom: 32,
-  },
-  backText: {
-    fontSize: 18,
-    fontWeight: '500',
-  },
-  header: {
-    marginBottom: 32,
-  },
-  iconContainer: {
-    width: 80,
-    height: 80,
-    backgroundColor: '#c026d3',
-    borderRadius: 40,
+  heroCard: {
+    borderRadius: 20,
+    paddingVertical: 26,
+    paddingHorizontal: 20,
     alignItems: 'center',
-    justifyContent: 'center',
+    borderWidth: StyleSheet.hairlineWidth,
     marginBottom: 24,
   },
+  iconContainer: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+  },
   iconText: {
-    fontSize: 40,
+    fontSize: 36,
   },
   title: {
-    fontSize: 36,
-    fontWeight: 'bold',
+    fontSize: 26,
+    fontWeight: '800',
     marginBottom: 8,
+    textAlign: 'center',
   },
   subtitle: {
-    fontSize: 18,
+    fontSize: 15,
+    lineHeight: 22,
+    textAlign: 'center',
+    maxWidth: 300,
   },
   form: {
     gap: 20,
@@ -200,10 +191,10 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   registerButton: {
-    backgroundColor: '#c026d3',
+    backgroundColor: '#7c3aed',
     paddingVertical: 16,
-    borderRadius: 12,
-    shadowColor: '#c026d3',
+    borderRadius: 14,
+    shadowColor: '#7c3aed',
     shadowOffset: {
       width: 0,
       height: 4,
@@ -229,7 +220,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
   },
   loginLink: {
-    color: '#c026d3',
+    color: '#7c3aed',
     fontWeight: '600',
     fontSize: 15,
   },

@@ -226,9 +226,9 @@ export default function CustomerRegisterScreen() {
   };
 
   return (
-    <KeyboardAvoidingView 
+    <KeyboardAvoidingView
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      style={[styles.container, { backgroundColor: colors.card }]}
+      style={[styles.container, { backgroundColor: colors.background }]}
     >
       {/* Account Exists Modal */}
       <Modal
@@ -264,23 +264,14 @@ export default function CustomerRegisterScreen() {
         </View>
       </Modal>
 
-      <ScrollView contentContainerStyle={styles.scrollContent}>
+      <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
         <View style={styles.content}>
-          {/* Back Button */}
-          <TouchableOpacity 
-            onPress={() => router.canGoBack() ? router.back() : router.replace('/')}
-            style={[styles.backBtn, { backgroundColor: colors.surfaceVariant }]}
-          >
-            <Ionicons name="chevron-back" size={22} color={colors.text} />
-          </TouchableOpacity>
-
-          {/* Header */}
-          <View style={styles.header}>
+          <View style={[styles.heroCard, { backgroundColor: colors.surfaceVariant, borderColor: colors.border }]}>
             <View style={[styles.iconContainer, { backgroundColor: colors.primary }]}>
               <Text style={styles.iconText}>📦</Text>
             </View>
-            <Text style={[styles.title, { color: colors.text }]}>Create Account</Text>
-            <Text style={[styles.subtitle, { color: colors.textSecondary }]}>Register as a customer</Text>
+            <Text style={[styles.title, { color: colors.text }]}>Create account</Text>
+            <Text style={[styles.subtitle, { color: colors.textSecondary }]}>Join to send packages and track every delivery.</Text>
           </View>
 
           {/* Form */}
@@ -555,42 +546,46 @@ export default function CustomerRegisterScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    marginBottom:40,
   },
   scrollContent: {
     flexGrow: 1,
   },
   content: {
     flex: 1,
-    paddingHorizontal: 24,
-    paddingTop: 64,
-    paddingBottom: 32,
+    paddingHorizontal: 22,
+    paddingTop: 8,
+    paddingBottom: 36,
   },
-  backBtn: {
-    width: 42, height: 42, borderRadius: 21,
-    alignItems: 'center', justifyContent: 'center', marginBottom: 24,
-  },
-  header: {
-    marginBottom: 32,
-  },
-  iconContainer: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
+  heroCard: {
+    borderRadius: 20,
+    paddingVertical: 26,
+    paddingHorizontal: 20,
     alignItems: 'center',
-    justifyContent: 'center',
+    borderWidth: StyleSheet.hairlineWidth,
     marginBottom: 24,
   },
+  iconContainer: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+  },
   iconText: {
-    fontSize: 40,
+    fontSize: 36,
   },
   title: {
-    fontSize: 36,
-    fontWeight: 'bold',
+    fontSize: 26,
+    fontWeight: '800',
     marginBottom: 8,
+    textAlign: 'center',
   },
   subtitle: {
-    fontSize: 18,
+    fontSize: 15,
+    lineHeight: 22,
+    textAlign: 'center',
+    maxWidth: 300,
   },
   form: {
     gap: 20,

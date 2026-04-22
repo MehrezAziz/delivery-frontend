@@ -1,19 +1,17 @@
 import { useEffect, useState, useCallback } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, Alert,
+  View, Text, StyleSheet, TouchableOpacity,
   ActivityIndicator, ScrollView, RefreshControl,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import axios from 'axios';
 import { orderService, Order } from '../../services/api/order.service';
 import { notificationService } from '../../services/api/notification.service';
 import { clearPushToken } from '../../services/api/notification.service';
 import { useTheme } from '../../contexts/ThemeContext';
-import { ThemeToggle } from '../../components/ThemeToggle';
 import { restoreOrderTrackingForDriver, stopOrderTrackingSilently } from '../../services/notifications';
 import { syncDriverLocationTracking } from '../../services/driverLocationTracking';
 import { NotificationPreviewModal } from '../../components/NotificationPreviewModal';
@@ -33,7 +31,6 @@ const STATUS_META: Record<string, { icon: string; color: string; bg: string; lab
 
 export default function DriverHome() {
   const router = useRouter();
-  const insets = useSafeAreaInsets();
   const { colors, isDark } = useTheme();
   const [driver, setDriver] = useState<any>(null);
   const [activeOrders, setActiveOrders] = useState<Order[]>([]);
@@ -96,18 +93,6 @@ export default function DriverHome() {
     restoreOrderTrackingForDriver();
   }, []);
 
-  const handleLogout = () => {
-    Alert.alert('Logout', 'Are you sure?', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Logout', style: 'destructive', onPress: async () => {
-        await stopOrderTrackingSilently();
-        await clearPushToken();
-        await AsyncStorage.clear();
-        router.replace('/(auth)/driver-login');
-      }},
-    ]);
-  };
-
   if (loading) {
     return <View style={[s.loadingContainer, { backgroundColor: colors.background }]}><ActivityIndicator size="large" color={colors.primary} /></View>;
   }
@@ -130,37 +115,24 @@ export default function DriverHome() {
         onOpenFullInbox={() => router.push('/(driver)/notifications')}
         onMarkAllRead={() => setUnreadCount(0)}
       />
-      {/* Status bar background */}
-      <View style={{ backgroundColor: colors.headerBg, height: insets.top }} />
-      {/* Header */}
-      <View style={[s.header, { backgroundColor: colors.headerBg }]}>
-        <View style={s.headerContent}>
-          <View style={{ flex: 1 }}>
-            <Text style={s.greeting}>Hello, {firstName} 👋</Text>
-            <View style={s.statusRow}>
-              <View style={[s.statusDot, { backgroundColor: statusColor }]} />
-              <Text style={s.statusLabel}>{statusLabel}</Text>
-            </View>
-          </View>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            <ThemeToggle color="#fff" style={{ backgroundColor: 'rgba(255,255,255,0.2)' }} />
-            <TouchableOpacity onPress={() => setNotifPreviewOpen(true)} style={s.logoutBtn}>
-              <Ionicons name="notifications-outline" size={20} color="#fff" />
-              {unreadCount > 0 && (
-                <View style={s.badge}>
-                  <Text style={s.badgeText}>{unreadCount > 99 ? '99+' : unreadCount}</Text>
-                </View>
-              )}
-            </TouchableOpacity>
-            <TouchableOpacity onPress={handleLogout} style={s.logoutBtn}>
-              <Ionicons name="log-out-outline" size={20} color="#fff" />
-            </TouchableOpacity>
-          </View>
-        </View>
-      </View>
-
-      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 60 }}
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 100 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); loadData(); }} />}>
+
+        <View style={[s.heroStrip, { backgroundColor: colors.headerBg }]}>
+          <Text style={s.greeting}>Hello, {firstName} 👋</Text>
+          <View style={s.statusRow}>
+            <View style={[s.statusDot, { backgroundColor: statusColor }]} />
+            <Text style={s.statusLabel}>{statusLabel}</Text>
+          </View>
+          <TouchableOpacity onPress={() => setNotifPreviewOpen(true)} style={s.notifCorner} activeOpacity={0.85}>
+            <Ionicons name="notifications-outline" size={22} color="#fff" />
+            {unreadCount > 0 && (
+              <View style={s.badge}>
+                <Text style={s.badgeText}>{unreadCount > 99 ? '99+' : unreadCount}</Text>
+              </View>
+            )}
+          </TouchableOpacity>
+        </View>
 
         {/* Status Alerts */}
         {driver?.status === 'INCOMPLETE' && (
@@ -305,20 +277,29 @@ const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f8fafc' },
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f8fafc' },
 
-  header: {
-    backgroundColor: '#0284c7', paddingTop: 16, paddingBottom: 24,
-    borderBottomLeftRadius: 28, borderBottomRightRadius: 28,
+  heroStrip: {
+    marginHorizontal: 20,
+    marginTop: 8,
+    marginBottom: 8,
+    borderRadius: 18,
+    padding: 18,
+    paddingRight: 56,
+    position: 'relative',
   },
-  headerContent: {
-    flexDirection: 'row', alignItems: 'center', paddingHorizontal: 24,
-  },
-  greeting: { fontSize: 24, fontWeight: '800', color: '#fff', marginBottom: 4 },
+  greeting: { fontSize: 22, fontWeight: '800', color: '#fff', marginBottom: 6 },
   statusRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   statusDot: { width: 8, height: 8, borderRadius: 4 },
-  statusLabel: { fontSize: 13, color: 'rgba(255,255,255,0.8)', fontWeight: '600' },
-  logoutBtn: {
-    width: 42, height: 42, borderRadius: 21, backgroundColor: 'rgba(255,255,255,0.15)',
-    alignItems: 'center', justifyContent: 'center',
+  statusLabel: { fontSize: 13, color: 'rgba(255,255,255,0.85)', fontWeight: '600' },
+  notifCorner: {
+    position: 'absolute',
+    right: 14,
+    top: 16,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   badge: {
     position: 'absolute', top: -4, right: -4, backgroundColor: '#ef4444',

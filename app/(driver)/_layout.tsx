@@ -2,8 +2,11 @@ import { useEffect } from 'react';
 import { Stack } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ensureDriverPushNotificationSetup } from '../../services/driverPushSetup';
+import { DriverStackHeader } from '../../components/AppChromeHeader';
+import { useTheme } from '../../contexts/ThemeContext';
 
 export default function DriverLayout() {
+  const { colors } = useTheme();
   useEffect(() => {
     void (async () => {
       const [token, role] = await Promise.all([
@@ -17,13 +20,21 @@ export default function DriverLayout() {
   }, []);
 
   return (
-    <Stack screenOptions={{ headerShown: false }}>
+    <Stack
+      screenOptions={{
+        headerShown: true,
+        header: () => <DriverStackHeader />,
+        headerStyle: { backgroundColor: colors.headerBg },
+        headerShadowVisible: false,
+        animation: 'slide_from_right',
+      }}
+    >
       <Stack.Screen name="home" />
       <Stack.Screen name="my-orders" />
       <Stack.Screen name="available-orders" />
       <Stack.Screen name="order-chat" />
       <Stack.Screen name="order-detail" />
-      <Stack.Screen name="address-map" />
+      <Stack.Screen name="address-map" options={{ headerShown: false }} />
       <Stack.Screen name="upload-proofs" />
       <Stack.Screen name="support" />
       <Stack.Screen name="support-chat" />

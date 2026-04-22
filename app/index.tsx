@@ -4,9 +4,12 @@ import { useEffect, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { isSessionValid, clearSession } from '../services/auth-session';
 import { resolveLaunchRouteAfterLogin } from '../services/notifications';
+import { useTheme } from '../contexts/ThemeContext';
+import { AppChromeHeader } from '../components/AppChromeHeader';
 
 export default function RoleSelectionScreen() {
   const router = useRouter();
+  const { colors, isDark } = useTheme();
   const [checking, setChecking] = useState(true);
   const [selectedRole, setSelectedRole] = useState<'CUSTOMER' | 'DRIVER'>('CUSTOMER');
 
@@ -50,38 +53,40 @@ export default function RoleSelectionScreen() {
 
   if (checking) {
     return (
-      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
-        <ActivityIndicator size="large" color="#0284c7" />
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background }]}>
+        <ActivityIndicator size="large" color={colors.primary} />
       </View>
     );
   }
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <AppChromeHeader role="guest" title="Welcome" hideBack />
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <View style={styles.heroCard}>
-          <View style={styles.heroBadge}>
-            <Text style={styles.heroBadgeText}>Fast Delivery</Text>
+        <View style={[styles.heroCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          <View style={[styles.heroBadge, { backgroundColor: colors.primaryLight }]}>
+            <Text style={[styles.heroBadgeText, { color: colors.primary }]}>Fast delivery</Text>
           </View>
-          <Text style={styles.title}>Deliver anything, faster and smarter</Text>
-          <Text style={styles.subtitle}>
+          <Text style={[styles.title, { color: colors.text }]}>Deliver anything, faster and smarter</Text>
+          <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
             Reliable pickup and delivery for customers, with earning opportunities for drivers.
           </Text>
         </View>
 
-        <View style={styles.introSection}>
-          <Text style={styles.introTitle}>Why use the app?</Text>
-          <Text style={styles.introItem}>- Live order tracking and transparent pricing</Text>
-          <Text style={styles.introItem}>- Secure payments and easy address management</Text>
-          <Text style={styles.introItem}>- Fast onboarding for both customers and drivers</Text>
+        <View style={[styles.introSection, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          <Text style={[styles.introTitle, { color: colors.text }]}>Why use the app?</Text>
+          <Text style={[styles.introItem, { color: colors.textSecondary }]}>• Live order tracking and transparent pricing</Text>
+          <Text style={[styles.introItem, { color: colors.textSecondary }]}>• Secure payments and easy address management</Text>
+          <Text style={[styles.introItem, { color: colors.textSecondary }]}>• Fast onboarding for both customers and drivers</Text>
         </View>
 
-        <Text style={styles.roleHeading}>Choose your role</Text>
+        <Text style={[styles.roleHeading, { color: colors.text }]}>Choose your role</Text>
         <View style={styles.cardsContainer}>
           <TouchableOpacity
             style={[
               styles.card,
-              selectedRole === 'CUSTOMER' ? styles.cardActiveCustomer : styles.cardIdle,
+              { borderColor: colors.border },
+              selectedRole === 'CUSTOMER' ? styles.cardActiveCustomer : { backgroundColor: colors.card },
             ]}
             onPress={() => setSelectedRole('CUSTOMER')}
             activeOpacity={0.9}
@@ -90,12 +95,12 @@ export default function RoleSelectionScreen() {
               <Text style={styles.cardIconText}>📦</Text>
             </View>
             <View style={styles.cardTextBlock}>
-              <Text style={styles.cardTitle}>Customer</Text>
-              <Text style={styles.cardDescription}>
+              <Text style={[styles.cardTitle, { color: colors.text }]}>Customer</Text>
+              <Text style={[styles.cardDescription, { color: colors.textSecondary }]}>
                 Create delivery orders, save frequent addresses, and track every step.
               </Text>
             </View>
-            <Text style={[styles.cardState, selectedRole === 'CUSTOMER' && styles.cardStateActive]}>
+            <Text style={[styles.cardState, { color: colors.textTertiary }, selectedRole === 'CUSTOMER' && { color: colors.primary }]}>
               {selectedRole === 'CUSTOMER' ? 'Selected' : 'Tap to select'}
             </Text>
           </TouchableOpacity>
@@ -103,7 +108,8 @@ export default function RoleSelectionScreen() {
           <TouchableOpacity
             style={[
               styles.card,
-              selectedRole === 'DRIVER' ? styles.cardActiveDriver : styles.cardIdle,
+              { borderColor: colors.border },
+              selectedRole === 'DRIVER' ? styles.cardActiveDriver : { backgroundColor: colors.card },
             ]}
             onPress={() => setSelectedRole('DRIVER')}
             activeOpacity={0.9}
@@ -112,19 +118,19 @@ export default function RoleSelectionScreen() {
               <Text style={styles.cardIconText}>🚗</Text>
             </View>
             <View style={styles.cardTextBlock}>
-              <Text style={styles.cardTitle}>Driver</Text>
-              <Text style={styles.cardDescription}>
+              <Text style={[styles.cardTitle, { color: colors.text }]}>Driver</Text>
+              <Text style={[styles.cardDescription, { color: colors.textSecondary }]}>
                 Accept nearby orders, optimize routes, and grow your daily earnings.
               </Text>
             </View>
-            <Text style={[styles.cardState, selectedRole === 'DRIVER' && styles.cardStateActive]}>
+            <Text style={[styles.cardState, { color: colors.textTertiary }, selectedRole === 'DRIVER' && { color: '#9333ea' }]}>
               {selectedRole === 'DRIVER' ? 'Selected' : 'Tap to select'}
             </Text>
           </TouchableOpacity>
         </View>
 
         <TouchableOpacity
-          style={styles.continueBtn}
+          style={[styles.continueBtn, { backgroundColor: colors.primary, shadowColor: colors.primary }]}
           onPress={() => router.push(selectedRole === 'CUSTOMER' ? '/(auth)/customer-login' : '/(auth)/driver-login')}
           activeOpacity={0.85}
         >
@@ -134,14 +140,18 @@ export default function RoleSelectionScreen() {
         </TouchableOpacity>
 
         <View style={styles.footer}>
-          <Text style={styles.footerText}>
+          <Text style={[styles.footerText, { color: colors.textSecondary }]}>
             By continuing, you agree to our Terms & Privacy Policy
           </Text>
         </View>
       </ScrollView>
-      <View style={styles.bgCircleTop} />
-      <View style={styles.bgCircleBottom} />
-      <View style={styles.bgCircleSide} />
+      {!isDark && (
+        <>
+          <View style={styles.bgCircleTop} />
+          <View style={styles.bgCircleBottom} />
+          <View style={styles.bgCircleSide} />
+        </>
+      )}
     </View>
   );
 }
@@ -149,20 +159,17 @@ export default function RoleSelectionScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f3f7ff',
   },
   content: {
-    paddingTop: 56,
+    paddingTop: 12,
     paddingHorizontal: 20,
     paddingBottom: 28,
     gap: 18,
   },
   heroCard: {
-    backgroundColor: '#ffffff',
     borderRadius: 22,
     padding: 20,
     borderWidth: 1,
-    borderColor: '#dbeafe',
     shadowColor: '#0f172a',
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.08,
@@ -174,11 +181,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 999,
-    backgroundColor: '#e0f2fe',
     marginBottom: 10,
   },
   heroBadgeText: {
-    color: '#0369a1',
     fontSize: 12,
     fontWeight: '700',
     letterSpacing: 0.3,
@@ -186,36 +191,29 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 28,
     fontWeight: '800',
-    color: '#0f172a',
     marginBottom: 8,
   },
   subtitle: {
     fontSize: 15,
-    color: '#475569',
     lineHeight: 22,
   },
   introSection: {
-    backgroundColor: '#ffffff',
     borderRadius: 18,
     padding: 16,
     borderWidth: 1,
-    borderColor: '#e2e8f0',
   },
   introTitle: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#0f172a',
     marginBottom: 8,
   },
   introItem: {
     fontSize: 13,
-    color: '#475569',
     marginBottom: 5,
   },
   roleHeading: {
     fontSize: 17,
     fontWeight: '700',
-    color: '#0f172a',
     marginTop: 4,
   },
   cardsContainer: {
@@ -227,19 +225,17 @@ const styles = StyleSheet.create({
     padding: 16,
     flexDirection: 'row',
     alignItems: 'center',
-    borderWidth: 1.6,
-  },
-  cardIdle: {
-    backgroundColor: '#ffffff',
-    borderColor: '#cbd5e1',
+    borderWidth: 1,
   },
   cardActiveCustomer: {
     backgroundColor: '#eff6ff',
     borderColor: '#2563eb',
+    borderWidth: 2,
   },
   cardActiveDriver: {
     backgroundColor: '#faf5ff',
     borderColor: '#9333ea',
+    borderWidth: 2,
   },
   cardIcon: {
     width: 56,
@@ -265,29 +261,21 @@ const styles = StyleSheet.create({
   cardTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#0f172a',
     marginBottom: 4,
   },
   cardDescription: {
     fontSize: 13,
-    color: '#64748b',
     lineHeight: 18,
   },
   cardState: {
     fontSize: 12,
     fontWeight: '700',
-    color: '#64748b',
-  },
-  cardStateActive: {
-    color: '#0f172a',
   },
   continueBtn: {
     height: 54,
     borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#0284c7',
-    shadowColor: '#0284c7',
     shadowOffset: { width: 0, height: 5 },
     shadowOpacity: 0.25,
     shadowRadius: 10,

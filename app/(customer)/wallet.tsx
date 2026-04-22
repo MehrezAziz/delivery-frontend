@@ -128,7 +128,6 @@ export default function WalletScreen() {
   if (loading) {
     return (
       <View style={[styles.container, { backgroundColor: colors.background }]}>
-        <View style={[styles.header, { backgroundColor: colors.card }]}><Text style={[styles.headerTitle, { color: colors.text }]}>My Wallet</Text></View>
         <View style={styles.center}><ActivityIndicator size="large" color={colors.primary} /></View>
       </View>
     );
@@ -137,7 +136,6 @@ export default function WalletScreen() {
   if (error || !wallet) {
     return (
       <View style={[styles.container, { backgroundColor: colors.background }]}>
-        <View style={[styles.header, { backgroundColor: colors.card }]}><Text style={[styles.headerTitle, { color: colors.text }]}>My Wallet</Text></View>
         <View style={styles.center}>
           <Text style={[styles.errorText, { color: colors.textSecondary }]}>Wallet not found</Text>
           <TouchableOpacity style={styles.setupBtn} onPress={() => router.push('/(auth)/customer-setup')}>
@@ -150,11 +148,6 @@ export default function WalletScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      {/* Header */}
-      <View style={[styles.header, { backgroundColor: colors.card }]}>
-        <Text style={[styles.headerTitle, { color: colors.text }]}>My Wallet</Text>
-      </View>
-
       {/* Balance card */}
       <View style={[styles.balanceCard, { backgroundColor: colors.primary }]}>
         <Text style={styles.balanceLabel}>Available Balance</Text>
@@ -353,25 +346,15 @@ export default function WalletScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f9fafb' },
-  header: {
-    backgroundColor: '#fff',
-    paddingHorizontal: 24,
-    paddingTop: 56,
-    paddingBottom: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  headerTitle: { fontSize: 32, fontWeight: 'bold', color: '#111827' },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 16 },
   errorText: { color: '#6b7280', fontSize: 16, textAlign: 'center' },
   setupBtn: { backgroundColor: '#0284c7', paddingHorizontal: 24, paddingVertical: 12, borderRadius: 8 },
   setupBtnText: { color: '#fff', fontWeight: '600', fontSize: 15 },
 
   balanceCard: {
-    margin: 20,
+    marginHorizontal: 20,
+    marginTop: 8,
+    marginBottom: 4,
     backgroundColor: '#0284c7',
     borderRadius: 20,
     padding: 24,

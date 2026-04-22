@@ -131,15 +131,6 @@ export default function DriverProfileScreen() {
 
   return (
     <View style={[s.container, { backgroundColor: colors.background }]}>
-      {/* Header */}
-      <View style={[s.header, { backgroundColor: colors.headerBg }]}>
-        <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace('/(driver)/home')} style={s.headerBtn}>
-          <Ionicons name="chevron-back" size={22} color="#fff" />
-        </TouchableOpacity>
-        <Text style={s.headerTitle}>Profile</Text>
-        <View style={{ width: 38 }} />
-      </View>
-
       <ScrollView style={{ flex: 1 }} contentContainerStyle={s.content}>
         {/* Profile Card */}
         <View style={[s.profileCard, { backgroundColor: colors.card }]}>
@@ -309,17 +300,6 @@ export default function DriverProfileScreen() {
 const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f8fafc' },
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f8fafc' },
-
-  header: {
-    backgroundColor: '#0284c7', paddingTop: 50, paddingBottom: 18, paddingHorizontal: 20,
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    borderBottomLeftRadius: 20, borderBottomRightRadius: 20,
-  },
-  headerBtn: {
-    width: 38, height: 38, borderRadius: 19, backgroundColor: 'rgba(255,255,255,0.2)',
-    alignItems: 'center', justifyContent: 'center',
-  },
-  headerTitle: { color: '#fff', fontSize: 18, fontWeight: '700' },
 
   content: { padding: 20, paddingBottom: 40 },
 

@@ -297,9 +297,6 @@ export default function CustomerProfileScreen() {
   if (loading) {
     return (
       <View style={[styles.container, { backgroundColor: colors.background }]}>
-        <View style={[styles.header, { backgroundColor: colors.card }]}>
-          <Text style={[styles.headerTitle, { color: colors.text }]}>Profile</Text>
-        </View>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={colors.primary} />
           <Text style={[styles.loadingText, { color: colors.textSecondary }]}>Loading profile...</Text>
@@ -318,9 +315,6 @@ export default function CustomerProfileScreen() {
   if (error || !user || !customer) {
     return (
       <View style={[styles.container, { backgroundColor: colors.background }]}>
-        <View style={[styles.header, { backgroundColor: colors.card }]}>
-          <Text style={[styles.headerTitle, { color: colors.text }]}>Profile</Text>
-        </View>
         <View style={styles.errorContainer}>
           <Text style={[styles.errorText, { color: colors.danger }]}>{error || 'Failed to load profile'}</Text>
           <TouchableOpacity style={[styles.retryButton, { backgroundColor: colors.primary }]} onPress={loadUserData}>
@@ -337,11 +331,6 @@ export default function CustomerProfileScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      {/* Header */}
-      <View style={[styles.header, { backgroundColor: colors.card }]}>
-        <Text style={[styles.headerTitle, { color: colors.text }]}>Profile</Text>
-      </View>
-
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
         {/* Profile Info */}
         <View style={[styles.profileCard, { backgroundColor: colors.card }]}>
@@ -744,25 +733,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#f9fafb',
-  },
-  header: {
-    backgroundColor: '#ffffff',
-    paddingHorizontal: 24,
-    paddingTop: 56,
-    paddingBottom: 24,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  headerTitle: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    color: '#111827',
   },
   loadingContainer: {
     flex: 1,

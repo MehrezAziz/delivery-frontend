@@ -270,14 +270,6 @@ export default function DriverTransactionsScreen() {
 
   return (
     <View style={[s.container, { backgroundColor: colors.background }]}>
-      <View style={[s.header, { backgroundColor: colors.headerBg }]}>
-        <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace('/(driver)/home')} style={s.headerBtn}>
-          <Ionicons name="chevron-back" size={22} color="#fff" />
-        </TouchableOpacity>
-        <Text style={s.headerTitle}>Transactions</Text>
-        <View style={{ width: 38 }} />
-      </View>
-
       <View style={[s.balanceCard, { backgroundColor: colors.card }]}>
         <Text style={[s.balanceLabel, { color: colors.textTertiary }]}>Current Balance</Text>
         <Text style={[s.balanceValue, { color: balance < 0 ? '#dc2626' : '#16a34a' }]}>
@@ -399,18 +391,8 @@ function DetailLine({
 const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f8fafc' },
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f8fafc' },
-  header: {
-    backgroundColor: '#0284c7', paddingTop: 50, paddingBottom: 18, paddingHorizontal: 20,
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    borderBottomLeftRadius: 20, borderBottomRightRadius: 20,
-  },
-  headerBtn: {
-    width: 38, height: 38, borderRadius: 19, backgroundColor: 'rgba(255,255,255,0.2)',
-    alignItems: 'center', justifyContent: 'center',
-  },
-  headerTitle: { color: '#fff', fontSize: 18, fontWeight: '700' },
   balanceCard: {
-    margin: 16, marginBottom: 0, backgroundColor: '#fff', borderRadius: 16, padding: 20,
+    margin: 16, marginTop: 8, marginBottom: 0, backgroundColor: '#fff', borderRadius: 16, padding: 20,
     alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.06, shadowRadius: 10, elevation: 3,
   },

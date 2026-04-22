@@ -612,27 +612,23 @@ export default function DriverRegisterStep3() {
     }
   };
 
-  const handleBack = () => {
-    if (fromVerification) {
-      router.replace('/(driver)/home');
-      return;
-    }
-    router.canGoBack() ? router.back() : router.replace('/');
-  };
-
   const livenessUiUnavailable = Platform.OS === 'web' || !device;
 
   return (
-    <ScrollView style={[styles.container, { backgroundColor: colors.card }]}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={handleBack} style={[styles.backBtn, { backgroundColor: colors.surfaceVariant }]}>
-          <Ionicons name="chevron-back" size={22} color={colors.text} />
-        </TouchableOpacity>
+    <ScrollView
+      style={[styles.container, { backgroundColor: colors.background }]}
+      contentContainerStyle={styles.scrollInner}
+      keyboardShouldPersistTaps="handled"
+    >
+      <View style={[styles.heroCard, { backgroundColor: colors.surfaceVariant, borderColor: colors.border }]}>
+        {!fromVerification ? (
+          <Text style={[styles.stepBadge, { color: colors.primary, backgroundColor: colors.primaryLight }]}>Step 3 of 3</Text>
+        ) : null}
         <Text style={[styles.title, { color: colors.text }]}>
-          {fromVerification ? 'Complete verification' : 'Driver Registration'}
+          {fromVerification ? 'Complete verification' : 'Documents & identity'}
         </Text>
         <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-          {fromVerification ? 'Identity & documents' : 'Step 3 of 3: Document Verification'}
+          {fromVerification ? 'Upload identity and documents to finish verification.' : 'Upload your ID and vehicle documents to finish registration.'}
         </Text>
       </View>
 
@@ -845,27 +841,36 @@ export default function DriverRegisterStep3() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    padding: 20,
   },
-  header: {
-    marginBottom: 20,
-    marginTop: 20,
-  },
-  backBtn: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
+  scrollInner: { paddingHorizontal: 20, paddingTop: 8, paddingBottom: 48 },
+  heroCard: {
+    borderRadius: 20,
+    paddingVertical: 22,
+    paddingHorizontal: 18,
+    marginBottom: 18,
+    borderWidth: StyleSheet.hairlineWidth,
     alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 16,
+  },
+  stepBadge: {
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 999,
+    marginBottom: 10,
   },
   title: {
-    fontSize: 28,
-    fontWeight: 'bold',
+    fontSize: 22,
+    fontWeight: '800',
     marginBottom: 8,
+    textAlign: 'center',
   },
   subtitle: {
-    fontSize: 16,
+    fontSize: 14,
+    lineHeight: 20,
+    textAlign: 'center',
+    maxWidth: 320,
   },
   progressContainer: {
     flexDirection: 'row',

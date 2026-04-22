@@ -139,12 +139,8 @@ export default function CustomerOrdersScreen() {
   return (
     <View style={[st.container, { backgroundColor: colors.background }]}>
       <StatusBar style={isDark ? 'light' : 'dark'} />
-      {/* Header */}
-      <View style={[st.header, { backgroundColor: colors.card, borderBottomColor: colors.border }]}>
-        <View>
-          <Text style={[st.headerTitle, { color: colors.text }]}>My Orders</Text>
-          <Text style={[st.headerCount, { color: colors.textTertiary }]}>{orders.length} total</Text>
-        </View>
+      <View style={[st.toolbar, { backgroundColor: colors.card, borderColor: colors.border }]}>
+        <Text style={[st.headerCount, { color: colors.textTertiary }]}>{orders.length} total</Text>
         <View style={{ flexDirection: 'row', gap: 10, alignItems: 'center' }}>
           <TouchableOpacity style={[st.trackBtn, { backgroundColor: '#0284c7' }]} onPress={() => setTrackModalOpen(true)} activeOpacity={0.8}>
             <Ionicons name="location-outline" size={16} color="#fff" />
@@ -332,13 +328,18 @@ const st = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f8fafc' },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f8fafc' },
 
-  header: {
-    backgroundColor: '#fff', paddingTop: 54, paddingBottom: 16, paddingHorizontal: 20,
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end',
-    borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#e5e7eb',
+  toolbar: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    marginHorizontal: 16,
+    marginTop: 8,
+    borderRadius: 14,
+    borderWidth: StyleSheet.hairlineWidth,
   },
-  headerTitle: { fontSize: 28, fontWeight: '800', color: '#111827' },
-  headerCount: { fontSize: 14, color: '#9ca3af', fontWeight: '500', marginTop: 2 },
+  headerCount: { fontSize: 13, fontWeight: '600' },
   filterBtn: {
     width: 42, height: 42, borderRadius: 21, backgroundColor: '#f3f4f6',
     alignItems: 'center', justifyContent: 'center',

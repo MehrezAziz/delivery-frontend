@@ -166,13 +166,15 @@ export default function DriverRegisterStep2() {
   };
 
   return (
-    <ScrollView style={[styles.container, { backgroundColor: colors.card }]} keyboardShouldPersistTaps="handled">
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace('/')} style={[styles.backBtn, { backgroundColor: colors.surfaceVariant }]}>
-          <Ionicons name="chevron-back" size={22} color={colors.text} />
-        </TouchableOpacity>
-        <Text style={[styles.title, { color: colors.text }]}>Driver Registration</Text>
-        <Text style={[styles.subtitle, { color: colors.textSecondary }]}>Step 2 of 3: Vehicle & Address</Text>
+    <ScrollView
+      style={[styles.container, { backgroundColor: colors.background }]}
+      contentContainerStyle={styles.scrollInner}
+      keyboardShouldPersistTaps="handled"
+    >
+      <View style={[styles.heroCard, { backgroundColor: colors.surfaceVariant, borderColor: colors.border }]}>
+        <Text style={[styles.stepBadge, { color: colors.primary, backgroundColor: colors.primaryLight }]}>Step 2 of 3</Text>
+        <Text style={[styles.title, { color: colors.text }]}>Vehicle & address</Text>
+        <Text style={[styles.subtitle, { color: colors.textSecondary }]}>Tell us how you deliver and where you are based.</Text>
       </View>
 
       <View style={styles.progressContainer}>
@@ -274,14 +276,27 @@ export default function DriverRegisterStep2() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 20 },
-  header: { marginBottom: 20, marginTop: 20 },
-  backBtn: {
-    width: 42, height: 42, borderRadius: 21,
-    alignItems: 'center', justifyContent: 'center', marginBottom: 16,
+  container: { flex: 1 },
+  scrollInner: { paddingHorizontal: 20, paddingTop: 8, paddingBottom: 40 },
+  heroCard: {
+    borderRadius: 20,
+    paddingVertical: 22,
+    paddingHorizontal: 18,
+    marginBottom: 18,
+    borderWidth: StyleSheet.hairlineWidth,
+    alignItems: 'center',
   },
-  title: { fontSize: 28, fontWeight: 'bold', marginBottom: 8 },
-  subtitle: { fontSize: 16 },
+  stepBadge: {
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 999,
+    marginBottom: 10,
+  },
+  title: { fontSize: 22, fontWeight: '800', marginBottom: 8, textAlign: 'center' },
+  subtitle: { fontSize: 14, lineHeight: 20, textAlign: 'center', maxWidth: 300 },
   progressContainer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginBottom: 30 },
   progressDot: { width: 12, height: 12, borderRadius: 6 },
   progressDotActive: { width: 16, height: 16, borderRadius: 8 },

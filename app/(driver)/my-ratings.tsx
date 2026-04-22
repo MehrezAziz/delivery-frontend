@@ -1,9 +1,8 @@
 import { useEffect, useState, useCallback } from 'react';
 import {
-  View, Text, ScrollView, TouchableOpacity, ActivityIndicator,
+  View, Text, ScrollView, ActivityIndicator,
   RefreshControl, StyleSheet,
 } from 'react-native';
-import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { orderService } from '../../services/api/order.service';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -11,11 +10,6 @@ import { useTheme } from '../../contexts/ThemeContext';
 const STAR_LABELS = ['', 'Terrible', 'Very Bad', 'Bad', 'Poor', 'Below Avg', 'Average', 'Above Avg', 'Good', 'Very Good', 'Excellent'];
 
 export default function DriverMyRatingsScreen() {
-  const router = useRouter();
-  const handleBack = () => {
-    if (router.canGoBack()) router.back();
-    else router.replace('/(driver)/home');
-  };
   const { colors, isDark } = useTheme();
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -38,15 +32,7 @@ export default function DriverMyRatingsScreen() {
 
   return (
     <View style={[s.container, { backgroundColor: colors.background }]}>
-      <View style={s.header}>
-        <TouchableOpacity onPress={handleBack} style={s.headerBtn}>
-          <Ionicons name="chevron-back" size={22} color="#fff" />
-        </TouchableOpacity>
-        <Text style={s.headerTitle}>My Ratings</Text>
-        <View style={{ width: 38 }} />
-      </View>
-
-      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 40 }}
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingTop: 8, paddingBottom: 40 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} />}>
 
         {/* Summary card */}
@@ -102,16 +88,6 @@ export default function DriverMyRatingsScreen() {
 const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f8fafc' },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f8fafc' },
-  header: {
-    backgroundColor: '#f59e0b', paddingTop: 50, paddingBottom: 18, paddingHorizontal: 20,
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    borderBottomLeftRadius: 20, borderBottomRightRadius: 20,
-  },
-  headerBtn: {
-    width: 38, height: 38, borderRadius: 19, backgroundColor: 'rgba(255,255,255,0.2)',
-    alignItems: 'center', justifyContent: 'center',
-  },
-  headerTitle: { color: '#fff', fontSize: 18, fontWeight: '700' },
   summaryCard: {
     backgroundColor: '#fff', borderRadius: 18, padding: 24, marginBottom: 16, alignItems: 'center',
     shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 10, elevation: 3,

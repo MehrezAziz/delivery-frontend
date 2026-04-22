@@ -114,13 +114,15 @@ export default function DriverRegisterStep1() {
   };
 
   return (
-    <ScrollView style={[styles.container, { backgroundColor: colors.card }]}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace('/')} style={[styles.backBtn, { backgroundColor: colors.surfaceVariant }]}>
-          <Ionicons name="chevron-back" size={22} color={colors.text} />
-        </TouchableOpacity>
-        <Text style={[styles.title, { color: colors.text }]}>Driver Registration</Text>
-        <Text style={[styles.subtitle, { color: colors.textSecondary }]}>Step 1 of 3: Personal Information</Text>
+    <ScrollView
+      style={[styles.container, { backgroundColor: colors.background }]}
+      contentContainerStyle={styles.scrollInner}
+      keyboardShouldPersistTaps="handled"
+    >
+      <View style={[styles.heroCard, { backgroundColor: colors.surfaceVariant, borderColor: colors.border }]}>
+        <Text style={[styles.stepBadge, { color: colors.primary, backgroundColor: colors.primaryLight }]}>Step 1 of 3</Text>
+        <Text style={[styles.title, { color: colors.text }]}>Personal information</Text>
+        <Text style={[styles.subtitle, { color: colors.textSecondary }]}>Photo, phone, and password to create your driver account.</Text>
       </View>
 
       {/* Profile Picture */}
@@ -217,14 +219,28 @@ export default function DriverRegisterStep1() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 20, marginBottom: 60 },
-  backBtn: {
-    width: 42, height: 42, borderRadius: 21,
-    alignItems: 'center', justifyContent: 'center', marginBottom: 24,
+  container: { flex: 1 },
+  scrollInner: { paddingHorizontal: 20, paddingTop: 8, paddingBottom: 40 },
+  heroCard: {
+    borderRadius: 20,
+    paddingVertical: 22,
+    paddingHorizontal: 18,
+    marginBottom: 22,
+    borderWidth: StyleSheet.hairlineWidth,
+    alignItems: 'center',
   },
-  header: { marginBottom: 30, marginTop: 20 },
-  title: { fontSize: 28, fontWeight: 'bold', marginBottom: 8 },
-  subtitle: { fontSize: 16 },
+  stepBadge: {
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 999,
+    overflow: 'hidden',
+    marginBottom: 10,
+  },
+  title: { fontSize: 22, fontWeight: '800', marginBottom: 8, textAlign: 'center' },
+  subtitle: { fontSize: 14, lineHeight: 20, textAlign: 'center', maxWidth: 300 },
   imageContainer: { alignItems: 'center', marginBottom: 20 },
   imagePicker: { width: 120, height: 120, borderRadius: 60, overflow: 'hidden' },
   profileImage: { width: '100%', height: '100%' },

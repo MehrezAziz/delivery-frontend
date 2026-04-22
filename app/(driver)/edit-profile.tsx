@@ -107,13 +107,6 @@ export default function DriverEditProfileScreen() {
   if (!verified) {
     return (
       <View style={[s.container, { backgroundColor: colors.background }]}>
-        <View style={[s.header, { backgroundColor: colors.headerBg }]}>
-          <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace('/(driver)/home')} style={s.headerBtn}>
-            <Ionicons name="chevron-back" size={22} color="#fff" />
-          </TouchableOpacity>
-          <Text style={s.headerTitle}>Edit Profile</Text>
-          <View style={{ width: 38 }} />
-        </View>
         <View style={s.gateContainer}>
           <View style={s.gateIconWrap}>
             <Ionicons name="lock-closed" size={40} color={colors.primary} />
@@ -143,13 +136,6 @@ export default function DriverEditProfileScreen() {
 
   return (
     <View style={[s.container, { backgroundColor: colors.background }]}>
-      <View style={[s.header, { backgroundColor: colors.headerBg }]}>
-        <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace('/(driver)/home')} style={s.headerBtn}>
-          <Ionicons name="chevron-back" size={22} color="#fff" />
-        </TouchableOpacity>
-        <Text style={s.headerTitle}>Edit Profile</Text>
-        <View style={{ width: 38 }} />
-      </View>
       <ScrollView style={{ flex: 1 }} contentContainerStyle={s.content}>
         <Field label="First Name" value={firstName} onChange={setFirstName} colors={colors} />
         <Field label="Last Name" value={secondName} onChange={setSecondName} colors={colors} />
@@ -190,17 +176,7 @@ function Field({ label, value, onChange, keyboardType, multiline, colors }: any)
 const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f8fafc' },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f8fafc' },
-  header: {
-    backgroundColor: '#0284c7', paddingTop: 50, paddingBottom: 18, paddingHorizontal: 20,
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    borderBottomLeftRadius: 20, borderBottomRightRadius: 20,
-  },
-  headerBtn: {
-    width: 38, height: 38, borderRadius: 19, backgroundColor: 'rgba(255,255,255,0.2)',
-    alignItems: 'center', justifyContent: 'center',
-  },
-  headerTitle: { color: '#fff', fontSize: 18, fontWeight: '700' },
-  content: { padding: 20, paddingBottom: 40 },
+  content: { padding: 20, paddingTop: 8, paddingBottom: 40 },
   // Password gate
   gateContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 32 },
   gateIconWrap: {

@@ -15,10 +15,6 @@ export default function OrderChatScreen() {
   const router = useRouter();
   const { orderId: orderIdParam } = useLocalSearchParams<{ orderId: string | string[] }>();
   const orderId = typeof orderIdParam === 'string' ? orderIdParam : orderIdParam?.[0] ?? '';
-  const handleBack = () => {
-    if (router.canGoBack()) router.back();
-    else router.replace('/(customer)/home');
-  };
   const { colors, isDark } = useTheme();
   const [chatRoom, setChatRoom] = useState<ChatRoom | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -111,17 +107,19 @@ export default function OrderChatScreen() {
 
   return (
     <KeyboardAvoidingView style={[s.container, { backgroundColor: colors.background }]} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-      {/* Header */}
-      <View style={[s.header, { backgroundColor: colors.headerBg }]}>
-        <TouchableOpacity onPress={handleBack} style={s.headerBtn}>
-          <Ionicons name="chevron-back" size={22} color="#fff" />
-        </TouchableOpacity>
-        <View style={{ flex: 1 }}>
-          <Text style={s.headerTitle}>Order Chat</Text>
-          <Text style={s.headerSub}>#{orderId?.slice(0, 8)}</Text>
+      <View style={[s.chatToolbar, { backgroundColor: colors.card, borderColor: colors.border }]}>
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Text style={[s.toolbarMeta, { color: colors.textTertiary }]}>Order</Text>
+          <Text style={[s.toolbarOrderId, { color: colors.text }]} numberOfLines={1}>
+            #{orderId?.slice(0, 8)}
+          </Text>
         </View>
-        <TouchableOpacity onPress={handleAssistance} style={s.assistBtn}>
-          <Ionicons name="headset" size={18} color="#ea580c" />
+        <TouchableOpacity
+          onPress={handleAssistance}
+          style={[s.assistBtn, { backgroundColor: isDark ? 'rgba(234,88,12,0.22)' : '#fff3e0' }]}
+          accessibilityLabel="Request assistance"
+        >
+          <Ionicons name="headset-outline" size={20} color="#ea580c" />
         </TouchableOpacity>
       </View>
 
@@ -180,20 +178,25 @@ const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f8fafc' },
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f8fafc' },
 
-  header: {
-    backgroundColor: '#0284c7', paddingTop: 50, paddingBottom: 16, paddingHorizontal: 20,
-    flexDirection: 'row', alignItems: 'center', gap: 12,
-    borderBottomLeftRadius: 20, borderBottomRightRadius: 20,
+  chatToolbar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    marginHorizontal: 16,
+    marginTop: 8,
+    borderRadius: 14,
+    borderWidth: StyleSheet.hairlineWidth,
+    gap: 12,
   },
-  headerBtn: {
-    width: 38, height: 38, borderRadius: 19, backgroundColor: 'rgba(255,255,255,0.2)',
-    alignItems: 'center', justifyContent: 'center',
-  },
-  headerTitle: { color: '#fff', fontSize: 18, fontWeight: '700' },
-  headerSub: { color: 'rgba(255,255,255,0.7)', fontSize: 12, marginTop: 1 },
+  toolbarMeta: { fontSize: 11, fontWeight: '700', letterSpacing: 0.4, textTransform: 'uppercase' },
+  toolbarOrderId: { fontSize: 15, fontWeight: '800', marginTop: 2 },
   assistBtn: {
-    width: 38, height: 38, borderRadius: 19, backgroundColor: '#fff3e0',
-    alignItems: 'center', justifyContent: 'center',
+    width: 42,
+    height: 42,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 
   messagesList: { flex: 1 },

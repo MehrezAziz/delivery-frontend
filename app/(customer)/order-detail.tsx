@@ -40,10 +40,6 @@ export default function OrderDetailScreen() {
   const { orderId: orderIdParam, scrollTo } = useLocalSearchParams<{ orderId: string; scrollTo?: string }>();
   const orderId = Array.isArray(orderIdParam) ? orderIdParam[0] : orderIdParam;
   const { unread: chatUnread } = useOrderChatUnread(orderId);
-  const handleBack = () => {
-    if (router.canGoBack()) router.back();
-    else router.replace('/(customer)/home');
-  };
   const { colors, isDark } = useTheme();
   const [order, setOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
@@ -293,18 +289,13 @@ export default function OrderDetailScreen() {
 
   return (
     <View style={[s.container, { backgroundColor: colors.background }]}>
-      {/* ── Header ── */}
       <View style={[s.header, { backgroundColor: meta.color }]}>
-        <View style={s.headerTop}>
-          <TouchableOpacity onPress={handleBack} style={s.headerBtn}>
-            <Ionicons name="chevron-back" size={22} color="#fff" />
-          </TouchableOpacity>
-          <Text style={s.headerTitle}>Order Details</Text>
-          <TouchableOpacity onPress={handleAssistance} style={s.headerBtn}>
+        <View style={s.headerAssistRow}>
+          <View style={{ flex: 1 }} />
+          <TouchableOpacity onPress={handleAssistance} style={s.headerBtn} accessibilityLabel="Help and support">
             <Ionicons name="headset-outline" size={20} color="#fff" />
           </TouchableOpacity>
         </View>
-        {/* Status hero */}
         <View style={s.statusHero}>
           <View style={[s.statusIconCircle, { backgroundColor: 'rgba(255,255,255,0.2)' }]}>
             <Ionicons name={meta.icon as any} size={32} color="#fff" />
@@ -1050,17 +1041,17 @@ const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f8fafc' },
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f8fafc' },
 
-  // Header
-  header: { paddingTop: 50, paddingBottom: 24, borderBottomLeftRadius: 28, borderBottomRightRadius: 28 },
-  headerTop: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 20, marginBottom: 20,
+  header: { paddingTop: 12, paddingBottom: 24, borderBottomLeftRadius: 28, borderBottomRightRadius: 28 },
+  headerAssistRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    marginBottom: 12,
   },
   headerBtn: {
     width: 38, height: 38, borderRadius: 19, backgroundColor: 'rgba(255,255,255,0.2)',
     alignItems: 'center', justifyContent: 'center',
   },
-  headerTitle: { color: 'rgba(255,255,255,0.85)', fontSize: 16, fontWeight: '600' },
   statusHero: { alignItems: 'center' },
   statusIconCircle: {
     width: 64, height: 64, borderRadius: 32, alignItems: 'center', justifyContent: 'center', marginBottom: 10,

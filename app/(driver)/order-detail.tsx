@@ -41,10 +41,6 @@ export default function DriverOrderDetailScreen() {
   const orderId = Array.isArray(orderIdParam) ? orderIdParam[0] : orderIdParam;
   const scrollTo = Array.isArray(scrollToParam) ? scrollToParam[0] : scrollToParam;
   const { unread: chatUnread } = useOrderChatUnread(orderId);
-  const handleBack = () => {
-    if (router.canGoBack()) router.back();
-    else router.replace('/(driver)/home');
-  };
   const { colors, isDark } = useTheme();
   const [order, setOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
@@ -320,15 +316,7 @@ export default function DriverOrderDetailScreen() {
 
   return (
     <View style={[s.container, { backgroundColor: colors.background }]}>
-      {/* Header */}
       <View style={[s.header, { backgroundColor: meta.color }]}>
-        <View style={s.headerTop}>
-          <TouchableOpacity onPress={handleBack} style={s.headerBtn}>
-            <Ionicons name="chevron-back" size={22} color="#fff" />
-          </TouchableOpacity>
-          <Text style={s.headerTitle}>Order Details</Text>
-          <View style={{ width: 38 }} />
-        </View>
         <View style={s.statusHero}>
           <View style={s.statusIconCircle}>
             <Ionicons name={meta.icon as any} size={32} color="#fff" />
@@ -803,16 +791,7 @@ function TimelineItem({ label, time, color }: { label: string; time: string; col
 const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f8fafc' },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f8fafc' },
-  header: { paddingTop: 50, paddingBottom: 24, borderBottomLeftRadius: 28, borderBottomRightRadius: 28 },
-  headerTop: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 20, marginBottom: 20,
-  },
-  headerBtn: {
-    width: 38, height: 38, borderRadius: 19, backgroundColor: 'rgba(255,255,255,0.2)',
-    alignItems: 'center', justifyContent: 'center',
-  },
-  headerTitle: { color: 'rgba(255,255,255,0.85)', fontSize: 16, fontWeight: '600' },
+  header: { paddingTop: 16, paddingBottom: 24, borderBottomLeftRadius: 28, borderBottomRightRadius: 28 },
   statusHero: { alignItems: 'center' },
   statusIconCircle: {
     width: 64, height: 64, borderRadius: 32, backgroundColor: 'rgba(255,255,255,0.2)',

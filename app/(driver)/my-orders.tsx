@@ -334,19 +334,10 @@ export default function DriverMyOrdersScreen() {
 
   return (
     <View style={[s.container, { backgroundColor: colors.background }]}>
-      {/* Header */}
-      <View style={[s.header, { backgroundColor: colors.card, borderBottomColor: colors.border }]}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-          <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace('/(driver)/home')} style={[s.backBtn, { backgroundColor: colors.surfaceVariant }]}>
-            <Ionicons name="chevron-back" size={22} color={colors.text} />
-          </TouchableOpacity>
-          <View>
-            <Text style={[s.headerTitle, { color: colors.text }]}>My Deliveries</Text>
-            <Text style={[s.headerSub, { color: colors.textTertiary }]}>
-              {activeOrders.length} active · {pastOrders.length} completed
-            </Text>
-          </View>
-        </View>
+      <View style={[s.statsBar, { backgroundColor: colors.card, borderColor: colors.border }]}>
+        <Text style={[s.headerSub, { color: colors.textTertiary }]}>
+          {activeOrders.length} active · {pastOrders.length} completed
+        </Text>
       </View>
 
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 40 }}
@@ -388,17 +379,15 @@ const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f8fafc' },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f8fafc' },
 
-  // Header
-  header: {
-    backgroundColor: '#fff', paddingTop: 54, paddingBottom: 16, paddingHorizontal: 20,
-    borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#e5e7eb',
+  statsBar: {
+    marginHorizontal: 16,
+    marginTop: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 14,
+    borderWidth: StyleSheet.hairlineWidth,
   },
-  headerTitle: { fontSize: 28, fontWeight: '800', color: '#111827' },
-  headerSub: { fontSize: 14, color: '#9ca3af', marginTop: 2 },
-  backBtn: {
-    width: 38, height: 38, borderRadius: 19, backgroundColor: '#f3f4f6',
-    alignItems: 'center', justifyContent: 'center',
-  },
+  headerSub: { fontSize: 13, fontWeight: '600' },
 
   // Section
   sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },

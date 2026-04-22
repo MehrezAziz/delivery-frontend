@@ -75,12 +75,9 @@ export default function CustomerSupportScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <View style={[styles.header, { backgroundColor: colors.card, borderBottomColor: colors.border }]}>
-        <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace('/(customer)/home')}>
-          <Text style={[styles.backText, { color: colors.primary }]}>← Back</Text>
-        </TouchableOpacity>
-        <Text style={[styles.title, { color: colors.text }]}>Support</Text>
-        <TouchableOpacity onPress={() => setShowCreate(true)} style={styles.newBtn}>
+      <View style={[styles.supportToolbar, { backgroundColor: colors.card, borderColor: colors.border }]}>
+        <Text style={[styles.toolbarHint, { color: colors.textSecondary }]}>Your tickets</Text>
+        <TouchableOpacity onPress={() => setShowCreate(true)} style={[styles.newBtn, { backgroundColor: colors.primary }]}>
           <Text style={styles.newBtnText}>+ New</Text>
         </TouchableOpacity>
       </View>
@@ -172,10 +169,19 @@ export default function CustomerSupportScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f9fafb' },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 60, paddingBottom: 16, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#e5e7eb' },
-  backText: { color: '#0284c7', fontSize: 16, fontWeight: '500' },
-  title: { fontSize: 20, fontWeight: 'bold', color: '#111827' },
-  newBtn: { backgroundColor: '#0284c7', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 8 },
+  supportToolbar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginHorizontal: 16,
+    marginTop: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 14,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  toolbarHint: { fontSize: 13, fontWeight: '600', flex: 1 },
+  newBtn: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 10 },
   newBtnText: { color: '#fff', fontWeight: '600', fontSize: 14 },
   empty: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 8 },
   emptyIcon: { fontSize: 48 },

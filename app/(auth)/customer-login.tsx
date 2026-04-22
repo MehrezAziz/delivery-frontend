@@ -147,25 +147,18 @@ export default function CustomerLoginScreen() {
   };
 
   return (
-    <KeyboardAvoidingView 
+    <KeyboardAvoidingView
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      style={[styles.container, { backgroundColor: colors.card }]}
+      style={[styles.container, { backgroundColor: colors.background }]}
     >
-      <ScrollView contentContainerStyle={styles.scrollContent}>
+      <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
         <View style={styles.content}>
-          <TouchableOpacity 
-            onPress={() => router.canGoBack() ? router.back() : router.replace('/')}
-            style={[styles.backBtn, { backgroundColor: colors.surfaceVariant }]}
-          >
-            <Ionicons name="chevron-back" size={22} color={colors.text} />
-          </TouchableOpacity>
-
-          <View style={styles.header}>
+          <View style={[styles.heroCard, { backgroundColor: colors.surfaceVariant, borderColor: colors.border }]}>
             <View style={[styles.iconContainer, { backgroundColor: colors.primary }]}>
               <Text style={styles.iconText}>📦</Text>
             </View>
-            <Text style={[styles.title, { color: colors.text }]}>Welcome Back</Text>
-            <Text style={[styles.subtitle, { color: colors.textSecondary }]}>Login to your customer account</Text>
+            <Text style={[styles.title, { color: colors.text }]}>Welcome back</Text>
+            <Text style={[styles.subtitle, { color: colors.textSecondary }]}>Sign in to track deliveries and manage orders.</Text>
           </View>
 
           <View style={styles.form}>
@@ -271,42 +264,46 @@ export default function CustomerLoginScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    marginBottom:40,
   },
   scrollContent: {
     flexGrow: 1,
   },
   content: {
     flex: 1,
-    paddingHorizontal: 24,
-    paddingTop: 64,
-    paddingBottom: 32,
+    paddingHorizontal: 22,
+    paddingTop: 8,
+    paddingBottom: 36,
   },
-  backBtn: {
-    width: 42, height: 42, borderRadius: 21,
-    alignItems: 'center', justifyContent: 'center', marginBottom: 24,
-  },
-  header: {
-    marginBottom: 48,
+  heroCard: {
+    borderRadius: 20,
+    paddingVertical: 28,
+    paddingHorizontal: 22,
+    alignItems: 'center',
+    borderWidth: StyleSheet.hairlineWidth,
+    marginBottom: 28,
   },
   iconContainer: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
+    width: 72,
+    height: 72,
+    borderRadius: 36,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 24,
+    marginBottom: 18,
   },
   iconText: {
-    fontSize: 40,
+    fontSize: 36,
   },
   title: {
-    fontSize: 36,
-    fontWeight: 'bold',
+    fontSize: 26,
+    fontWeight: '800',
     marginBottom: 8,
+    textAlign: 'center',
   },
   subtitle: {
-    fontSize: 18,
+    fontSize: 15,
+    lineHeight: 22,
+    textAlign: 'center',
+    maxWidth: 300,
   },
   form: {
     gap: 20,

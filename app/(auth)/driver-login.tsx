@@ -146,13 +146,17 @@ export default function DriverLogin() {
   };
 
   return (
-    <ScrollView style={[styles.container, { backgroundColor: colors.card }]}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace('/')} style={[styles.backBtn, { backgroundColor: colors.surfaceVariant }]}>
-          <Ionicons name="chevron-back" size={22} color={colors.text} />
-        </TouchableOpacity>
-        <Text style={[styles.title, { color: colors.text }]}>Driver Login</Text>
-        <Text style={[styles.subtitle, { color: colors.textSecondary }]}>Welcome back!</Text>
+    <ScrollView
+      style={[styles.container, { backgroundColor: colors.background }]}
+      contentContainerStyle={styles.scrollInner}
+      keyboardShouldPersistTaps="handled"
+    >
+      <View style={[styles.heroCard, { backgroundColor: colors.surfaceVariant, borderColor: colors.border }]}>
+        <View style={[styles.heroIcon, { backgroundColor: '#7c3aed' }]}>
+          <Ionicons name="car-sport" size={34} color="#fff" />
+        </View>
+        <Text style={[styles.title, { color: colors.text }]}>Driver sign in</Text>
+        <Text style={[styles.subtitle, { color: colors.textSecondary }]}>Access deliveries, earnings, and your schedule.</Text>
       </View>
 
       {/* Phone Input */}
@@ -245,23 +249,39 @@ export default function DriverLogin() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    padding: 20,
   },
-  backBtn: {
-    width: 42, height: 42, borderRadius: 21,
-    alignItems: 'center', justifyContent: 'center', marginBottom: 24,
+  scrollInner: {
+    paddingHorizontal: 22,
+    paddingTop: 8,
+    paddingBottom: 40,
   },
-  header: {
-    marginBottom: 40,
-    marginTop: 60,
+  heroCard: {
+    borderRadius: 20,
+    paddingVertical: 26,
+    paddingHorizontal: 20,
+    alignItems: 'center',
+    borderWidth: StyleSheet.hairlineWidth,
+    marginBottom: 24,
+  },
+  heroIcon: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
   },
   title: {
-    fontSize: 32,
-    fontWeight: 'bold',
+    fontSize: 26,
+    fontWeight: '800',
     marginBottom: 8,
+    textAlign: 'center',
   },
   subtitle: {
-    fontSize: 18,
+    fontSize: 15,
+    lineHeight: 22,
+    textAlign: 'center',
+    maxWidth: 300,
   },
   inputGroup: {
     marginBottom: 20,
@@ -273,15 +293,16 @@ const styles = StyleSheet.create({
   },
   input: {
     borderWidth: 1,
-    borderRadius: 8,
-    padding: 12,
+    borderRadius: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
     fontSize: 16,
   },
   passwordContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     borderWidth: 1,
-    borderRadius: 8,
+    borderRadius: 14,
   },
   passwordInput: {
     flex: 1,
@@ -292,10 +313,15 @@ const styles = StyleSheet.create({
     padding: 12,
   },
   loginButton: {
-    padding: 16,
-    borderRadius: 8,
+    paddingVertical: 16,
+    borderRadius: 14,
     alignItems: 'center',
     marginTop: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    elevation: 4,
   },
   loginButtonDisabled: {
     opacity: 0.6,

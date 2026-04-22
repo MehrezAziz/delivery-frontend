@@ -6,7 +6,6 @@ import {
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { notificationService, Notification } from '../../services/api/notification.service';
 import { useTheme } from '../../contexts/ThemeContext';
 import {
@@ -48,7 +47,6 @@ const TYPE_ICONS: Record<string, string> = {
 
 export default function DriverNotifications() {
   const router = useRouter();
-  const insets = useSafeAreaInsets();
   const { colors, isDark } = useTheme();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
@@ -183,19 +181,16 @@ export default function DriverNotifications() {
 
   return (
     <View style={[s.container, { backgroundColor: colors.background }]}>
-      <View style={[s.header, { paddingTop: insets.top + 12, backgroundColor: colors.card, borderBottomColor: colors.border }]}>
-        <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace('/(driver)/home')} style={[s.backBtn, { backgroundColor: colors.surfaceVariant }]}>
-          <Ionicons name="chevron-back" size={24} color={colors.text} />
-        </TouchableOpacity>
-        <View style={{ flex: 1, marginHorizontal: 8 }}>
-          <Text style={[s.headerTitle, { color: colors.text }]}>All notifications</Text>
-          <Text style={[s.headerSub, { color: colors.textSecondary }]}>Grouped by chat, order, ticket…</Text>
-        </View>
+      <View style={[s.notifToolbar, { backgroundColor: colors.card, borderColor: colors.border }]}>
+        <Text style={[s.toolbarHint, { color: colors.textSecondary }]} numberOfLines={2}>
+          Grouped by chat, order, ticket…
+        </Text>
         <TouchableOpacity
           onPress={() => {
             notificationService.markAllAsRead();
             setNotifications((prev) => prev.map((n) => ({ ...n, readAt: n.readAt || new Date().toISOString() })));
           }}
+          hitSlop={8}
         >
           <Text style={[s.markAllText, { color: colors.primary }]}>Make all as read</Text>
         </TouchableOpacity>
@@ -243,17 +238,20 @@ export default function DriverNotifications() {
 const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f9fafb' },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  header: {
-    flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: 12, paddingTop: 16, paddingBottom: 12,
-    borderBottomWidth: 1,
+  notifToolbar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    marginHorizontal: 16,
+    marginTop: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 14,
+    borderWidth: StyleSheet.hairlineWidth,
   },
-  backBtn: {
-    width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center',
-  },
-  headerTitle: { fontSize: 17, fontWeight: '700' },
-  headerSub: { fontSize: 11, marginTop: 2 },
-  markAllText: { fontSize: 12, fontWeight: '600' },
+  toolbarHint: { flex: 1, fontSize: 12, fontWeight: '600', lineHeight: 16 },
+  markAllText: { fontSize: 12, fontWeight: '700' },
   sortRow: {
     flexDirection: 'row',
     alignItems: 'center',

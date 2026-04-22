@@ -1,0 +1,55 @@
+/** Route segment (expo file name) → human-readable title */
+
+export const AUTH_ROUTE_TITLES: Record<string, string> = {
+  'customer-login': 'Customer sign in',
+  'driver-login': 'Driver sign in',
+  'customer-register': 'Create account',
+  'driver-register': 'Driver registration',
+  'driver-register-step1': 'Driver registration',
+  'driver-register-step2': 'Driver registration',
+  'driver-register-step3': 'Driver registration',
+  'customer-setup': 'Complete profile',
+  terms: 'Terms & privacy',
+};
+
+export const CUSTOMER_ROUTE_TITLES: Record<string, string> = {
+  home: 'Home',
+  orders: 'My orders',
+  wallet: 'Wallet',
+  profile: 'Profile',
+  addresses: 'Addresses',
+  restrictions: 'Restrictions',
+  support: 'Support',
+  'support-chat': 'Support chat',
+  'create-order': 'New order',
+  'local-pickup-order': 'Local pickup',
+  'pick-location': 'Pick location',
+  'order-detail': 'Order details',
+  'order-chat': 'Order chat',
+  'track-driver': 'Track driver',
+  'edit-profile': 'Edit profile',
+  notifications: 'Notifications',
+};
+
+export const DRIVER_ROUTE_TITLES: Record<string, string> = {
+  home: 'Home',
+  'my-orders': 'My deliveries',
+  'available-orders': 'Available orders',
+  'order-chat': 'Order chat',
+  'order-detail': 'Order details',
+  'address-map': 'Map',
+  'upload-proofs': 'Upload proofs',
+  support: 'Support',
+  'support-chat': 'Support chat',
+  addresses: 'Addresses',
+  availability: 'Availability',
+  documents: 'Documents',
+  earnings: 'Earnings',
+  transactions: 'Transactions',
+  profile: 'Profile',
+  'edit-profile': 'Edit profile',
+  restrictions: 'Restrictions',
+  verification: 'Verification',
+  notifications: 'Notifications',
+  'my-ratings': 'My ratings',
+};

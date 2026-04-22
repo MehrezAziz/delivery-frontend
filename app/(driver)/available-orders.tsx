@@ -748,25 +748,19 @@ export default function AvailableOrdersScreen() {
 
   return (
     <View style={[s.container, { backgroundColor: colors.background }]}>
-      {/* Header */}
-      <View style={[s.header, { backgroundColor: colors.headerBg }]}>
-        <View style={s.headerRow}>
-          <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace('/(driver)/home')} style={s.headerBtn}>
-            <Ionicons name="chevron-back" size={22} color="#fff" />
-          </TouchableOpacity>
-          <Text style={s.headerTitle}>Available Orders</Text>
-          <TouchableOpacity
-            style={[s.headerBtn, filterActive && { backgroundColor: '#fff' }]}
-            onPress={() => { if (allCountries.length === 0) loadCountries(); setShowFilter(true); }}
-          >
-            <Ionicons name="filter" size={20} color={filterActive ? '#0284c7' : '#fff'} />
-          </TouchableOpacity>
-        </View>
-        <Text style={s.headerSub}>
+      <View style={[s.subHeaderBar, { backgroundColor: colors.card, borderColor: colors.border }]}>
+        <Text style={[s.headerSub, { color: colors.textSecondary }]} numberOfLines={2}>
           {filterActive
             ? `${totalOrders} order${totalOrders !== 1 ? 's' : ''} in ${advFilterLabel}`
             : `${totalOrders} order${totalOrders !== 1 ? 's' : ''} near you`}
         </Text>
+        <TouchableOpacity
+          style={[s.filterChipBtn, { backgroundColor: colors.surfaceVariant }, filterActive && { backgroundColor: colors.primary }]}
+          onPress={() => { if (allCountries.length === 0) loadCountries(); setShowFilter(true); }}
+          activeOpacity={0.75}
+        >
+          <Ionicons name="filter" size={18} color={filterActive ? '#fff' : colors.text} />
+        </TouchableOpacity>
       </View>
 
       {showDeclinedFlash && (
@@ -1162,17 +1156,25 @@ export default function AvailableOrdersScreen() {
 const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f8fafc' },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f8fafc' },
-  header: {
-    backgroundColor: '#0284c7', paddingTop: 50, paddingBottom: 20, paddingHorizontal: 20,
-    borderBottomLeftRadius: 24, borderBottomRightRadius: 24,
+  subHeaderBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    marginHorizontal: 16,
+    marginTop: 8,
+    borderRadius: 14,
+    borderWidth: StyleSheet.hairlineWidth,
+    gap: 10,
   },
-  headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 },
-  headerBtn: {
-    width: 38, height: 38, borderRadius: 19, backgroundColor: 'rgba(255,255,255,0.2)',
-    alignItems: 'center', justifyContent: 'center',
+  headerSub: { flex: 1, fontSize: 13, fontWeight: '600', lineHeight: 18 },
+  filterChipBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  headerTitle: { color: '#fff', fontSize: 20, fontWeight: '700' },
-  headerSub: { color: 'rgba(255,255,255,0.75)', fontSize: 14, textAlign: 'center' },
   /** Full-screen centered flash when company declines driver before arrival */
   declinedFlashOverlay: {
     ...StyleSheet.absoluteFillObject,

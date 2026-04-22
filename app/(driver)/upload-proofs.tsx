@@ -241,14 +241,6 @@ export default function UploadProofsScreen() {
 
   return (
     <View style={[s.container, { backgroundColor: colors.background }]}>
-      <View style={s.header}>
-        <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace('/(driver)/home')} style={s.headerBtn}>
-          <Ionicons name="chevron-back" size={22} color="#fff" />
-        </TouchableOpacity>
-        <Text style={s.headerTitle}>Upload Proofs</Text>
-        <View style={{ width: 38 }} />
-      </View>
-
       <ScrollView style={{ flex: 1 }} contentContainerStyle={s.content}>
         <View style={s.infoCard}>
           <View style={s.infoIconWrap}>
@@ -324,17 +316,7 @@ export default function UploadProofsScreen() {
 
 const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f8fafc' },
-  header: {
-    backgroundColor: '#16a34a', paddingTop: 50, paddingBottom: 18, paddingHorizontal: 20,
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    borderBottomLeftRadius: 20, borderBottomRightRadius: 20,
-  },
-  headerBtn: {
-    width: 38, height: 38, borderRadius: 19, backgroundColor: 'rgba(255,255,255,0.2)',
-    alignItems: 'center', justifyContent: 'center',
-  },
-  headerTitle: { color: '#fff', fontSize: 18, fontWeight: '700' },
-  content: { padding: 20, paddingBottom: 40 },
+  content: { padding: 20, paddingTop: 12, paddingBottom: 40 },
   infoCard: {
     backgroundColor: '#eff6ff', borderRadius: 14, padding: 16,
     flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 20,

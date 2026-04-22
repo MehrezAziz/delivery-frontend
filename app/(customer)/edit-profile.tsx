@@ -117,13 +117,6 @@ export default function CustomerEditProfileScreen() {
   if (!verified) {
     return (
       <View style={[s.container, { backgroundColor: colors.background }]}>
-        <View style={[s.header, { backgroundColor: colors.card, borderBottomColor: colors.border }]}>
-          <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace('/(customer)/home')} style={[s.headerBtn, { backgroundColor: colors.surfaceVariant }]}>
-            <Ionicons name="chevron-back" size={22} color={colors.text} />
-          </TouchableOpacity>
-          <Text style={[s.headerTitleDark, { color: colors.text }]}>Edit Profile</Text>
-          <View style={{ width: 38 }} />
-        </View>
         <View style={[s.gateContainer, { backgroundColor: colors.background }]}>
           <View style={s.gateIconWrap}>
             <Ionicons name="lock-closed" size={40} color={colors.primary} />
@@ -143,13 +136,6 @@ export default function CustomerEditProfileScreen() {
 
   return (
     <View style={[s.container, { backgroundColor: colors.background }]}>
-      <View style={[s.header, { backgroundColor: colors.card, borderBottomColor: colors.border }]}>
-        <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace('/(customer)/home')} style={[s.headerBtn, { backgroundColor: colors.surfaceVariant }]}>
-          <Ionicons name="chevron-back" size={22} color={colors.text} />
-        </TouchableOpacity>
-        <Text style={[s.headerTitleDark, { color: colors.text }]}>Edit Profile</Text>
-        <View style={{ width: 38 }} />
-      </View>
       <ScrollView style={{ flex: 1 }} contentContainerStyle={s.content}>
         <Field label="First Name" value={firstName} onChange={setFirstName} />
         <Field label="Last Name" value={secondName} onChange={setSecondName} />
@@ -221,17 +207,7 @@ function Field({ label, value, onChange, keyboardType, editable = true, multilin
 const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f8fafc' },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f8fafc' },
-  header: {
-    backgroundColor: '#fff', paddingTop: 50, paddingBottom: 18, paddingHorizontal: 20,
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#e5e7eb',
-  },
-  headerBtn: {
-    width: 38, height: 38, borderRadius: 19, backgroundColor: '#f3f4f6',
-    alignItems: 'center', justifyContent: 'center',
-  },
-  headerTitleDark: { fontSize: 18, fontWeight: '700', color: '#111827' },
-  content: { padding: 20, paddingBottom: 40 },
+  content: { padding: 20, paddingTop: 8, paddingBottom: 40 },
   gateContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 32 },
   gateIconWrap: {
     width: 80, height: 80, borderRadius: 40, backgroundColor: '#dbeafe',
