@@ -3,6 +3,8 @@ import { useRouter, usePathname } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../contexts/ThemeContext';
 import { clearSession } from '../services/auth-session';
+import { clearPushToken } from '../services/api/notification.service';
+import { stopOrderTrackingSilently } from '../services/notifications';
 
 function normalizePath(path: string) {
   return (path || '/').replace(/\/$/, '') || '/';
@@ -96,7 +98,14 @@ export function AppSideMenu({
         style: 'destructive',
         onPress: async () => {
           onClose();
-          await clearSession();
+          try {
+            // Same cleanup as profile logout: drop persistent order-tracking notification + FCM before clearing storage.
+            await stopOrderTrackingSilently();
+            await clearPushToken();
+            await clearSession();
+          } catch {
+            await clearSession();
+          }
           if (role === 'customer') router.replace('/(auth)/customer-login');
           else if (role === 'driver') router.replace('/(auth)/driver-login');
           else router.replace('/');
