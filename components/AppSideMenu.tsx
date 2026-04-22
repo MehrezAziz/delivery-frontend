@@ -1,8 +1,36 @@
 import { Modal, View, Text, TouchableOpacity, ScrollView, Pressable, StyleSheet, Alert } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, usePathname } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../contexts/ThemeContext';
 import { clearSession } from '../services/auth-session';
+
+function normalizePath(path: string) {
+  return (path || '/').replace(/\/$/, '') || '/';
+}
+
+/** True when the app is already showing the route targeted by `href` (expo group paths). */
+export function isSideMenuRouteActive(pathname: string, href: string): boolean {
+  const p = normalizePath(pathname);
+  const h = normalizePath(href);
+  if (p === h) return true;
+  if (h === '/' && (p === '/' || p === '/index')) return true;
+
+  const pParts = p.split('/').filter(Boolean);
+  const hParts = h.split('/').filter(Boolean);
+  if (hParts.length === 0) return false;
+
+  /** Some builds only expose the leaf segment in `pathname` (e.g. `orders`). */
+  if (pParts.length === 1 && hParts.length >= 2) {
+    return pParts[0] === hParts[hParts.length - 1];
+  }
+
+  if (pParts.length < 2 || hParts.length < 2) return false;
+  const hGroup = hParts[0];
+  const hScreen = hParts[hParts.length - 1];
+  const pGroup = pParts[0];
+  const pScreen = pParts[pParts.length - 1];
+  return pGroup === hGroup && pScreen === hScreen;
+}
 
 type Role = 'guest' | 'customer' | 'driver';
 
@@ -46,11 +74,16 @@ export function AppSideMenu({
   role: Role;
 }) {
   const router = useRouter();
+  const pathname = usePathname();
   const { colors, isDark } = useTheme();
 
   const links = role === 'guest' ? GUEST_LINKS : role === 'customer' ? CUSTOMER_LINKS : DRIVER_LINKS;
 
   const go = (href: string) => {
+    if (isSideMenuRouteActive(pathname, href)) {
+      onClose();
+      return;
+    }
     onClose();
     setTimeout(() => router.push(href as any), 0);
   };
@@ -86,20 +119,47 @@ export function AppSideMenu({
             </TouchableOpacity>
           </View>
           <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-            {links.map((item) => (
-              <TouchableOpacity
-                key={item.href + item.label}
-                style={[styles.row, { backgroundColor: colors.surfaceVariant }]}
-                onPress={() => go(item.href)}
-                activeOpacity={0.75}
-              >
-                <View style={[styles.rowIcon, { backgroundColor: isDark ? colors.primaryLight : colors.primaryLight }]}>
-                  <Ionicons name={item.icon} size={20} color={colors.primary} />
-                </View>
-                <Text style={[styles.rowLabel, { color: colors.text }]}>{item.label}</Text>
-                <Ionicons name="chevron-forward" size={18} color={colors.textTertiary} />
-              </TouchableOpacity>
-            ))}
+            {links.map((item) => {
+              const active = isSideMenuRouteActive(pathname, item.href);
+              return (
+                <TouchableOpacity
+                  key={item.href + item.label}
+                  style={[
+                    styles.row,
+                    {
+                      backgroundColor: active ? (isDark ? 'rgba(14,165,233,0.18)' : colors.primaryLight) : colors.surfaceVariant,
+                      borderWidth: active ? 1.5 : 0,
+                      borderColor: active ? colors.primary : 'transparent',
+                    },
+                  ]}
+                  onPress={() => go(item.href)}
+                  activeOpacity={0.75}
+                >
+                  <View
+                    style={[
+                      styles.rowIcon,
+                      {
+                        backgroundColor: active
+                          ? (isDark ? 'rgba(14,165,233,0.35)' : '#bae6fd')
+                          : isDark
+                            ? colors.primaryLight
+                            : colors.primaryLight,
+                      },
+                    ]}
+                  >
+                    <Ionicons name={item.icon} size={20} color={colors.primary} />
+                  </View>
+                  <Text style={[styles.rowLabel, { color: colors.text, fontWeight: active ? '800' : '600' }]}>
+                    {item.label}
+                  </Text>
+                  <Ionicons
+                    name={active ? 'checkmark-circle' : 'chevron-forward'}
+                    size={active ? 20 : 18}
+                    color={active ? colors.primary : colors.textTertiary}
+                  />
+                </TouchableOpacity>
+              );
+            })}
             {role !== 'guest' && (
               <TouchableOpacity
                 style={[styles.logoutRow, { borderColor: colors.border }]}
