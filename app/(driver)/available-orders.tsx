@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, ActivityIndicator,
-  Alert, RefreshControl, StyleSheet, Modal, TextInput, FlatList, Linking, Platform,
+  Alert, RefreshControl, StyleSheet, Modal, TextInput, FlatList,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -34,14 +34,6 @@ function formatDriverAddressLine(addr: Order['pickupAddress'] | Order['dropoffAd
   const tail = [del, gov, country].filter(Boolean).join(', ');
   if (street && tail) return `${street}, ${tail}`;
   return tail || street || 'Address';
-}
-
-function mapQueryLabelForCoords(
-  addr: Order['pickupAddress'] | Order['dropoffAddress'] | null | undefined,
-  displayLine: string,
-): string {
-  if (!addr?.latitude || !addr?.longitude) return displayLine;
-  return `${displayLine} (${addr.latitude.toFixed(5)}, ${addr.longitude.toFixed(5)})`;
 }
 
 const STORAGE_KEY_FILTER_LEVEL = 'avail_quick_filter_level';
@@ -87,6 +79,52 @@ function SearchPicker({ visible, title, data, onSelect, onClose, search, setSear
         />
       </View>
     </Modal>
+  );
+}
+
+function OrderDescriptionCard({ description }: { description: string | null | undefined }) {
+  const { colors, isDark } = useTheme();
+  const [expanded, setExpanded] = useState(false);
+  const text = (description || '').trim();
+  if (!text) return null;
+  const showToggle = text.length > 160 || (text.match(/\n/g) || []).length >= 2;
+
+  return (
+    <View
+      style={[
+        s.orderDescBox,
+        {
+          backgroundColor: isDark ? 'rgba(14, 165, 233, 0.09)' : '#f0f9ff',
+          borderColor: isDark ? 'rgba(56, 189, 248, 0.4)' : '#bae6fd',
+        },
+      ]}
+    >
+      <View style={s.orderDescHead}>
+        <View style={[s.orderDescIconWrap, { backgroundColor: isDark ? 'rgba(2, 132, 199, 0.35)' : '#e0f2fe' }]}>
+          <Ionicons name="reader-outline" size={17} color={colors.primary} />
+        </View>
+        <Text style={[s.orderDescTitle, { color: colors.textSecondary }]}>Package description</Text>
+      </View>
+      <Text
+        style={[s.orderDescBody, { color: colors.text }]}
+        numberOfLines={expanded || !showToggle ? undefined : 4}
+      >
+        {text}
+      </Text>
+      {showToggle ? (
+        <TouchableOpacity
+          onPress={() => setExpanded((e) => !e)}
+          style={s.orderDescToggle}
+          activeOpacity={0.7}
+          hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
+        >
+          <Text style={[s.orderDescToggleText, { color: colors.primary }]}>
+            {expanded ? 'Show less' : 'Show more'}
+          </Text>
+          <Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={15} color={colors.primary} />
+        </TouchableOpacity>
+      ) : null}
+    </View>
   );
 }
 
@@ -438,7 +476,6 @@ export default function AvailableOrdersScreen() {
   const renderOrderCard = (order: Order) => {
     const isAccepting = accepting === order.id;
     const isUrgentHighlighted = !!urgentOrderId && order.id === urgentOrderId;
-<<<<<<< HEAD
     const customerName = [order.customer?.firstName, order.customer?.secondName].filter(Boolean).join(' ').trim() || 'Customer';
     const customerInitials = customerName
       .split(' ')
@@ -466,30 +503,6 @@ export default function AvailableOrdersScreen() {
       const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
       return earthRadiusKm * c;
     })();
-    const openAddressOnMap = async (latitude: number | null, longitude: number | null, label?: string | null) => {
-      if (latitude == null || longitude == null) {
-        Alert.alert('Map', 'Coordinates are not available for this address.');
-        return;
-      }
-      const encoded = encodeURIComponent(label || 'Address');
-      const geoUrl = Platform.select({
-        ios: `maps:0,0?q=${latitude},${longitude}`,
-        default: `geo:${latitude},${longitude}?q=${latitude},${longitude}(${encoded})`,
-      });
-      const webUrl = `https://www.google.com/maps/search/?api=1&query=${latitude},${longitude}`;
-      if (geoUrl && await Linking.canOpenURL(geoUrl)) {
-        await Linking.openURL(geoUrl);
-        return;
-      }
-      if (await Linking.canOpenURL(webUrl)) {
-        await Linking.openURL(webUrl);
-        return;
-      }
-      Alert.alert('Map', 'Could not open map application.');
-    };
-    const pickupLine = formatDriverAddressLine(order.pickupAddress);
-    const dropoffLine = formatDriverAddressLine(order.dropoffAddress);
-=======
     const pickupLat = order.pickupAddress?.latitude;
     const pickupLng = order.pickupAddress?.longitude;
     const pickupHasCoords =
@@ -511,7 +524,8 @@ export default function AvailableOrdersScreen() {
     const dropoffMapTitle =
       [order.dropoffAddress?.street, order.dropoffAddress?.delegation?.nameDelegation].filter(Boolean).join(', ') ||
       'Delivery';
->>>>>>> fixdriver
+    const pickupLine = formatDriverAddressLine(order.pickupAddress);
+    const dropoffLine = formatDriverAddressLine(order.dropoffAddress);
     return (
       <View
         key={order.id}
@@ -563,12 +577,6 @@ export default function AvailableOrdersScreen() {
           </View>
           <View style={{ flex: 1 }}>
             <TouchableOpacity
-<<<<<<< HEAD
-              onPress={() => openAddressOnMap(
-                order.pickupAddress?.latitude ?? null,
-                order.pickupAddress?.longitude ?? null,
-                mapQueryLabelForCoords(order.pickupAddress, pickupLine),
-=======
               style={s.addressTapRow}
               onPress={() => openAddressOnMap(pickupLat, pickupLng, 'pickup', pickupMapTitle)}
               activeOpacity={0.75}
@@ -582,9 +590,9 @@ export default function AvailableOrdersScreen() {
                     fontWeight: pickupHasCoords ? '600' : '500',
                   },
                 ]}
-                numberOfLines={1}
+                numberOfLines={2}
               >
-                {order.pickupAddress?.street || order.pickupAddress?.delegation?.nameDelegation || 'Pickup'}
+                {pickupLine || 'Pickup'}
               </Text>
               {pickupHasCoords ? (
                 <Ionicons name="map-outline" size={20} color={colors.primary} />
@@ -596,14 +604,7 @@ export default function AvailableOrdersScreen() {
                 <Text style={[s.chipText, { color: colors.textSecondary, marginTop: 2 }]}>
                   Exact source: {order.pickupAddress.latitude.toFixed(5)}, {order.pickupAddress.longitude.toFixed(5)}
                 </Text>
->>>>>>> fixdriver
               )}
-              activeOpacity={0.7}
-            >
-              <Text style={[s.routeText, s.routeLinkText, { color: colors.text }]} numberOfLines={2}>
-                {pickupLine || 'Pickup'}
-              </Text>
-            </TouchableOpacity>
             {distanceToPickup !== null && (
               <View style={[s.distanceToPickupCard, { borderColor: colors.border, backgroundColor: colors.surfaceVariant }]}>
                 <View style={[s.distanceToPickupIconWrap, { backgroundColor: isDark ? '#0c4a6e' : '#e0f2fe' }]}>
@@ -620,20 +621,6 @@ export default function AvailableOrdersScreen() {
               </View>
             )}
             <View style={{ height: 14 }} />
-<<<<<<< HEAD
-            <TouchableOpacity
-              onPress={() => openAddressOnMap(
-                order.dropoffAddress?.latitude ?? null,
-                order.dropoffAddress?.longitude ?? null,
-                mapQueryLabelForCoords(order.dropoffAddress, dropoffLine),
-              )}
-              activeOpacity={0.7}
-            >
-              <Text style={[s.routeText, s.routeLinkText, { color: colors.text }]} numberOfLines={2}>
-                {dropoffLine || 'Dropoff'}
-              </Text>
-            </TouchableOpacity>
-=======
             {order.localPickupOnly ? (
               <Text style={[s.routeText, { color: colors.textSecondary, fontWeight: '500' }]} numberOfLines={3}>
                 Local pickup only — bring items to the pickup address (no separate drop-off).
@@ -653,18 +640,18 @@ export default function AvailableOrdersScreen() {
                       fontWeight: dropoffHasCoords ? '600' : '500',
                     },
                   ]}
-                  numberOfLines={1}
+                  numberOfLines={2}
                 >
-                  {order.dropoffAddress?.street || order.dropoffAddress?.delegation?.nameDelegation || 'Dropoff'}
+                  {dropoffLine || 'Dropoff'}
                 </Text>
                 {dropoffHasCoords ? (
                   <Ionicons name="map-outline" size={20} color={colors.primary} />
                 ) : null}
               </TouchableOpacity>
             )}
->>>>>>> fixdriver
           </View>
         </View>
+        <OrderDescriptionCard description={order.description} />
         <View style={s.chipsRow}>
           <View style={[s.chip, { backgroundColor: colors.surfaceVariant }]}>
             <Ionicons name="resize-outline" size={12} color={colors.textSecondary} />
@@ -1288,8 +1275,7 @@ const s = StyleSheet.create({
   routeDot: { width: 10, height: 10, borderRadius: 5 },
   routeLine: { width: 2, flex: 1, backgroundColor: '#e5e7eb', marginVertical: 3 },
   routeText: { fontSize: 14, color: '#374151', fontWeight: '500' },
-<<<<<<< HEAD
-  routeLinkText: { textDecorationLine: 'underline' },
+  addressTapRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
   distanceToPickupCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1309,9 +1295,25 @@ const s = StyleSheet.create({
   },
   distanceToPickupLabel: { fontSize: 11, fontWeight: '600', letterSpacing: 0.3, textTransform: 'uppercase' },
   distanceToPickupValue: { fontSize: 17, fontWeight: '800', marginTop: 2 },
-=======
-  addressTapRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
->>>>>>> fixdriver
+  orderDescBox: {
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+    marginBottom: 14,
+  },
+  orderDescHead: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 8 },
+  orderDescIconWrap: {
+    width: 30,
+    height: 30,
+    borderRadius: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  orderDescTitle: { fontSize: 11, fontWeight: '800', letterSpacing: 0.8, textTransform: 'uppercase' },
+  orderDescBody: { fontSize: 14, lineHeight: 21, fontWeight: '500' },
+  orderDescToggle: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 8, alignSelf: 'flex-start' },
+  orderDescToggleText: { fontSize: 13, fontWeight: '700' },
   chipsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 14 },
   chip: {
     flexDirection: 'row', alignItems: 'center', gap: 4,
