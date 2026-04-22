@@ -2,37 +2,14 @@ import { Modal, View, Text, TouchableOpacity, ScrollView, Pressable, StyleSheet,
 import { useRouter, usePathname } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../contexts/ThemeContext';
+import { useAppNavigation } from '../contexts/AppNavigationContext';
 import { clearSession } from '../services/auth-session';
 import { clearPushToken } from '../services/api/notification.service';
 import { stopOrderTrackingSilently } from '../services/notifications';
+import { isSameAppRoute } from '../utils/appRoutes';
 
-function normalizePath(path: string) {
-  return (path || '/').replace(/\/$/, '') || '/';
-}
-
-/** True when the app is already showing the route targeted by `href` (expo group paths). */
-export function isSideMenuRouteActive(pathname: string, href: string): boolean {
-  const p = normalizePath(pathname);
-  const h = normalizePath(href);
-  if (p === h) return true;
-  if (h === '/' && (p === '/' || p === '/index')) return true;
-
-  const pParts = p.split('/').filter(Boolean);
-  const hParts = h.split('/').filter(Boolean);
-  if (hParts.length === 0) return false;
-
-  /** Some builds only expose the leaf segment in `pathname` (e.g. `orders`). */
-  if (pParts.length === 1 && hParts.length >= 2) {
-    return pParts[0] === hParts[hParts.length - 1];
-  }
-
-  if (pParts.length < 2 || hParts.length < 2) return false;
-  const hGroup = hParts[0];
-  const hScreen = hParts[hParts.length - 1];
-  const pGroup = pParts[0];
-  const pScreen = pParts[pParts.length - 1];
-  return pGroup === hGroup && pScreen === hScreen;
-}
+/** @deprecated Use `isSameAppRoute` from `utils/appRoutes`. */
+export const isSideMenuRouteActive = isSameAppRoute;
 
 type Role = 'guest' | 'customer' | 'driver';
 
@@ -77,17 +54,18 @@ export function AppSideMenu({
 }) {
   const router = useRouter();
   const pathname = usePathname();
+  const { push } = useAppNavigation();
   const { colors, isDark } = useTheme();
 
   const links = role === 'guest' ? GUEST_LINKS : role === 'customer' ? CUSTOMER_LINKS : DRIVER_LINKS;
 
   const go = (href: string) => {
-    if (isSideMenuRouteActive(pathname, href)) {
+    if (isSameAppRoute(pathname, href)) {
       onClose();
       return;
     }
     onClose();
-    setTimeout(() => router.push(href as any), 0);
+    setTimeout(() => push(href), 0);
   };
 
   const onLogout = () => {
@@ -129,7 +107,7 @@ export function AppSideMenu({
           </View>
           <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
             {links.map((item) => {
-              const active = isSideMenuRouteActive(pathname, item.href);
+              const active = isSameAppRoute(pathname, item.href);
               return (
                 <TouchableOpacity
                   key={item.href + item.label}

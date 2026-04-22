@@ -1,8 +1,8 @@
 import { View, Text, TouchableOpacity, StyleSheet, FlatList, ActivityIndicator, Modal, TextInput, ScrollView } from 'react-native';
-import { useRouter } from 'expo-router';
 import { useState, useEffect, useCallback } from 'react';
 import { supportService, SupportTicket } from '../../services/api/support.service';
 import { useTheme } from '../../contexts/ThemeContext';
+import { useAppNavigation } from '../../contexts/AppNavigationContext';
 
 const CATEGORIES = ['ORDER_ISSUE', 'PAYMENT', 'TECHNICAL', 'OTHER'];
 const PRIORITIES = ['LOW', 'MEDIUM', 'HIGH', 'URGENT'];
@@ -15,7 +15,7 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 export default function DriverSupportScreen() {
-  const router = useRouter();
+  const { push } = useAppNavigation();
   const { colors, isDark } = useTheme();
   const [tickets, setTickets] = useState<SupportTicket[]>([]);
   const [loading, setLoading] = useState(true);
@@ -98,7 +98,7 @@ export default function DriverSupportScreen() {
           renderItem={({ item }) => (
             <TouchableOpacity
               style={[styles.ticketCard, { backgroundColor: colors.card, borderColor: colors.border }]}
-              onPress={() => router.push(`/(driver)/support-chat?ticketId=${item.id}`)}
+              onPress={() => push(`/(driver)/support-chat?ticketId=${item.id}`)}
             >
               <View style={styles.ticketHeader}>
                 <View style={[styles.statusBadge, { backgroundColor: STATUS_COLORS[item.status] || '#6b7280' }]}>

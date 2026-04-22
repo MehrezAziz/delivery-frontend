@@ -5,6 +5,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ThemeProvider, useTheme } from '../contexts/ThemeContext';
+import { AppNavigationProvider } from '../contexts/AppNavigationContext';
 import GlobalErrorBoundary from '../components/GlobalErrorBoundary';
 import FriendlyErrorModal from '../components/FriendlyErrorModal';
 import { ApiError, setGlobalApiErrorHandler } from '../services/api/client';
@@ -140,7 +141,9 @@ export default function RootLayout() {
   return (
     <ThemeProvider>
       <SafeAreaProvider>
-        <RootContent />
+        <AppNavigationProvider>
+          <RootContent />
+        </AppNavigationProvider>
       </SafeAreaProvider>
     </ThemeProvider>
   );

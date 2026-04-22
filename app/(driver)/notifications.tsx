@@ -3,11 +3,11 @@ import {
   View, Text, FlatList, StyleSheet, TouchableOpacity,
   ActivityIndicator, RefreshControl,
 } from 'react-native';
-import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { notificationService, Notification } from '../../services/api/notification.service';
 import { useTheme } from '../../contexts/ThemeContext';
+import { useAppNavigation } from '../../contexts/AppNavigationContext';
 import {
   groupNotificationsByThread,
   inboxGroupKey,
@@ -46,7 +46,7 @@ const TYPE_ICONS: Record<string, string> = {
 };
 
 export default function DriverNotifications() {
-  const router = useRouter();
+  const { push } = useAppNavigation();
   const { colors, isDark } = useTheme();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
@@ -95,7 +95,7 @@ export default function DriverNotifications() {
     }
     const suppressedRoute = routeWhenDriverCannotOpenOrderDetail(item);
     if (suppressedRoute) {
-      router.push(suppressedRoute as any);
+      push(suppressedRoute);
       return;
     }
     if (shouldSuppressDriverOrderDetailNavigation(item)) {
@@ -103,19 +103,19 @@ export default function DriverNotifications() {
     }
     if (item.relatedEntityType === 'Order' && item.relatedEntityId) {
       if (item.type === 'NEW_ORDER_AVAILABLE') {
-        router.push(`/(driver)/available-orders?urgentOrderId=${item.relatedEntityId}`);
+        push(`/(driver)/available-orders?urgentOrderId=${item.relatedEntityId}`);
       } else if (item.type === 'NEW_MESSAGE_FROM_CUSTOMER') {
         /** Company portal chat uses Order + this type (same as delivery-company.service). */
-        router.push(`/(driver)/order-chat?orderId=${item.relatedEntityId}`);
+        push(`/(driver)/order-chat?orderId=${item.relatedEntityId}`);
       } else {
-        router.push(`/(driver)/order-detail?orderId=${item.relatedEntityId}`);
+        push(`/(driver)/order-detail?orderId=${item.relatedEntityId}`);
       }
     } else if (item.relatedEntityType === 'ChatRoom' && item.relatedEntityId) {
-      router.push(`/(driver)/order-chat?orderId=${item.relatedEntityId}`);
+      push(`/(driver)/order-chat?orderId=${item.relatedEntityId}`);
     } else if (item.relatedEntityType === 'SupportTicket' && item.relatedEntityId) {
-      router.push(`/(driver)/support-chat?ticketId=${item.relatedEntityId}`);
+      push(`/(driver)/support-chat?ticketId=${item.relatedEntityId}`);
     } else if (item.relatedEntityType === 'Rating') {
-      router.push('/(driver)/my-ratings');
+      push('/(driver)/my-ratings');
     }
   };
 

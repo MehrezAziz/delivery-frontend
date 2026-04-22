@@ -4,9 +4,11 @@ import {
   Alert, RefreshControl, StyleSheet,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { orderService, Order } from '../../services/api/order.service';
 import { useTheme } from '../../contexts/ThemeContext';
+import { useAppNavigation } from '../../contexts/AppNavigationContext';
 import {
   restoreOrderTrackingForDriver,
   stopOrderTrackingSilently,
@@ -42,8 +44,27 @@ const STATUS_REVERT: Record<string, { prev: string; label: string }> = {
   RETURNED:       { prev: 'DELIVERING',      label: 'Back to Delivering' },
 };
 
+function formatMoney(v: unknown): string {
+  const n = typeof v === 'number' ? v : Number(v);
+  if (!Number.isFinite(n)) return '—';
+  return n.toFixed(2);
+}
+
+function formatKm(v: unknown): string {
+  const n = typeof v === 'number' ? v : Number(v);
+  if (!Number.isFinite(n)) return '—';
+  return `${n.toFixed(1)} km`;
+}
+
+function formatWeight(v: unknown): string {
+  const n = typeof v === 'number' ? v : Number(v);
+  if (!Number.isFinite(n)) return '—';
+  return `${n} kg`;
+}
+
 export default function DriverMyOrdersScreen() {
   const router = useRouter();
+  const { push } = useAppNavigation();
   const { colors, isDark } = useTheme();
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
@@ -59,11 +80,27 @@ export default function DriverMyOrdersScreen() {
 
   useEffect(() => { load(); }, [load]);
   useEffect(() => {
-    return subscribeDriverMyOrdersRefresh(() => {
-      void load();
+    let debounce: ReturnType<typeof setTimeout> | undefined;
+    const unsub = subscribeDriverMyOrdersRefresh(() => {
+      if (debounce) clearTimeout(debounce);
+      debounce = setTimeout(() => {
+        void load();
+      }, 650);
     });
+    return () => {
+      if (debounce) clearTimeout(debounce);
+      unsub();
+    };
   }, [load]);
-  useEffect(() => { const i = setInterval(load, 10000); return () => clearInterval(i); }, [load]);
+
+  useFocusEffect(
+    useCallback(() => {
+      const i = setInterval(() => {
+        void load();
+      }, 10000);
+      return () => clearInterval(i);
+    }, [load]),
+  );
 
   useEffect(() => {
     const ids = orders.filter((o) => o.chatRoom?.status === 'ACTIVE').map((o) => o.id);
@@ -72,12 +109,15 @@ export default function DriverMyOrdersScreen() {
       return;
     }
     let cancelled = false;
-    void (async () => {
-      const map = await fetchChatUnreadMapForOrders(ids);
-      if (!cancelled) setChatUnreadMap(map);
-    })();
+    const t = setTimeout(() => {
+      void (async () => {
+        const map = await fetchChatUnreadMapForOrders(ids);
+        if (!cancelled) setChatUnreadMap(map);
+      })();
+    }, 450);
     return () => {
       cancelled = true;
+      clearTimeout(t);
     };
   }, [orders]);
 
@@ -91,7 +131,7 @@ export default function DriverMyOrdersScreen() {
           'You must upload at least the first proof image before marking this order.',
           [
             { text: 'Cancel', style: 'cancel' },
-            { text: 'Upload Now', onPress: () => router.push(`/(driver)/upload-proofs?orderId=${orderId}`) },
+            { text: 'Upload Now', onPress: () => push(`/(driver)/upload-proofs?orderId=${orderId}`) },
           ],
         );
         return;
@@ -152,7 +192,7 @@ export default function DriverMyOrdersScreen() {
 
     return (
       <TouchableOpacity key={order.id} style={[s.card, { backgroundColor: colors.card }]} activeOpacity={0.7}
-        onPress={() => router.push(`/(driver)/order-detail?orderId=${order.id}`)}>
+        onPress={() => push(`/(driver)/order-detail?orderId=${order.id}`)}>
         {/* Header: status badge + price */}
         <View style={s.cardTop}>
           <View style={{ flex: 1 }}>
@@ -163,7 +203,7 @@ export default function DriverMyOrdersScreen() {
             </View>
           </View>
           <View style={s.priceCol}>
-            <Text style={[s.priceText, { color: colors.primary }]}>{order.price.toFixed(2)}</Text>
+            <Text style={[s.priceText, { color: colors.primary }]}>{formatMoney(order.price)}</Text>
             <Text style={[s.priceCurrency, { color: colors.textTertiary }]}>TND</Text>
           </View>
         </View>
@@ -190,11 +230,11 @@ export default function DriverMyOrdersScreen() {
         <View style={s.chipsRow}>
           <View style={[s.chip, { backgroundColor: colors.surfaceVariant }]}>
             <Ionicons name="resize-outline" size={12} color={colors.textSecondary} />
-            <Text style={[s.chipText, { color: colors.textSecondary }]}>{order.distanceKm.toFixed(1)} km</Text>
+            <Text style={[s.chipText, { color: colors.textSecondary }]}>{formatKm(order.distanceKm)}</Text>
           </View>
           <View style={[s.chip, { backgroundColor: colors.surfaceVariant }]}>
             <Ionicons name="cube-outline" size={12} color={colors.textSecondary} />
-            <Text style={[s.chipText, { color: colors.textSecondary }]}>{order.weight} kg</Text>
+            <Text style={[s.chipText, { color: colors.textSecondary }]}>{formatWeight(order.weight)}</Text>
           </View>
           <View style={[s.chip, { backgroundColor: order.paymentType === 'COD' ? '#dcfce7' : '#dbeafe' }]}>
             <Text style={{ fontSize: 11 }}>{order.paymentType === 'COD' ? '💵' : '💰'}</Text>
@@ -209,7 +249,7 @@ export default function DriverMyOrdersScreen() {
           <View style={s.quickRow}>
             <View style={{ position: 'relative' }}>
               <TouchableOpacity style={[s.quickBtn, { backgroundColor: '#eff6ff' }]}
-                onPress={() => router.push(`/(driver)/order-chat?orderId=${order.id}`)} activeOpacity={0.7}>
+                onPress={() => push(`/(driver)/order-chat?orderId=${order.id}`)} activeOpacity={0.7}>
                 <Ionicons name="chatbubbles" size={16} color="#2563eb" />
                 <Text style={[s.quickBtnText, { color: '#2563eb' }]}>Chat</Text>
               </TouchableOpacity>
@@ -217,7 +257,7 @@ export default function DriverMyOrdersScreen() {
             </View>
             <TouchableOpacity style={[s.quickBtn, { backgroundColor: '#fff7ed' }]}
               onPress={async () => {
-                try { await orderService.driverRequestAssistance(order.id); router.push('/(driver)/support'); }
+                try { await orderService.driverRequestAssistance(order.id); push('/(driver)/support'); }
                 catch (e: any) { Alert.alert('Error', e.message); }
               }} activeOpacity={0.7}>
               <Ionicons name="headset" size={16} color="#ea580c" />
@@ -319,7 +359,7 @@ export default function DriverMyOrdersScreen() {
           )}
           {['PICKED_UP', 'DELIVERING', 'DELIVERED'].includes(order.status) && (
             <TouchableOpacity style={[s.proofBtn, { backgroundColor: colors.surfaceVariant }, order.driverAssignment?.image1Proof && { backgroundColor: '#dcfce7' }]}
-              onPress={() => router.push(`/(driver)/upload-proofs?orderId=${order.id}`)} activeOpacity={0.7}>
+              onPress={() => push(`/(driver)/upload-proofs?orderId=${order.id}`)} activeOpacity={0.7}>
               <Ionicons name={order.driverAssignment?.image1Proof ? 'checkmark-circle' : 'camera-outline'} size={16}
                 color={order.driverAssignment?.image1Proof ? '#16a34a' : colors.text} />
               <Text style={[s.proofBtnText, { color: colors.text }, order.driverAssignment?.image1Proof && { color: '#16a34a' }]}>

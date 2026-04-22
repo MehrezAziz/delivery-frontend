@@ -3,16 +3,17 @@ import {
   View, Text, FlatList, TextInput, TouchableOpacity,
   KeyboardAvoidingView, Platform, ActivityIndicator, StyleSheet,
 } from 'react-native';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { orderService, ChatMessage, ChatRoom } from '../../services/api/order.service';
 import { notificationService } from '../../services/api/notification.service';
 import { useTheme } from '../../contexts/ThemeContext';
+import { useAppNavigation } from '../../contexts/AppNavigationContext';
 import { useActiveChatForNotifications } from '../../hooks/useActiveChatForNotifications';
 
 export default function DriverOrderChatScreen() {
-  const router = useRouter();
+  const { push } = useAppNavigation();
   const { orderId: orderIdParam } = useLocalSearchParams<{ orderId: string | string[] }>();
   const orderId = typeof orderIdParam === 'string' ? orderIdParam : orderIdParam?.[0] ?? '';
   const { colors, isDark } = useTheme();
@@ -81,7 +82,7 @@ export default function DriverOrderChatScreen() {
   const handleAssistance = async () => {
     try {
       await orderService.driverRequestAssistance(orderId);
-      router.push('/(driver)/support');
+      push('/(driver)/support');
     } catch (e) { console.error(e); }
   };
 

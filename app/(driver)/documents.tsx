@@ -14,6 +14,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import axios from 'axios';
 import { useTheme } from '../../contexts/ThemeContext';
+import { useAppNavigation } from '../../contexts/AppNavigationContext';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api';
 
@@ -37,6 +38,7 @@ interface VerificationData {
 
 export default function DriverDocumentsScreen() {
   const router = useRouter();
+  const { push } = useAppNavigation();
   const { colors, isDark } = useTheme();
   const [data, setData] = useState<VerificationData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -163,7 +165,7 @@ export default function DriverDocumentsScreen() {
         {canUploadNew && (
           <TouchableOpacity
             style={s.uploadBtn}
-            onPress={() => router.push('/(driver)/verification')}
+            onPress={() => push('/(driver)/verification')}
           >
             <Ionicons name="cloud-upload" size={20} color="#fff" />
             <Text style={s.uploadBtnText}>Upload New Documents</Text>

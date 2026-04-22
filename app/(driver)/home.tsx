@@ -12,6 +12,7 @@ import { orderService, Order } from '../../services/api/order.service';
 import { notificationService } from '../../services/api/notification.service';
 import { clearPushToken } from '../../services/api/notification.service';
 import { useTheme } from '../../contexts/ThemeContext';
+import { useAppNavigation } from '../../contexts/AppNavigationContext';
 import { restoreOrderTrackingForDriver, stopOrderTrackingSilently } from '../../services/notifications';
 import { syncDriverLocationTracking } from '../../services/driverLocationTracking';
 import { NotificationPreviewModal } from '../../components/NotificationPreviewModal';
@@ -22,6 +23,11 @@ const ACTIVE_STATUSES = [
   'DRIVER_ASSIGNED', 'DRIVER_ARRIVED', 'PICKED_UP', 'DELIVERING',
 ];
 
+function safePrice(v: unknown): string {
+  const n = typeof v === 'number' ? v : Number(v);
+  return Number.isFinite(n) ? n.toFixed(2) : '—';
+}
+
 const STATUS_META: Record<string, { icon: string; color: string; bg: string; label: string }> = {
   DRIVER_ASSIGNED: { icon: 'person-outline', color: '#2563eb', bg: '#dbeafe', label: 'Assigned' },
   DRIVER_ARRIVED:  { icon: 'flag-outline',   color: '#7c3aed', bg: '#ede9fe', label: 'Arrived' },
@@ -31,6 +37,7 @@ const STATUS_META: Record<string, { icon: string; color: string; bg: string; lab
 
 export default function DriverHome() {
   const router = useRouter();
+  const { push } = useAppNavigation();
   const { colors, isDark } = useTheme();
   const [driver, setDriver] = useState<any>(null);
   const [activeOrders, setActiveOrders] = useState<Order[]>([]);
@@ -112,7 +119,7 @@ export default function DriverHome() {
         visible={notifPreviewOpen}
         onClose={() => setNotifPreviewOpen(false)}
         variant="driver"
-        onOpenFullInbox={() => router.push('/(driver)/notifications')}
+        onOpenFullInbox={() => push('/(driver)/notifications')}
         onMarkAllRead={() => setUnreadCount(0)}
       />
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 100 }}
@@ -136,7 +143,7 @@ export default function DriverHome() {
 
         {/* Status Alerts */}
         {driver?.status === 'INCOMPLETE' && (
-          <TouchableOpacity style={[s.alertCard, { backgroundColor: colors.card }]} onPress={() => router.push('/(driver)/verification')} activeOpacity={0.8}>
+          <TouchableOpacity style={[s.alertCard, { backgroundColor: colors.card }]} onPress={() => push('/(driver)/verification')} activeOpacity={0.8}>
             <View style={[s.alertIconWrap, { backgroundColor: '#fef3c7' }]}>
               <Ionicons name="warning" size={22} color="#ca8a04" />
             </View>
@@ -160,7 +167,7 @@ export default function DriverHome() {
         )}
         {(driver?.status === 'SUSPENDED' || driver?.status === 'REJECTED') && (
           <TouchableOpacity style={[s.alertCard, { borderLeftColor: '#dc2626', backgroundColor: colors.card }]}
-            onPress={() => router.push('/(driver)/restrictions')} activeOpacity={0.8}>
+            onPress={() => push('/(driver)/restrictions')} activeOpacity={0.8}>
             <View style={[s.alertIconWrap, { backgroundColor: '#fee2e2' }]}>
               <Ionicons name="alert-circle" size={22} color="#dc2626" />
             </View>
@@ -177,7 +184,7 @@ export default function DriverHome() {
           <View style={s.section}>
             <View style={s.mainActionsRow}>
               <TouchableOpacity style={[s.mainAction, { backgroundColor: '#0284c7' }]}
-                onPress={() => router.push('/(driver)/available-orders')} activeOpacity={0.85}>
+                onPress={() => push('/(driver)/available-orders')} activeOpacity={0.85}>
                 <View style={s.mainActionIcon}>
                   <Ionicons name="list" size={26} color="#fff" />
                 </View>
@@ -191,7 +198,7 @@ export default function DriverHome() {
                 <Text style={s.mainActionSub}>Find orders</Text>
               </TouchableOpacity>
               <TouchableOpacity style={[s.mainAction, { backgroundColor: '#16a34a' }]}
-                onPress={() => router.push('/(driver)/my-orders')} activeOpacity={0.85}>
+                onPress={() => push('/(driver)/my-orders')} activeOpacity={0.85}>
                 <View style={s.mainActionIcon}>
                   <Ionicons name="cube" size={26} color="#fff" />
                 </View>
@@ -207,7 +214,7 @@ export default function DriverHome() {
           <View style={s.section}>
             <View style={s.sectionHeader}>
               <Text style={[s.sectionTitle, { color: colors.text }]}>Active Deliveries</Text>
-              <TouchableOpacity onPress={() => router.push('/(driver)/my-orders')}>
+              <TouchableOpacity onPress={() => push('/(driver)/my-orders')}>
                 <Text style={[s.seeAll, { color: colors.primary }]}>See All</Text>
               </TouchableOpacity>
             </View>
@@ -215,13 +222,13 @@ export default function DriverHome() {
               const meta = STATUS_META[order.status] || STATUS_META.DRIVER_ASSIGNED;
               return (
                 <TouchableOpacity key={order.id} style={[s.orderCard, { backgroundColor: colors.card }]}
-                  onPress={() => router.push(`/(driver)/my-orders`)} activeOpacity={0.8}>
+                  onPress={() => push(`/(driver)/my-orders`)} activeOpacity={0.8}>
                   <View style={s.orderTop}>
                     <View style={[s.orderBadge, { backgroundColor: meta.bg }]}>
                       <Ionicons name={meta.icon as any} size={14} color={meta.color} />
                       <Text style={[s.orderBadgeText, { color: meta.color }]}>{meta.label}</Text>
                     </View>
-                    <Text style={[s.orderPrice, { color: colors.text }]}>{order.price.toFixed(2)} TND</Text>
+                    <Text style={[s.orderPrice, { color: colors.text }]}>{safePrice(order.price)} TND</Text>
                   </View>
                   <View style={s.orderRoute}>
                     <View style={s.routeIcons}>
@@ -258,7 +265,7 @@ export default function DriverHome() {
             ].map((item, i, arr) => (
               <TouchableOpacity key={item.label}
                 style={[s.menuItem, i < arr.length - 1 && [s.menuItemBorder, { borderBottomColor: colors.border }]]}
-                onPress={() => router.push(item.route as any)} activeOpacity={0.7}>
+                onPress={() => push(item.route)} activeOpacity={0.7}>
                 <View style={[s.menuIconWrap, { backgroundColor: item.color + '15' }]}>
                   <Ionicons name={item.icon as any} size={20} color={item.color} />
                 </View>

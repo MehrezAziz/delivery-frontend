@@ -15,6 +15,7 @@ import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
 import { useTheme } from '../../contexts/ThemeContext';
+import { useAppNavigation } from '../../contexts/AppNavigationContext';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
 
@@ -28,6 +29,7 @@ type DriverMe = {
 
 export default function DriverEarningsScreen() {
   const router = useRouter();
+  const { push } = useAppNavigation();
   const { colors, isDark } = useTheme();
   const [driver, setDriver] = useState<DriverMe | null>(null);
   const [loading, setLoading] = useState(true);
@@ -136,7 +138,7 @@ export default function DriverEarningsScreen() {
           <Text style={[styles.panelTitle, { color: colors.text }]}>Quick actions</Text>
           <TouchableOpacity
             style={[styles.actionRow, { backgroundColor: colors.surfaceVariant }]}
-            onPress={() => router.push('/(driver)/transactions')}
+            onPress={() => push('/(driver)/transactions')}
             activeOpacity={0.75}
           >
             <View style={[styles.actionIcon, { backgroundColor: colors.primaryLight }]}>
@@ -153,7 +155,7 @@ export default function DriverEarningsScreen() {
 
           <TouchableOpacity
             style={[styles.actionRow, { backgroundColor: colors.surfaceVariant, marginTop: 10 }]}
-            onPress={() => router.push('/(driver)/my-orders')}
+            onPress={() => push('/(driver)/my-orders')}
             activeOpacity={0.75}
           >
             <View style={[styles.actionIcon, { backgroundColor: isDark ? 'rgba(34,197,94,0.2)' : '#dcfce7' }]}>

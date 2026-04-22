@@ -6,6 +6,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '../contexts/ThemeContext';
+import { useAppNavigation } from '../contexts/AppNavigationContext';
 import { ThemeToggle } from './ThemeToggle';
 import { AppSideMenu } from './AppSideMenu';
 import {
@@ -66,6 +67,7 @@ export function AppChromeHeader({
 }) {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { push } = useAppNavigation();
   const pathname = usePathname();
   const segments = useSegments() as string[];
   const { colors, isDark } = useTheme();
@@ -128,8 +130,8 @@ export function AppChromeHeader({
   };
 
   const onAvatar = () => {
-    if (role === 'customer') router.push('/(customer)/profile');
-    else if (role === 'driver') router.push('/(driver)/profile');
+    if (role === 'customer') push('/(customer)/profile');
+    else if (role === 'driver') push('/(driver)/profile');
   };
 
   const headerBg = role === 'guest' ? colors.card : colors.headerBg;

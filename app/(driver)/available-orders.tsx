@@ -11,6 +11,8 @@ import { startDriverLocationTracking } from '../../services/driverLocationTracki
 import { ensureDriverPushNotificationSetup } from '../../services/driverPushSetup';
 import { api } from '../../services/api/client';
 import { useTheme } from '../../contexts/ThemeContext';
+import { useAppNavigation } from '../../contexts/AppNavigationContext';
+import { scheduleWhenIdle } from '../../utils/scheduleIdle';
 import * as Location from 'expo-location';
 
 const ZONE_META: Record<string, { icon: string; color: string; bg: string }> = {
@@ -130,6 +132,7 @@ function OrderDescriptionCard({ description }: { description: string | null | un
 
 export default function AvailableOrdersScreen() {
   const router = useRouter();
+  const { push } = useAppNavigation();
   const { urgentOrderId, declinedFlash } = useLocalSearchParams<{
     urgentOrderId?: string;
     declinedFlash?: string | string[];
@@ -203,7 +206,10 @@ export default function AvailableOrdersScreen() {
   }, []);
 
   useEffect(() => {
-    getCurrentDriverPosition();
+    const { cancel } = scheduleWhenIdle(() => {
+      void getCurrentDriverPosition();
+    }, { timeout: 2000 });
+    return () => cancel();
   }, [getCurrentDriverPosition]);
 
   useEffect(() => {
@@ -443,7 +449,7 @@ export default function AvailableOrdersScreen() {
               'You must add a phone number to your profile before accepting orders. Customers need to be able to contact you.',
               [
                 { text: 'Later', style: 'cancel' },
-                { text: 'Add Phone Number', onPress: () => router.push('/(driver)/edit-profile') },
+                { text: 'Add Phone Number', onPress: () => push('/(driver)/edit-profile') },
               ],
             );
           } else {
@@ -467,8 +473,8 @@ export default function AvailableOrdersScreen() {
       Alert.alert('Location unavailable', 'Map coordinates are not available for this address.');
       return;
     }
-    router.push(
-      `/(driver)/address-map?lat=${lat}&lng=${lng}&kind=${kind}&title=${encodeURIComponent(mapTitle)}` as any,
+    push(
+      `/(driver)/address-map?lat=${lat}&lng=${lng}&kind=${kind}&title=${encodeURIComponent(mapTitle)}`,
     );
   };
 

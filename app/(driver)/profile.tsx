@@ -13,11 +13,13 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import axios from 'axios';
 import { useTheme } from '../../contexts/ThemeContext';
+import { useAppNavigation } from '../../contexts/AppNavigationContext';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
 
 export default function DriverProfileScreen() {
   const router = useRouter();
+  const { push } = useAppNavigation();
   const { colors, isDark, toggleTheme } = useTheme();
   const [driver, setDriver] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -263,7 +265,7 @@ export default function DriverProfileScreen() {
             <TouchableOpacity
               key={item.label}
               style={[s.menuItem, i < menuItems.length - 1 && [s.menuItemBorder, { borderBottomColor: colors.border }]]}
-              onPress={() => router.push(item.route as any)}
+              onPress={() => push(item.route)}
               activeOpacity={0.7}
             >
               <View style={[s.menuIconWrap, { backgroundColor: item.color + '15' }]}>

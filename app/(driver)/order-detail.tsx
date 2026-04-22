@@ -9,6 +9,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { orderService, Order } from '../../services/api/order.service';
 import { useTheme } from '../../contexts/ThemeContext';
+import { useAppNavigation } from '../../contexts/AppNavigationContext';
 import {
   restoreOrderTrackingForDriver,
   stopOrderTrackingSilently,
@@ -37,6 +38,7 @@ const STAR_LABELS = ['Terrible','Very Bad','Bad','Poor','Below Avg','Average','A
 
 export default function DriverOrderDetailScreen() {
   const router = useRouter();
+  const { push } = useAppNavigation();
   const { orderId: orderIdParam, scrollTo: scrollToParam } = useLocalSearchParams<{ orderId: string; scrollTo?: string }>();
   const orderId = Array.isArray(orderIdParam) ? orderIdParam[0] : orderIdParam;
   const scrollTo = Array.isArray(scrollToParam) ? scrollToParam[0] : scrollToParam;
@@ -199,7 +201,7 @@ export default function DriverOrderDetailScreen() {
     if (!order || statusUpdating) return;
     const hasProof1 = Boolean(order.driverAssignment?.image1Proof);
     if (!hasProof1) {
-      router.push(`/(driver)/upload-proofs?orderId=${order.id}&afterProof=delivered` as any);
+      push(`/(driver)/upload-proofs?orderId=${order.id}&afterProof=delivered`);
       return;
     }
     try {
@@ -218,7 +220,7 @@ export default function DriverOrderDetailScreen() {
     if (!order || statusUpdating) return;
     const hasProof1 = Boolean(order.driverAssignment?.image1Proof);
     if (!hasProof1) {
-      router.push(`/(driver)/upload-proofs?orderId=${order.id}&afterProof=returned` as any);
+      push(`/(driver)/upload-proofs?orderId=${order.id}&afterProof=returned`);
       return;
     }
     try {
@@ -284,9 +286,7 @@ export default function DriverOrderDetailScreen() {
       Alert.alert('Location unavailable', 'Map coordinates are not available for this address.');
       return;
     }
-    router.push(
-      `/(driver)/address-map?lat=${lat}&lng=${lng}&kind=${kind}&title=${encodeURIComponent(mapTitle)}` as any,
-    );
+    push(`/(driver)/address-map?lat=${lat}&lng=${lng}&kind=${kind}&title=${encodeURIComponent(mapTitle)}`);
   };
 
   const pickupLat = order.pickupAddress?.latitude;
@@ -551,7 +551,7 @@ export default function DriverOrderDetailScreen() {
           <View style={{ position: 'relative', alignSelf: 'stretch' }}>
             <TouchableOpacity
               style={[s.card, { backgroundColor: '#16a34a', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 }]}
-              onPress={() => router.push(`/(driver)/order-chat?orderId=${order.id}`)}
+              onPress={() => push(`/(driver)/order-chat?orderId=${order.id}`)}
               activeOpacity={0.85}
             >
               <Ionicons name="chatbubbles" size={20} color="#fff" />
@@ -739,7 +739,7 @@ export default function DriverOrderDetailScreen() {
             </View>
             <TouchableOpacity
               style={[s.proofActionBtn, { backgroundColor: colors.primary }]}
-              onPress={() => router.push(`/(driver)/upload-proofs?orderId=${order.id}` as any)}
+              onPress={() => push(`/(driver)/upload-proofs?orderId=${order.id}`)}
               activeOpacity={0.85}
             >
               <Ionicons name="cloud-upload-outline" size={16} color="#fff" />
