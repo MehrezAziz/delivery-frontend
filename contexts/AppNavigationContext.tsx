@@ -1,12 +1,24 @@
-import React, { createContext, useCallback, useContext, useMemo, useRef, useState } from 'react';
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { ActivityIndicator, Modal, StyleSheet, Text, View } from 'react-native';
 import { usePathname, useRouter } from 'expo-router';
 import { useTheme } from './ThemeContext';
 import { isSameAppRoute } from '../utils/appRoutes';
-import { scheduleWhenIdle } from '../utils/scheduleIdle';
+
+/** Only show loading if navigation takes longer than this (fast screens stay clean). */
+const NAV_OVERLAY_SHOW_DELAY_MS = 300;
+/** Always clear pending navigation UI after this (safety). */
+const NAV_OVERLAY_MAX_WAIT_MS = 5000;
 
 type Ctx = {
-  /** Brief overlay + navigation; skips if already on target or same href tapped again within ~1s. */
+  /** Navigation with optional delayed overlay; skips duplicate taps and no-op when already on route. */
   push: (href: string) => void;
 };
 
@@ -51,6 +63,33 @@ export function AppNavigationProvider({ children }: { children: React.ReactNode 
   const pathname = usePathname();
   const [overlay, setOverlay] = useState(false);
   const lastPushRef = useRef<{ href: string; at: number } | null>(null);
+  const pendingHrefRef = useRef<string | null>(null);
+  const navEpochRef = useRef(0);
+  const showDelayTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const maxWaitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const clearNavTimers = useCallback(() => {
+    if (showDelayTimerRef.current) {
+      clearTimeout(showDelayTimerRef.current);
+      showDelayTimerRef.current = null;
+    }
+    if (maxWaitTimerRef.current) {
+      clearTimeout(maxWaitTimerRef.current);
+      maxWaitTimerRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => {
+    const pending = pendingHrefRef.current;
+    if (!pending) return;
+    if (!isSameAppRoute(pathname, pending)) return;
+    pendingHrefRef.current = null;
+    navEpochRef.current += 1;
+    clearNavTimers();
+    setOverlay(false);
+  }, [pathname, clearNavTimers]);
+
+  useEffect(() => () => clearNavTimers(), [clearNavTimers]);
 
   const push = useCallback(
     (href: string) => {
@@ -60,18 +99,36 @@ export function AppNavigationProvider({ children }: { children: React.ReactNode 
       const prev = lastPushRef.current;
       if (prev && prev.href === href && now - prev.at < 900) return;
       lastPushRef.current = { href, at: now };
-      setOverlay(true);
+
+      clearNavTimers();
+      setOverlay(false);
+      navEpochRef.current += 1;
+      const epoch = navEpochRef.current;
+      pendingHrefRef.current = href;
+
+      showDelayTimerRef.current = setTimeout(() => {
+        if (navEpochRef.current !== epoch || pendingHrefRef.current !== href) return;
+        setOverlay(true);
+      }, NAV_OVERLAY_SHOW_DELAY_MS);
+
+      maxWaitTimerRef.current = setTimeout(() => {
+        if (navEpochRef.current !== epoch) return;
+        pendingHrefRef.current = null;
+        navEpochRef.current += 1;
+        clearNavTimers();
+        setOverlay(false);
+      }, NAV_OVERLAY_MAX_WAIT_MS);
+
       try {
         router.push(href as never);
       } catch {
+        pendingHrefRef.current = null;
+        navEpochRef.current += 1;
+        clearNavTimers();
         setOverlay(false);
-        return;
       }
-      scheduleWhenIdle(() => {
-        setTimeout(() => setOverlay(false), 320);
-      });
     },
-    [router, pathname],
+    [router, pathname, clearNavTimers],
   );
 
   const value = useMemo(() => ({ push }), [push]);
