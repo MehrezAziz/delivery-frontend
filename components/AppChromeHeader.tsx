@@ -49,6 +49,8 @@ export function AppChromeHeader({
   showProfile,
   showThemeToggle,
   hideBack,
+  /** Customer/driver sign-in: header back always opens welcome (`/`). */
+  guestLoginBackToWelcome,
 }: {
   title?: string;
   role: AppChromeRole;
@@ -60,6 +62,7 @@ export function AppChromeHeader({
   showThemeToggle?: boolean;
   /** When omitted: hidden on main Home tab (customer/driver); guest uses explicit value. */
   hideBack?: boolean;
+  guestLoginBackToWelcome?: boolean;
 }) {
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -114,6 +117,10 @@ export function AppChromeHeader({
     showThemeToggle !== undefined ? showThemeToggle : role !== 'guest' && isMainHome;
 
   const onBack = () => {
+    if (role === 'guest' && guestLoginBackToWelcome) {
+      router.replace('/');
+      return;
+    }
     if (router.canGoBack()) router.back();
     else if (role === 'guest') router.replace('/');
     else if (role === 'customer') router.replace('/(customer)/home');
@@ -193,7 +200,16 @@ export function AppChromeHeader({
 /** Use inside Stack `screenOptions` for auth routes. */
 export function AuthChromeHeader({ routeName }: { routeName: string }) {
   const title = AUTH_ROUTE_TITLES[routeName] || 'Account';
-  return <AppChromeHeader role="guest" title={title} showProfile={false} showThemeToggle={false} />;
+  const guestLoginBackToWelcome = routeName === 'customer-login' || routeName === 'driver-login';
+  return (
+    <AppChromeHeader
+      role="guest"
+      title={title}
+      showProfile={false}
+      showThemeToggle={false}
+      guestLoginBackToWelcome={guestLoginBackToWelcome}
+    />
+  );
 }
 
 export function CustomerTabsHeader() {

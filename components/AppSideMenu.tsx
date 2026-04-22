@@ -64,7 +64,9 @@ export function AppSideMenu({
         onPress: async () => {
           onClose();
           await clearSession();
-          router.replace('/');
+          if (role === 'customer') router.replace('/(auth)/customer-login');
+          else if (role === 'driver') router.replace('/(auth)/driver-login');
+          else router.replace('/');
         },
       },
     ]);
