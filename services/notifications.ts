@@ -53,6 +53,31 @@ const ORDER_ACTIVE_STATUSES = [
 /** Driver foreground tracking includes return flow before return deposit is recorded. */
 const DRIVER_ORDER_TRACKING_STATUSES = [...ORDER_ACTIVE_STATUSES, 'RETURNED'];
 
+/** Avoid re-posting the same Android ongoing notification on every poll (was re-triggering heads-up every ~3s). */
+const lastAndroidOrderTrackingSig = new Map<string, string>();
+
+function shouldDeferDriverPickupStickyNotification(order: Order): boolean {
+  if (!order.pickupAt || !order.pickupOriginalAt) return false;
+  const until = new Date(order.pickupOriginalAt).getTime();
+  return Number.isFinite(until) && until > Date.now();
+}
+
+function buildAndroidOrderTrackingSig(
+  title: string,
+  body: string,
+  orderStatus: string | undefined,
+  trackingAudience: string | undefined,
+  actionButtonsJson: string | undefined,
+): string {
+  return [title, body, orderStatus || '', trackingAudience || '', actionButtonsJson || ''].join('\u0001');
+}
+
+async function dismissAndroidOrderTrackingForOrderId(orderId: string) {
+  if (Platform.OS !== 'android') return;
+  await clearTrackedOrder(orderId);
+  await notifee.cancelNotification(getOrderNotificationId(orderId)).catch(() => {});
+}
+
 const STATUS_BY_NOTIFICATION_TYPE: Record<string, string> = {
   ORDER_CREATED: 'SEARCHING_DRIVER',
   DRIVER_ASSIGNED: 'DRIVER_ASSIGNED',
@@ -262,6 +287,7 @@ async function setTrackedOrderStatus(orderId: string, status?: string) {
 }
 
 async function clearTrackedOrder(orderId: string) {
+  lastAndroidOrderTrackingSig.delete(orderId);
   const map = await getTrackingStatusMap();
   delete map[orderId];
   await setTrackingStatusMap(map);
@@ -453,6 +479,19 @@ export async function startOrderTracking(orderId: string, title: string, body: s
   if (Platform.OS !== 'android') return;
   if (data?.orderStatus === 'DRAFT') return;
 
+  try {
+    const role = await AsyncStorage.getItem('userRole');
+    if (role === 'DRIVER') {
+      const order = await orderService.getOrder(orderId);
+      if (order && shouldDeferDriverPickupStickyNotification(order)) {
+        await dismissAndroidOrderTrackingForOrderId(orderId);
+        return;
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+
   await setTrackedOrderStatus(orderId, data?.orderStatus);
 
   const driverAssignedFallback = isDriverTrackingData(data) && data?.orderStatus === 'DRIVER_ASSIGNED';
@@ -466,6 +505,16 @@ export async function startOrderTracking(orderId: string, title: string, body: s
     : isDriverTrackingData(data)
       ? '📋 View order'
       : '📍 View Order';
+
+  const startSig = buildAndroidOrderTrackingSig(
+    title,
+    body,
+    data?.orderStatus,
+    data?.trackingAudience,
+    data?.actionButtons,
+  );
+  if (lastAndroidOrderTrackingSig.get(orderId) === startSig) return;
+  lastAndroidOrderTrackingSig.set(orderId, startSig);
 
   await notifee.displayNotification({
     id: getOrderNotificationId(orderId),
@@ -494,6 +543,17 @@ export async function updateOrderTracking(title: string, body: string, data?: Re
 
   const orderId = data?.orderId || data?.relatedEntityId || data?.groupKey?.replace('order:', '') || '';
   if (!orderId) return;
+
+  const sig = buildAndroidOrderTrackingSig(
+    title,
+    body,
+    data?.orderStatus,
+    data?.trackingAudience,
+    data?.actionButtons,
+  );
+  if (lastAndroidOrderTrackingSig.get(orderId) === sig) return;
+  lastAndroidOrderTrackingSig.set(orderId, sig);
+
   await setTrackedOrderStatus(orderId, data?.orderStatus);
 
   const driverAssignedFallback = isDriverTrackingData(data) && data?.orderStatus === 'DRIVER_ASSIGNED';
@@ -693,6 +753,7 @@ export async function restoreOrderTrackingForDriver(forceRefreshOrderId?: string
     const orders = await orderService.getDriverMyOrders();
     const activeOrders = orders
       .filter((order) => DRIVER_ORDER_TRACKING_STATUSES.includes(order.status))
+      .filter((order) => !shouldDeferDriverPickupStickyNotification(order))
       .sort(
         (a, b) =>
           new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
@@ -748,6 +809,10 @@ export async function syncDriverTrackingNotificationWithOrder(order: Order | nul
     if (role !== 'DRIVER') return;
 
     if (DRIVER_ORDER_TRACKING_STATUSES.includes(order.status)) {
+      if (shouldDeferDriverPickupStickyNotification(order)) {
+        await dismissAndroidOrderTrackingForOrderId(order.id);
+        return;
+      }
       const { title, body } = getDriverTrackingNotificationFromOrder(order);
       const actionButtons = getDriverActionButtonsForStatus(order.status);
       await updateOrderTracking(title, body, {
@@ -1193,7 +1258,9 @@ async function handleOrderFCMData(rawData: Record<string, unknown>) {
   ) {
     try {
       const order = await orderService.getOrder(oid);
-      if (order && DRIVER_ORDER_TRACKING_STATUSES.includes(order.status)) {
+      if (order && shouldDeferDriverPickupStickyNotification(order)) {
+        await dismissAndroidOrderTrackingForOrderId(oid);
+      } else if (order && DRIVER_ORDER_TRACKING_STATUSES.includes(order.status)) {
         const t = getDriverTrackingNotificationFromOrder(order);
         await updateOrderTracking(t.title, t.body, {
           ...data,
@@ -1247,6 +1314,19 @@ async function handleOrderFCMData(rawData: Record<string, unknown>) {
   }
 
   if (!oid) return;
+
+  if (Platform.OS === 'android' && isDriverTrackingData(data)) {
+    try {
+      const ord = await orderService.getOrder(oid);
+      if (ord && shouldDeferDriverPickupStickyNotification(ord)) {
+        await dismissAndroidOrderTrackingForOrderId(oid);
+        emitOrderDetailAndDriverListRefresh(oid);
+        return;
+      }
+    } catch {
+      /* ignore */
+    }
+  }
 
   if (Platform.OS === 'android') {
     if (resolved) {
