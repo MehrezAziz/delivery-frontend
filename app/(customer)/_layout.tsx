@@ -3,6 +3,7 @@ import { Platform, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../contexts/ThemeContext';
+import { CustomerTabBarInsetProvider } from '../../contexts/CustomerTabBarInsetContext';
 import { CustomerTabsHeader } from '../../components/AppChromeHeader';
 
 const TAB_ICON_NAMES: Record<string, { active: keyof typeof Ionicons.glyphMap; inactive: keyof typeof Ionicons.glyphMap }> = {
@@ -19,6 +20,7 @@ export default function CustomerLayout() {
   const tabBarBottom = insets.bottom;
 
   return (
+    <CustomerTabBarInsetProvider>
     <Tabs
       screenOptions={({ route }) => ({
         headerShown: true,
@@ -71,13 +73,22 @@ export default function CustomerLayout() {
       <Tabs.Screen name="support-chat" options={{ href: null }} />
       <Tabs.Screen name="create-order" options={{ href: null }} />
       <Tabs.Screen name="local-pickup-order" options={{ href: null }} />
-      <Tabs.Screen name="pick-location" options={{ href: null, headerShown: false }} />
+      <Tabs.Screen
+        name="pick-location"
+        options={{
+          href: null,
+          headerShown: false,
+          /** Full-screen map: hide main tab bar while selecting a pin. */
+          tabBarStyle: { display: 'none' },
+        }}
+      />
       <Tabs.Screen name="order-detail" options={{ href: null }} />
       <Tabs.Screen name="order-chat" options={{ href: null }} />
       <Tabs.Screen name="track-driver" options={{ href: null, headerShown: false }} />
       <Tabs.Screen name="edit-profile" options={{ href: null }} />
       <Tabs.Screen name="notifications" options={{ href: null }} />
     </Tabs>
+    </CustomerTabBarInsetProvider>
   );
 }
 

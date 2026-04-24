@@ -14,6 +14,7 @@ import {
   restoreOrderTrackingForDriver,
   stopOrderTrackingSilently,
   subscribeOrderDetailRefresh,
+  syncDriverTrackingNotificationWithOrder,
 } from '../../services/notifications';
 import { useOrderChatUnread } from '../../hooks/useOrderChatUnread';
 import { ChatUnreadBadge } from '../../components/ChatUnreadBadge';
@@ -58,7 +59,9 @@ export default function DriverOrderDetailScreen() {
 
   const load = useCallback(async () => {
     try {
-      setOrder(await orderService.getOrder(orderId));
+      const o = await orderService.getOrder(orderId);
+      setOrder(o);
+      await syncDriverTrackingNotificationWithOrder(o);
     } catch (e: any) {
       const status = e?.response?.status;
       if (status === 403 || status === 404) {
@@ -79,6 +82,16 @@ export default function DriverOrderDetailScreen() {
       void load();
     });
   }, [orderId, load]);
+
+  /** Customer approval updates the order on the server before FCM may arrive; poll briefly so status & UI stay in sync. */
+  useEffect(() => {
+    if (!orderId || order?.status !== 'PENDING_CUSTOMER_APPROVAL') return;
+    const t = setInterval(() => {
+      void load();
+    }, 3500);
+    return () => clearInterval(t);
+  }, [orderId, order?.status, load]);
+
   useFocusEffect(
     useCallback(() => {
       load();
@@ -266,7 +279,7 @@ export default function DriverOrderDetailScreen() {
   const showProofSection = ['DRIVER_ARRIVED', 'PICKED_UP', 'DELIVERING', 'RETURNED', 'RETURN_DEPOSIT', 'DELIVERED'].includes(order.status);
   const canRevert = ['DRIVER_ARRIVED', 'PICKED_UP', 'DELIVERING', 'RETURNED'].includes(order.status);
   const canCancelAssignment =
-    order.status === 'PENDING_CUSTOMER_APPROVAL' || order.status === 'DRIVER_ASSIGNED';
+    (order.status === 'PENDING_CUSTOMER_APPROVAL' || order.status === 'DRIVER_ASSIGNED') && !order.driverArrivedOnce;
   const chatFriendlyClosedStatuses = ['DELIVERED', 'RETURN_DEPOSIT', 'REFUNDED', 'FAILED', 'DISPUTED', 'CANCELLED'];
   const canOpenChat = !!order.chatRoom || chatFriendlyClosedStatuses.includes(order.status);
   const nextActionLabel: Record<string, string> = {
@@ -526,7 +539,59 @@ export default function DriverOrderDetailScreen() {
           {order.isNightDelivery && (
             <View style={[s.chip, { backgroundColor: '#e0e7ff' }]}><Text style={{ fontSize: 14 }}>🌙</Text><Text style={[s.chipText, { color: '#3730a3' }]}>Night</Text></View>
           )}
+          {order.pickupAt ? (
+            <View style={[s.chip, { backgroundColor: '#fef3c7' }]}>
+              <Ionicons name="time-outline" size={14} color="#92400e" />
+              <Text style={[s.chipText, { color: '#92400e' }]}>
+                {new Date(order.pickupAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+              </Text>
+            </View>
+          ) : null}
         </View>
+
+        {order.pickupAt && (
+          <View style={[s.card, { backgroundColor: colors.card }]}>
+            <Text style={[s.cardTitle, { color: colors.text }]}>Pickup schedule</Text>
+            <Text style={{ color: colors.textSecondary, marginBottom: 8 }}>
+              Pickup at: {new Date(order.pickupAt).toLocaleString()}
+            </Text>
+            {order.canDriverControlPickupPersistent ? (
+              <View style={{ flexDirection: 'row', gap: 8 }}>
+                <TouchableOpacity
+                  style={[s.nextBtn, { backgroundColor: colors.primary }]}
+                  onPress={async () => {
+                    try {
+                      await orderService.driverControlPickupPersistent(order.id, 'show');
+                      await load();
+                    } catch (e: any) {
+                      Alert.alert('Error', e.message || 'Unable to show notification');
+                    }
+                  }}
+                >
+                  <Text style={s.nextBtnText}>Show persistent now</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[s.revertBtn, { flex: 1 }]}
+                  onPress={async () => {
+                    try {
+                      await orderService.driverControlPickupPersistent(order.id, 'ignore');
+                      await load();
+                      await restoreOrderTrackingForDriver(order.id);
+                    } catch (e: any) {
+                      Alert.alert('Error', e.message || 'Unable to ignore notification');
+                    }
+                  }}
+                >
+                  <Text style={s.revertBtnText}>Ignore until original</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <Text style={{ color: colors.textTertiary, fontSize: 12 }}>
+                Persistent pickup notification is now system-controlled.
+              </Text>
+            )}
+          </View>
+        )}
 
         {/* Price */}
         <View style={[s.card, { backgroundColor: colors.card }]}>
@@ -678,13 +743,17 @@ export default function DriverOrderDetailScreen() {
           </View>
         )}
 
-        {/* Customer info */}
-        {order.description && (
-          <View style={[s.card, { backgroundColor: colors.card }]}>
-            <Text style={[s.cardTitle, { color: colors.text }]}>Package Description</Text>
-            <Text style={[s.descText, { color: colors.text }]}>{order.description}</Text>
-          </View>
-        )}
+        <View style={[s.card, { backgroundColor: colors.card }]}>
+          <Text style={[s.cardTitle, { color: colors.text }]}>Package description</Text>
+          <Text
+            style={[
+              s.descText,
+              { color: (order.description ?? '').trim() ? colors.text : colors.textSecondary },
+            ]}
+          >
+            {(order.description ?? '').trim() || 'No description provided.'}
+          </Text>
+        </View>
 
         {/* Rating received */}
         {order.rating && (

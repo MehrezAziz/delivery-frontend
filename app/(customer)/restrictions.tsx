@@ -12,6 +12,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import axios from 'axios';
 import { useTheme } from '../../contexts/ThemeContext';
+import { useCustomerTabBarInset } from '../../contexts/CustomerTabBarInsetContext';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api';
 
@@ -27,6 +28,7 @@ interface Restriction {
 export default function CustomerRestrictionsScreen() {
   const router = useRouter();
   const { colors, isDark } = useTheme();
+  const tabBarPad = useCustomerTabBarInset();
   const [restrictions, setRestrictions] = useState<Restriction[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -94,7 +96,7 @@ export default function CustomerRestrictionsScreen() {
         <Text style={[styles.title, { color: colors.text }]}>My Restrictions</Text>
       </View>
 
-      <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent}>
+      <ScrollView style={styles.scroll} contentContainerStyle={[styles.scrollContent, { paddingBottom: 32 + tabBarPad }]}>
         {error && (
           <View style={[styles.errorBox, { backgroundColor: colors.dangerBg }]}>
             <Text style={[styles.errorText, { color: colors.danger }]}>{error}</Text>
@@ -143,7 +145,7 @@ const styles = StyleSheet.create({
   backBtn: { padding: 4 },
   title: { fontSize: 22, fontWeight: 'bold', color: '#111827' },
   scroll: { flex: 1 },
-  scrollContent: { padding: 16, paddingBottom: 32 },
+  scrollContent: { padding: 16 },
   errorBox: { backgroundColor: '#fef2f2', padding: 16, borderRadius: 12, alignItems: 'center', marginBottom: 16 },
   errorText: { color: '#dc2626', marginBottom: 8 },
   retryText: { color: '#0284c7', fontWeight: '600' },

@@ -8,6 +8,7 @@ import {
   sendSupportMessageStream,
 } from '../../services/api/support.service';
 import { useTheme } from '../../contexts/ThemeContext';
+import { useCustomerTabBarInset } from '../../contexts/CustomerTabBarInsetContext';
 import { useActiveChatForNotifications } from '../../hooks/useActiveChatForNotifications';
 import { SupportChatMessageItem } from '../../components/support/SupportChatMessageItem';
 
@@ -15,6 +16,7 @@ export default function SupportChatScreen() {
   const router = useRouter();
   const { ticketId } = useLocalSearchParams<{ ticketId: string }>();
   const { colors } = useTheme();
+  const tabBarPad = useCustomerTabBarInset();
   const [ticket, setTicket] = useState<(SupportTicket & { messages: SupportMessage[] }) | null>(null);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState('');
@@ -154,7 +156,7 @@ export default function SupportChatScreen() {
         ref={flatListRef}
         data={ticket.messages}
         keyExtractor={(m) => m.id}
-        contentContainerStyle={styles.messagesList}
+        contentContainerStyle={[styles.messagesList, { paddingBottom: 8 + tabBarPad }]}
         onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: false })}
         ListHeaderComponent={
           <View style={styles.ticketInfo}>
@@ -186,11 +188,11 @@ export default function SupportChatScreen() {
       />
 
       {isClosed ? (
-        <View style={[styles.closedBanner, { backgroundColor: colors.surfaceVariant, borderTopColor: colors.border }]}>
+        <View style={[styles.closedBanner, { backgroundColor: colors.surfaceVariant, borderTopColor: colors.border, paddingBottom: 16 + tabBarPad }]}>
           <Text style={[styles.closedText, { color: colors.textSecondary }]}>This ticket is closed</Text>
         </View>
       ) : (
-        <View style={[styles.inputBar, { backgroundColor: colors.card, borderTopColor: colors.border }]}>
+        <View style={[styles.inputBar, { backgroundColor: colors.card, borderTopColor: colors.border, paddingBottom: 12 + tabBarPad }]}>
           <TextInput
             style={[styles.input, { backgroundColor: colors.inputBg, borderColor: colors.inputBorder, color: colors.text }]}
             placeholder="Type a message..."
@@ -225,7 +227,7 @@ const styles = StyleSheet.create({
   },
   headerTitle: { fontSize: 15, fontWeight: '700' },
   headerStatus: { fontSize: 12, fontWeight: '600', marginTop: 2 },
-  messagesList: { padding: 16, paddingBottom: 8 },
+  messagesList: { padding: 16 },
   ticketInfo: { backgroundColor: '#eff6ff', borderRadius: 12, padding: 12, marginBottom: 16 },
   ticketInfoText: { fontSize: 14, color: '#1e40af', marginBottom: 4 },
   ticketInfoDate: { fontSize: 11, color: '#6b7280' },
@@ -241,8 +243,8 @@ const styles = StyleSheet.create({
   inputBar: {
     flexDirection: 'row',
     alignItems: 'flex-end',
-    padding: 12,
-    paddingBottom: 32,
+    paddingHorizontal: 12,
+    paddingTop: 12,
     backgroundColor: '#fff',
     borderTopWidth: 1,
     borderTopColor: '#e5e7eb',
@@ -262,6 +264,6 @@ const styles = StyleSheet.create({
   },
   sendBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#0284c7', alignItems: 'center', justifyContent: 'center' },
   sendBtnText: { color: '#fff', fontSize: 20, fontWeight: '600' },
-  closedBanner: { padding: 16, paddingBottom: 32, alignItems: 'center', borderTopWidth: 1 },
+  closedBanner: { paddingHorizontal: 16, paddingTop: 16, alignItems: 'center', borderTopWidth: 1 },
   closedText: { fontSize: 14, fontWeight: '500' },
 });

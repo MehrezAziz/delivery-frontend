@@ -9,6 +9,7 @@ import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import { orderService, Order } from '../../services/api/order.service';
 import { useTheme } from '../../contexts/ThemeContext';
+import { useCustomerTabBarInset } from '../../contexts/CustomerTabBarInsetContext';
 import { fetchChatUnreadMapForOrders } from '../../hooks/useOrderChatUnread';
 import { ChatUnreadBadge } from '../../components/ChatUnreadBadge';
 
@@ -38,6 +39,7 @@ const STATUS_CONFIG: Record<string, { bg: string; text: string; label: string }>
 export default function CustomerOrdersScreen() {
   const router = useRouter();
   const { colors, isDark } = useTheme();
+  const tabBarPad = useCustomerTabBarInset();
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -192,10 +194,10 @@ export default function CustomerOrdersScreen() {
       </Modal>
 
       {/* Orders list */}
-      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 40 }}
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 40 + tabBarPad }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
         {filteredOrders.length === 0 ? (
-          <View style={st.empty}>
+          <View style={[st.empty, { paddingBottom: tabBarPad }]}>
             <Ionicons name="receipt-outline" size={48} color={colors.border} />
             <Text style={[st.emptyText, { color: colors.textTertiary }]}>No orders found</Text>
           </View>

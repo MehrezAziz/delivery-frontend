@@ -62,6 +62,18 @@ function formatWeight(v: unknown): string {
   return `${n} kg`;
 }
 
+function formatPickupTime(iso?: string | null): string | null {
+  if (!iso) return null;
+  const dt = new Date(iso);
+  if (Number.isNaN(dt.getTime())) return null;
+  return dt.toLocaleString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
 export default function DriverMyOrdersScreen() {
   const router = useRouter();
   const { push } = useAppNavigation();
@@ -71,6 +83,7 @@ export default function DriverMyOrdersScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [updatingStatus, setUpdatingStatus] = useState<string | null>(null);
   const [chatUnreadMap, setChatUnreadMap] = useState<Record<string, number>>({});
+  const [timeFilter, setTimeFilter] = useState<'all' | 'now' | '1h' | '2h' | 'today'>('all');
 
   const load = useCallback(async () => {
     try { setOrders(await orderService.getDriverMyOrders()); }
@@ -177,12 +190,27 @@ export default function DriverMyOrdersScreen() {
     return <View style={[s.center, { backgroundColor: colors.background }]}><ActivityIndicator size="large" color={colors.primary} /></View>;
   }
 
+  const now = Date.now();
+  const byTime = (o: Order) => {
+    if (timeFilter === 'all') return true;
+    if (!o.pickupAt) return timeFilter === 'now';
+    const ms = new Date(o.pickupAt).getTime() - now;
+    if (timeFilter === 'now') return ms <= 0;
+    if (timeFilter === '1h') return ms > 0 && ms <= 60 * 60 * 1000;
+    if (timeFilter === '2h') return ms > 0 && ms <= 2 * 60 * 60 * 1000;
+    if (timeFilter === 'today') {
+      const d = new Date(o.pickupAt);
+      const n = new Date();
+      return d.getFullYear() === n.getFullYear() && d.getMonth() === n.getMonth() && d.getDate() === n.getDate();
+    }
+    return true;
+  };
   const activeOrders = orders.filter(
     o => !['DELIVERED', 'CANCELLED', 'RETURN_DEPOSIT'].includes(o.status),
-  );
+  ).filter(byTime);
   const pastOrders = orders.filter(o =>
     ['DELIVERED', 'CANCELLED', 'RETURN_DEPOSIT'].includes(o.status),
-  );
+  ).filter(byTime);
 
   const renderOrder = (order: Order) => {
     const meta = STATUS_META[order.status] || STATUS_META.DELIVERED;
@@ -242,6 +270,12 @@ export default function DriverMyOrdersScreen() {
               {order.paymentType === 'COD' ? 'Cash' : 'Wallet'}
             </Text>
           </View>
+          {order.pickupAt ? (
+            <View style={[s.chip, { backgroundColor: '#fef3c7' }]}>
+              <Ionicons name="time-outline" size={12} color="#92400e" />
+              <Text style={[s.chipText, { color: '#92400e' }]}>{formatPickupTime(order.pickupAt)}</Text>
+            </View>
+          ) : null}
         </View>
 
         {/* Quick actions: Chat + Assistance */}
@@ -351,7 +385,7 @@ export default function DriverMyOrdersScreen() {
 
         {/* Secondary actions */}
         <View style={s.secondaryRow}>
-          {order.status === 'DRIVER_ASSIGNED' && (
+          {order.status === 'DRIVER_ASSIGNED' && !order.driverArrivedOnce && (
             <TouchableOpacity style={[s.cancelBtn, { backgroundColor: colors.dangerBg }]} onPress={() => handleCancel(order.id)} activeOpacity={0.7}>
               <Ionicons name="close-circle-outline" size={16} color={colors.danger} />
               <Text style={[s.cancelBtnText, { color: colors.danger }]}>Cancel</Text>
@@ -379,6 +413,30 @@ export default function DriverMyOrdersScreen() {
           {activeOrders.length} active · {pastOrders.length} completed
         </Text>
       </View>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 8, gap: 8 }}>
+        {[
+          { id: 'all', label: 'All' },
+          { id: 'now', label: 'Now' },
+          { id: '1h', label: 'In 1h' },
+          { id: '2h', label: 'In 2h' },
+          { id: 'today', label: 'Today' },
+        ].map((f) => (
+          <TouchableOpacity
+            key={f.id}
+            style={{
+              paddingHorizontal: 12,
+              paddingVertical: 7,
+              borderRadius: 999,
+              backgroundColor: timeFilter === (f.id as any) ? colors.primary : colors.surfaceVariant,
+            }}
+            onPress={() => setTimeFilter(f.id as any)}
+          >
+            <Text style={{ color: timeFilter === (f.id as any) ? '#fff' : colors.textSecondary, fontWeight: '700', fontSize: 12 }}>
+              {f.label}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
 
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 40 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} />}>

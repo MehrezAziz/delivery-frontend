@@ -3,6 +3,7 @@ import { useRouter } from 'expo-router';
 import { useState, useEffect, useCallback } from 'react';
 import { supportService, SupportTicket } from '../../services/api/support.service';
 import { useTheme } from '../../contexts/ThemeContext';
+import { useCustomerTabBarInset } from '../../contexts/CustomerTabBarInsetContext';
 
 const CATEGORIES = ['ORDER_ISSUE', 'PAYMENT', 'TECHNICAL', 'OTHER'];
 const PRIORITIES = ['LOW', 'MEDIUM', 'HIGH', 'URGENT'];
@@ -17,6 +18,7 @@ const STATUS_COLORS: Record<string, string> = {
 export default function CustomerSupportScreen() {
   const router = useRouter();
   const { colors, isDark } = useTheme();
+  const tabBarPad = useCustomerTabBarInset();
   const [tickets, setTickets] = useState<SupportTicket[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
@@ -85,7 +87,7 @@ export default function CustomerSupportScreen() {
       {loading ? (
         <ActivityIndicator size="large" color={colors.primary} style={{ marginTop: 40 }} />
       ) : tickets.length === 0 ? (
-        <View style={styles.empty}>
+        <View style={[styles.empty, { paddingBottom: tabBarPad }]}>
           <Text style={styles.emptyIcon}>💬</Text>
           <Text style={[styles.emptyText, { color: colors.text }]}>No support tickets yet</Text>
           <Text style={[styles.emptySubtext, { color: colors.textTertiary }]}>Tap "+ New" to create one</Text>
@@ -94,7 +96,7 @@ export default function CustomerSupportScreen() {
         <FlatList
           data={tickets}
           keyExtractor={t => t.id}
-          contentContainerStyle={{ padding: 16 }}
+          contentContainerStyle={{ padding: 16, paddingBottom: 16 + tabBarPad }}
           renderItem={({ item }) => (
             <TouchableOpacity
               style={[styles.ticketCard, { backgroundColor: colors.card, borderColor: colors.border }]}

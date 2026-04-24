@@ -151,6 +151,7 @@ async function resolveOrderTrackingText(
   try {
     const order = await orderService.getOrder(oid);
     if (!order) return title && body ? { title, body } : null;
+    if (order.status === 'DRAFT') return null;
     if (data.trackingAudience === 'DRIVER') {
       return getDriverTrackingNotificationFromOrder(order);
     }
@@ -450,6 +451,7 @@ function isDriverTrackingData(data?: Record<string, string>) {
  */
 export async function startOrderTracking(orderId: string, title: string, body: string, data?: Record<string, string>) {
   if (Platform.OS !== 'android') return;
+  if (data?.orderStatus === 'DRAFT') return;
 
   await setTrackedOrderStatus(orderId, data?.orderStatus);
 
@@ -488,6 +490,7 @@ export async function startOrderTracking(orderId: string, title: string, body: s
  */
 export async function updateOrderTracking(title: string, body: string, data?: Record<string, string>) {
   if (Platform.OS !== 'android') return;
+  if (data?.orderStatus === 'DRAFT') return;
 
   const orderId = data?.orderId || data?.relatedEntityId || data?.groupKey?.replace('order:', '') || '';
   if (!orderId) return;
@@ -672,12 +675,20 @@ export async function restoreOrderTrackingForCustomer() {
 /**
  * Restore driver order tracking (ongoing notification + status actions) after login/reopen.
  */
-export async function restoreOrderTrackingForDriver() {
+export async function restoreOrderTrackingForDriver(forceRefreshOrderId?: string) {
   if (Platform.OS !== 'android') return;
 
   try {
     const role = await AsyncStorage.getItem('userRole');
     if (role !== 'DRIVER') return;
+
+    if (forceRefreshOrderId) {
+      const map = await getTrackingStatusMap();
+      if (map[forceRefreshOrderId]) {
+        delete map[forceRefreshOrderId];
+        await setTrackingStatusMap(map);
+      }
+    }
 
     const orders = await orderService.getDriverMyOrders();
     const activeOrders = orders
@@ -726,6 +737,44 @@ export async function restoreOrderTrackingForDriver() {
   }
 }
 
+/**
+ * Keep the Android foreground order notification in sync with a freshly fetched order
+ * (e.g. order detail poll / refetch). FCM may be missing or the status map may match while the OS UI is stale.
+ */
+export async function syncDriverTrackingNotificationWithOrder(order: Order | null) {
+  if (Platform.OS !== 'android' || !order?.id) return;
+  try {
+    const role = await AsyncStorage.getItem('userRole');
+    if (role !== 'DRIVER') return;
+
+    if (DRIVER_ORDER_TRACKING_STATUSES.includes(order.status)) {
+      const { title, body } = getDriverTrackingNotificationFromOrder(order);
+      const actionButtons = getDriverActionButtonsForStatus(order.status);
+      await updateOrderTracking(title, body, {
+        orderId: order.id,
+        groupKey: `order:${order.id}`,
+        relatedEntityType: 'Order',
+        relatedEntityId: order.id,
+        ongoing: 'true',
+        orderStatus: order.status,
+        trackingAudience: 'DRIVER',
+        ...(actionButtons?.length ? { actionButtons: JSON.stringify(actionButtons) } : {}),
+      });
+      return;
+    }
+
+    const map = await getTrackingStatusMap();
+    if (map[order.id]) {
+      delete map[order.id];
+      await setTrackingStatusMap(map);
+      await notifee.cancelNotification(getOrderNotificationId(order.id)).catch(() => {});
+      await restoreOrderTrackingForDriver();
+    }
+  } catch (e) {
+    console.error('syncDriverTrackingNotificationWithOrder:', e);
+  }
+}
+
 
 // ============================================================
 // ACTION BUTTON HANDLERS
@@ -744,9 +793,9 @@ async function handleAcceptDriver(orderId: string) {
       headers: { Authorization: `Bearer ${token}` },
     });
 
-    emitOrderDetailRefresh(orderId);
+    emitOrderDetailAndDriverListRefresh(orderId);
     // The backend will emit order.driver_assigned which sends a new FCM
-    // that will update the foreground service notification
+    // that will update the foreground service notification on the driver's device
     console.log('Driver approved successfully from notification');
   } catch (error) {
     console.error('Failed to approve driver from notification:', error);
@@ -1126,47 +1175,104 @@ export async function resolveLaunchRouteAfterLogin(): Promise<string | null> {
 async function handleOrderFCMData(rawData: Record<string, unknown>) {
   const data = coerceFcmData(rawData);
   const { orderId, groupKey, ongoing } = data;
+  if (data.orderStatus === 'DRAFT') return;
+
+  const oid = orderId || groupKey?.replace('order:', '') || '';
+  const ongoingTrue = ongoing === 'true';
+
+  /**
+   * Legacy pickup "native reminder" used `order:` + ongoing false, which was treated as terminal
+   * and stopped the driver foreground notification on every tick. Re-sync tracking instead.
+   */
+  if (
+    Platform.OS === 'android' &&
+    data.type === 'PICKUP_REMINDER' &&
+    !ongoingTrue &&
+    oid &&
+    (isDriverTrackingData(data) || groupKey?.startsWith('order:'))
+  ) {
+    try {
+      const order = await orderService.getOrder(oid);
+      if (order && DRIVER_ORDER_TRACKING_STATUSES.includes(order.status)) {
+        const t = getDriverTrackingNotificationFromOrder(order);
+        await updateOrderTracking(t.title, t.body, {
+          ...data,
+          orderId: oid,
+          orderStatus: order.status,
+          trackingAudience: 'DRIVER',
+          ongoing: 'true',
+          groupKey: `order:${oid}`,
+        });
+      }
+    } catch {
+      /* ignore */
+    }
+    emitOrderDetailAndDriverListRefresh(oid);
+    return;
+  }
 
   const isTerminal = ongoing === 'false';
-  const oid = orderId || groupKey?.replace('order:', '') || '';
   const inferredOrderStatus =
     data.orderStatus ||
     (data.type ? STATUS_BY_NOTIFICATION_TYPE[data.type] : undefined);
 
   const resolved = await resolveOrderTrackingText(data, oid);
-  if (!resolved) return;
 
   if (isTerminal) {
-    const isCompanyDriverRemoval =
-      data.type === 'ORDER_CANCELLED_BY_CUSTOMER' &&
-      data.orderStatus === 'FAILED';
-    if (isCompanyDriverRemoval) {
-      if (Platform.OS === 'android') {
-        await replaceOrderTrackingWithDismissibleFailed(oid, resolved.title, resolved.body, {
-          type: data.type || '',
-          groupKey: data.groupKey || `order:${oid}`,
-          ...(data.notificationId ? { notificationId: data.notificationId } : {}),
-          ...(data.suppressDriverTapNavigation ? { suppressDriverTapNavigation: data.suppressDriverTapNavigation } : {}),
-        });
+    if (resolved) {
+      const isCompanyDriverRemoval =
+        data.type === 'ORDER_CANCELLED_BY_CUSTOMER' &&
+        data.orderStatus === 'FAILED';
+      if (isCompanyDriverRemoval) {
+        if (Platform.OS === 'android') {
+          await replaceOrderTrackingWithDismissibleFailed(oid, resolved.title, resolved.body, {
+            type: data.type || '',
+            groupKey: data.groupKey || `order:${oid}`,
+            ...(data.notificationId ? { notificationId: data.notificationId } : {}),
+            ...(data.suppressDriverTapNavigation ? { suppressDriverTapNavigation: data.suppressDriverTapNavigation } : {}),
+          });
+        } else {
+          await displayRegularNotification({
+            title: resolved.title,
+            body: resolved.body,
+            type: data.type || '',
+          });
+        }
       } else {
-        await displayRegularNotification({
-          title: resolved.title,
-          body: resolved.body,
-          type: data.type || '',
-        });
+        await stopOrderTracking(resolved.title, resolved.body, oid);
       }
-    } else {
-      await stopOrderTracking(resolved.title, resolved.body, oid);
     }
-    emitOrderDetailAndDriverListRefresh(oid);
+    if (oid) emitOrderDetailAndDriverListRefresh(oid);
     return;
   }
+
   if (!oid) return;
-  await updateOrderTracking(resolved.title, resolved.body, {
-    ...data,
-    orderId: oid,
-    ...(inferredOrderStatus ? { orderStatus: inferredOrderStatus } : {}),
-  });
+
+  if (Platform.OS === 'android') {
+    if (resolved) {
+      await updateOrderTracking(resolved.title, resolved.body, {
+        ...data,
+        orderId: oid,
+        ...(inferredOrderStatus ? { orderStatus: inferredOrderStatus } : {}),
+      });
+    } else if (isDriverTrackingData(data)) {
+      try {
+        const order = await orderService.getOrder(oid);
+        if (order) {
+          const t = getDriverTrackingNotificationFromOrder(order);
+          await updateOrderTracking(t.title, t.body, {
+            ...data,
+            orderId: oid,
+            orderStatus: order.status,
+            trackingAudience: 'DRIVER',
+          });
+        }
+      } catch {
+        /* keep foreground notification as-is */
+      }
+    }
+  }
+
   emitOrderDetailAndDriverListRefresh(oid);
 }
 

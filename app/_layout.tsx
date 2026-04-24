@@ -83,8 +83,8 @@ function RootContent() {
       if (event?.preventDefault) event.preventDefault();
     };
 
-    // Create notification channels
-    createNotificationChannels();
+    // Create notification channels (never block startup on rejection / native edge cases)
+    void createNotificationChannels().catch(() => {});
 
     // Register push notifications if user is logged in
     AsyncStorage.getItem('accessToken').then((token) => {

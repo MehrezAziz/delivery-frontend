@@ -8,6 +8,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { notificationService, Notification } from '../../services/api/notification.service';
 import { useTheme } from '../../contexts/ThemeContext';
+import { useCustomerTabBarInset } from '../../contexts/CustomerTabBarInsetContext';
 import {
   groupNotificationsByThread,
   inboxGroupKey,
@@ -46,6 +47,7 @@ const TYPE_ICONS: Record<string, string> = {
 export default function CustomerNotifications() {
   const router = useRouter();
   const { colors } = useTheme();
+  const tabBarPad = useCustomerTabBarInset();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -195,7 +197,11 @@ export default function CustomerNotifications() {
         data={grouped}
         keyExtractor={(g) => g.groupKey}
         renderItem={renderItem}
-        contentContainerStyle={grouped.length === 0 ? s.emptyContainer : { paddingBottom: 40 }}
+        contentContainerStyle={
+          grouped.length === 0
+            ? [s.emptyContainer, { paddingBottom: tabBarPad }]
+            : { paddingBottom: 40 + tabBarPad }
+        }
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); loadNotifications(1, false); }} />
         }

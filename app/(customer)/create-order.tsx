@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, ActivityIndicator,
-  Alert, TextInput, KeyboardAvoidingView, Platform, StyleSheet, Modal, FlatList,
+  Alert, TextInput, KeyboardAvoidingView, Platform, StyleSheet, Modal, FlatList, Pressable,
 } from 'react-native';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
@@ -12,6 +13,12 @@ import { api } from '../../services/api/client';
 import { orderService, Order } from '../../services/api/order.service';
 import { startOrderTracking } from '../../services/notifications';
 import { useTheme } from '../../contexts/ThemeContext';
+import { useCustomerTabBarInset } from '../../contexts/CustomerTabBarInsetContext';
+import {
+  mergeDatePart,
+  mergeTimePart,
+  enforcePickupAfterPublish,
+} from '../../utils/customerScheduleDatetime';
 
 interface SavedAddress {
   addressId: string;
@@ -26,6 +33,30 @@ interface SavedAddress {
 const COORD_MATCH_EPSILON = 0.00015;
 const RECENT_ADDR_KEY = 'recent_customer_addresses';
 const MAX_CUSTOMER_EXTRA = 10000;
+
+function roundUpToNextQuarter(from: Date): Date {
+  const d = new Date(from.getTime());
+  d.setSeconds(0, 0);
+  const m = d.getMinutes();
+  d.setMinutes(Math.ceil(m / 15) * 15);
+  if (d.getTime() <= Date.now()) d.setMinutes(d.getMinutes() + 15);
+  return d;
+}
+
+function defaultPickupDate(): Date {
+  const d = new Date();
+  d.setSeconds(0, 0);
+  d.setMinutes(0);
+  d.setHours(d.getHours() + 1);
+  if (d.getTime() <= Date.now()) d.setHours(d.getHours() + 1);
+  return d;
+}
+
+function formatScheduleHero(d: Date) {
+  const time = d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+  const date = d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+  return { time, date };
+}
 
 interface PricePreview {
   isNightDelivery: boolean;
@@ -47,6 +78,9 @@ interface PricePreview {
 export default function CreateOrderScreen() {
   const router = useRouter();
   const { colors, isDark } = useTheme();
+  const tabBarPad = useCustomerTabBarInset();
+  /** Local draft until Android/iOS picker confirms — avoids clock snapping back to parent state. */
+  type SchedulePickerSession = { field: 'publish' | 'pickup'; step: 'date' | 'time'; draft: Date };
 
   const [step, setStep] = useState<'form' | 'preview'>('form');
   const [pickupAddress, setPickupAddress] = useState<SavedAddress | null>(null);
@@ -66,6 +100,28 @@ export default function CreateOrderScreen() {
   const [walletBalance, setWalletBalance] = useState(0);
   const [pickupNickSave, setPickupNickSave] = useState('');
   const [dropoffNickSave, setDropoffNickSave] = useState('');
+  const [scheduleOpen, setScheduleOpen] = useState(false);
+  const [publishMode, setPublishMode] = useState<'now' | 'later'>('now');
+  const [publishLaterAt, setPublishLaterAt] = useState(() => roundUpToNextQuarter(new Date()));
+  const [pickupEnabled, setPickupEnabled] = useState(false);
+  const [pickupAtDate, setPickupAtDate] = useState(() => defaultPickupDate());
+  const [iosScheduleSession, setIosScheduleSession] = useState<null | SchedulePickerSession>(null);
+  const [androidScheduleSession, setAndroidScheduleSession] = useState<null | SchedulePickerSession>(null);
+
+  const publishLaterRef = React.useRef(publishLaterAt);
+  const pickupAtRef = React.useRef(pickupAtDate);
+  const iosScheduleSessionRef = React.useRef(iosScheduleSession);
+  const androidScheduleSessionRef = React.useRef(androidScheduleSession);
+  publishLaterRef.current = publishLaterAt;
+  pickupAtRef.current = pickupAtDate;
+  iosScheduleSessionRef.current = iosScheduleSession;
+  androidScheduleSessionRef.current = androidScheduleSession;
+
+  const applyScheduleDates = React.useCallback((nextPublish: Date, nextPickup: Date) => {
+    const { publish, pickup } = enforcePickupAfterPublish(nextPublish, nextPickup, pickupEnabled);
+    setPublishLaterAt(publish);
+    setPickupAtDate(pickup);
+  }, [pickupEnabled]);
   const [savedAddresses, setSavedAddresses] = useState<SavedAddress[]>([]);
   const [savedPickerVisible, setSavedPickerVisible] = useState(false);
   const [savedPickerTarget, setSavedPickerTarget] = useState<'pickup' | 'dropoff'>('pickup');
@@ -339,6 +395,18 @@ export default function CreateOrderScreen() {
       Alert.alert('Amount', `Optional extra cannot exceed ${MAX_CUSTOMER_EXTRA}.`);
       return;
     }
+    if (publishMode === 'later' && publishLaterAt.getTime() <= Date.now() + 45_000) {
+      Alert.alert('Publish time', 'Choose a publish time at least one minute ahead, or keep “Publish now”.');
+      return;
+    }
+    if (pickupEnabled && pickupAtDate.getTime() <= Date.now()) {
+      Alert.alert('Pickup time', 'Choose a pickup time in the future.');
+      return;
+    }
+    if (publishMode === 'later' && pickupEnabled && pickupAtDate.getTime() <= publishLaterAt.getTime()) {
+      Alert.alert('Schedule', 'Pickup date and time must be strictly after publish date and time.');
+      return;
+    }
     setLoading(true);
     try {
       const [savedPickupNickname, savedDropoffNickname] = await Promise.all([
@@ -375,6 +443,10 @@ export default function CreateOrderScreen() {
       Alert.alert('Amount', `Enter a valid optional extra (0–${MAX_CUSTOMER_EXTRA}).`);
       return;
     }
+    if (publishMode === 'later' && pickupEnabled && pickupAtDate.getTime() <= publishLaterAt.getTime()) {
+      Alert.alert('Schedule', 'Pickup date and time must be strictly after publish date and time.');
+      return;
+    }
     setSubmitting(true);
     try {
       const order = await orderService.createOrder({
@@ -384,6 +456,8 @@ export default function CreateOrderScreen() {
         description: description || undefined,
         cancelAfterMinutes,
         customerExtraAmount: ex,
+        ...(publishMode === 'later' ? { publishAt: publishLaterAt.toISOString() } : {}),
+        ...(pickupEnabled ? { pickupAt: pickupAtDate.toISOString() } : {}),
       });
       // Reset form for next order
       setPickupAddress(null);
@@ -395,6 +469,13 @@ export default function CreateOrderScreen() {
       setCustomerExtraAmount('0');
       setPickupNickSave('');
       setDropoffNickSave('');
+      setPublishMode('now');
+      setPublishLaterAt(roundUpToNextQuarter(new Date()));
+      setPickupEnabled(false);
+      setPickupAtDate(defaultPickupDate());
+      setScheduleOpen(false);
+      setIosScheduleSession(null);
+      setAndroidScheduleSession(null);
       setPreview(null);
       setStep('form');
       // Refresh active orders
@@ -402,25 +483,35 @@ export default function CreateOrderScreen() {
         const all = await orderService.getMyOrders();
         setActiveOrders(all.filter(o => ACTIVE_STATUSES.includes(o.status)));
       } catch {}
-      Alert.alert('Order Created!', 'We are searching for a driver near you.', [
-        { text: 'View Order', onPress: () => router.push(`/(customer)/order-detail?orderId=${order.id}`) },
-        { text: 'New Order', style: 'cancel' },
-      ]);
-
-      // Start the foreground service for order tracking with progress bar
-      startOrderTracking(
-        order.id,
-        '📦 Order Confirmed — Searching for a driver...',
-        '⛟———⌖———⌖———⌖———⌖———⌖———⌖',
-        {
-          orderId: order.id,
-          orderStatus: 'SEARCHING_DRIVER',
-          groupKey: `order:${order.id}`,
-          relatedEntityType: 'Order',
-          relatedEntityId: order.id,
-          ongoing: 'true',
-        },
+      const isLiveToDrivers = order.status === 'SEARCHING_DRIVER';
+      const draftBody =
+        order.publishAt != null
+          ? `Your order is saved as a draft. Drivers will be notified starting ${new Date(order.publishAt).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}.`
+          : 'Your order is saved as a draft. Drivers will be notified when it is published.';
+      Alert.alert(
+        isLiveToDrivers ? 'Order Created!' : 'Order scheduled',
+        isLiveToDrivers ? 'We are searching for a driver near you.' : draftBody,
+        [
+          { text: 'View Order', onPress: () => router.push(`/(customer)/order-detail?orderId=${order.id}`) },
+          { text: 'New Order', style: 'cancel' },
+        ],
       );
+
+      if (isLiveToDrivers) {
+        startOrderTracking(
+          order.id,
+          '📦 Order Confirmed — Searching for a driver...',
+          '⛟———⌖———⌖———⌖———⌖———⌖———⌖',
+          {
+            orderId: order.id,
+            orderStatus: 'SEARCHING_DRIVER',
+            groupKey: `order:${order.id}`,
+            relatedEntityType: 'Order',
+            relatedEntityId: order.id,
+            ongoing: 'true',
+          },
+        );
+      }
     } catch (e: any) {
       Alert.alert('Error', e.message || 'Failed to create order');
     } finally {
@@ -504,7 +595,7 @@ export default function CreateOrderScreen() {
 
     return (
       <View style={[s.container, { backgroundColor: colors.background }]}>
-        <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 20, paddingBottom: 40 }}>
+        <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 20, paddingBottom: 40 + tabBarPad }}>
           <TouchableOpacity
             style={[s.previewEditRow, { backgroundColor: colors.card, borderColor: colors.border }]}
             onPress={() => setStep('form')}
@@ -675,7 +766,7 @@ export default function CreateOrderScreen() {
   return (
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <View style={[s.container, { backgroundColor: colors.background }]}>
-        <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 20, paddingBottom: 40 }} keyboardShouldPersistTaps="handled">
+        <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 20, paddingBottom: 40 + tabBarPad }} keyboardShouldPersistTaps="handled">
           <TouchableOpacity
             style={[s.localPickupCta, { backgroundColor: colors.card, borderColor: colors.border }]}
             onPress={() =>
@@ -927,6 +1018,240 @@ export default function CreateOrderScreen() {
             )}
           </View>
 
+          {/* ── Schedule (tap icon to expand; default publish = now) ── */}
+          <TouchableOpacity
+            style={[
+              s.scheduleToggleRow,
+              { backgroundColor: colors.card, borderColor: colors.border },
+              scheduleOpen && { borderColor: colors.primary },
+            ]}
+            onPress={() => setScheduleOpen((o) => !o)}
+            activeOpacity={0.85}
+            accessibilityRole="button"
+            accessibilityLabel={scheduleOpen ? 'Hide schedule' : 'Show schedule'}
+          >
+            <View style={[s.scheduleToggleIcon, { backgroundColor: colors.primaryLight }]}>
+              <Ionicons name="calendar-outline" size={22} color={colors.primary} />
+            </View>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text style={[s.scheduleToggleTitle, { color: colors.text }]}>Schedule</Text>
+              <Text style={[s.scheduleToggleSub, { color: colors.textSecondary }]} numberOfLines={1}>
+                {publishMode === 'now' && !pickupEnabled
+                  ? 'Publish now — optional pickup time'
+                  : [
+                      publishMode === 'later' ? `Publish ${formatScheduleHero(publishLaterAt).date}` : 'Publish now',
+                      pickupEnabled ? ` · Pickup ${formatScheduleHero(pickupAtDate).time}` : '',
+                    ].join('')}
+              </Text>
+            </View>
+            {(publishMode === 'later' || pickupEnabled) && (
+              <View style={[s.scheduleBadge, { backgroundColor: colors.primary }]} />
+            )}
+            <Ionicons name={scheduleOpen ? 'chevron-up' : 'chevron-down'} size={22} color={colors.textTertiary} />
+          </TouchableOpacity>
+
+          {scheduleOpen && (
+            <View style={[s.schedulePanel, { backgroundColor: colors.card, borderColor: colors.border }]}>
+              <Text style={[s.schedulePanelLead, { color: colors.textSecondary }]}>
+                Drivers see your order when it is published. Pickup time helps the driver arrive on time.
+              </Text>
+
+              <Text style={[s.scheduleSectionLabel, { color: colors.text }]}>When to publish</Text>
+              <View style={s.segmentRow}>
+                <TouchableOpacity
+                  style={[
+                    s.segmentBtn,
+                    { borderColor: colors.border, backgroundColor: colors.inputBg },
+                    publishMode === 'now' && { backgroundColor: colors.primary, borderColor: colors.primary },
+                  ]}
+                  onPress={() => setPublishMode('now')}
+                  activeOpacity={0.8}
+                >
+                  <Ionicons name="flash-outline" size={18} color={publishMode === 'now' ? '#fff' : colors.text} />
+                  <Text style={[s.segmentBtnText, { color: publishMode === 'now' ? '#fff' : colors.text }]}>Now</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    s.segmentBtn,
+                    { borderColor: colors.border, backgroundColor: colors.inputBg },
+                    publishMode === 'later' && { backgroundColor: colors.primary, borderColor: colors.primary },
+                  ]}
+                  onPress={() => setPublishMode('later')}
+                  activeOpacity={0.8}
+                >
+                  <Ionicons name="time-outline" size={18} color={publishMode === 'later' ? '#fff' : colors.text} />
+                  <Text style={[s.segmentBtnText, { color: publishMode === 'later' ? '#fff' : colors.text }]}>Later</Text>
+                </TouchableOpacity>
+              </View>
+
+              {publishMode === 'later' && (() => {
+                const hero = formatScheduleHero(publishLaterAt);
+                return (
+                  <View style={[s.scheduleHeroBox, { backgroundColor: colors.inputBg, borderColor: colors.border }]}>
+                    <View style={s.scheduleHeroTopRow}>
+                      <Pressable
+                        style={s.scheduleHeroTimePress}
+                        onPress={() => {
+                          if (Platform.OS === 'ios') {
+                            setIosScheduleSession({
+                              field: 'publish',
+                              step: 'time',
+                              draft: new Date(publishLaterAt),
+                            });
+                          }
+                          else
+                            setAndroidScheduleSession({
+                              field: 'publish',
+                              step: 'time',
+                              draft: new Date(publishLaterAt),
+                            });
+                        }}
+                      >
+                        <Text style={[s.datetimeHeroTime, { color: colors.text }]}>{hero.time}</Text>
+                        <Text style={[s.scheduleHeroMicroHint, { color: colors.textTertiary }]}>Tap time</Text>
+                      </Pressable>
+                      <TouchableOpacity
+                        style={[s.scheduleEditIconBtn, { borderColor: colors.border }]}
+                        onPress={() => {
+                          if (Platform.OS === 'ios') {
+                            setIosScheduleSession({
+                              field: 'publish',
+                              step: 'date',
+                              draft: new Date(publishLaterAt),
+                            });
+                          }
+                          else
+                            setAndroidScheduleSession({
+                              field: 'publish',
+                              step: 'date',
+                              draft: new Date(publishLaterAt),
+                            });
+                        }}
+                        accessibilityRole="button"
+                        accessibilityLabel="Edit publish date and time"
+                      >
+                        <Ionicons name="create-outline" size={22} color={colors.primary} />
+                      </TouchableOpacity>
+                    </View>
+                    <Pressable
+                      style={s.scheduleHeroDatePress}
+                      onPress={() => {
+                        if (Platform.OS === 'ios') {
+                          setIosScheduleSession({
+                            field: 'publish',
+                            step: 'date',
+                            draft: new Date(publishLaterAt),
+                          });
+                        }
+                        else
+                          setAndroidScheduleSession({
+                            field: 'publish',
+                            step: 'date',
+                            draft: new Date(publishLaterAt),
+                          });
+                      }}
+                    >
+                      <Text style={[s.datetimeHeroDate, { color: colors.textSecondary }]}>{hero.date}</Text>
+                      <Text style={[s.scheduleHeroMicroHint, { color: colors.textTertiary }]}>Tap date — then time</Text>
+                    </Pressable>
+                  </View>
+                );
+              })()}
+
+              <View style={[s.scheduleDivider, { backgroundColor: colors.border }]} />
+
+              <View style={s.pickupHeaderRow}>
+                <View style={{ flex: 1 }}>
+                  <Text style={[s.scheduleSectionLabel, { color: colors.text, marginBottom: 4 }]}>Pickup time</Text>
+                  <Text style={[s.scheduleHint, { color: colors.textSecondary }]}>Optional — for driver reminders</Text>
+                </View>
+                <TouchableOpacity
+                  style={[s.switchTrack, { backgroundColor: pickupEnabled ? colors.primary : colors.border }]}
+                  onPress={() => setPickupEnabled((e) => !e)}
+                  activeOpacity={0.85}
+                  accessibilityRole="switch"
+                  accessibilityState={{ checked: pickupEnabled }}
+                >
+                  <View style={[s.switchThumb, { marginLeft: pickupEnabled ? 24 : 2 }]} />
+                </TouchableOpacity>
+              </View>
+
+              {pickupEnabled && (() => {
+                const hero = formatScheduleHero(pickupAtDate);
+                return (
+                  <View style={[s.scheduleHeroBox, { backgroundColor: colors.inputBg, borderColor: colors.border }]}>
+                    <View style={s.scheduleHeroTopRow}>
+                      <Pressable
+                        style={s.scheduleHeroTimePress}
+                        onPress={() => {
+                          if (Platform.OS === 'ios') {
+                            setIosScheduleSession({
+                              field: 'pickup',
+                              step: 'time',
+                              draft: new Date(pickupAtDate),
+                            });
+                          }
+                          else
+                            setAndroidScheduleSession({
+                              field: 'pickup',
+                              step: 'time',
+                              draft: new Date(pickupAtDate),
+                            });
+                        }}
+                      >
+                        <Text style={[s.datetimeHeroTime, { color: colors.text }]}>{hero.time}</Text>
+                        <Text style={[s.scheduleHeroMicroHint, { color: colors.textTertiary }]}>Tap time</Text>
+                      </Pressable>
+                      <TouchableOpacity
+                        style={[s.scheduleEditIconBtn, { borderColor: colors.border }]}
+                        onPress={() => {
+                          if (Platform.OS === 'ios') {
+                            setIosScheduleSession({
+                              field: 'pickup',
+                              step: 'date',
+                              draft: new Date(pickupAtDate),
+                            });
+                          }
+                          else
+                            setAndroidScheduleSession({
+                              field: 'pickup',
+                              step: 'date',
+                              draft: new Date(pickupAtDate),
+                            });
+                        }}
+                        accessibilityRole="button"
+                        accessibilityLabel="Edit pickup date and time"
+                      >
+                        <Ionicons name="create-outline" size={22} color={colors.primary} />
+                      </TouchableOpacity>
+                    </View>
+                    <Pressable
+                      style={s.scheduleHeroDatePress}
+                      onPress={() => {
+                        if (Platform.OS === 'ios') {
+                          setIosScheduleSession({
+                            field: 'pickup',
+                            step: 'date',
+                            draft: new Date(pickupAtDate),
+                          });
+                        }
+                        else
+                          setAndroidScheduleSession({
+                            field: 'pickup',
+                            step: 'date',
+                            draft: new Date(pickupAtDate),
+                          });
+                      }}
+                    >
+                      <Text style={[s.datetimeHeroDate, { color: colors.textSecondary }]}>{hero.date}</Text>
+                      <Text style={[s.scheduleHeroMicroHint, { color: colors.textTertiary }]}>Tap date — then time</Text>
+                    </Pressable>
+                  </View>
+                );
+              })()}
+            </View>
+          )}
+
           {/* ── Calculate Price Button ── */}
           <TouchableOpacity
             style={[s.primaryBtn, (!pickupAddress || !dropoffAddress) && s.primaryBtnDisabled]}
@@ -945,6 +1270,103 @@ export default function CreateOrderScreen() {
           </TouchableOpacity>
         </ScrollView>
       </View>
+
+      {Platform.OS === 'ios' && (
+        <Modal visible={iosScheduleSession !== null} transparent animationType="fade" onRequestClose={() => setIosScheduleSession(null)}>
+          <Pressable style={s.pickerOverlay} onPress={() => setIosScheduleSession(null)}>
+            <View style={[s.pickerSheet, { backgroundColor: colors.card }]} onStartShouldSetResponder={() => true}>
+              {iosScheduleSession !== null && (
+                <>
+                  <Text style={[s.pickerSheetTitle, { color: colors.text }]}>
+                    {iosScheduleSession.field === 'publish' ? 'When to publish' : 'Pickup time'}
+                    {iosScheduleSession.step === 'date' ? ' — date' : ' — time'}
+                  </Text>
+                  <DateTimePicker
+                    value={iosScheduleSession.draft}
+                    mode={iosScheduleSession.step === 'date' ? 'date' : 'time'}
+                    display="spinner"
+                    themeVariant={isDark ? 'dark' : 'light'}
+                    onChange={(_, date) => {
+                      if (!date) return;
+                      setIosScheduleSession((sess) => {
+                        if (!sess) return sess;
+                        const merged =
+                          sess.step === 'date' ? mergeDatePart(sess.draft, date) : mergeTimePart(sess.draft, date);
+                        return { ...sess, draft: merged };
+                      });
+                    }}
+                  />
+                  {iosScheduleSession.step === 'date' ? (
+                    <>
+                      <TouchableOpacity
+                        style={[s.pickerDoneBtn, { backgroundColor: colors.primary, marginTop: 4 }]}
+                        onPress={() =>
+                          setIosScheduleSession((sess) => (sess ? { ...sess, step: 'time' } : sess))
+                        }
+                      >
+                        <Text style={s.pickerDoneBtnText}>Continue to time</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity style={[s.pickerCancelBtn, { marginTop: 8 }]} onPress={() => setIosScheduleSession(null)}>
+                        <Text style={[s.pickerCancelBtnText, { color: colors.textSecondary }]}>Cancel</Text>
+                      </TouchableOpacity>
+                    </>
+                  ) : (
+                    <TouchableOpacity
+                      style={[s.pickerDoneBtn, { backgroundColor: colors.primary, marginTop: 8 }]}
+                      onPress={() => {
+                        const sess = iosScheduleSessionRef.current;
+                        if (!sess) return;
+                        if (sess.field === 'publish') {
+                          applyScheduleDates(sess.draft, pickupAtRef.current);
+                        } else {
+                          applyScheduleDates(publishLaterRef.current, sess.draft);
+                        }
+                        setIosScheduleSession(null);
+                      }}
+                    >
+                      <Text style={s.pickerDoneBtnText}>Done</Text>
+                    </TouchableOpacity>
+                  )}
+                </>
+              )}
+            </View>
+          </Pressable>
+        </Modal>
+      )}
+      {Platform.OS === 'android' && androidScheduleSession && (
+        <DateTimePicker
+          key={`${androidScheduleSession.field}-${androidScheduleSession.step}`}
+          value={androidScheduleSession.draft}
+          mode={androidScheduleSession.step === 'date' ? 'date' : 'time'}
+          display="default"
+          onChange={(ev, date) => {
+            const sess = androidScheduleSessionRef.current;
+            if (!sess) return;
+            if (ev?.type === 'dismissed') {
+              setAndroidScheduleSession(null);
+              return;
+            }
+            if (!date) return;
+            const pub = publishLaterRef.current;
+            const pick = pickupAtRef.current;
+            if (sess.step === 'date') {
+              if (ev?.type !== 'set') return;
+              const mergedDate = mergeDatePart(sess.draft, date);
+              setAndroidScheduleSession({ ...sess, step: 'time', draft: mergedDate });
+              return;
+            }
+            if (ev?.type !== 'set') return;
+            const mergedTime = mergeTimePart(sess.draft, date);
+            if (sess.field === 'publish') {
+              applyScheduleDates(mergedTime, pick);
+            } else {
+              applyScheduleDates(pub, mergedTime);
+            }
+            setAndroidScheduleSession(null);
+          }}
+        />
+      )}
+
       <Modal visible={savedPickerVisible} transparent animationType="slide" onRequestClose={() => setSavedPickerVisible(false)}>
         <View style={s.modalOverlay}>
           <View style={[s.modalCard, { backgroundColor: colors.card }]}>
@@ -1250,4 +1672,122 @@ const s = StyleSheet.create({
 
   // Validation
   validationError: { color: '#dc2626', fontSize: 12, fontWeight: '600', marginTop: 6 },
+
+  scheduleToggleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    marginBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  scheduleToggleIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  scheduleToggleTitle: { fontSize: 16, fontWeight: '800', letterSpacing: -0.2 },
+  scheduleToggleSub: { fontSize: 12, fontWeight: '600', marginTop: 3 },
+  scheduleBadge: { width: 8, height: 8, borderRadius: 4, marginRight: 4 },
+
+  schedulePanel: {
+    borderRadius: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    padding: 18,
+    marginBottom: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  schedulePanelLead: { fontSize: 13, lineHeight: 19, marginBottom: 18, fontWeight: '500' },
+  scheduleSectionLabel: { fontSize: 13, fontWeight: '800', letterSpacing: 0.3, textTransform: 'uppercase', marginBottom: 10 },
+  scheduleHint: { fontSize: 12, fontWeight: '500' },
+  segmentRow: { flexDirection: 'row', gap: 10, marginBottom: 14 },
+  segmentBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  segmentBtnText: { fontSize: 15, fontWeight: '800' },
+  scheduleHeroBox: {
+    borderRadius: 14,
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    marginBottom: 4,
+  },
+  scheduleHeroTopRow: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 },
+  scheduleHeroTimePress: { flex: 1, paddingVertical: 4 },
+  scheduleHeroDatePress: { paddingVertical: 8, marginTop: 4 },
+  scheduleEditIconBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  scheduleHeroMicroHint: { fontSize: 11, fontWeight: '600', marginTop: 4 },
+  datetimeHeroTime: { fontSize: 28, fontWeight: '800', letterSpacing: -0.5 },
+  datetimeHeroDate: { fontSize: 14, fontWeight: '600', marginTop: 4 },
+  scheduleDivider: { height: StyleSheet.hairlineWidth, marginVertical: 16 },
+  pickupHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 },
+  switchTrack: {
+    width: 50,
+    height: 28,
+    borderRadius: 14,
+    padding: 2,
+    justifyContent: 'center',
+  },
+  switchThumb: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#fff',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+
+  pickerOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'flex-end',
+    paddingBottom: 24,
+    paddingHorizontal: 16,
+  },
+  pickerSheet: {
+    borderRadius: 18,
+    padding: 16,
+    paddingBottom: 12,
+  },
+  pickerSheetTitle: { fontSize: 17, fontWeight: '800', marginBottom: 8, textAlign: 'center' },
+  pickerDoneBtn: {
+    marginTop: 8,
+    height: 48,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pickerDoneBtnText: { color: '#fff', fontSize: 16, fontWeight: '800' },
+  pickerCancelBtn: { height: 44, alignItems: 'center', justifyContent: 'center' },
+  pickerCancelBtnText: { fontSize: 15, fontWeight: '700' },
 });

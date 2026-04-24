@@ -9,6 +9,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { orderService, ChatMessage, ChatRoom } from '../../services/api/order.service';
 import { notificationService } from '../../services/api/notification.service';
 import { useTheme } from '../../contexts/ThemeContext';
+import { useCustomerTabBarInset } from '../../contexts/CustomerTabBarInsetContext';
 import { useActiveChatForNotifications } from '../../hooks/useActiveChatForNotifications';
 
 export default function OrderChatScreen() {
@@ -16,6 +17,7 @@ export default function OrderChatScreen() {
   const { orderId: orderIdParam } = useLocalSearchParams<{ orderId: string | string[] }>();
   const orderId = typeof orderIdParam === 'string' ? orderIdParam : orderIdParam?.[0] ?? '';
   const { colors, isDark } = useTheme();
+  const tabBarPad = useCustomerTabBarInset();
   const [chatRoom, setChatRoom] = useState<ChatRoom | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
@@ -129,7 +131,7 @@ export default function OrderChatScreen() {
         data={messages}
         keyExtractor={m => m.id}
         style={s.messagesList}
-        contentContainerStyle={s.messagesContent}
+        contentContainerStyle={[s.messagesContent, { paddingBottom: 8 + tabBarPad }]}
         onContentSizeChange={() => flatListRef.current?.scrollToEnd()}
         renderItem={renderMessage}
         ListEmptyComponent={
@@ -143,12 +145,12 @@ export default function OrderChatScreen() {
 
       {/* Input */}
       {isClosed ? (
-        <View style={[s.closedBar, { backgroundColor: colors.surfaceVariant }]}>
+        <View style={[s.closedBar, { backgroundColor: colors.surfaceVariant, paddingBottom: 16 + tabBarPad }]}>
           <Ionicons name="lock-closed-outline" size={16} color={colors.textTertiary} />
           <Text style={[s.closedText, { color: colors.textTertiary }]}>chatroom closed</Text>
         </View>
       ) : (
-        <View style={[s.inputBar, { backgroundColor: colors.card, borderTopColor: colors.border }]}>
+        <View style={[s.inputBar, { backgroundColor: colors.card, borderTopColor: colors.border, paddingBottom: 12 + tabBarPad }]}>
           <TextInput
             style={[s.textInput, { backgroundColor: colors.surfaceVariant, color: colors.text }]}
             value={input}
@@ -220,13 +222,13 @@ const s = StyleSheet.create({
 
   closedBar: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
-    backgroundColor: '#f3f4f6', paddingVertical: 16,
+    backgroundColor: '#f3f4f6', paddingTop: 16,
   },
   closedText: { fontSize: 14, color: '#9ca3af', fontWeight: '500' },
 
   inputBar: {
     flexDirection: 'row', alignItems: 'flex-end', gap: 10,
-    backgroundColor: '#fff', paddingHorizontal: 16, paddingVertical: 12,
+    backgroundColor: '#fff', paddingHorizontal: 16, paddingTop: 12,
     borderTopWidth: 1, borderTopColor: '#f3f4f6',
   },
   textInput: {

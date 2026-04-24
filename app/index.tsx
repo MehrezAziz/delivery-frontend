@@ -21,7 +21,12 @@ export default function RoleSelectionScreen() {
     try {
       const valid = await isSessionValid();
       if (valid) {
-        const launchRoute = await resolveLaunchRouteAfterLogin();
+        let launchRoute: string | null = null;
+        try {
+          launchRoute = await resolveLaunchRouteAfterLogin();
+        } catch (launchErr) {
+          console.error('resolveLaunchRouteAfterLogin failed:', launchErr);
+        }
         if (launchRoute) {
           router.replace(launchRoute as any);
           return;

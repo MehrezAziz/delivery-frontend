@@ -32,6 +32,7 @@ export default function DriverLayout() {
       <Stack.Screen name="home" />
       <Stack.Screen name="my-orders" />
       <Stack.Screen name="available-orders" />
+      <Stack.Screen name="required-permissions" options={{ title: 'Permissions' }} />
       <Stack.Screen name="order-chat" />
       <Stack.Screen name="order-detail" />
       <Stack.Screen name="address-map" options={{ headerShown: false }} />

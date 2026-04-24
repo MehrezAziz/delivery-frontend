@@ -12,8 +12,10 @@ import { ensureDriverPushNotificationSetup } from '../../services/driverPushSetu
 import { api } from '../../services/api/client';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useAppNavigation } from '../../contexts/AppNavigationContext';
-import { scheduleWhenIdle } from '../../utils/scheduleIdle';
-import * as Location from 'expo-location';
+import {
+  getDriverOperationalPermissionStatus,
+  allDriverOperationalPermissionsGranted,
+} from '../../utils/driverOperationalPermissions';
 
 const ZONE_META: Record<string, { icon: string; color: string; bg: string }> = {
   'Same Delegation':        { icon: 'location',      color: '#16a34a', bg: '#dcfce7' },
@@ -149,7 +151,6 @@ export default function AvailableOrdersScreen() {
   const [rejectionSubmitting, setRejectionSubmitting] = useState<string | null>(null);
   const [showDeclinedFlash, setShowDeclinedFlash] = useState(false);
   const [nowMs, setNowMs] = useState(Date.now());
-  const [driverPosition, setDriverPosition] = useState<{ latitude: number; longitude: number } | null>(null);
 
   // "I'm available now" state — default TRUE
   const [availableNow, setAvailableNow] = useState(true);
@@ -193,24 +194,6 @@ export default function AvailableOrdersScreen() {
   const filteredDel = useMemo(() =>
     advDelegations.filter(d => d.nameDelegation.toLowerCase().includes(delSearch.toLowerCase())),
     [advDelegations, delSearch]);
-
-  const getCurrentDriverPosition = useCallback(async () => {
-    try {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') return;
-      const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-      setDriverPosition({ latitude: pos.coords.latitude, longitude: pos.coords.longitude });
-    } catch {
-      setDriverPosition(null);
-    }
-  }, []);
-
-  useEffect(() => {
-    const { cancel } = scheduleWhenIdle(() => {
-      void getCurrentDriverPosition();
-    }, { timeout: 2000 });
-    return () => cancel();
-  }, [getCurrentDriverPosition]);
 
   useEffect(() => {
     const timer = setInterval(() => setNowMs(Date.now()), 1000);
@@ -424,6 +407,27 @@ export default function AvailableOrdersScreen() {
   const handleAccept = async (orderId: string) => {
     const ca = filterActive || quickFilterLevel ? filteredData?.canAccept : data?.canAccept;
     if (!ca) { Alert.alert('Not Verified', 'Your account must be verified before you can accept orders.'); return; }
+    const ensureDriverOperationalPermissions = async () => {
+      try {
+        const s = await getDriverOperationalPermissionStatus();
+        if (!allDriverOperationalPermissionsGranted(s)) {
+          router.push({
+            pathname: '/(driver)/required-permissions',
+            params: { returnTo: encodeURIComponent('/(driver)/available-orders') },
+          });
+          return false;
+        }
+        return true;
+      } catch {
+        router.push({
+          pathname: '/(driver)/required-permissions',
+          params: { returnTo: encodeURIComponent('/(driver)/available-orders') },
+        });
+        return false;
+      }
+    };
+    const permissionsOk = await ensureDriverOperationalPermissions();
+    if (!permissionsOk) return;
     Alert.alert('Accept Order', 'Take this delivery?', [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Accept', onPress: async () => {
@@ -494,21 +498,6 @@ export default function AvailableOrdersScreen() {
     const countdownLabel = countdownSec == null
       ? null
       : `${String(Math.floor(countdownSec / 60)).padStart(2, '0')}:${String(countdownSec % 60).padStart(2, '0')}`;
-    const distanceToPickup = (() => {
-      if (!driverPosition || !order.pickupAddress?.latitude || !order.pickupAddress?.longitude) return null;
-      const toRad = (v: number) => (v * Math.PI) / 180;
-      const earthRadiusKm = 6371;
-      const dLat = toRad(order.pickupAddress.latitude - driverPosition.latitude);
-      const dLng = toRad(order.pickupAddress.longitude - driverPosition.longitude);
-      const a =
-        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-        Math.cos(toRad(driverPosition.latitude)) *
-          Math.cos(toRad(order.pickupAddress.latitude)) *
-          Math.sin(dLng / 2) *
-          Math.sin(dLng / 2);
-      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-      return earthRadiusKm * c;
-    })();
     const pickupLat = order.pickupAddress?.latitude;
     const pickupLng = order.pickupAddress?.longitude;
     const pickupHasCoords =
@@ -611,21 +600,6 @@ export default function AvailableOrdersScreen() {
                   Exact source: {order.pickupAddress.latitude.toFixed(5)}, {order.pickupAddress.longitude.toFixed(5)}
                 </Text>
               )}
-            {distanceToPickup !== null && (
-              <View style={[s.distanceToPickupCard, { borderColor: colors.border, backgroundColor: colors.surfaceVariant }]}>
-                <View style={[s.distanceToPickupIconWrap, { backgroundColor: isDark ? '#0c4a6e' : '#e0f2fe' }]}>
-                  <Ionicons name="navigate" size={16} color={isDark ? '#7dd3fc' : '#0369a1'} />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={[s.distanceToPickupLabel, { color: colors.textSecondary }]}>Distance to pickup</Text>
-                  <Text style={[s.distanceToPickupValue, { color: colors.text }]}>
-                    {distanceToPickup < 1
-                      ? `${Math.round(distanceToPickup * 1000)} m`
-                      : `${distanceToPickup.toFixed(1)} km`}
-                  </Text>
-                </View>
-              </View>
-            )}
             <View style={{ height: 14 }} />
             {order.localPickupOnly ? (
               <Text style={[s.routeText, { color: colors.textSecondary, fontWeight: '500' }]} numberOfLines={3}>
@@ -687,6 +661,14 @@ export default function AvailableOrdersScreen() {
               <Text style={[s.chipText, { color: '#3730a3' }]}>Night</Text>
             </View>
           )}
+          {order.pickupAt ? (
+            <View style={[s.chip, { backgroundColor: '#fef3c7' }]}>
+              <Ionicons name="time-outline" size={12} color="#92400e" />
+              <Text style={[s.chipText, { color: '#92400e' }]}>
+                {new Date(order.pickupAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+              </Text>
+            </View>
+          ) : null}
         </View>
         <TouchableOpacity
           style={[s.acceptBtn, !canAccept && s.acceptBtnDisabled]}
@@ -856,7 +838,7 @@ export default function AvailableOrdersScreen() {
 
       {/* Orders list */}
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 40 }}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); getCurrentDriverPosition(); load(); }} />}>
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} />}>
         {totalOrders === 0 ? (
           <View style={s.empty}>
             <Ionicons name="cube-outline" size={56} color={colors.textTertiary} />
@@ -1284,25 +1266,6 @@ const s = StyleSheet.create({
   routeLine: { width: 2, flex: 1, backgroundColor: '#e5e7eb', marginVertical: 3 },
   routeText: { fontSize: 14, color: '#374151', fontWeight: '500' },
   addressTapRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
-  distanceToPickupCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    marginTop: 10,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderRadius: 12,
-    borderWidth: StyleSheet.hairlineWidth,
-  },
-  distanceToPickupIconWrap: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  distanceToPickupLabel: { fontSize: 11, fontWeight: '600', letterSpacing: 0.3, textTransform: 'uppercase' },
-  distanceToPickupValue: { fontSize: 17, fontWeight: '800', marginTop: 2 },
   orderDescBox: {
     borderRadius: 12,
     borderWidth: StyleSheet.hairlineWidth,

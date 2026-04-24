@@ -6,6 +6,7 @@ import * as Clipboard from 'expo-clipboard';
 import { clearPushToken } from '../../services/api/notification.service';
 import { stopOrderTrackingSilently } from '../../services/notifications';
 import { useTheme } from '../../contexts/ThemeContext';
+import { useCustomerTabBarInset } from '../../contexts/CustomerTabBarInsetContext';
 import { getCustomerStatusLabel, getCustomerStatusTextColor } from '../../utils/customerStatus';
 
 // Get API URL from environment variable
@@ -14,6 +15,7 @@ const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/a
 export default function CustomerProfileScreen() {
   const router = useRouter();
   const { colors, isDark, toggleTheme } = useTheme();
+  const tabBarPad = useCustomerTabBarInset();
   
   // State for user data
   const [user, setUser] = useState<any | null>(null);
@@ -331,7 +333,7 @@ export default function CustomerProfileScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
+      <ScrollView style={styles.scrollView} contentContainerStyle={{ paddingBottom: 24 + tabBarPad }}>
         {/* Profile Info */}
         <View style={[styles.profileCard, { backgroundColor: colors.card }]}>
           <View style={styles.profileHeader}>
@@ -770,9 +772,6 @@ const styles = StyleSheet.create({
   },
   scrollView: {
     flex: 1,
-  },
-  scrollContent: {
-    paddingBottom: 24,
   },
   profileCard: {
     backgroundColor: '#ffffff',

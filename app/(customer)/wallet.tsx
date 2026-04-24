@@ -7,6 +7,7 @@ import { useFocusEffect, useRouter } from 'expo-router';
 import { walletService } from '../../services/api';
 import type { Wallet, WalletTransaction, WithdrawalRequest } from '../../services/api';
 import { useTheme } from '../../contexts/ThemeContext';
+import { useCustomerTabBarInset } from '../../contexts/CustomerTabBarInsetContext';
 
 type Tab = 'overview' | 'transactions' | 'withdrawals';
 
@@ -34,6 +35,7 @@ const STATUS_COLORS: Record<string, string> = {
 export default function WalletScreen() {
   const router = useRouter();
   const { colors, isDark } = useTheme();
+  const tabBarPad = useCustomerTabBarInset();
   const [activeTab, setActiveTab] = useState<Tab>('overview');
   const [wallet, setWallet] = useState<Wallet | null>(null);
   const [transactions, setTransactions] = useState<WalletTransaction[]>([]);
@@ -189,7 +191,7 @@ export default function WalletScreen() {
       </View>
 
       {/* Tab content */}
-      <ScrollView style={styles.content} contentContainerStyle={styles.contentPad}>
+      <ScrollView style={styles.content} contentContainerStyle={[styles.contentPad, { paddingBottom: 40 + tabBarPad }]}>
 
         {/* Overview */}
         {activeTab === 'overview' && (
@@ -390,7 +392,7 @@ const styles = StyleSheet.create({
   tabTextActive: { color: '#fff' },
 
   content: { flex: 1 },
-  contentPad: { padding: 20, gap: 12, paddingBottom: 40 },
+  contentPad: { padding: 20, gap: 12 },
 
   infoCard: {
     backgroundColor: '#fff',

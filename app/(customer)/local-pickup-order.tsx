@@ -16,6 +16,7 @@ import { api } from '../../services/api/client';
 import { orderService } from '../../services/api/order.service';
 import { startOrderTracking } from '../../services/notifications';
 import { useTheme } from '../../contexts/ThemeContext';
+import { useCustomerTabBarInset } from '../../contexts/CustomerTabBarInsetContext';
 
 interface SavedAddress {
   addressId: string;
@@ -36,6 +37,7 @@ export default function LocalPickupOrderScreen() {
     ? decodeURIComponent(params.returnTo)
     : '/(customer)/create-order';
   const { colors } = useTheme();
+  const tabBarPad = useCustomerTabBarInset();
   const [source, setSource] = useState<SavedAddress | null>(null);
   const [paymentType, setPaymentType] = useState<'COD' | 'WALLET'>('COD');
   const [weight, setWeight] = useState('1');
@@ -198,19 +200,21 @@ export default function LocalPickupOrderScreen() {
                   cancelAfterMinutes,
                   customerExtraAmount: ex,
                 });
-                startOrderTracking(
-                  order.id,
-                  '📦 Local pickup — searching for a driver...',
-                  '⛟———⌖———⌖———⌖———⌖———⌖———⌖',
-                  {
-                    orderId: order.id,
-                    orderStatus: 'SEARCHING_DRIVER',
-                    groupKey: `order:${order.id}`,
-                    relatedEntityType: 'Order',
-                    relatedEntityId: order.id,
-                    ongoing: 'true',
-                  },
-                );
+                if (order.status === 'SEARCHING_DRIVER') {
+                  startOrderTracking(
+                    order.id,
+                    '📦 Local pickup — searching for a driver...',
+                    '⛟———⌖———⌖———⌖———⌖———⌖———⌖',
+                    {
+                      orderId: order.id,
+                      orderStatus: 'SEARCHING_DRIVER',
+                      groupKey: `order:${order.id}`,
+                      relatedEntityType: 'Order',
+                      relatedEntityId: order.id,
+                      ongoing: 'true',
+                    },
+                  );
+                }
                 setSource(null);
                 setPaymentType('COD');
                 setWeight('1');
@@ -255,7 +259,7 @@ export default function LocalPickupOrderScreen() {
           <Text style={s.title}>Local pickup</Text>
           <View style={{ width: 36 }} />
         </View>
-        <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 40 }}>
+        <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 40 + tabBarPad }}>
           <Text style={[s.hint, { color: colors.textSecondary }]}>
             Driver brings items to you (within your delegation). No separate delivery address.
           </Text>

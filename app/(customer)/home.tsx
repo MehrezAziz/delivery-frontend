@@ -8,6 +8,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '../../contexts/ThemeContext';
+import { useCustomerTabBarInset } from '../../contexts/CustomerTabBarInsetContext';
 import { orderService, Order } from '../../services/api/order.service';
 import { notificationService } from '../../services/api/notification.service';
 import { restoreOrderTrackingForCustomer } from '../../services/notifications';
@@ -30,6 +31,7 @@ const STATUS_META: Record<string, { icon: string; color: string; bg: string; lab
 export default function CustomerHomeScreen() {
   const router = useRouter();
   const { colors, isDark } = useTheme();
+  const tabBarPad = useCustomerTabBarInset();
   const [userName, setUserName] = useState('');
   const [customerStatus, setCustomerStatus] = useState<string>('ACTIVE');
   const [activeOrders, setActiveOrders] = useState<Order[]>([]);
@@ -96,7 +98,7 @@ export default function CustomerHomeScreen() {
         onOpenFullInbox={() => router.push('/(customer)/notifications')}
         onMarkAllRead={() => setUnreadCount(0)}
       />
-      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 100 }}
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 24 + tabBarPad }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); loadOrders(); }} />}>
 
         <View style={[s.heroStrip, { backgroundColor: colors.headerBg }]}>

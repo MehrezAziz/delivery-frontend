@@ -7,12 +7,14 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '../../contexts/ThemeContext';
+import { useCustomerTabBarInset } from '../../contexts/CustomerTabBarInsetContext';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api';
 
 export default function CustomerEditProfileScreen() {
   const router = useRouter();
   const { colors, isDark } = useTheme();
+  const tabBarPad = useCustomerTabBarInset();
   const [verified, setVerified] = useState(false);
   const [isGoogleUser, setIsGoogleUser] = useState(false);
   const [password, setPassword] = useState('');
@@ -136,7 +138,7 @@ export default function CustomerEditProfileScreen() {
 
   return (
     <View style={[s.container, { backgroundColor: colors.background }]}>
-      <ScrollView style={{ flex: 1 }} contentContainerStyle={s.content}>
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={[s.content, { paddingBottom: 40 + tabBarPad }]}>
         <Field label="First Name" value={firstName} onChange={setFirstName} />
         <Field label="Last Name" value={secondName} onChange={setSecondName} />
         <Field label="Phone" value={phone} onChange={setPhone} keyboardType="phone-pad" />
@@ -207,7 +209,7 @@ function Field({ label, value, onChange, keyboardType, editable = true, multilin
 const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f8fafc' },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f8fafc' },
-  content: { padding: 20, paddingTop: 8, paddingBottom: 40 },
+  content: { padding: 20, paddingTop: 8 },
   gateContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 32 },
   gateIconWrap: {
     width: 80, height: 80, borderRadius: 40, backgroundColor: '#dbeafe',

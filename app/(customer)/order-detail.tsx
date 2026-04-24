@@ -7,8 +7,10 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { orderService, Order, computeOrderCancelRemainingSec } from '../../services/api/order.service';
 import { useTheme } from '../../contexts/ThemeContext';
+import { useCustomerTabBarInset } from '../../contexts/CustomerTabBarInsetContext';
 import { useOrderChatUnread } from '../../hooks/useOrderChatUnread';
 import { ChatUnreadBadge } from '../../components/ChatUnreadBadge';
+import { DraftOrderScheduleCard } from '../../components/customer/DraftOrderScheduleCard';
 
 /** Customer-facing delivery steps (no company return / deposit steps). */
 const STATUS_FLOW = [
@@ -41,6 +43,7 @@ export default function OrderDetailScreen() {
   const orderId = Array.isArray(orderIdParam) ? orderIdParam[0] : orderIdParam;
   const { unread: chatUnread } = useOrderChatUnread(orderId);
   const { colors, isDark } = useTheme();
+  const tabBarPad = useCustomerTabBarInset();
   const [order, setOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -72,7 +75,7 @@ export default function OrderDetailScreen() {
   useEffect(() => { loadOrder(); }, [loadOrder]);
   useEffect(() => {
     if (!orderId) return;
-    const pollMs = order?.status === 'SEARCHING_DRIVER' ? 3000 : 5000;
+    const pollMs = order?.status === 'SEARCHING_DRIVER' || order?.status === 'DRAFT' ? 3000 : 5000;
     const interval = setInterval(loadOrder, pollMs);
     return () => clearInterval(interval);
   }, [orderId, order?.status, loadOrder]);
@@ -308,8 +311,16 @@ export default function OrderDetailScreen() {
       <ScrollView
         ref={scrollViewRef}
         style={{ flex: 1 }}
-        contentContainerStyle={{ padding: 20, paddingBottom: 40 }}
+        contentContainerStyle={{ padding: 20, paddingBottom: 40 + tabBarPad }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); loadOrder(); }} />}>
+
+        {order.status === 'DRAFT' && (
+          <DraftOrderScheduleCard
+            order={order}
+            onSaved={(updated) => setOrder(updated)}
+            readOnlyScheduleUntilEdit
+          />
+        )}
 
         {/* ── Progress Steps (only for active orders) ── */}
         {isActive && currentStepIndex >= 0 && (

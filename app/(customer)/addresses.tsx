@@ -17,6 +17,7 @@ import { Ionicons } from '@expo/vector-icons';
 import axios from 'axios';
 import { geographyService, Country, Governorate, Delegation } from '../../services/api/geography.service';
 import { useTheme } from '../../contexts/ThemeContext';
+import { useCustomerTabBarInset } from '../../contexts/CustomerTabBarInsetContext';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api';
 
@@ -40,6 +41,7 @@ interface Address {
 export default function CustomerAddressesScreen() {
   const router = useRouter();
   const { colors, isDark } = useTheme();
+  const tabBarPad = useCustomerTabBarInset();
   const [addresses, setAddresses] = useState<Address[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -227,7 +229,7 @@ export default function CustomerAddressesScreen() {
         </TouchableOpacity>
         <Text style={[s.title, { color: colors.text }]}>My Addresses</Text>
       </View>
-      <ScrollView style={s.scroll} contentContainerStyle={s.scrollContent}>
+      <ScrollView style={s.scroll} contentContainerStyle={[s.scrollContent, { paddingBottom: 32 + tabBarPad }]}>
         {addresses.length === 0 && (
           <View style={s.emptyBox}>
             <Ionicons name="location-outline" size={48} color={colors.textTertiary} />
@@ -373,7 +375,7 @@ const s = StyleSheet.create({
   backBtn: { padding: 4 },
   title: { fontSize: 22, fontWeight: 'bold', color: '#111827' },
   scroll: { flex: 1 },
-  scrollContent: { padding: 16, paddingBottom: 32 },
+  scrollContent: { padding: 16 },
   emptyBox: { alignItems: 'center', paddingVertical: 48 },
   emptyTitle: { fontSize: 18, fontWeight: '600', color: '#111827', marginTop: 12 },
   emptyText: { fontSize: 14, color: '#6b7280', marginTop: 4 },

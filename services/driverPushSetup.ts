@@ -8,7 +8,11 @@ import { registerForPushNotifications } from './notifications';
 export async function ensureDriverPushNotificationSetup(): Promise<void> {
   try {
     if (Platform.OS === 'android') {
-      await Notifications.requestPermissionsAsync();
+      try {
+        await Notifications.requestPermissionsAsync();
+      } catch {
+        /* Some OEM builds can throw before the permission dialog exists */
+      }
     }
     await registerForPushNotifications();
   } catch {

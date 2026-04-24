@@ -80,6 +80,13 @@ export interface Order {
   cancelTimerRemainingSeconds?: number | null;
   cancelTimerRunning?: boolean;
   cancelTimerLastResumedAt?: string | null;
+  publishAt?: string;
+  pickupAt?: string | null;
+  pickupOriginalAt?: string | null;
+  pickupReminderAt?: string | null;
+  pickupRemainingSeconds?: number | null;
+  canDriverControlPickupPersistent?: boolean | null;
+  driverArrivedOnce?: boolean;
   deliveryZoneType: string | null;
   createdAt: string;
   pickupAddress: OrderAddress | null;
@@ -168,6 +175,8 @@ export const orderService = {
     description?: string;
     cancelAfterMinutes?: number;
     customerExtraAmount?: number;
+    publishAt?: string;
+    pickupAt?: string;
   }) =>
     api.post<Order>('/orders', data),
 
@@ -281,6 +290,9 @@ export const orderService = {
   updateCancelAfter: (orderId: string, cancelAfterMinutes: number) =>
     api.patch<Order>(`/orders/${orderId}/cancel-after`, { cancelAfterMinutes }),
 
+  updateSchedule: (orderId: string, data: { publishAt?: string; pickupAt?: string | null }) =>
+    api.patch<Order>(`/orders/${orderId}/schedule`, data),
+
   /** Driver: respond to customer rejection after arrival */
   submitArrivalConflictFeedback: (orderId: string, feedback: string) =>
     api.post<{ message: string }>(`/orders/${orderId}/arrival-conflict/feedback`, { feedback }),
@@ -296,6 +308,9 @@ export const orderService = {
   // Driver revert status
   revertOrderStatus: (orderId: string) =>
     api.post(`/driver/orders/${orderId}/revert-status`),
+
+  driverControlPickupPersistent: (orderId: string, action: 'show' | 'ignore') =>
+    api.post(`/driver/orders/${orderId}/pickup-persistent`, { action }),
 
   // Driver rejected orders
   getDriverRejectedOrders: () =>
