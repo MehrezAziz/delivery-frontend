@@ -86,6 +86,8 @@ export interface Order {
   pickupReminderAt?: string | null;
   pickupRemainingSeconds?: number | null;
   canDriverControlPickupPersistent?: boolean | null;
+  driverPickupPersistentSentAt?: string | null;
+  driverPickupPersistentIgnoredAt?: string | null;
   driverArrivedOnce?: boolean;
   deliveryZoneType: string | null;
   createdAt: string;

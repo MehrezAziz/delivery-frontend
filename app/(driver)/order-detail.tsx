@@ -11,6 +11,7 @@ import { orderService, Order } from '../../services/api/order.service';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useAppNavigation } from '../../contexts/AppNavigationContext';
 import {
+  bustDriverOrderTrackingDedupe,
   restoreOrderTrackingForDriver,
   stopOrderTrackingSilently,
   subscribeOrderDetailRefresh,
@@ -562,7 +563,11 @@ export default function DriverOrderDetailScreen() {
                   onPress={async () => {
                     try {
                       await orderService.driverControlPickupPersistent(order.id, 'show');
-                      await load();
+                      bustDriverOrderTrackingDedupe(order.id);
+                      const o = await orderService.getOrder(order.id);
+                      setOrder(o);
+                      await syncDriverTrackingNotificationWithOrder(o);
+                      await restoreOrderTrackingForDriver(order.id);
                     } catch (e: any) {
                       Alert.alert('Error', e.message || 'Unable to show notification');
                     }
@@ -575,7 +580,10 @@ export default function DriverOrderDetailScreen() {
                   onPress={async () => {
                     try {
                       await orderService.driverControlPickupPersistent(order.id, 'ignore');
-                      await load();
+                      bustDriverOrderTrackingDedupe(order.id);
+                      const o = await orderService.getOrder(order.id);
+                      setOrder(o);
+                      await syncDriverTrackingNotificationWithOrder(o);
                       await restoreOrderTrackingForDriver(order.id);
                     } catch (e: any) {
                       Alert.alert('Error', e.message || 'Unable to ignore notification');

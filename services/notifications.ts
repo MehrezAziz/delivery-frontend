@@ -58,8 +58,15 @@ const lastAndroidOrderTrackingSig = new Map<string, string>();
 
 function shouldDeferDriverPickupStickyNotification(order: Order): boolean {
   if (!order.pickupAt || !order.pickupOriginalAt) return false;
+  /** Driver chose "Show persistent now" or the scheduled window already activated — do not suppress. */
+  if (order.driverPickupPersistentSentAt) return false;
   const until = new Date(order.pickupOriginalAt).getTime();
   return Number.isFinite(until) && until > Date.now();
+}
+
+/** After "Show persistent now", force the next Notifee update (dedupe key ignores server-only state). */
+export function bustDriverOrderTrackingDedupe(orderId: string) {
+  lastAndroidOrderTrackingSig.delete(orderId);
 }
 
 function buildAndroidOrderTrackingSig(
