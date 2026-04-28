@@ -17,6 +17,8 @@ export default function CustomerLayout() {
   const insets = useSafeAreaInsets();
   /** Flush with system navigation: bar bottom aligns to safe-area inset (no extra gap). */
   const tabBarBottom = insets.bottom;
+  const tabBarHeight = 58 + (insets.bottom > 0 ? 6 : 0);
+  const bottomOverlayClearance = tabBarHeight + tabBarBottom + 18;
 
   return (
     <Tabs
@@ -29,6 +31,9 @@ export default function CustomerLayout() {
         tabBarInactiveTintColor: colors.textTertiary,
         tabBarShowLabel: true,
         tabBarLabelStyle: styles.tabLabel,
+        sceneStyle: {
+          paddingBottom: bottomOverlayClearance,
+        },
         tabBarIcon: ({ color, focused }) => {
           const pair = TAB_ICON_NAMES[route.name];
           if (!pair) return <Ionicons name="ellipse-outline" size={22} color={color} />;
@@ -40,7 +45,7 @@ export default function CustomerLayout() {
           right: 14,
           bottom: tabBarBottom,
           minHeight: 58,
-          height: 58 + (insets.bottom > 0 ? 6 : 0),
+          height: tabBarHeight,
           paddingTop: 6,
           paddingBottom: insets.bottom > 0 ? 6 : 10,
           borderRadius: 18,

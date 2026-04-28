@@ -1,12 +1,14 @@
 import { useEffect } from 'react';
 import { Stack } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ensureDriverPushNotificationSetup } from '../../services/driverPushSetup';
 import { DriverStackHeader } from '../../components/AppChromeHeader';
 import { useTheme } from '../../contexts/ThemeContext';
 
 export default function DriverLayout() {
   const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
   useEffect(() => {
     void (async () => {
       const [token, role] = await Promise.all([
@@ -27,6 +29,7 @@ export default function DriverLayout() {
         headerStyle: { backgroundColor: colors.headerBg },
         headerShadowVisible: false,
         animation: 'slide_from_right',
+        contentStyle: { paddingBottom: insets.bottom + 8 },
       }}
     >
       <Stack.Screen name="home" />

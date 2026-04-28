@@ -23,6 +23,7 @@ import { orderService, Order } from './api/order.service';
 // Channel IDs
 const CHANNEL_ORDER = 'order-updates';
 const CHANNEL_DEFAULT = 'default';
+const CHANNEL_CHAT = 'chat-messages';
 const PENDING_NOTIFICATION_ROUTE_KEY = 'pendingNotificationRoute';
 const TRACKING_STATUS_MAP_KEY = 'trackingOrderStatusMap';
 
@@ -190,6 +191,13 @@ export async function createNotificationChannels() {
     id: CHANNEL_DEFAULT,
     name: 'General',
     importance: AndroidImportance.DEFAULT,
+  });
+
+  await notifee.createChannel({
+    id: CHANNEL_CHAT,
+    name: 'Chat Messages',
+    importance: AndroidImportance.HIGH,
+    vibration: true,
   });
 }
 
