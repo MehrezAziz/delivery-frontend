@@ -7,6 +7,7 @@ import { saveLoginTimestamp } from '../services/auth-session';
 import {
   registerForPushNotifications,
   restoreOrderTrackingForCustomer,
+  restoreOrderTrackingForDriver,
 } from '../services/notifications';
 
 // Use environment variable for API URL
@@ -159,6 +160,7 @@ export const useGoogleAuth = (
         await restoreOrderTrackingForCustomer();
         router.replace('/(customer)/home');
       } else {
+        await restoreOrderTrackingForDriver();
         router.replace('/(driver)/home');
       }
       

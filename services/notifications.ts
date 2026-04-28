@@ -86,6 +86,14 @@ function coerceFcmData(
   return out;
 }
 
+function extractOrderIdFromOrderGroupKey(groupKey?: string): string {
+  const key = String(groupKey || '').trim();
+  if (!key.toLowerCase().startsWith('order:')) return '';
+  const rest = key.slice(6);
+  const firstSegment = rest.split(':')[0]?.trim();
+  return firstSegment || '';
+}
+
 async function getStoredUserRole(): Promise<string | null> {
   const direct = await AsyncStorage.getItem('userRole');
   if (direct) return direct;
@@ -258,6 +266,69 @@ export function registerOrderForegroundService() {
 
 function getOrderNotificationId(orderId: string) {
   return `order-track-${orderId}`;
+}
+
+function extractOrderIdFromTrackingNotificationId(notificationId: string): string | null {
+  const prefix = 'order-track-';
+  if (!notificationId || !notificationId.startsWith(prefix)) return null;
+  const orderId = notificationId.slice(prefix.length).trim();
+  return orderId || null;
+}
+
+function dedupeOrdersByIdNewest(orders: Order[]): Order[] {
+  const byId = new Map<string, Order>();
+  for (const order of orders) {
+    const existing = byId.get(order.id);
+    if (!existing) {
+      byId.set(order.id, order);
+      continue;
+    }
+    const existingTs = new Date(existing.createdAt).getTime();
+    const incomingTs = new Date(order.createdAt).getTime();
+    if (incomingTs >= existingTs) byId.set(order.id, order);
+  }
+  return Array.from(byId.values());
+}
+
+async function cancelDisplayedTrackingNotifications(predicate?: (orderId: string) => boolean) {
+  if (Platform.OS !== 'android') return;
+  try {
+    const displayed = await notifee.getDisplayedNotifications();
+    await Promise.all(
+      displayed.map((entry) => {
+        const id = String(entry.notification?.id || '');
+        const orderId = extractOrderIdFromTrackingNotificationId(id);
+        if (!orderId) return Promise.resolve();
+        if (predicate && !predicate(orderId)) return Promise.resolve();
+        return notifee.cancelNotification(id).catch(() => {});
+      }),
+    );
+  } catch {
+    // Ignore platform/notifee read errors and continue with map cleanup fallback.
+  }
+}
+
+async function getDisplayedTrackingOrderIds(): Promise<Set<string>> {
+  const out = new Set<string>();
+  if (Platform.OS !== 'android') return out;
+  try {
+    const displayed = await notifee.getDisplayedNotifications();
+    for (const entry of displayed) {
+      const id = String(entry.notification?.id || '');
+      const orderId = extractOrderIdFromTrackingNotificationId(id);
+      if (orderId) out.add(orderId);
+    }
+  } catch {
+    // Ignore read errors and fallback to map-based restore checks.
+  }
+  return out;
+}
+
+export async function resetOrderTrackingNotifications() {
+  if (Platform.OS !== 'android') return;
+  await notifee.stopForegroundService().catch(() => {});
+  await cancelDisplayedTrackingNotifications();
+  await AsyncStorage.removeItem(TRACKING_STATUS_MAP_KEY);
 }
 
 async function getTrackingStatusMap(): Promise<Record<string, string>> {
@@ -511,7 +582,11 @@ export async function startOrderTracking(orderId: string, title: string, body: s
 export async function updateOrderTracking(title: string, body: string, data?: Record<string, string>) {
   if (Platform.OS !== 'android') return;
 
-  const orderId = data?.orderId || data?.relatedEntityId || data?.groupKey?.replace('order:', '') || '';
+  const orderId =
+    data?.orderId ||
+    data?.relatedEntityId ||
+    extractOrderIdFromOrderGroupKey(data?.groupKey) ||
+    '';
   if (!orderId) return;
   await setTrackedOrderStatus(orderId, data?.orderStatus);
 
@@ -561,12 +636,7 @@ async function stopOrderTrackingWithOptions(title: string, body: string, showFin
   if (Platform.OS !== 'android') return;
 
   if (!orderId && !showFinalNotification) {
-    const map = await getTrackingStatusMap();
-    const allOrderIds = Object.keys(map);
-    await Promise.all(
-      allOrderIds.map((id) => notifee.cancelNotification(getOrderNotificationId(id)).catch(() => {})),
-    );
-    await AsyncStorage.removeItem(TRACKING_STATUS_MAP_KEY);
+    await resetOrderTrackingNotifications();
     return;
   }
 
@@ -585,6 +655,7 @@ async function stopOrderTrackingWithOptions(title: string, body: string, showFin
     body,
     android: {
       channelId: CHANNEL_ORDER,
+      ongoing: false,
       importance: AndroidImportance.HIGH,
       autoCancel: true,
       pressAction: { id: pressId, launchActivity: 'default' },
@@ -647,19 +718,23 @@ export async function restoreOrderTrackingForCustomer() {
     }
 
     const orders = await orderService.getMyOrders();
-    const activeOrders = orders
+    const activeOrders = dedupeOrdersByIdNewest(
+      orders
       .filter((order) => ORDER_ACTIVE_STATUSES.includes(order.status))
       .sort(
         (a, b) =>
           new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-      );
+      ),
+    );
 
     if (!activeOrders.length) {
       await stopOrderTrackingSilently();
       return;
     }
     const map = await getTrackingStatusMap();
+    const displayedOrderIds = await getDisplayedTrackingOrderIds();
     const activeIdSet = new Set(activeOrders.map((o) => o.id));
+    await cancelDisplayedTrackingNotifications((orderId) => !activeIdSet.has(orderId));
 
     for (const trackedOrderId of Object.keys(map)) {
       if (!activeIdSet.has(trackedOrderId)) {
@@ -669,7 +744,7 @@ export async function restoreOrderTrackingForCustomer() {
     }
 
     for (const order of activeOrders) {
-      if (map[order.id] === order.status) continue;
+      if (map[order.id] === order.status && displayedOrderIds.has(order.id)) continue;
       const { title, body } = getTrackingNotificationFromOrder(order);
       const actionButtons =
         order.status === 'PENDING_CUSTOMER_APPROVAL' ? getDriverFoundActionButtons() : null;
@@ -729,12 +804,14 @@ export async function restoreOrderTrackingForDriver() {
     if (role !== 'DRIVER') return;
 
     const orders = await orderService.getDriverMyOrders();
-    const activeOrders = orders
+    const activeOrders = dedupeOrdersByIdNewest(
+      orders
       .filter((order) => DRIVER_ORDER_TRACKING_STATUSES.includes(order.status))
       .sort(
         (a, b) =>
           new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-      );
+      ),
+    );
 
     if (!activeOrders.length) {
       await stopOrderTrackingSilently();
@@ -742,7 +819,9 @@ export async function restoreOrderTrackingForDriver() {
     }
 
     const map = await getTrackingStatusMap();
+    const displayedOrderIds = await getDisplayedTrackingOrderIds();
     const activeIdSet = new Set(activeOrders.map((o) => o.id));
+    await cancelDisplayedTrackingNotifications((orderId) => !activeIdSet.has(orderId));
 
     for (const trackedOrderId of Object.keys(map)) {
       if (!activeIdSet.has(trackedOrderId)) {
@@ -752,7 +831,7 @@ export async function restoreOrderTrackingForDriver() {
     }
 
     for (const order of activeOrders) {
-      if (map[order.id] === order.status) continue;
+      if (map[order.id] === order.status && displayedOrderIds.has(order.id)) continue;
       const { title, body } = getDriverTrackingNotificationFromOrder(order);
       const actionButtons = getDriverActionButtonsForStatus(order.status);
 
@@ -1180,7 +1259,7 @@ async function handleOrderFCMData(rawData: Record<string, unknown>) {
   const { orderId, groupKey, ongoing } = data;
 
   const isTerminal = ongoing === 'false';
-  const oid = orderId || groupKey?.replace('order:', '') || '';
+  const oid = orderId || extractOrderIdFromOrderGroupKey(groupKey) || '';
   const inferredOrderStatus =
     data.orderStatus ||
     (data.type ? STATUS_BY_NOTIFICATION_TYPE[data.type] : undefined);

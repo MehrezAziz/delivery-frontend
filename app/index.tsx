@@ -3,7 +3,7 @@ import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { isSessionValid, clearSession } from '../services/auth-session';
-import { resolveLaunchRouteAfterLogin } from '../services/notifications';
+import { resolveLaunchRouteAfterLogin, stopOrderTrackingSilently } from '../services/notifications';
 import { useTheme } from '../contexts/ThemeContext';
 import { AppChromeHeader } from '../components/AppChromeHeader';
 
@@ -42,10 +42,12 @@ export default function RoleSelectionScreen() {
         }
       } else {
         // Session expired or no token — clear stale data
+        await stopOrderTrackingSilently();
         await clearSession();
       }
     } catch (e) {
       console.error('Session check error:', e);
+      await stopOrderTrackingSilently();
       await clearSession();
     }
     setChecking(false);

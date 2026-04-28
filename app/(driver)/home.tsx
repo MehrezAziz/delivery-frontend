@@ -80,6 +80,7 @@ export default function DriverHome() {
       }
     } catch (error: any) {
       if (error.response?.status === 401) {
+        await stopOrderTrackingSilently();
         await AsyncStorage.clear();
         router.replace('/(auth)/driver-login');
       }

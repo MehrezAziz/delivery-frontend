@@ -11,6 +11,7 @@ import { useOrderChatUnread } from '../../hooks/useOrderChatUnread';
 import { ChatUnreadBadge } from '../../components/ChatUnreadBadge';
 import {
   restoreOrderTrackingForCustomer,
+  subscribeOrderDetailRefresh,
   syncCustomerOrderTrackingFromOrder,
 } from '../../services/notifications';
 
@@ -74,6 +75,12 @@ export default function OrderDetailScreen() {
   }, [orderId]);
 
   useEffect(() => { loadOrder(); }, [loadOrder]);
+  useEffect(() => {
+    if (!orderId) return;
+    return subscribeOrderDetailRefresh(orderId, () => {
+      void loadOrder();
+    });
+  }, [orderId, loadOrder]);
 
   // Keep Android persistent order tracking notification synchronized from this exact order payload
   // while user is on order details (even if push arrives late/missed).
