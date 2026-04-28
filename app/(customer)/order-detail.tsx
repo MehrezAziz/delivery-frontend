@@ -9,6 +9,10 @@ import { orderService, Order, computeOrderCancelRemainingSec } from '../../servi
 import { useTheme } from '../../contexts/ThemeContext';
 import { useOrderChatUnread } from '../../hooks/useOrderChatUnread';
 import { ChatUnreadBadge } from '../../components/ChatUnreadBadge';
+import {
+  restoreOrderTrackingForCustomer,
+  syncCustomerOrderTrackingFromOrder,
+} from '../../services/notifications';
 
 /** Customer-facing delivery steps (no company return / deposit steps). */
 const STATUS_FLOW = [
@@ -70,6 +74,19 @@ export default function OrderDetailScreen() {
   }, [orderId]);
 
   useEffect(() => { loadOrder(); }, [loadOrder]);
+
+  // Keep Android persistent order tracking notification synchronized from this exact order payload
+  // while user is on order details (even if push arrives late/missed).
+  useEffect(() => {
+    if (!order) return;
+    void syncCustomerOrderTrackingFromOrder(order);
+  }, [order]);
+
+  // Safety reconciliation with global tracker map (covers app reopen / stale map cases).
+  useEffect(() => {
+    if (!order?.id) return;
+    void restoreOrderTrackingForCustomer();
+  }, [order?.id, order?.status]);
   useEffect(() => {
     if (!orderId) return;
     const pollMs = order?.status === 'SEARCHING_DRIVER' ? 3000 : 5000;

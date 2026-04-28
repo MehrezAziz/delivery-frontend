@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import {
   View, Text, ScrollView, StyleSheet, TouchableOpacity,
-  ActivityIndicator, RefreshControl,
+  ActivityIndicator, RefreshControl, Alert,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
@@ -13,6 +13,7 @@ import { notificationService } from '../../services/api/notification.service';
 import { restoreOrderTrackingForCustomer } from '../../services/notifications';
 import { NotificationPreviewModal } from '../../components/NotificationPreviewModal';
 import { getCustomerStatusDotColor } from '../../utils/customerStatus';
+import { api } from '../../services/api/client';
 
 const ACTIVE_STATUSES = [
   'SEARCHING_DRIVER', 'PENDING_CUSTOMER_APPROVAL', 'DRIVER_ASSIGNED', 'DRIVER_ARRIVED', 'PICKED_UP', 'DELIVERING',
@@ -37,6 +38,7 @@ export default function CustomerHomeScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const [notifPreviewOpen, setNotifPreviewOpen] = useState(false);
+  const [hasMainAddress, setHasMainAddress] = useState(false);
 
   const loadHeaderIdentity = useCallback(async () => {
     try {
@@ -59,14 +61,29 @@ export default function CustomerHomeScreen() {
     restoreOrderTrackingForCustomer();
   }, [loadHeaderIdentity]);
 
+  useEffect(() => {
+    if (customerStatus === 'CREATED' && !hasMainAddress) {
+      Alert.alert(
+        'Address verification required',
+        'Please add MAIN address to be verified.',
+        [
+          { text: 'Later', style: 'cancel' },
+          { text: 'Add MAIN address', onPress: () => router.push('/(customer)/addresses') },
+        ],
+      );
+    }
+  }, [customerStatus, hasMainAddress, router]);
+
   const loadOrders = useCallback(async () => {
     try {
-      const [orders, notifCount] = await Promise.all([
+      const [orders, notifCount, addresses] = await Promise.all([
         orderService.getMyOrders(),
         notificationService.getUnreadCount().catch(() => ({ count: 0 })),
+        api.get<Array<{ nickname?: string | null }>>('/addresses').catch(() => []),
       ]);
       setActiveOrders(orders.filter(o => ACTIVE_STATUSES.includes(o.status)));
       setUnreadCount(notifCount.count);
+      setHasMainAddress(addresses.some((a) => String(a.nickname || '').toUpperCase() === 'MAIN'));
     } catch (e) {
       console.error(e);
     } finally {

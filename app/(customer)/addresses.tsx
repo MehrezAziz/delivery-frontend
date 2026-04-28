@@ -37,6 +37,8 @@ interface Address {
   };
 }
 
+const MAIN_NICKNAME = 'MAIN';
+
 export default function CustomerAddressesScreen() {
   const router = useRouter();
   const { colors, isDark } = useTheme();
@@ -157,6 +159,11 @@ export default function CustomerAddressesScreen() {
   };
 
   const deleteAddress = (addressId: string) => {
+    const addr = addresses.find((a) => a.id === addressId);
+    if (addr?.nickname === MAIN_NICKNAME) {
+      Alert.alert('Protected address', 'MAIN address cannot be deleted. Set another address as MAIN first.');
+      return;
+    }
     Alert.alert('Delete Address', 'Are you sure?', [
       { text: 'Cancel', style: 'cancel' },
       {
@@ -174,6 +181,21 @@ export default function CustomerAddressesScreen() {
         },
       },
     ]);
+  };
+
+  const setAsMainAddress = async (addressId: string) => {
+    try {
+      const token = await AsyncStorage.getItem('accessToken');
+      await axios.patch(
+        `${API_URL}/addresses/${addressId}`,
+        { nickname: MAIN_NICKNAME },
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+      loadAddresses();
+    } catch (err: any) {
+      const msg = Array.isArray(err.response?.data?.message) ? err.response.data.message.join(', ') : err.response?.data?.message || 'Failed to set MAIN address';
+      Alert.alert('Error', msg);
+    }
   };
 
   const openPicker = (type: 'country' | 'governorate' | 'delegation') => {
@@ -314,14 +336,22 @@ export default function CustomerAddressesScreen() {
                   <Text style={[s.coordText, { color: colors.textTertiary }]}>📍 {addr.latitude.toFixed(4)}, {addr.longitude.toFixed(4)}</Text>
                 )}
                 <View style={[s.cardActions, { borderTopColor: colors.border }]}>
+                  {addr.nickname !== MAIN_NICKNAME && (
+                    <TouchableOpacity style={s.editBtn} onPress={() => setAsMainAddress(addr.id)}>
+                      <Ionicons name="star" size={16} color="#0f766e" />
+                      <Text style={[s.editBtnText, { color: '#0f766e' }]}>Set as MAIN</Text>
+                    </TouchableOpacity>
+                  )}
                   <TouchableOpacity style={s.editBtn} onPress={() => startEdit(addr)}>
                     <Ionicons name="pencil" size={16} color="#0284c7" />
                     <Text style={s.editBtnText}>Edit</Text>
                   </TouchableOpacity>
-                  <TouchableOpacity style={s.deleteBtn} onPress={() => deleteAddress(addr.id)}>
-                    <Ionicons name="trash" size={16} color="#dc2626" />
-                    <Text style={s.deleteBtnText}>Delete</Text>
-                  </TouchableOpacity>
+                  {addr.nickname !== MAIN_NICKNAME && (
+                    <TouchableOpacity style={s.deleteBtn} onPress={() => deleteAddress(addr.id)}>
+                      <Ionicons name="trash" size={16} color="#dc2626" />
+                      <Text style={s.deleteBtnText}>Delete</Text>
+                    </TouchableOpacity>
+                  )}
                 </View>
               </>
             )}

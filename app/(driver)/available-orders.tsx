@@ -543,7 +543,7 @@ export default function AvailableOrdersScreen() {
       >
         {isUrgentHighlighted && (
           <View style={{ alignSelf: 'flex-start', marginBottom: 8, backgroundColor: '#f59e0b', borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 }}>
-            <Text style={{ color: '#fff', fontSize: 11, fontWeight: '700' }}>URGENT NOTIFICATION</Text>
+            <Text style={{ color: '#fff', fontSize: 11, fontWeight: '700' }}>URGENT</Text>
           </View>
         )}
         <View style={s.cardTop}>

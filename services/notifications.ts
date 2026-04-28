@@ -85,6 +85,19 @@ function coerceFcmData(
   return out;
 }
 
+async function getStoredUserRole(): Promise<string | null> {
+  const direct = await AsyncStorage.getItem('userRole');
+  if (direct) return direct;
+  const rawUser = await AsyncStorage.getItem('user');
+  if (!rawUser) return null;
+  try {
+    const parsed = JSON.parse(rawUser);
+    return parsed?.role ? String(parsed.role) : null;
+  } catch {
+    return null;
+  }
+}
+
 /** Screens showing a single order can subscribe; refetch when FCM or notification actions change that order. */
 const orderDetailRefreshListeners = new Map<string, Set<() => void>>();
 
@@ -471,6 +484,7 @@ export async function startOrderTracking(orderId: string, title: string, body: s
     body,
     android: {
       channelId: CHANNEL_ORDER,
+      asForegroundService: true,
       ongoing: true,
       autoCancel: false,
       importance: AndroidImportance.HIGH,
@@ -511,6 +525,7 @@ export async function updateOrderTracking(title: string, body: string, data?: Re
     body,
     android: {
       channelId: CHANNEL_ORDER,
+      asForegroundService: true,
       ongoing: true,
       autoCancel: false,
       importance: AndroidImportance.HIGH,
@@ -553,7 +568,7 @@ async function stopOrderTrackingWithOptions(title: string, body: string, showFin
 
   if (!showFinalNotification) return;
 
-  const role = await AsyncStorage.getItem('userRole');
+  const role = await getStoredUserRole();
   const pressId = role === 'DRIVER' ? 'view_order_driver' : 'view_order';
 
   await notifee.displayNotification({
@@ -617,8 +632,8 @@ export async function restoreOrderTrackingForCustomer() {
   if (Platform.OS !== 'android') return;
 
   try {
-    const role = await AsyncStorage.getItem('userRole');
-    if (role !== 'CUSTOMER') {
+    const role = await getStoredUserRole();
+    if (role && role !== 'CUSTOMER') {
       await stopOrderTrackingSilently();
       return;
     }
@@ -667,6 +682,32 @@ export async function restoreOrderTrackingForCustomer() {
   } catch (error) {
     console.error('Failed to restore order tracking notification:', error);
   }
+}
+
+/**
+ * Force-sync customer persistent tracking notification from one fresh order payload.
+ * Useful on order-detail where status can change before FCM arrives.
+ */
+export async function syncCustomerOrderTrackingFromOrder(order: Order | null | undefined) {
+  if (Platform.OS !== 'android' || !order) return;
+  const role = await getStoredUserRole();
+  if (role && role !== 'CUSTOMER') return;
+
+  if (!ORDER_ACTIVE_STATUSES.includes(order.status)) return;
+
+  const { title, body } = getTrackingNotificationFromOrder(order);
+  const actionButtons =
+    order.status === 'PENDING_CUSTOMER_APPROVAL' ? getDriverFoundActionButtons() : null;
+
+  await startOrderTracking(order.id, title, body, {
+    orderId: order.id,
+    groupKey: `order:${order.id}`,
+    relatedEntityType: 'Order',
+    relatedEntityId: order.id,
+    ongoing: 'true',
+    orderStatus: order.status,
+    ...(actionButtons ? { actionButtons: JSON.stringify(actionButtons) } : {}),
+  });
 }
 
 /**
@@ -1033,6 +1074,9 @@ async function routeFromNotifeeInitialForNavigation(initial: NotifeeInitial): Pr
 
   if (actionId === 'see_driver' && orderId) return getOrderRoute(orderId, true);
   if (actionId === 'view_order' && orderId) {
+    if (role === 'DRIVER' && data.type === 'NEW_ORDER_AVAILABLE') {
+      return `/(driver)/available-orders?urgentOrderId=${orderId}`;
+    }
     return role === 'DRIVER' ? getDriverOrderRoute(orderId) : getOrderRoute(orderId);
   }
   if (actionId === 'view_order_driver' && orderId) return getDriverOrderRoute(orderId);
@@ -1246,6 +1290,10 @@ export function setupNotificationListeners() {
             role = undefined;
           }
           if (!role) role = (await AsyncStorage.getItem('userRole')) || 'CUSTOMER';
+          if (role === 'DRIVER' && data?.type === 'NEW_ORDER_AVAILABLE') {
+            router.push(`/(driver)/available-orders?urgentOrderId=${orderId}` as any);
+            return;
+          }
           router.push(
             (role === 'DRIVER' ? getDriverOrderRoute(orderId) : getOrderRoute(orderId)) as any,
           );
@@ -1350,6 +1398,10 @@ export function setupBackgroundHandler() {
           role = undefined;
         }
         if (!role) role = (await AsyncStorage.getItem('userRole')) || 'CUSTOMER';
+        if (role === 'DRIVER' && data?.type === 'NEW_ORDER_AVAILABLE') {
+          await savePendingNotificationRoute(`/(driver)/available-orders?urgentOrderId=${orderId}`);
+          return;
+        }
         await savePendingNotificationRoute(
           role === 'DRIVER' ? getDriverOrderRoute(orderId) : getOrderRoute(orderId),
         );

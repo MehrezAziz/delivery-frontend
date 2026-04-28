@@ -71,6 +71,8 @@ export default function CreateOrderScreen() {
   const [savedPickerTarget, setSavedPickerTarget] = useState<'pickup' | 'dropoff'>('pickup');
   const [savedSearch, setSavedSearch] = useState('');
   const [recentAddressIds, setRecentAddressIds] = useState<string[]>([]);
+  const [customerStatus, setCustomerStatus] = useState<string>('ACTIVE');
+  const hasMainAddress = savedAddresses.some((a) => String(a.nickname || '').toUpperCase() === 'MAIN');
 
   const ACTIVE_STATUSES = ['SEARCHING_DRIVER', 'DRIVER_ASSIGNED', 'DRIVER_ARRIVED', 'PICKED_UP', 'DELIVERING'];
 
@@ -100,6 +102,20 @@ export default function CreateOrderScreen() {
   // Fetch wallet balance on mount and when screen regains focus
   useEffect(() => { fetchWalletBalance(); }, [fetchWalletBalance]);
   useFocusEffect(useCallback(() => { fetchWalletBalance(); }, [fetchWalletBalance]));
+  useFocusEffect(
+    useCallback(() => {
+      (async () => {
+        try {
+          const raw = await AsyncStorage.getItem('customer');
+          if (!raw) return;
+          const customer = JSON.parse(raw);
+          setCustomerStatus(customer?.customerStatus || 'ACTIVE');
+        } catch {
+          setCustomerStatus('ACTIVE');
+        }
+      })();
+    }, []),
+  );
 
   const loadSavedAddresses = useCallback(async () => {
     try {
@@ -313,6 +329,10 @@ export default function CreateOrderScreen() {
 
   // Calculate price
   const handleCalculatePrice = async () => {
+    if (customerStatus === 'CREATED' && !hasMainAddress) {
+      Alert.alert('Address verification required', 'Please add MAIN address to be verified before creating orders.');
+      return;
+    }
     if (!pickupAddress || !dropoffAddress) {
       Alert.alert('Missing Address', 'Please select both pickup and delivery locations on the map.');
       return;
