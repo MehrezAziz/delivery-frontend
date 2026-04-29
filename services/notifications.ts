@@ -1,5 +1,6 @@
 import notifee, {
   AndroidImportance,
+  AndroidStyle,
   EventType,
 } from '@notifee/react-native';
 import {
@@ -24,6 +25,17 @@ import { orderService, Order } from './api/order.service';
 const CHANNEL_ORDER = 'order-updates';
 const CHANNEL_DEFAULT = 'default';
 const CHANNEL_CHAT = 'chat-messages';
+/** Stable Notifee id + Android tray grouping per order chat thread */
+const CHAT_THREAD_STORAGE_KEY = 'nativeChatThreadLines:v1';
+const MAX_CHAT_THREAD_LINES = 25;
+const ORDER_CHAT_REPLY_ACTION = 'chat_reply';
+const IOS_CHAT_REPLY_CATEGORY = 'ORDER_CHAT_REPLY';
+const CHAT_NOTIF_ID_PREFIX = 'chat-thread-';
+
+type ChatQueuedLine = { messageId: string; text: string; timestamp: number };
+
+let iosChatCategoriesRegistered = false;
+
 const PENDING_NOTIFICATION_ROUTE_KEY = 'pendingNotificationRoute';
 const TRACKING_STATUS_MAP_KEY = 'trackingOrderStatusMap';
 
@@ -276,27 +288,48 @@ async function resolveOrderTrackingText(
  * Create Android notification channels
  */
 export async function createNotificationChannels() {
-  if (Platform.OS !== 'android') return;
+  if (Platform.OS === 'android') {
+    await notifee.createChannel({
+      id: CHANNEL_ORDER,
+      name: 'Order Updates',
+      importance: AndroidImportance.HIGH,
+      vibration: true,
+    });
 
-  await notifee.createChannel({
-    id: CHANNEL_ORDER,
-    name: 'Order Updates',
-    importance: AndroidImportance.HIGH,
-    vibration: true,
-  });
+    await notifee.createChannel({
+      id: CHANNEL_DEFAULT,
+      name: 'General',
+      importance: AndroidImportance.DEFAULT,
+    });
 
-  await notifee.createChannel({
-    id: CHANNEL_DEFAULT,
-    name: 'General',
-    importance: AndroidImportance.DEFAULT,
-  });
+    await notifee.createChannel({
+      id: CHANNEL_CHAT,
+      name: 'Chat Messages',
+      importance: AndroidImportance.HIGH,
+      vibration: true,
+    });
+  }
 
-  await notifee.createChannel({
-    id: CHANNEL_CHAT,
-    name: 'Chat Messages',
-    importance: AndroidImportance.HIGH,
-    vibration: true,
-  });
+  if (Platform.OS === 'ios' && !iosChatCategoriesRegistered) {
+    iosChatCategoriesRegistered = true;
+    try {
+      await notifee.setNotificationCategories([
+        {
+          id: IOS_CHAT_REPLY_CATEGORY,
+          actions: [
+            {
+              id: ORDER_CHAT_REPLY_ACTION,
+              title: 'Send',
+              input: { placeholderText: 'Message', buttonText: 'Send' },
+              foreground: false,
+            },
+          ],
+        },
+      ]);
+    } catch {
+      iosChatCategoriesRegistered = false;
+    }
+  }
 }
 
 /**
@@ -1146,6 +1179,86 @@ function shouldSuppressChatNotification(data: Record<string, string>): boolean {
   return false;
 }
 
+function parseSentAtMs(raw?: string): number {
+  if (!raw?.trim()) return NaN;
+  const t = Date.parse(raw.trim());
+  return Number.isNaN(t) ? NaN : t;
+}
+
+function stableChatNotificationId(orderId: string): string {
+  return `${CHAT_NOTIF_ID_PREFIX}${orderId}`;
+}
+
+async function readChatThreadMap(): Promise<Record<string, ChatQueuedLine[]>> {
+  try {
+    const raw = await AsyncStorage.getItem(CHAT_THREAD_STORAGE_KEY);
+    if (!raw) return {};
+    const p = JSON.parse(raw);
+    return typeof p === 'object' && p && !Array.isArray(p) ? p : {};
+  } catch {
+    return {};
+  }
+}
+
+async function writeChatThreadMap(map: Record<string, ChatQueuedLine[]>) {
+  await AsyncStorage.setItem(CHAT_THREAD_STORAGE_KEY, JSON.stringify(map));
+}
+
+/**
+ * Merge one server chat line into the per-order queue (sorted by time, capped).
+ */
+async function mergeIncomingChatLine(orderId: string, data: Record<string, string>): Promise<ChatQueuedLine[]> {
+  const preview =
+    (data.messagePreview || '').trim() ||
+    (data.body || '').trim() ||
+    'Message';
+  let rawId = (data.messageId || '').trim();
+  if (!rawId) {
+    rawId = `legacy_${parseSentAtMs(data.sentAt) || Date.now()}_${preview.slice(0, 48)}`;
+  }
+  let ts = parseSentAtMs(data.sentAt);
+  if (!Number.isFinite(ts)) ts = Date.now();
+
+  const map = await readChatThreadMap();
+  let lines = map[orderId] ? [...map[orderId]] : [];
+  if (!lines.some((l) => l.messageId === rawId)) {
+    lines.push({ messageId: rawId, text: preview, timestamp: ts });
+  }
+  lines.sort((a, b) => a.timestamp - b.timestamp);
+  if (lines.length > MAX_CHAT_THREAD_LINES) {
+    lines = lines.slice(-MAX_CHAT_THREAD_LINES);
+  }
+  map[orderId] = lines;
+  await writeChatThreadMap(map);
+  return lines;
+}
+
+function senderLabelFromChatData(data: Record<string, string>): string {
+  const t = (data.title || '').trim();
+  if (t) return t;
+  if (data.type === 'NEW_MESSAGE_FROM_DRIVER') {
+    return (data.driverName || '').trim() || 'Driver';
+  }
+  return (data.customerName || '').trim() || 'Customer';
+}
+
+async function handleChatQuickReply(orderId: string, input: string | undefined) {
+  const text = (input || '').trim();
+  if (!text || !orderId) return;
+  try {
+    await orderService.sendChatMessage(orderId, text);
+    emitOrderDetailRefresh(orderId);
+    emitUnreadBadgeRefreshDebounced();
+    try {
+      await notifee.cancelNotification(stableChatNotificationId(orderId));
+    } catch {
+      /* ignore */
+    }
+  } catch (e) {
+    console.error('Chat quick reply failed:', e);
+  }
+}
+
 /** Build an expo-router path from FCM / Notifee notification data. */
 export async function notificationDataToRoute(
   data: Record<string, string> | undefined,
@@ -1426,32 +1539,76 @@ function isOrderTrackingPayload(data: Record<string, string>): boolean {
   return false;
 }
 
-/** Order-chat messages: high-importance channel; stable id replaces prior banner for same thread. */
-async function displayChatNotification(data: Record<string, string>, androidId?: string) {
-  const title = (data.title || '').trim();
-  const body = (data.body || '').trim();
-  if (!title || !body) return;
+/**
+ * Order chat: one tray slot per thread, Messaging-style lines on Android, inline reply where supported.
+ */
+async function displayGroupedChatNotification(data: Record<string, string>, lines: ChatQueuedLine[]) {
+  const orderId = effectiveOrderIdFromChatPayload(data);
+  if (!orderId || lines.length === 0) return;
   if (shouldSuppressChatNotification(data)) return;
 
-  if (Platform.OS === 'android') {
-    try {
-      await createNotificationChannels();
-    } catch {
-      /* ignore */
-    }
+  const convTitle = senderLabelFromChatData(data);
+  const senderName = convTitle;
+  const lastText = lines[lines.length - 1]?.text || '';
+
+  try {
+    await createNotificationChannels();
+  } catch {
+    /* ignore */
   }
 
+  const baseData = { ...data, orderId };
+
+  const replyAction = {
+    title: 'Send',
+    pressAction: { id: ORDER_CHAT_REPLY_ACTION, launchActivity: 'none' as const },
+    input: { placeholder: 'Message' as const },
+  };
+
+  if (Platform.OS === 'android') {
+    const messagingMessages = lines.map((ln) => ({
+      text: ln.text,
+      timestamp: ln.timestamp,
+      person: { name: senderName, id: `sender_${orderId}` },
+    }));
+
+    await notifee.displayNotification({
+      id: stableChatNotificationId(orderId),
+      title: convTitle,
+      body: lastText,
+      data: baseData,
+      android: {
+        channelId: CHANNEL_CHAT,
+        importance: AndroidImportance.HIGH,
+        pressAction: { id: 'default', launchActivity: 'default' },
+        /** Matches backend FCM `chat_thread_${orderId}` so merged Notifee replaces the system chat banner. */
+        tag: `chat_thread_${orderId}`.slice(0, 64),
+        style: {
+          type: AndroidStyle.MESSAGING,
+          person: { name: 'You', id: 'local' },
+          title: convTitle,
+          messages: messagingMessages,
+        },
+        actions: [replyAction],
+      },
+      ios: { sound: 'default', threadId: `chat:${orderId}`, categoryId: IOS_CHAT_REPLY_CATEGORY },
+    });
+    return;
+  }
+
+  const iosBody = lines.map((l) => l.text).join('\n');
   await notifee.displayNotification({
-    ...(androidId ? { id: androidId } : {}),
-    title,
-    body,
-    android: {
-      channelId: CHANNEL_CHAT,
-      importance: AndroidImportance.HIGH,
-      pressAction: { id: 'default' },
+    id: stableChatNotificationId(orderId),
+    title: convTitle,
+    body: iosBody,
+    data: baseData,
+    ios: {
+      sound: 'default',
+      threadId: `chat:${orderId}`,
+      categoryId: IOS_CHAT_REPLY_CATEGORY,
+      summaryArgument: convTitle,
+      summaryArgumentCount: lines.length,
     },
-    ios: { sound: 'default' },
-    data,
   });
 }
 
@@ -1513,6 +1670,12 @@ export function setupNotificationListeners() {
 
       if (actionId === 'accept_driver' && orderId) {
         handleAcceptDriver(orderId);
+        return;
+      }
+      if (actionId === ORDER_CHAT_REPLY_ACTION) {
+        const merged = coerceFcmData(detail.notification?.data as Record<string, unknown>);
+        const oid = effectiveOrderIdFromChatPayload(merged);
+        void handleChatQuickReply(oid, detail.input);
         return;
       }
       if (
@@ -1599,18 +1762,10 @@ export function setupBackgroundHandler() {
         (data.orderId || '').trim() ||
         groupKey.replace(/^chat:/i, '').trim() ||
         effectiveOrderIdFromChatPayload(data);
-      const notifId = (data.notificationId || '').trim();
-      /** One Notifee id per server row — same order id used to replace updates and hid subsequent messages on Android. */
-      const nid = notifId ? `chat-${notifId}` : oid ? `chat-fallback-${oid}-${Date.now()}` : `chat-${Date.now()}`;
-      const hasTray = fcmHasNativeNotificationTrayPayload(remoteMessage);
-      const foreground = AppState.currentState === 'active';
-      /**
-       * Hybrid FCM (notification + data): Android does not show a system heads-up while the app is foregrounded,
-       * but `hasTray` is still true — we must show via Notifee. Background/quit: OS displays the native tray once.
-       */
-      if (foreground || !hasTray) {
-        await displayChatNotification(data, nid);
-      }
+      if (!oid) return;
+      if (shouldSuppressChatNotification(data)) return;
+      const lines = await mergeIncomingChatLine(oid, data);
+      await displayGroupedChatNotification(data, lines);
       return;
     }
 
@@ -1638,6 +1793,12 @@ export function setupBackgroundHandler() {
 
       if (actionId === 'accept_driver' && orderId) {
         await handleAcceptDriver(orderId);
+        return;
+      }
+      if (actionId === ORDER_CHAT_REPLY_ACTION) {
+        const merged = coerceFcmData(detail.notification?.data as Record<string, unknown>);
+        const oid = effectiveOrderIdFromChatPayload(merged);
+        await handleChatQuickReply(oid, detail.input);
         return;
       }
       if (
@@ -1718,12 +1879,10 @@ export async function handleFCMMessage(remoteMessage: any) {
       (data.orderId || '').trim() ||
       (data.groupKey || '').replace(/^chat:/i, '').trim() ||
       effectiveOrderIdFromChatPayload(data);
-    const notifId = (data.notificationId || '').trim();
-    const nid = notifId ? `chat-${notifId}` : oid ? `chat-fallback-${oid}-${Date.now()}` : `chat-${Date.now()}`;
-    const hasTray = fcmHasNativeNotificationTrayPayload(remoteMessage);
-    if (AppState.currentState === 'active' || !hasTray) {
-      await displayChatNotification(data, nid);
-    }
+    if (!oid) return;
+    if (shouldSuppressChatNotification(data)) return;
+    const lines = await mergeIncomingChatLine(oid, data);
+    await displayGroupedChatNotification(data, lines);
   } else if (
     !fcmHasNativeNotificationTrayPayload(remoteMessage) ||
     AppState.currentState === 'active'
