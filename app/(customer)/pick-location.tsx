@@ -9,6 +9,7 @@ import MapView, { Marker, Region } from 'react-native-maps';
 import * as Location from 'expo-location';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '../../contexts/ThemeContext';
+import { GOOGLE_MAPS_DARK_STYLE } from '../../constants/googleMapsDarkStyle';
 
 const GOOGLE_API_KEY = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY || '';
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -190,6 +191,7 @@ export default function PickLocationScreen() {
         onPress={handleMapPress}
         showsUserLocation
         showsMyLocationButton={false}
+        customMapStyle={isDark ? GOOGLE_MAPS_DARK_STYLE : undefined}
       >
         {marker && (
           <Marker coordinate={marker} pinColor={accentColor} />

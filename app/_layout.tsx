@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
-import { AppState, type AppStateStatus } from 'react-native';
+import { AppState, type AppStateStatus, View } from 'react-native';
 import { Stack } from 'expo-router';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ThemeProvider, useTheme } from '../contexts/ThemeContext';
+import { ThemedAlertProvider } from '../components/ThemedAlert';
 import { AppNavigationProvider } from '../contexts/AppNavigationContext';
 import GlobalErrorBoundary from '../components/GlobalErrorBoundary';
 import FriendlyErrorModal from '../components/FriendlyErrorModal';
@@ -26,7 +27,7 @@ setupBackgroundHandler();
 registerOrderForegroundService();
 
 function RootContent() {
-  const { isDark } = useTheme();
+  const { colors, isDark } = useTheme();
   const cleanupRef = useRef<(() => void) | null>(null);
   const lastErrorShownAtRef = useRef(0);
   const [friendlyError, setFriendlyError] = useState<{
@@ -123,7 +124,7 @@ function RootContent() {
 
   return (
     <GlobalErrorBoundary>
-      <>
+      <View style={{ flex: 1, backgroundColor: colors.background }}>
         <StatusBar style={isDark ? 'light' : 'dark'} />
         <Stack screenOptions={{ headerShown: false }} />
         <FriendlyErrorModal
@@ -132,7 +133,7 @@ function RootContent() {
           message={friendlyError.message}
           onClose={() => setFriendlyError((prev) => ({ ...prev, visible: false }))}
         />
-      </>
+      </View>
     </GlobalErrorBoundary>
   );
 }
@@ -140,11 +141,13 @@ function RootContent() {
 export default function RootLayout() {
   return (
     <ThemeProvider>
-      <SafeAreaProvider>
-        <AppNavigationProvider>
-          <RootContent />
-        </AppNavigationProvider>
-      </SafeAreaProvider>
+      <ThemedAlertProvider>
+        <SafeAreaProvider>
+          <AppNavigationProvider>
+            <RootContent />
+          </AppNavigationProvider>
+        </SafeAreaProvider>
+      </ThemedAlertProvider>
     </ThemeProvider>
   );
 }

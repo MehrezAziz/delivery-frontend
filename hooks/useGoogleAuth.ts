@@ -9,6 +9,7 @@ import {
   restoreOrderTrackingForCustomer,
   restoreOrderTrackingForDriver,
 } from '../services/notifications';
+import { persistDriverIdentityFromMe } from '../utils/persistDriverIdentity';
 
 // Use environment variable for API URL
 // For physical device with USB + ADB reverse, use localhost
@@ -130,12 +131,9 @@ export const useGoogleAuth = (
 
         if (profileResponse.ok) {
           const profileData = await profileResponse.json();
-          
-          // Store user data
-          await AsyncStorage.setItem('user', JSON.stringify(profileData.user));
-          
-          // Store customer or driver data
+
           if (role === 'CUSTOMER') {
+            await AsyncStorage.setItem('user', JSON.stringify(profileData.user));
             await AsyncStorage.setItem('customer', JSON.stringify({
               id: profileData.id,
               userId: profileData.userId,
@@ -144,7 +142,7 @@ export const useGoogleAuth = (
               referredByCodeId: profileData.referredByCodeId,
             }));
           } else {
-            await AsyncStorage.setItem('driver', JSON.stringify(profileData));
+            await persistDriverIdentityFromMe(profileData);
           }
         } else {
           console.error('Failed to fetch profile:', await profileResponse.text());

@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, ActivityIndicator,
-  Alert, RefreshControl, StyleSheet,
+  RefreshControl, StyleSheet,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
@@ -16,6 +16,7 @@ import {
 } from '../../services/notifications';
 import { fetchChatUnreadMapForOrders } from '../../hooks/useOrderChatUnread';
 import { ChatUnreadBadge } from '../../components/ChatUnreadBadge';
+import { appAlert } from '../../utils/appAlert';
 
 const STATUS_META: Record<string, { color: string; bg: string; label: string; icon: string }> = {
   PENDING_CUSTOMER_APPROVAL: { color: '#ea580c', bg: '#ffedd5', label: 'Waiting for Customer', icon: 'hourglass-outline' },
@@ -60,6 +61,10 @@ function formatWeight(v: unknown): string {
   const n = typeof v === 'number' ? v : Number(v);
   if (!Number.isFinite(n)) return '—';
   return `${n} kg`;
+}
+
+function isCompanyOrder(o: Order): boolean {
+  return o.sourceType === 'DELIVERY_COMPANY';
 }
 
 export default function DriverMyOrdersScreen() {
@@ -126,7 +131,7 @@ export default function DriverMyOrdersScreen() {
     if (status === 'DELIVERED' || status === 'RETURNED') {
       const order = orders.find(o => o.id === orderId);
       if (order && !order.driverAssignment?.image1Proof) {
-        Alert.alert(
+        appAlert(
           'Proof Required',
           'You must upload at least the first proof image before marking this order.',
           [
@@ -139,12 +144,12 @@ export default function DriverMyOrdersScreen() {
     }
     setUpdatingStatus(orderId);
     try { await orderService.updateOrderStatus(orderId, status); load(); }
-    catch (e: any) { Alert.alert('Error', e.message); }
+    catch (e: any) { appAlert('Error', e.message); }
     finally { setUpdatingStatus(null); }
   };
 
   const handleRevertStatus = (orderId: string) => {
-    Alert.alert('Go Back', 'Revert to the previous status?', [
+    appAlert('Go Back', 'Revert to the previous status?', [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Yes, Go Back', onPress: async () => {
         setUpdatingStatus(orderId);
@@ -153,14 +158,14 @@ export default function DriverMyOrdersScreen() {
           await load();
           await restoreOrderTrackingForDriver();
         }
-        catch (e: any) { Alert.alert('Error', e.message); }
+        catch (e: any) { appAlert('Error', e.message); }
         finally { setUpdatingStatus(null); }
       }},
     ]);
   };
 
   const handleCancel = (orderId: string) => {
-    Alert.alert('Cancel Assignment', 'Are you sure you want to cancel this delivery?', [
+    appAlert('Cancel Assignment', 'Are you sure you want to cancel this delivery?', [
       { text: 'No', style: 'cancel' },
       { text: 'Yes, Cancel', style: 'destructive', onPress: async () => {
         try {
@@ -168,7 +173,7 @@ export default function DriverMyOrdersScreen() {
           await stopOrderTrackingSilently();
           router.replace('/(driver)/available-orders');
         }
-        catch (e: any) { Alert.alert('Error', e.message); }
+        catch (e: any) { appAlert('Error', e.message); }
       }},
     ]);
   };
@@ -247,21 +252,27 @@ export default function DriverMyOrdersScreen() {
         {/* Quick actions: Chat + Assistance */}
         {hasChat && (
           <View style={s.quickRow}>
-            <View style={{ position: 'relative' }}>
-              <TouchableOpacity style={[s.quickBtn, { backgroundColor: '#eff6ff' }]}
-                onPress={() => push(`/(driver)/order-chat?orderId=${order.id}`)} activeOpacity={0.7}>
-                <Ionicons name="chatbubbles" size={16} color="#2563eb" />
+            <View style={{ flex: 2, position: 'relative' }}>
+              <TouchableOpacity
+                style={[s.quickBtn, s.quickBtnChat, { backgroundColor: isDark ? 'rgba(37,99,235,0.22)' : '#eff6ff' }]}
+                onPress={() => push(`/(driver)/order-chat?orderId=${order.id}`)}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="chatbubbles" size={18} color="#2563eb" />
                 <Text style={[s.quickBtnText, { color: '#2563eb' }]}>Chat</Text>
               </TouchableOpacity>
               <ChatUnreadBadge count={chatUnreadMap[order.id] ?? 0} />
             </View>
-            <TouchableOpacity style={[s.quickBtn, { backgroundColor: '#fff7ed' }]}
+            <TouchableOpacity
+              style={[s.quickBtn, s.quickBtnHelp, { flex: 1, backgroundColor: isDark ? 'rgba(234,88,12,0.18)' : '#fff7ed' }]}
               onPress={async () => {
                 try { await orderService.driverRequestAssistance(order.id); push('/(driver)/support'); }
-                catch (e: any) { Alert.alert('Error', e.message); }
-              }} activeOpacity={0.7}>
-              <Ionicons name="headset" size={16} color="#ea580c" />
-              <Text style={[s.quickBtnText, { color: '#ea580c' }]}>Help</Text>
+                catch (e: any) { appAlert('Error', e.message); }
+              }}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="headset" size={15} color="#ea580c" />
+              <Text style={[s.quickBtnText, { color: '#ea580c', fontSize: 12 }]}>Help</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -281,18 +292,20 @@ export default function DriverMyOrdersScreen() {
             )}
             {order.status === 'DELIVERING' ? (
               <View style={{ flex: 1, flexDirection: 'row', gap: 8 }}>
-                <TouchableOpacity
-                  style={[s.actionBtn, { backgroundColor: '#e11d48', flex: 1, marginBottom: 0 }]}
-                  onPress={() => handleStatusUpdate(order.id, 'RETURNED')}
-                  disabled={isUpdating}
-                  activeOpacity={0.8}
-                >
-                  {isUpdating ? (
-                    <ActivityIndicator size="small" color="#fff" />
-                  ) : (
-                    <Text style={s.actionBtnText}>rejected</Text>
-                  )}
-                </TouchableOpacity>
+                {isCompanyOrder(order) && (
+                  <TouchableOpacity
+                    style={[s.actionBtn, { backgroundColor: '#e11d48', flex: 1, marginBottom: 0 }]}
+                    onPress={() => handleStatusUpdate(order.id, 'RETURNED')}
+                    disabled={isUpdating}
+                    activeOpacity={0.8}
+                  >
+                    {isUpdating ? (
+                      <ActivityIndicator size="small" color="#fff" />
+                    ) : (
+                      <Text style={s.actionBtnText}>rejected</Text>
+                    )}
+                  </TouchableOpacity>
+                )}
                 <TouchableOpacity
                   style={[s.actionBtn, { backgroundColor: action.color, flex: 1, marginBottom: 0 }]}
                   onPress={() => handleStatusUpdate(order.id, action.next)}
@@ -466,11 +479,13 @@ const s = StyleSheet.create({
   chipText: { fontSize: 12, fontWeight: '600', color: '#6b7280' },
 
   // Quick actions
-  quickRow: { flexDirection: 'row', gap: 8, marginBottom: 12 },
+  quickRow: { flexDirection: 'row', gap: 8, marginBottom: 12, alignItems: 'stretch' },
   quickBtn: {
-    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
     paddingVertical: 10, borderRadius: 12,
   },
+  quickBtnChat: { minHeight: 48, paddingVertical: 14 },
+  quickBtnHelp: { minHeight: 40, paddingVertical: 8 },
   quickBtnText: { fontSize: 13, fontWeight: '700' },
 
   // Main action

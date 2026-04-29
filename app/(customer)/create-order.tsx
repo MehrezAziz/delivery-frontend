@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, ActivityIndicator,
-  Alert, TextInput, KeyboardAvoidingView, Platform, StyleSheet, Modal, FlatList,
+  TextInput, KeyboardAvoidingView, Platform, StyleSheet, Modal, FlatList, Switch,
 } from 'react-native';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
@@ -12,6 +13,8 @@ import { api } from '../../services/api/client';
 import { orderService, Order } from '../../services/api/order.service';
 import { startOrderTracking } from '../../services/notifications';
 import { useTheme } from '../../contexts/ThemeContext';
+import { appAlert } from '../../utils/appAlert';
+import { clampMinSchedule, mergePublishDatePart, mergePublishTimePart } from '../../utils/schedPublishHelpers';
 
 interface SavedAddress {
   addressId: string;
@@ -73,8 +76,16 @@ export default function CreateOrderScreen() {
   const [recentAddressIds, setRecentAddressIds] = useState<string[]>([]);
   const [customerStatus, setCustomerStatus] = useState<string>('ACTIVE');
   const hasMainAddress = savedAddresses.some((a) => String(a.nickname || '').toUpperCase() === 'MAIN');
+  const [scheduleLater, setScheduleLater] = useState(false);
+  const [publishAt, setPublishAt] = useState(() => new Date(Date.now() + 15 * 60 * 1000));
+  /** Android: `datetime` mode is invalid — use date then time (see @react-native-community/datetimepicker). */
+  const [androidPublishStep, setAndroidPublishStep] = useState<'idle' | 'date' | 'time'>('idle');
 
-  const ACTIVE_STATUSES = ['SEARCHING_DRIVER', 'DRIVER_ASSIGNED', 'DRIVER_ARRIVED', 'PICKED_UP', 'DELIVERING'];
+  const ACTIVE_STATUSES = ['PENDING_PUBLISH', 'SEARCHING_DRIVER', 'DRIVER_ASSIGNED', 'DRIVER_ARRIVED', 'PICKED_UP', 'DELIVERING'];
+
+  useEffect(() => {
+    if (!scheduleLater) setAndroidPublishStep('idle');
+  }, [scheduleLater]);
 
   // Load active orders
   useEffect(() => {
@@ -177,7 +188,7 @@ export default function CreateOrderScreen() {
         lat, lng,
       });
     } catch (e: any) {
-      Alert.alert('Error', e.message || 'Failed to save address');
+      appAlert('Error', e.message || 'Failed to save address');
     } finally {
       setResolving(false);
     }
@@ -266,7 +277,7 @@ export default function CreateOrderScreen() {
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Location', 'We need your permission to use the current position.');
+        appAlert('Location', 'We need your permission to use the current position.');
         return;
       }
       const pos = await Location.getCurrentPositionAsync({});
@@ -330,33 +341,37 @@ export default function CreateOrderScreen() {
   // Calculate price
   const handleCalculatePrice = async () => {
     if (customerStatus === 'CREATED' && !hasMainAddress) {
-      Alert.alert('Address verification required', 'Please add MAIN address to be verified before creating orders.');
+      appAlert('Address verification required', 'Please add MAIN address to be verified before creating orders.');
       return;
     }
     if (!pickupAddress || !dropoffAddress) {
-      Alert.alert('Missing Address', 'Please select both pickup and delivery locations on the map.');
+      appAlert('Missing Address', 'Please select both pickup and delivery locations on the map.');
       return;
     }
     if (pickupAddress.addressId === dropoffAddress.addressId) {
-      Alert.alert('Same Location', 'Pickup and delivery must be different locations.');
+      appAlert('Same Location', 'Pickup and delivery must be different locations.');
       return;
     }
     const w = parseFloat(weight);
     if (isNaN(w) || w <= 0) {
-      Alert.alert('Invalid Weight', 'Please enter a valid package weight.');
+      appAlert('Invalid Weight', 'Please enter a valid package weight.');
       return;
     }
     if (cancelAfterMinutes > 1440) {
-      Alert.alert('Invalid Timer', 'Auto-cancel time must be 24 hours or less.');
+      appAlert('Invalid Timer', 'Auto-cancel time must be 24 hours or less.');
+      return;
+    }
+    if (scheduleLater && publishAt.getTime() < Date.now() + 60 * 1000) {
+      appAlert('Schedule', 'Publish time must be at least one minute from now.');
       return;
     }
     const ex = parseFloat((customerExtraAmount || '0').replace(',', '.'));
     if (Number.isNaN(ex) || ex < 0) {
-      Alert.alert('Amount', 'Enter a valid optional extra amount (0 or more).');
+      appAlert('Amount', 'Enter a valid optional extra amount (0 or more).');
       return;
     }
     if (ex > MAX_CUSTOMER_EXTRA) {
-      Alert.alert('Amount', `Optional extra cannot exceed ${MAX_CUSTOMER_EXTRA}.`);
+      appAlert('Amount', `Optional extra cannot exceed ${MAX_CUSTOMER_EXTRA}.`);
       return;
     }
     setLoading(true);
@@ -376,12 +391,13 @@ export default function CreateOrderScreen() {
         dropoffAddressId: dropoffAddress.addressId,
         paymentType, weight: w,
         customerExtraAmount: ex,
+        scheduledPublishAt: scheduleLater ? publishAt.toISOString() : undefined,
       });
       setPreview(result);
       setCustomerExtraAmount(String(result.customerExtraAmount ?? ex));
       setStep('preview');
     } catch (e: any) {
-      Alert.alert('Error', e.message || 'Failed to calculate price');
+      appAlert('Error', e.message || 'Failed to calculate price');
     } finally {
       setLoading(false);
     }
@@ -392,7 +408,7 @@ export default function CreateOrderScreen() {
     if (!pickupAddress || !dropoffAddress || !preview) return;
     const ex = parseFloat((customerExtraAmount || '0').replace(',', '.'));
     if (Number.isNaN(ex) || ex < 0 || ex > MAX_CUSTOMER_EXTRA) {
-      Alert.alert('Amount', `Enter a valid optional extra (0–${MAX_CUSTOMER_EXTRA}).`);
+      appAlert('Amount', `Enter a valid optional extra (0–${MAX_CUSTOMER_EXTRA}).`);
       return;
     }
     setSubmitting(true);
@@ -404,6 +420,7 @@ export default function CreateOrderScreen() {
         description: description || undefined,
         cancelAfterMinutes,
         customerExtraAmount: ex,
+        scheduledPublishAt: scheduleLater ? publishAt.toISOString() : undefined,
       });
       // Reset form for next order
       setPickupAddress(null);
@@ -415,6 +432,8 @@ export default function CreateOrderScreen() {
       setCustomerExtraAmount('0');
       setPickupNickSave('');
       setDropoffNickSave('');
+      setScheduleLater(false);
+      setPublishAt(new Date(Date.now() + 15 * 60 * 1000));
       setPreview(null);
       setStep('form');
       // Refresh active orders
@@ -422,19 +441,28 @@ export default function CreateOrderScreen() {
         const all = await orderService.getMyOrders();
         setActiveOrders(all.filter(o => ACTIVE_STATUSES.includes(o.status)));
       } catch {}
-      Alert.alert('Order Created!', 'We are searching for a driver near you.', [
-        { text: 'View Order', onPress: () => router.push(`/(customer)/order-detail?orderId=${order.id}`) },
-        { text: 'New Order', style: 'cancel' },
-      ]);
+      const scheduled = order.status === 'PENDING_PUBLISH';
+      appAlert(
+        scheduled ? 'Order scheduled' : 'Order Created!',
+        scheduled
+          ? 'Drivers will be notified at the time you chose.'
+          : 'We are searching for a driver near you.',
+        [
+          { text: 'View Order', onPress: () => router.push(`/(customer)/order-detail?orderId=${order.id}`) },
+          { text: 'New Order', style: 'cancel' },
+        ],
+      );
 
       // Start the foreground service for order tracking with progress bar
       startOrderTracking(
         order.id,
-        '📦 Order Confirmed — Searching for a driver...',
-        '⛟———⌖———⌖———⌖———⌖———⌖———⌖',
+        scheduled
+          ? '📅 Order scheduled — waiting to go live'
+          : '📦 Order Confirmed — Searching for a driver...',
+        scheduled ? '◉———⌖———⌖———⌖———⌖———⌖———⌖' : '⛟———⌖———⌖———⌖———⌖———⌖———⌖',
         {
           orderId: order.id,
-          orderStatus: 'SEARCHING_DRIVER',
+          orderStatus: scheduled ? 'PENDING_PUBLISH' : 'SEARCHING_DRIVER',
           groupKey: `order:${order.id}`,
           relatedEntityType: 'Order',
           relatedEntityId: order.id,
@@ -442,7 +470,7 @@ export default function CreateOrderScreen() {
         },
       );
     } catch (e: any) {
-      Alert.alert('Error', e.message || 'Failed to create order');
+      appAlert('Error', e.message || 'Failed to create order');
     } finally {
       setSubmitting(false);
     }
@@ -461,11 +489,12 @@ export default function CreateOrderScreen() {
         paymentType: 'COD',
         weight: parseFloat(weight),
         customerExtraAmount: extraOk,
+        scheduledPublishAt: scheduleLater ? publishAt.toISOString() : undefined,
       });
       setPreview(result);
       setCustomerExtraAmount(String(result.customerExtraAmount ?? extraOk));
     } catch (e: any) {
-      Alert.alert('Error', e.message || 'Failed to recalculate price');
+      appAlert('Error', e.message || 'Failed to recalculate price');
     }
   };
 
@@ -476,16 +505,16 @@ export default function CreateOrderScreen() {
       ? overrideExtraAmount
       : parseFloat((customerExtraAmount || '0').replace(',', '.'));
     if (Number.isNaN(ex) || ex < 0) {
-      Alert.alert('Amount', 'Enter a valid optional extra amount (0 or more).');
+      appAlert('Amount', 'Enter a valid optional extra amount (0 or more).');
       return;
     }
     if (ex > MAX_CUSTOMER_EXTRA) {
-      Alert.alert('Amount', `Optional extra cannot exceed ${MAX_CUSTOMER_EXTRA}.`);
+      appAlert('Amount', `Optional extra cannot exceed ${MAX_CUSTOMER_EXTRA}.`);
       return;
     }
     const w = parseFloat(weight);
     if (Number.isNaN(w) || w <= 0) {
-      Alert.alert('Weight', 'Go back and enter a valid weight.');
+      appAlert('Weight', 'Go back and enter a valid weight.');
       return;
     }
     setLoading(true);
@@ -496,11 +525,12 @@ export default function CreateOrderScreen() {
         paymentType,
         weight: w,
         customerExtraAmount: ex,
+        scheduledPublishAt: scheduleLater ? publishAt.toISOString() : undefined,
       });
       setPreview(result);
       setCustomerExtraAmount(String(result.customerExtraAmount ?? ex));
     } catch (e: any) {
-      Alert.alert('Error', e.message || 'Failed to update price');
+      appAlert('Error', e.message || 'Failed to update price');
     } finally {
       setLoading(false);
     }
@@ -579,6 +609,14 @@ export default function CreateOrderScreen() {
                 <Text style={[s.chipText, { color: '#3730a3' }]}>Night</Text>
               </View>
             )}
+            {scheduleLater && (
+              <View style={[s.chip, { backgroundColor: isDark ? 'rgba(14,165,233,0.2)' : '#e0f2fe' }]}>
+                <Text style={{ fontSize: 14 }}>📅</Text>
+                <Text style={[s.chipText, { color: colors.primary }]}>
+                  Live {publishAt.toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })}
+                </Text>
+              </View>
+            )}
           </View>
 
           {/* Optional extra for long errands / driver time (added to calculated delivery price) */}
@@ -651,7 +689,7 @@ export default function CreateOrderScreen() {
             <View style={s.insufficientActions}>
               <TouchableOpacity
                 style={[s.insufficientBtn, { backgroundColor: '#dbeafe' }]}
-                onPress={() => Alert.alert('Coming Soon', 'The Add Coins feature will be available soon.')}
+                onPress={() => appAlert('Coming Soon', 'The Add Coins feature will be available soon.')}
                 activeOpacity={0.7}
               >
                 <Ionicons name="add-circle-outline" size={18} color="#1e40af" />
@@ -944,6 +982,84 @@ export default function CreateOrderScreen() {
             </View>
             {cancelAfterMinutes > 1440 && (
               <Text style={s.validationError}>Must be 1440 minutes (24h) or less</Text>
+            )}
+          </View>
+
+          {/* ── Publish to drivers later ── */}
+          <View style={[s.card, { backgroundColor: colors.card }]}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+              <View style={{ flex: 1, paddingRight: 12 }}>
+                <Text style={[s.cardTitle, { color: colors.text }]}>Publish time</Text>
+                <Text style={[s.inputLabel, { color: colors.textSecondary }]}>
+                  Drivers only see your order at this time (notifications go out then too).
+                </Text>
+              </View>
+              <Switch
+                value={scheduleLater}
+                onValueChange={setScheduleLater}
+                trackColor={{ false: colors.border, true: colors.primaryLight }}
+                thumbColor={scheduleLater ? colors.primary : colors.surfaceVariant}
+              />
+            </View>
+            {scheduleLater && (
+              <>
+                {Platform.OS === 'android' ? (
+                  <TouchableOpacity
+                    style={[s.schedulePickBtn, { backgroundColor: colors.surfaceVariant, borderColor: colors.border }]}
+                    onPress={() => setAndroidPublishStep('date')}
+                    activeOpacity={0.75}
+                  >
+                    <Ionicons name="calendar-outline" size={18} color={colors.primary} />
+                    <Text style={[s.schedulePickText, { color: colors.text }]}>
+                      {publishAt.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}
+                    </Text>
+                  </TouchableOpacity>
+                ) : (
+                  <View style={[s.schedulePickBtn, { backgroundColor: colors.surfaceVariant, borderColor: colors.border }]}>
+                    <Ionicons name="calendar-outline" size={18} color={colors.primary} />
+                    <Text style={[s.schedulePickText, { color: colors.text }]}>
+                      {publishAt.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}
+                    </Text>
+                  </View>
+                )}
+                {scheduleLater && Platform.OS === 'ios' && (
+                  <DateTimePicker
+                    value={publishAt}
+                    mode="datetime"
+                    display="compact"
+                    minimumDate={new Date(Date.now() + 60 * 1000)}
+                    themeVariant={isDark ? 'dark' : 'light'}
+                    onValueChange={(_, d) => {
+                      setPublishAt(d);
+                    }}
+                  />
+                )}
+                {scheduleLater && Platform.OS === 'android' && androidPublishStep === 'date' && (
+                  <DateTimePicker
+                    value={publishAt}
+                    mode="date"
+                    display="default"
+                    minimumDate={new Date()}
+                    onDismiss={() => setAndroidPublishStep('idle')}
+                    onValueChange={(_, d) => {
+                      setPublishAt((prev) => clampMinSchedule(mergePublishDatePart(prev, d)));
+                      setAndroidPublishStep('time');
+                    }}
+                  />
+                )}
+                {scheduleLater && Platform.OS === 'android' && androidPublishStep === 'time' && (
+                  <DateTimePicker
+                    value={publishAt}
+                    mode="time"
+                    display="default"
+                    onDismiss={() => setAndroidPublishStep('idle')}
+                    onValueChange={(_, d) => {
+                      setPublishAt((prev) => clampMinSchedule(mergePublishTimePart(prev, d)));
+                      setAndroidPublishStep('idle');
+                    }}
+                  />
+                )}
+              </>
             )}
           </View>
 
@@ -1270,4 +1386,14 @@ const s = StyleSheet.create({
 
   // Validation
   validationError: { color: '#dc2626', fontSize: 12, fontWeight: '600', marginTop: 6 },
+  schedulePickBtn: {
+    marginTop: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  schedulePickText: { fontSize: 15, fontWeight: '700', flex: 1 },
 });

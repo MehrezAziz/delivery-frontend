@@ -1,5 +1,5 @@
-import { useCallback, useMemo, useState } from 'react';
-import { View, Text, TouchableOpacity, Image, StyleSheet } from 'react-native';
+import { useCallback, useMemo, useState, useEffect } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, Image } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, usePathname, useSegments } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
@@ -9,35 +9,33 @@ import { useTheme } from '../contexts/ThemeContext';
 import { useAppNavigation } from '../contexts/AppNavigationContext';
 import { ThemeToggle } from './ThemeToggle';
 import { AppSideMenu } from './AppSideMenu';
+import { NotificationPreviewModal } from './NotificationPreviewModal';
+import { notificationService } from '../services/api/notification.service';
 import {
   AUTH_ROUTE_TITLES,
   CUSTOMER_ROUTE_TITLES,
   DRIVER_ROUTE_TITLES,
 } from '../constants/screenTitles';
-
-const API_ORIGIN = (process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api').replace(/\/?api\/?$/i, '');
+import {
+  getCustomerStatusDotColor,
+  getDriverStatusDotColor,
+  resolveUserProfileImageUri,
+} from '../utils/customerStatus';
 
 /** Main “home” tab only — avoids back → login confusion and limits chrome actions to home. */
 function isMainHomeScreen(role: AppChromeRole, segments: string[], pathname: string): boolean {
   const norm = (pathname || '/').replace(/\/$/, '') || '/';
+  const routeOnly = segments.filter((s) => !s.startsWith('('));
+  const leaf = routeOnly[routeOnly.length - 1];
   if (role === 'customer') {
-    if (segments.includes('(customer)') && segments[segments.length - 1] === 'home') return true;
+    if (leaf === 'home' && segments.includes('(customer)')) return true;
     return norm === '/(customer)/home' || norm.endsWith('/(customer)/home');
   }
   if (role === 'driver') {
-    if (segments.includes('(driver)') && segments[segments.length - 1] === 'home') return true;
+    if (leaf === 'home' && segments.includes('(driver)')) return true;
     return norm === '/(driver)/home' || norm.endsWith('/(driver)/home');
   }
   return false;
-}
-
-function resolveAvatarUri(image: string | null | undefined): string | null {
-  if (!image || typeof image !== 'string') return null;
-  const t = image.trim();
-  if (!t) return null;
-  if (t.startsWith('data:') || t.startsWith('file:') || t.startsWith('http')) return t;
-  const path = t.startsWith('/') ? t : `/${t}`;
-  return `${API_ORIGIN}${path}`;
 }
 
 export type AppChromeRole = 'guest' | 'customer' | 'driver';
@@ -48,6 +46,7 @@ export function AppChromeHeader({
   subtitle,
   showMenu = true,
   showProfile,
+  showNotifications,
   showThemeToggle,
   hideBack,
   /** Customer/driver sign-in: header back always opens welcome (`/`). */
@@ -57,8 +56,10 @@ export function AppChromeHeader({
   role: AppChromeRole;
   subtitle?: string;
   showMenu?: boolean;
-  /** When omitted: only on main Home tab (customer/driver). */
+  /** When omitted: only on main Home tab (customer/driver). Replaced by notification icon on home. */
   showProfile?: boolean;
+  /** Main home: show bell → notifications (default true when showProfile would have been true). */
+  showNotifications?: boolean;
   /** When omitted: only on main Home tab (customer/driver); guest screens set explicitly. */
   showThemeToggle?: boolean;
   /** When omitted: hidden on main Home tab (customer/driver); guest uses explicit value. */
@@ -72,48 +73,107 @@ export function AppChromeHeader({
   const segments = useSegments() as string[];
   const { colors, isDark } = useTheme();
   const [menuOpen, setMenuOpen] = useState(false);
-  const [avatarUri, setAvatarUri] = useState<string | null>(null);
-
-  const loadAvatar = useCallback(async () => {
-    if (role === 'guest') {
-      setAvatarUri(null);
-      return;
-    }
-    try {
-      const raw = await AsyncStorage.getItem('user');
-      if (!raw) {
-        setAvatarUri(null);
-        return;
-      }
-      const u = JSON.parse(raw) as { image?: string | null };
-      setAvatarUri(resolveAvatarUri(u?.image));
-    } catch {
-      setAvatarUri(null);
-    }
-  }, [role]);
-
-  useFocusEffect(
-    useCallback(() => {
-      void loadAvatar();
-    }, [loadAvatar]),
-  );
+  const [identityTitle, setIdentityTitle] = useState<string | null>(null);
+  const [identitySubtitle, setIdentitySubtitle] = useState<string | null>(null);
+  const [initials, setInitials] = useState('');
+  const [profileImageUri, setProfileImageUri] = useState<string | null>(null);
+  const [statusDotColor, setStatusDotColor] = useState('#9ca3af');
+  const [notifPreviewOpen, setNotifPreviewOpen] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
 
   const isMainHome = useMemo(() => isMainHomeScreen(role, segments, pathname), [role, segments, pathname]);
 
+  const loadHomeIdentity = useCallback(async () => {
+    if (role === 'guest' || !isMainHome) {
+      setIdentityTitle(null);
+      setIdentitySubtitle(null);
+      setInitials('');
+      setProfileImageUri(null);
+      setStatusDotColor('#9ca3af');
+      return;
+    }
+    try {
+      const rawUser = await AsyncStorage.getItem('user');
+      const rawCust = await AsyncStorage.getItem('customer');
+      const rawDrv = await AsyncStorage.getItem('driver');
+      let title = '';
+      let sub = '';
+      let ini = '';
+      let img: string | null = null;
+      let dot = '#9ca3af';
+      if (rawUser) {
+        const u = JSON.parse(rawUser) as { firstName?: string; secondName?: string; image?: string | null };
+        title = [u.firstName, u.secondName].filter(Boolean).join(' ').trim();
+        const a = (u.firstName || '').trim().charAt(0);
+        const b = (u.secondName || '').trim().charAt(0);
+        ini = `${a}${b}`.toUpperCase() || (a || '?').toUpperCase();
+        img = resolveUserProfileImageUri(u.image ?? null);
+      }
+      if (role === 'customer' && rawCust) {
+        const c = JSON.parse(rawCust) as { customerStatus?: string };
+        const st = c.customerStatus ? String(c.customerStatus) : '';
+        sub = st ? st.replace(/_/g, ' ') : '';
+        dot = st ? getCustomerStatusDotColor(st) : dot;
+      } else if (role === 'driver' && rawDrv) {
+        const d = JSON.parse(rawDrv) as { status?: string };
+        const st = d.status ? String(d.status) : '';
+        sub = st ? st.replace(/_/g, ' ') : '';
+        dot = st ? getDriverStatusDotColor(st) : dot;
+      }
+      setIdentityTitle(title || null);
+      setIdentitySubtitle(sub || null);
+      setInitials(ini);
+      setProfileImageUri(img);
+      setStatusDotColor(dot);
+    } catch {
+      setIdentityTitle(null);
+      setIdentitySubtitle(null);
+      setInitials('');
+      setProfileImageUri(null);
+      setStatusDotColor('#9ca3af');
+    }
+  }, [role, isMainHome]);
+
+  const resolvedShowNotifications =
+    showNotifications !== undefined
+      ? showNotifications
+      : showProfile !== undefined
+        ? showProfile
+        : role !== 'guest' && isMainHome;
+
+  const loadUnread = useCallback(async () => {
+    if (role === 'guest' || !isMainHome || !resolvedShowNotifications) return;
+    try {
+      const c = await notificationService.getUnreadCount();
+      setUnreadCount(c.count ?? 0);
+    } catch {
+      setUnreadCount(0);
+    }
+  }, [role, isMainHome, resolvedShowNotifications]);
+
+  useFocusEffect(
+    useCallback(() => {
+      void loadHomeIdentity();
+      void loadUnread();
+    }, [loadHomeIdentity, loadUnread]),
+  );
+
+  useEffect(() => {
+    void loadHomeIdentity();
+  }, [pathname, loadHomeIdentity]);
+
   const resolvedTitle = useMemo(() => {
     if (titleProp) return titleProp;
+    if (isMainHome && identityTitle) return identityTitle;
     const parts = pathname.replace(/^\//, '').split('/').filter(Boolean);
     const leaf = parts.filter((p) => !p.startsWith('(')).pop() || 'home';
     if (role === 'customer') return CUSTOMER_ROUTE_TITLES[leaf] || leaf.replace(/-/g, ' ');
     if (role === 'driver') return DRIVER_ROUTE_TITLES[leaf] || leaf.replace(/-/g, ' ');
     return 'App';
-  }, [titleProp, pathname, role]);
+  }, [titleProp, pathname, role, isMainHome, identityTitle]);
 
   const resolvedHideBack =
     role === 'guest' ? !!hideBack : hideBack === true || (hideBack !== false && isMainHome);
-
-  const resolvedShowProfile =
-    showProfile !== undefined ? showProfile : role !== 'guest' && isMainHome;
 
   const resolvedShowTheme =
     showThemeToggle !== undefined ? showThemeToggle : role !== 'guest' && isMainHome;
@@ -129,7 +189,7 @@ export function AppChromeHeader({
     else router.replace('/(driver)/home');
   };
 
-  const onAvatar = () => {
+  const onProfilePicturePress = () => {
     if (role === 'customer') push('/(customer)/profile');
     else if (role === 'driver') push('/(driver)/profile');
   };
@@ -144,19 +204,31 @@ export function AppChromeHeader({
         ? 'rgba(255,255,255,0.14)'
         : 'rgba(255,255,255,0.22)';
 
-  return (
-    <>
-      <View style={{ paddingTop: insets.top, backgroundColor: headerBg }}>
-        <View style={styles.row}>
-          {resolvedHideBack ? (
-            <View style={styles.iconBtn} />
-          ) : (
-            <TouchableOpacity onPress={onBack} style={[styles.iconBtn, { backgroundColor: iconBtnBg }]} activeOpacity={0.75}>
-              <Ionicons name="chevron-back" size={22} color={textColor} />
-            </TouchableOpacity>
-          )}
+  const showHomeIdentity = (role === 'customer' || role === 'driver') && isMainHome;
+  const notifBtnBg = role === 'guest' ? iconBtnBg : 'rgba(255,255,255,0.2)';
+  const bellColor = role === 'guest' ? textColor : '#fff';
 
-          <View style={styles.titleBlock}>
+  const homeIdentityBlock = (
+    <View style={[styles.titleBlock, showHomeIdentity && styles.titleBlockHome]}>
+      {showHomeIdentity ? (
+        <View style={styles.homeIdentityRow}>
+          <TouchableOpacity
+            onPress={onProfilePicturePress}
+            activeOpacity={0.75}
+            accessibilityRole="button"
+            accessibilityLabel="Open profile"
+          >
+            {profileImageUri ? (
+              <Image source={{ uri: profileImageUri }} style={styles.headerAvatar} />
+            ) : (
+              <View style={[styles.headerAvatarPlaceholder, { backgroundColor: iconBtnBg }]}>
+                <Text style={[styles.headerAvatarInitials, { color: textColor }]} numberOfLines={1}>
+                  {initials || '?'}
+                </Text>
+              </View>
+            )}
+          </TouchableOpacity>
+          <View style={styles.homeIdentityText}>
             <Text style={[styles.title, { color: textColor }]} numberOfLines={1}>
               {resolvedTitle}
             </Text>
@@ -164,34 +236,127 @@ export function AppChromeHeader({
               <Text style={[styles.subtitle, { color: subColor }]} numberOfLines={1}>
                 {subtitle}
               </Text>
-            ) : null}
-          </View>
-
-          <View style={styles.rightCluster}>
-            {resolvedShowProfile && role !== 'guest' ? (
-              <TouchableOpacity onPress={onAvatar} style={[styles.avatarRing, { borderColor: textColor }]} activeOpacity={0.8}>
-                {avatarUri ? (
-                  <Image source={{ uri: avatarUri }} style={styles.avatarImg} />
-                ) : (
-                  <Ionicons name="person" size={18} color={textColor} />
-                )}
-              </TouchableOpacity>
-            ) : null}
-            {resolvedShowTheme ? (
-              <ThemeToggle size={20} color={role === 'guest' ? colors.text : '#fff'} style={[styles.themeBtn, { backgroundColor: iconBtnBg }]} />
-            ) : null}
-            {showMenu ? (
-              <TouchableOpacity
-                onPress={() => setMenuOpen(true)}
-                style={[styles.iconBtn, { backgroundColor: iconBtnBg }]}
-                activeOpacity={0.75}
-              >
-                <Ionicons name="menu" size={22} color={textColor} />
-              </TouchableOpacity>
+            ) : identitySubtitle ? (
+              <View style={styles.subtitleWithDot}>
+                <View style={[styles.statusDotSm, { backgroundColor: statusDotColor }]} />
+                <Text style={[styles.subtitle, { color: subColor, marginTop: 0 }]} numberOfLines={1}>
+                  {identitySubtitle}
+                </Text>
+              </View>
             ) : null}
           </View>
         </View>
+      ) : (
+        <>
+          <Text style={[styles.title, { color: textColor }]} numberOfLines={1}>
+            {resolvedTitle}
+          </Text>
+          {subtitle ? (
+            <Text style={[styles.subtitle, { color: subColor }]} numberOfLines={1}>
+              {subtitle}
+            </Text>
+          ) : null}
+        </>
+      )}
+    </View>
+  );
+
+  return (
+    <>
+      <View style={{ paddingTop: insets.top, backgroundColor: headerBg }}>
+        <View style={styles.row}>
+          {showHomeIdentity ? (
+            <>
+              {homeIdentityBlock}
+              <View style={styles.rightCluster}>
+                {resolvedShowNotifications ? (
+                  <TouchableOpacity
+                    onPress={() => setNotifPreviewOpen(true)}
+                    style={[styles.notifCornerBtn, { backgroundColor: notifBtnBg }]}
+                    activeOpacity={0.85}
+                    accessibilityLabel="Notifications"
+                  >
+                    <Ionicons name="notifications-outline" size={22} color={bellColor} />
+                    {unreadCount > 0 ? (
+                      <View style={styles.notifBadge}>
+                        <Text style={styles.notifBadgeText}>{unreadCount > 99 ? '99+' : unreadCount}</Text>
+                      </View>
+                    ) : null}
+                  </TouchableOpacity>
+                ) : null}
+                {resolvedShowTheme ? (
+                  <ThemeToggle size={20} color="#fff" style={[styles.themeBtn, { backgroundColor: iconBtnBg }]} />
+                ) : null}
+                {showMenu ? (
+                  <TouchableOpacity
+                    onPress={() => setMenuOpen(true)}
+                    style={[styles.iconBtn, { backgroundColor: iconBtnBg }]}
+                    activeOpacity={0.75}
+                  >
+                    <Ionicons name="menu" size={22} color={textColor} />
+                  </TouchableOpacity>
+                ) : null}
+              </View>
+            </>
+          ) : (
+            <>
+              {resolvedHideBack ? (
+                <View style={styles.iconBtn} />
+              ) : (
+                <TouchableOpacity onPress={onBack} style={[styles.iconBtn, { backgroundColor: iconBtnBg }]} activeOpacity={0.75}>
+                  <Ionicons name="chevron-back" size={22} color={textColor} />
+                </TouchableOpacity>
+              )}
+              {homeIdentityBlock}
+              <View style={styles.rightCluster}>
+                {resolvedShowNotifications && role !== 'guest' ? (
+                  <TouchableOpacity
+                    onPress={() => setNotifPreviewOpen(true)}
+                    style={[styles.notifCornerBtn, { backgroundColor: notifBtnBg }]}
+                    activeOpacity={0.85}
+                    accessibilityLabel="Notifications"
+                  >
+                    <Ionicons name="notifications-outline" size={22} color={bellColor} />
+                    {unreadCount > 0 ? (
+                      <View style={styles.notifBadge}>
+                        <Text style={styles.notifBadgeText}>{unreadCount > 99 ? '99+' : unreadCount}</Text>
+                      </View>
+                    ) : null}
+                  </TouchableOpacity>
+                ) : null}
+                {resolvedShowTheme ? (
+                  <ThemeToggle size={20} color={role === 'guest' ? colors.text : '#fff'} style={[styles.themeBtn, { backgroundColor: iconBtnBg }]} />
+                ) : null}
+                {showMenu ? (
+                  <TouchableOpacity
+                    onPress={() => setMenuOpen(true)}
+                    style={[styles.iconBtn, { backgroundColor: iconBtnBg }]}
+                    activeOpacity={0.75}
+                  >
+                    <Ionicons name="menu" size={22} color={textColor} />
+                  </TouchableOpacity>
+                ) : null}
+              </View>
+            </>
+          )}
+        </View>
       </View>
+      {role !== 'guest' && isMainHome ? (
+        <NotificationPreviewModal
+          visible={notifPreviewOpen}
+          onClose={() => {
+            setNotifPreviewOpen(false);
+            void loadUnread();
+          }}
+          variant={role === 'driver' ? 'driver' : 'customer'}
+          onOpenFullInbox={() => {
+            setNotifPreviewOpen(false);
+            if (role === 'customer') push('/(customer)/notifications');
+            else if (role === 'driver') push('/(driver)/notifications');
+          }}
+          onMarkAllRead={() => setUnreadCount(0)}
+        />
+      ) : null}
       {showMenu ? (
         <AppSideMenu visible={menuOpen} onClose={() => setMenuOpen(false)} role={role} />
       ) : null}
@@ -222,6 +387,10 @@ export function DriverStackHeader() {
   return <AppChromeHeader role="driver" />;
 }
 
+export function DriverTabsHeader() {
+  return <AppChromeHeader role="driver" />;
+}
+
 const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
@@ -242,6 +411,70 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 0,
     paddingHorizontal: 4,
+  },
+  titleBlockHome: {
+    paddingHorizontal: 0,
+  },
+  notifCornerBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  notifBadge: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    backgroundColor: '#ef4444',
+    borderRadius: 10,
+    minWidth: 20,
+    height: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 4,
+  },
+  notifBadgeText: { color: '#fff', fontSize: 11, fontWeight: '700' },
+  homeIdentityRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    minWidth: 0,
+    flex: 1,
+  },
+  headerAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(0,0,0,0.08)',
+  },
+  headerAvatarPlaceholder: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerAvatarInitials: {
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  homeIdentityText: {
+    flex: 1,
+    minWidth: 0,
+  },
+  subtitleWithDot: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 2,
+    minWidth: 0,
+  },
+  statusDotSm: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    flexShrink: 0,
   },
   title: {
     fontSize: 17,
@@ -264,19 +497,5 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  avatarRing: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    borderWidth: 2,
-    overflow: 'hidden',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  avatarImg: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
   },
 });

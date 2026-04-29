@@ -4,6 +4,7 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 import { useTheme } from '../../contexts/ThemeContext';
+import { GOOGLE_MAPS_DARK_STYLE } from '../../constants/googleMapsDarkStyle';
 
 function parseParam(v: string | string[] | undefined): string {
   if (v == null) return '';
@@ -55,7 +56,12 @@ export default function DriverAddressMapScreen() {
 
   return (
     <View style={s.container}>
-      <MapView style={s.map} provider={PROVIDER_GOOGLE} initialRegion={region}>
+      <MapView
+        style={s.map}
+        provider={PROVIDER_GOOGLE}
+        initialRegion={region}
+        customMapStyle={isDark ? GOOGLE_MAPS_DARK_STYLE : undefined}
+      >
         <Marker coordinate={coord} title={title}>
           <View style={[s.markerOuter, { borderColor: markerColor }]}>
             <View style={[s.markerInner, { backgroundColor: markerColor }]}>

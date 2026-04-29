@@ -5,8 +5,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, ActivityIndicator,
-  Alert, TextInput, KeyboardAvoidingView, Platform, StyleSheet, Modal, FlatList,
+  TextInput, KeyboardAvoidingView, Platform, StyleSheet, Modal, FlatList, Switch,
 } from 'react-native';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
@@ -16,6 +17,8 @@ import { api } from '../../services/api/client';
 import { orderService } from '../../services/api/order.service';
 import { startOrderTracking } from '../../services/notifications';
 import { useTheme } from '../../contexts/ThemeContext';
+import { appAlert } from '../../utils/appAlert';
+import { clampMinSchedule, mergePublishDatePart, mergePublishTimePart } from '../../utils/schedPublishHelpers';
 
 interface SavedAddress {
   addressId: string;
@@ -35,7 +38,7 @@ export default function LocalPickupOrderScreen() {
   const returnTo = params.returnTo
     ? decodeURIComponent(params.returnTo)
     : '/(customer)/create-order';
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
   const [source, setSource] = useState<SavedAddress | null>(null);
   const [paymentType, setPaymentType] = useState<'COD' | 'WALLET'>('COD');
   const [weight, setWeight] = useState('1');
@@ -50,6 +53,9 @@ export default function LocalPickupOrderScreen() {
   const [walletBalance, setWalletBalance] = useState(0);
   const [cancelAfterMinutes, setCancelAfterMinutes] = useState(LOCAL_PICKUP_MIN_CANCEL_MINUTES);
   const [customerExtraAmount, setCustomerExtraAmount] = useState('0');
+  const [scheduleLater, setScheduleLater] = useState(false);
+  const [publishAt, setPublishAt] = useState(() => new Date(Date.now() + 15 * 60 * 1000));
+  const [androidPublishStep, setAndroidPublishStep] = useState<'idle' | 'date' | 'time'>('idle');
 
   const fetchWallet = useCallback(async () => {
     try {
@@ -59,6 +65,10 @@ export default function LocalPickupOrderScreen() {
   }, []);
   useEffect(() => { fetchWallet(); }, [fetchWallet]);
   useFocusEffect(useCallback(() => { fetchWallet(); }, [fetchWallet]));
+
+  useEffect(() => {
+    if (!scheduleLater) setAndroidPublishStep('idle');
+  }, [scheduleLater]);
 
   const loadSaved = useCallback(async () => {
     try {
@@ -105,7 +115,7 @@ export default function LocalPickupOrderScreen() {
         lat, lng,
       });
     } catch (e: any) {
-      Alert.alert('Error', e.message || 'Failed to save address');
+      appAlert('Error', e.message || 'Failed to save address');
     } finally { setResolving(false); }
   };
 
@@ -114,7 +124,7 @@ export default function LocalPickupOrderScreen() {
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Location', 'Permission is required to use your current position.');
+        appAlert('Location', 'Permission is required to use your current position.');
         return;
       }
       const pos = await Location.getCurrentPositionAsync({});
@@ -140,30 +150,40 @@ export default function LocalPickupOrderScreen() {
 
   const submit = async () => {
     if (!source) {
-      Alert.alert('Address', 'Select where the driver should meet you.');
+      appAlert('Address', 'Select where the driver should meet you.');
       return;
     }
     const w = parseFloat(weight);
     if (isNaN(w) || w <= 0) {
-      Alert.alert('Weight', 'Enter a valid weight.');
+      appAlert('Weight', 'Enter a valid weight.');
       return;
     }
     if (!description.trim()) {
-      Alert.alert('Required', 'Please describe what you need.');
+      appAlert('Required', 'Please describe what you need.');
       return;
     }
     const ex = parseFloat((customerExtraAmount || '0').replace(',', '.'));
     if (Number.isNaN(ex) || ex < 0) {
-      Alert.alert('Amount', 'Enter a valid optional extra amount (0 or more).');
+      appAlert('Amount', 'Enter a valid optional extra amount (0 or more).');
       return;
     }
     if (ex > MAX_CUSTOMER_EXTRA) {
-      Alert.alert('Amount', `Optional extra cannot exceed ${MAX_CUSTOMER_EXTRA}.`);
+      appAlert('Amount', `Optional extra cannot exceed ${MAX_CUSTOMER_EXTRA}.`);
       return;
     }
     if (cancelAfterMinutes > LOCAL_PICKUP_MAX_CANCEL_MINUTES) {
-      Alert.alert('Invalid Timer', `Auto-cancel time must be ${LOCAL_PICKUP_MAX_CANCEL_MINUTES} minutes or less.`);
+      appAlert('Invalid Timer', `Auto-cancel time must be ${LOCAL_PICKUP_MAX_CANCEL_MINUTES} minutes or less.`);
       return;
+    }
+    if (scheduleLater) {
+      if (publishAt.getTime() < Date.now() + 60 * 1000) {
+        appAlert('Time', 'Publish time must be at least 1 minute from now.');
+        return;
+      }
+      if (publishAt.getTime() > Date.now() + 30 * 24 * 60 * 60 * 1000) {
+        appAlert('Time', 'Publish time cannot be more than 30 days ahead.');
+        return;
+      }
     }
     setLoading(true);
     try {
@@ -173,15 +193,16 @@ export default function LocalPickupOrderScreen() {
         paymentType,
         weight: w,
         customerExtraAmount: ex,
+        scheduledPublishAt: scheduleLater ? publishAt.toISOString() : undefined,
       });
       setLoading(false);
       const extraLine =
         preview.customerExtraAmount > 0
           ? `\nDelivery ${preview.calculatedPrice.toFixed(2)} + your extra ${preview.customerExtraAmount.toFixed(2)}`
           : '';
-      Alert.alert(
+      appAlert(
         'Confirm',
-        `${extraLine ? extraLine + '\n' : ''}Total ${preview.totalPrice.toFixed(2)} ${preview.currencySymbol}. Create this local pickup order?`,
+        `${scheduleLater ? `Goes live ${publishAt.toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })}\n` : ''}${extraLine ? extraLine + '\n' : ''}Total ${preview.totalPrice.toFixed(2)} ${preview.currencySymbol}. Create this local pickup order?`,
         [
           { text: 'Cancel', style: 'cancel' },
           {
@@ -197,14 +218,18 @@ export default function LocalPickupOrderScreen() {
                   description: description.trim(),
                   cancelAfterMinutes,
                   customerExtraAmount: ex,
+                  scheduledPublishAt: scheduleLater ? publishAt.toISOString() : undefined,
                 });
+                const scheduled = order.status === 'PENDING_PUBLISH';
                 startOrderTracking(
                   order.id,
-                  '📦 Local pickup — searching for a driver...',
-                  '⛟———⌖———⌖———⌖———⌖———⌖———⌖',
+                  scheduled
+                    ? '📅 Local pickup — scheduled'
+                    : '📦 Local pickup — searching for a driver...',
+                  scheduled ? '◉———⌖———⌖———⌖———⌖———⌖———⌖' : '⛟———⌖———⌖———⌖———⌖———⌖———⌖',
                   {
                     orderId: order.id,
-                    orderStatus: 'SEARCHING_DRIVER',
+                    orderStatus: scheduled ? 'PENDING_PUBLISH' : 'SEARCHING_DRIVER',
                     groupKey: `order:${order.id}`,
                     relatedEntityType: 'Order',
                     relatedEntityId: order.id,
@@ -217,16 +242,18 @@ export default function LocalPickupOrderScreen() {
                 setDescription('');
                 setCustomerExtraAmount('0');
                 setCancelAfterMinutes(LOCAL_PICKUP_MIN_CANCEL_MINUTES);
+                setScheduleLater(false);
+                setPublishAt(new Date(Date.now() + 15 * 60 * 1000));
                 router.replace(`/(customer)/order-detail?orderId=${order.id}`);
               } catch (e: any) {
-                Alert.alert('Error', e.message || 'Failed');
+                appAlert('Error', e.message || 'Failed');
               } finally { setSubmitting(false); }
             },
           },
         ],
       );
     } catch (e: any) {
-      Alert.alert('Error', e.message || 'Preview failed');
+      appAlert('Error', e.message || 'Preview failed');
     } finally { setLoading(false); }
   };
 
@@ -329,6 +356,83 @@ export default function LocalPickupOrderScreen() {
               placeholder="0"
               placeholderTextColor={colors.textTertiary}
             />
+          </View>
+
+          <View style={[s.card, { backgroundColor: colors.card }]}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+              <View style={{ flex: 1, paddingRight: 12 }}>
+                <Text style={[s.cardTitle, { color: colors.text }]}>Publish time</Text>
+                <Text style={[s.lab, { color: colors.textSecondary }]}>
+                  Drivers see this order at this time (notifications go out then too).
+                </Text>
+              </View>
+              <Switch
+                value={scheduleLater}
+                onValueChange={setScheduleLater}
+                trackColor={{ false: colors.border, true: colors.primaryLight ?? 'rgba(14,165,233,0.35)' }}
+                thumbColor={scheduleLater ? colors.primary : colors.surfaceVariant}
+              />
+            </View>
+            {scheduleLater && (
+              <>
+                {Platform.OS === 'android' ? (
+                  <TouchableOpacity
+                    style={[s.schedulePickBtn, { backgroundColor: colors.surfaceVariant, borderColor: colors.border }]}
+                    onPress={() => setAndroidPublishStep('date')}
+                    activeOpacity={0.75}
+                  >
+                    <Ionicons name="calendar-outline" size={18} color={colors.primary} />
+                    <Text style={[s.schedulePickText, { color: colors.text }]}>
+                      {publishAt.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}
+                    </Text>
+                  </TouchableOpacity>
+                ) : (
+                  <View style={[s.schedulePickBtn, { backgroundColor: colors.surfaceVariant, borderColor: colors.border }]}>
+                    <Ionicons name="calendar-outline" size={18} color={colors.primary} />
+                    <Text style={[s.schedulePickText, { color: colors.text }]}>
+                      {publishAt.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}
+                    </Text>
+                  </View>
+                )}
+                {Platform.OS === 'ios' && (
+                  <DateTimePicker
+                    value={publishAt}
+                    mode="datetime"
+                    display="compact"
+                    minimumDate={new Date(Date.now() + 60 * 1000)}
+                    themeVariant={isDark ? 'dark' : 'light'}
+                    onValueChange={(_, d) => {
+                      setPublishAt(d);
+                    }}
+                  />
+                )}
+                {Platform.OS === 'android' && androidPublishStep === 'date' && (
+                  <DateTimePicker
+                    value={publishAt}
+                    mode="date"
+                    display="default"
+                    minimumDate={new Date()}
+                    onDismiss={() => setAndroidPublishStep('idle')}
+                    onValueChange={(_, d) => {
+                      setPublishAt((prev) => clampMinSchedule(mergePublishDatePart(prev, d)));
+                      setAndroidPublishStep('time');
+                    }}
+                  />
+                )}
+                {Platform.OS === 'android' && androidPublishStep === 'time' && (
+                  <DateTimePicker
+                    value={publishAt}
+                    mode="time"
+                    display="default"
+                    onDismiss={() => setAndroidPublishStep('idle')}
+                    onValueChange={(_, d) => {
+                      setPublishAt((prev) => clampMinSchedule(mergePublishTimePart(prev, d)));
+                      setAndroidPublishStep('idle');
+                    }}
+                  />
+                )}
+              </>
+            )}
           </View>
 
           <View style={[s.card, { backgroundColor: colors.card }]}>
@@ -487,4 +591,15 @@ const s = StyleSheet.create({
   recentTitle: { fontSize: 12, fontWeight: '700', marginBottom: 6 },
   recentChip: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 6, maxWidth: 180 },
   recentChipText: { fontSize: 12, fontWeight: '600' },
+  schedulePickBtn: {
+    marginTop: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  schedulePickText: { flex: 1, fontSize: 14, fontWeight: '600' },
 });

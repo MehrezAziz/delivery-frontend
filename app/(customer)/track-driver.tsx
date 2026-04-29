@@ -1,12 +1,14 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import {
-  View, Text, TouchableOpacity, ActivityIndicator, StyleSheet, Alert, Share, Clipboard,
+  View, Text, TouchableOpacity, ActivityIndicator, StyleSheet, Share, Clipboard,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 import { orderService, Order } from '../../services/api/order.service';
 import { useTheme } from '../../contexts/ThemeContext';
+import { GOOGLE_MAPS_DARK_STYLE } from '../../constants/googleMapsDarkStyle';
+import { appAlert } from '../../utils/appAlert';
 
 function normalizeDriverLocationPayload(loc: unknown): { latitude: number; longitude: number } | null {
   if (loc == null || typeof loc !== 'object') return null;
@@ -46,7 +48,7 @@ export default function TrackDriverScreen() {
         title: 'Track My Delivery',
       });
     } catch (e: any) {
-      Alert.alert('Error', e.message || 'Could not get tracking token');
+      appAlert('Error', e.message || 'Could not get tracking token');
     }
   }, [orderId]);
   const loadData = useCallback(async () => {
@@ -59,7 +61,7 @@ export default function TrackDriverScreen() {
       const coords = normalizeDriverLocationPayload(loc);
       if (coords) setDriverLoc(coords);
     } catch (e: any) {
-      Alert.alert('Error', e.message || 'Failed to load tracking data');
+      appAlert('Error', e.message || 'Failed to load tracking data');
     } finally {
       setLoading(false);
     }
@@ -120,6 +122,7 @@ export default function TrackDriverScreen() {
           if (hasCenteredOnDriver.current) setMapRegion(r);
         }}
         showsUserLocation
+        customMapStyle={isDark ? GOOGLE_MAPS_DARK_STYLE : undefined}
       >
         {driverLoc && (
           <Marker

@@ -17,6 +17,7 @@ import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import { saveLoginTimestamp } from '../../services/auth-session';
 import { registerForPushNotifications, restoreOrderTrackingForDriver } from '../../services/notifications';
 import { useTheme } from '../../contexts/ThemeContext';
+import { persistDriverIdentityFromMe } from '../../utils/persistDriverIdentity';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
 
@@ -65,6 +66,7 @@ export default function DriverLogin() {
 
       await AsyncStorage.setItem('userId', profileResponse.data.user.id);
       await AsyncStorage.setItem('driverId', profileResponse.data.id);
+      await persistDriverIdentityFromMe(profileResponse.data);
 
       await registerForPushNotifications();
       await restoreOrderTrackingForDriver();
@@ -121,6 +123,7 @@ export default function DriverLogin() {
 
       await AsyncStorage.setItem('userId', profileResponse.data.user.id);
       await AsyncStorage.setItem('driverId', profileResponse.data.id);
+      await persistDriverIdentityFromMe(profileResponse.data);
 
       await registerForPushNotifications();
       await restoreOrderTrackingForDriver();

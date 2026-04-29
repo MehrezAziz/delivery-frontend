@@ -3,6 +3,7 @@ import {
   View, Text, FlatList, TextInput, TouchableOpacity,
   KeyboardAvoidingView, Platform, ActivityIndicator, StyleSheet,
 } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -17,6 +18,7 @@ export default function DriverOrderChatScreen() {
   const { orderId: orderIdParam } = useLocalSearchParams<{ orderId: string | string[] }>();
   const orderId = typeof orderIdParam === 'string' ? orderIdParam : orderIdParam?.[0] ?? '';
   const { colors, isDark } = useTheme();
+  const insets = useSafeAreaInsets();
   const [chatRoom, setChatRoom] = useState<ChatRoom | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
@@ -88,9 +90,11 @@ export default function DriverOrderChatScreen() {
 
   if (loading) {
     return (
-      <View style={[s.loadingContainer, { backgroundColor: colors.background }]}>
-        <ActivityIndicator size="large" color="#16a34a" />
-      </View>
+      <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }} edges={['bottom']}>
+        <View style={[s.loadingContainer, { backgroundColor: colors.background }]}>
+          <ActivityIndicator size="large" color="#16a34a" />
+        </View>
+      </SafeAreaView>
     );
   }
 
@@ -111,7 +115,12 @@ export default function DriverOrderChatScreen() {
   };
 
   return (
-    <KeyboardAvoidingView style={[s.container, { backgroundColor: colors.background }]} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }} edges={['bottom']}>
+      <KeyboardAvoidingView
+        style={[s.container, { backgroundColor: colors.background }]}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top + 4 : 0}
+      >
       <View style={[s.chatToolbar, { backgroundColor: colors.card, borderColor: colors.border }]}>
         <View style={{ flex: 1, minWidth: 0 }}>
           <Text style={[s.toolbarMeta, { color: colors.textTertiary }]}>Order</Text>
@@ -135,6 +144,8 @@ export default function DriverOrderChatScreen() {
         keyExtractor={m => m.id}
         style={s.messagesList}
         contentContainerStyle={s.messagesContent}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="interactive"
         onContentSizeChange={() => flatListRef.current?.scrollToEnd()}
         renderItem={renderMessage}
         ListEmptyComponent={
@@ -153,7 +164,7 @@ export default function DriverOrderChatScreen() {
           <Text style={[s.closedText, { color: colors.textTertiary }]}>chatroom closed</Text>
         </View>
       ) : (
-        <View style={[s.inputBar, { backgroundColor: colors.card, borderTopColor: colors.border }]}>
+        <View style={[s.inputBar, { backgroundColor: colors.card, borderTopColor: colors.border, paddingBottom: Math.max(insets.bottom, 12) }]}>
           <TextInput
             style={[s.textInput, { backgroundColor: colors.surfaceVariant, color: colors.text }]}
             value={input}
@@ -175,7 +186,8 @@ export default function DriverOrderChatScreen() {
           </TouchableOpacity>
         </View>
       )}
-    </KeyboardAvoidingView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 

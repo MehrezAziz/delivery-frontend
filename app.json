@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "delivery-frontend",
+    "name": "local delivery",
     "slug": "delivery-frontend",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -39,6 +39,7 @@
       "bundleIdentifier": "com.delivery.app"
     },
     "android": {
+      "softwareKeyboardLayoutMode": "resize",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/android-icon-foreground.png",

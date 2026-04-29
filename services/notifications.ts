@@ -43,6 +43,7 @@ export function clearActiveChatContextIfMatches(kind: ActiveChatContext['kind'],
 }
 
 const ORDER_ACTIVE_STATUSES = [
+  'PENDING_PUBLISH',
   'SEARCHING_DRIVER',
   'PENDING_CUSTOMER_APPROVAL',
   'DRIVER_ASSIGNED',
@@ -56,6 +57,7 @@ const DRIVER_ORDER_TRACKING_STATUSES = [...ORDER_ACTIVE_STATUSES, 'RETURNED'];
 
 const STATUS_BY_NOTIFICATION_TYPE: Record<string, string> = {
   ORDER_CREATED: 'SEARCHING_DRIVER',
+  PENDING_PUBLISH: 'PENDING_PUBLISH',
   DRIVER_ASSIGNED: 'DRIVER_ASSIGNED',
   DRIVER_ARRIVED: 'DRIVER_ARRIVED',
   PACKAGE_PICKED_UP: 'PICKED_UP',
@@ -456,6 +458,18 @@ function getTrackingNotificationFromOrder(order: Order): { title: string; body: 
     'Driver';
 
   switch (order.status) {
+    case 'PENDING_PUBLISH': {
+      const when = order.scheduledPublishAt
+        ? new Date(order.scheduledPublishAt).toLocaleString(undefined, {
+            dateStyle: 'medium',
+            timeStyle: 'short',
+          })
+        : '';
+      return {
+        title: '📅 Order scheduled',
+        body: when ? `Drivers will see your order at ${when}` : 'Waiting for scheduled publish time',
+      };
+    }
     case 'SEARCHING_DRIVER':
       return {
         title: '📦 Order Confirmed — Searching for a driver...',
@@ -1303,6 +1317,13 @@ export async function resolveLaunchRouteAfterLogin(): Promise<string | null> {
 // ============================================================
 
 async function handleOrderFCMData(rawData: Record<string, unknown>) {
+  if (Platform.OS === 'android') {
+    try {
+      await createNotificationChannels();
+    } catch {
+      /* notifee may be unavailable in rare headless cases */
+    }
+  }
   const data = coerceFcmData(rawData);
   const { orderId, groupKey, ongoing } = data;
 
@@ -1360,6 +1381,14 @@ async function displayRegularNotification(data: Record<string, string>, androidI
   const { title, body } = data;
   if (!title || !body) return;
   if (shouldSuppressChatNotification(data)) return;
+
+  if (Platform.OS === 'android') {
+    try {
+      await createNotificationChannels();
+    } catch {
+      /* ignore */
+    }
+  }
 
   await notifee.displayNotification({
     ...(androidId ? { id: androidId } : {}),

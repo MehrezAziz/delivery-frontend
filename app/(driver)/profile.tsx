@@ -14,6 +14,7 @@ import * as ImagePicker from 'expo-image-picker';
 import axios from 'axios';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useAppNavigation } from '../../contexts/AppNavigationContext';
+import { persistDriverIdentityFromMe } from '../../utils/persistDriverIdentity';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
 
@@ -38,6 +39,7 @@ export default function DriverProfileScreen() {
         headers: { Authorization: `Bearer ${token}` },
       });
       setDriver(res.data);
+      await persistDriverIdentityFromMe(res.data);
     } catch (e) {
       console.error(e);
     } finally {

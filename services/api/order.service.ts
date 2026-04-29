@@ -80,6 +80,8 @@ export interface Order {
   cancelTimerRemainingSeconds?: number | null;
   cancelTimerRunning?: boolean;
   cancelTimerLastResumedAt?: string | null;
+  /** Present when the customer scheduled visibility (status PENDING_PUBLISH). */
+  scheduledPublishAt?: string | null;
   deliveryZoneType: string | null;
   createdAt: string;
   pickupAddress: OrderAddress | null;
@@ -168,6 +170,7 @@ export const orderService = {
     description?: string;
     cancelAfterMinutes?: number;
     customerExtraAmount?: number;
+    scheduledPublishAt?: string;
   }) =>
     api.post<Order>('/orders', data),
 
@@ -178,6 +181,7 @@ export const orderService = {
     paymentType: 'COD' | 'WALLET';
     weight: number;
     customerExtraAmount?: number;
+    scheduledPublishAt?: string;
   }) =>
     api.post<{
       isNightDelivery: boolean;
@@ -206,6 +210,9 @@ export const orderService = {
 
   changePaymentMethod: (id: string, paymentType: 'COD' | 'WALLET') =>
     api.patch<Order>(`/orders/${id}/payment-method`, { paymentType }),
+
+  updateScheduledPublish: (id: string, scheduledPublishAt: string) =>
+    api.patch<Order>(`/orders/${id}/scheduled-publish`, { scheduledPublishAt }),
 
   getDriverLocation: (id: string) => api.get(`/orders/${id}/driver-location`),
 

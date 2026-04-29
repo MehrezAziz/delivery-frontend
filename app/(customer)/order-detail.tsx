@@ -1,10 +1,12 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, ActivityIndicator,
-  Alert, RefreshControl, StyleSheet, TextInput, Modal, Image,
+  Alert, RefreshControl, StyleSheet, TextInput, Modal, Image, Platform,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import DateTimePicker from '@react-native-community/datetimepicker';
+import { clampMinSchedule, mergePublishDatePart, mergePublishTimePart } from '../../utils/schedPublishHelpers';
 import { orderService, Order, computeOrderCancelRemainingSec } from '../../services/api/order.service';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useOrderChatUnread } from '../../hooks/useOrderChatUnread';
@@ -22,6 +24,7 @@ const STATUS_FLOW = [
 
 const STATUS_META: Record<string, { icon: string; color: string; bg: string; label: string }> = {
   DRAFT:            { icon: 'document-outline',   color: '#6b7280', bg: '#f3f4f6', label: 'Draft' },
+  PENDING_PUBLISH:  { icon: 'calendar-outline',   color: '#0284c7', bg: '#e0f2fe', label: 'Scheduled' },
   SEARCHING_DRIVER: { icon: 'search-outline',     color: '#ca8a04', bg: '#fef9c3', label: 'Searching Driver' },
   PENDING_CUSTOMER_APPROVAL: { icon: 'hourglass-outline', color: '#ea580c', bg: '#ffedd5', label: 'Awaiting Your Approval' },
   DRIVER_ASSIGNED:  { icon: 'person-outline',     color: '#2563eb', bg: '#dbeafe', label: 'Driver Assigned' },
@@ -60,6 +63,10 @@ export default function OrderDetailScreen() {
   const [rejectReason, setRejectReason] = useState('');
   const [notifyLoading, setNotifyLoading] = useState(false);
   const [nowTs, setNowTs] = useState(Date.now());
+  const [scheduleModalVisible, setScheduleModalVisible] = useState(false);
+  const [draftPublishAt, setDraftPublishAt] = useState(new Date());
+  const [androidPublishStep, setAndroidPublishStep] = useState<'idle' | 'date' | 'time'>('idle');
+  const [scheduleSaving, setScheduleSaving] = useState(false);
 
   const scrollViewRef = useRef<ScrollView>(null);
   const [driverCardY, setDriverCardY] = useState<number | null>(null);
@@ -96,7 +103,8 @@ export default function OrderDetailScreen() {
   }, [order?.id, order?.status]);
   useEffect(() => {
     if (!orderId) return;
-    const pollMs = order?.status === 'SEARCHING_DRIVER' ? 3000 : 5000;
+    const pollMs =
+      order?.status === 'SEARCHING_DRIVER' ? 3000 : order?.status === 'PENDING_PUBLISH' ? 10000 : 5000;
     const interval = setInterval(loadOrder, pollMs);
     return () => clearInterval(interval);
   }, [orderId, order?.status, loadOrder]);
@@ -288,9 +296,15 @@ export default function OrderDetailScreen() {
   }
 
   const meta = STATUS_META[order.status] || STATUS_META.DRAFT;
-  const canCancel = ['SEARCHING_DRIVER', 'DRAFT'].includes(order.status);
+  const canCancel = ['SEARCHING_DRIVER', 'DRAFT', 'PENDING_PUBLISH'].includes(order.status);
   const canReactivate = ['CANCELLED', 'AUTO_CANCELLED'].includes(order.status);
-  const canChangePayment = ['SEARCHING_DRIVER', 'PENDING_CUSTOMER_APPROVAL', 'DRIVER_ASSIGNED', 'DRIVER_ARRIVED'].includes(order.status);
+  const canChangePayment = [
+    'SEARCHING_DRIVER',
+    'PENDING_PUBLISH',
+    'PENDING_CUSTOMER_APPROVAL',
+    'DRIVER_ASSIGNED',
+    'DRIVER_ARRIVED',
+  ].includes(order.status);
   const chatFriendlyClosedStatuses = ['DELIVERED', 'REFUNDED', 'FAILED', 'DISPUTED', 'CANCELLED', 'AUTO_CANCELLED'];
   const canOpenChat = !!order.chatRoom || chatFriendlyClosedStatuses.includes(order.status);
   const canTrack = ['PICKED_UP', 'DELIVERING'].includes(order.status);
@@ -310,6 +324,30 @@ export default function OrderDetailScreen() {
   const urgentRemainingSec = order.urgentNotify?.nextButtonEnabledAt
     ? Math.max(0, Math.floor((new Date(order.urgentNotify.nextButtonEnabledAt).getTime() - nowTs) / 1000))
     : 0;
+
+  const openScheduleEditor = () => {
+    const base = order.scheduledPublishAt
+      ? new Date(order.scheduledPublishAt)
+      : new Date(Date.now() + 5 * 60 * 1000);
+    setDraftPublishAt(clampMinSchedule(base));
+    setAndroidPublishStep('idle');
+    setScheduleModalVisible(true);
+  };
+
+  const saveSchedule = async () => {
+    const iso = clampMinSchedule(draftPublishAt).toISOString();
+    setScheduleSaving(true);
+    try {
+      const updated = await orderService.updateScheduledPublish(orderId, iso);
+      setOrder(updated);
+      setScheduleModalVisible(false);
+      void syncCustomerOrderTrackingFromOrder(updated);
+    } catch (e: any) {
+      Alert.alert('Could not update', e?.message || 'Try again');
+    } finally {
+      setScheduleSaving(false);
+    }
+  };
 
   return (
     <View style={[s.container, { backgroundColor: colors.background }]}>
@@ -334,6 +372,30 @@ export default function OrderDetailScreen() {
         style={{ flex: 1 }}
         contentContainerStyle={{ padding: 20, paddingBottom: 40 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); loadOrder(); }} />}>
+
+        {order.status === 'PENDING_PUBLISH' && order.scheduledPublishAt ? (
+          <View style={[s.card, { backgroundColor: colors.card, marginBottom: 16 }]}>
+            <Text style={[s.cardTitle, { color: colors.text }]}>Scheduled go-live</Text>
+            <Text style={{ color: colors.textSecondary, fontSize: 14, lineHeight: 20, marginBottom: 14 }}>
+              Drivers will see this order on{' '}
+              <Text style={{ fontWeight: '800', color: colors.text }}>
+                {new Date(order.scheduledPublishAt).toLocaleString(undefined, {
+                  dateStyle: 'medium',
+                  timeStyle: 'short',
+                })}
+              </Text>
+              .
+            </Text>
+            <TouchableOpacity
+              style={[s.actionBtn, { borderColor: colors.primary, backgroundColor: isDark ? 'rgba(14,165,233,0.15)' : '#e0f2fe' }]}
+              onPress={openScheduleEditor}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="calendar-outline" size={20} color={colors.primary} />
+              <Text style={[s.actionTitle, { color: colors.primary }]}>Change date & time</Text>
+            </TouchableOpacity>
+          </View>
+        ) : null}
 
         {/* ── Progress Steps (only for active orders) ── */}
         {isActive && currentStepIndex >= 0 && (
@@ -1031,6 +1093,82 @@ export default function OrderDetailScreen() {
             </ScrollView>
           </TouchableOpacity>
         </TouchableOpacity>
+      </Modal>
+
+      <Modal visible={scheduleModalVisible} transparent animationType="fade" onRequestClose={() => setScheduleModalVisible(false)}>
+        <View style={s.modalOverlay}>
+          <View style={[s.modalCard, { backgroundColor: colors.card }]}>
+            <Text style={[s.modalTitle, { color: colors.text }]}>When should drivers see this order?</Text>
+            <Text style={[s.modalSub, { color: colors.textSecondary }]}>
+              Must be at least one minute from now (local time).
+            </Text>
+            {Platform.OS === 'android' ? (
+              <TouchableOpacity
+                style={[s.actionBtn, { borderColor: colors.border, marginBottom: 8 }]}
+                onPress={() => setAndroidPublishStep('date')}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="calendar-outline" size={20} color={colors.primary} />
+                <Text style={[s.actionTitle, { color: colors.text, flex: 1 }]}>
+                  {draftPublishAt.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}
+                </Text>
+              </TouchableOpacity>
+            ) : (
+              <DateTimePicker
+                value={draftPublishAt}
+                mode="datetime"
+                display="spinner"
+                minimumDate={new Date(Date.now() + 60 * 1000)}
+                themeVariant={isDark ? 'dark' : 'light'}
+                onValueChange={(_, d) => {
+                  setDraftPublishAt(clampMinSchedule(d));
+                }}
+                style={{ marginBottom: 8 }}
+              />
+            )}
+            {Platform.OS === 'android' && androidPublishStep === 'date' && (
+              <DateTimePicker
+                value={draftPublishAt}
+                mode="date"
+                display="default"
+                minimumDate={new Date()}
+                onDismiss={() => setAndroidPublishStep('idle')}
+                onValueChange={(_, d) => {
+                  setDraftPublishAt((prev) => clampMinSchedule(mergePublishDatePart(prev, d)));
+                  setAndroidPublishStep('time');
+                }}
+              />
+            )}
+            {Platform.OS === 'android' && androidPublishStep === 'time' && (
+              <DateTimePicker
+                value={draftPublishAt}
+                mode="time"
+                display="default"
+                onDismiss={() => setAndroidPublishStep('idle')}
+                onValueChange={(_, d) => {
+                  setDraftPublishAt((prev) => clampMinSchedule(mergePublishTimePart(prev, d)));
+                  setAndroidPublishStep('idle');
+                }}
+              />
+            )}
+            <View style={s.modalActions}>
+              <TouchableOpacity style={s.modalCancelBtn} onPress={() => setScheduleModalVisible(false)}>
+                <Text style={s.modalCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[s.modalSubmitBtn, scheduleSaving && { opacity: 0.6 }]}
+                onPress={() => void saveSchedule()}
+                disabled={scheduleSaving}
+              >
+                {scheduleSaving ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text style={s.modalSubmitText}>Save</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
       </Modal>
     </View>
   );

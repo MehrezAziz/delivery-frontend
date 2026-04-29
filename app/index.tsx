@@ -63,7 +63,7 @@ export default function RoleSelectionScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <AppChromeHeader role="guest" title="Welcome" hideBack showMenu={false} showThemeToggle={false} showProfile={false} />
+      <AppChromeHeader role="guest" title="Welcome" hideBack showMenu={false} showThemeToggle={true} showProfile={false} />
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={[styles.heroCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <View style={[styles.heroBadge, { backgroundColor: colors.primaryLight }]}>
@@ -147,13 +147,11 @@ export default function RoleSelectionScreen() {
           </Text>
         </View>
       </ScrollView>
-      {!isDark && (
-        <>
-          <View style={styles.bgCircleTop} />
-          <View style={styles.bgCircleBottom} />
-          <View style={styles.bgCircleSide} />
-        </>
-      )}
+      <>
+        <View style={[styles.bgCircleTop, isDark && styles.bgCircleDark]} />
+        <View style={[styles.bgCircleBottom, isDark && styles.bgCircleDark]} />
+        <View style={[styles.bgCircleSide, isDark && styles.bgCircleDark]} />
+      </>
     </View>
   );
 }
@@ -296,6 +294,9 @@ const styles = StyleSheet.create({
     color: '#64748b',
     textAlign: 'center',
     fontSize: 12,
+  },
+  bgCircleDark: {
+    opacity: 0.35,
   },
   bgCircleTop: {
     position: 'absolute',

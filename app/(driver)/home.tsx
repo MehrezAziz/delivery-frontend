@@ -9,13 +9,12 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import axios from 'axios';
 import { orderService, Order } from '../../services/api/order.service';
-import { notificationService } from '../../services/api/notification.service';
 import { clearPushToken } from '../../services/api/notification.service';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useAppNavigation } from '../../contexts/AppNavigationContext';
 import { restoreOrderTrackingForDriver, stopOrderTrackingSilently } from '../../services/notifications';
 import { syncDriverLocationTracking } from '../../services/driverLocationTracking';
-import { NotificationPreviewModal } from '../../components/NotificationPreviewModal';
+import { persistDriverIdentityFromMe } from '../../utils/persistDriverIdentity';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
 
@@ -44,9 +43,6 @@ export default function DriverHome() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [hasAvailableOrders, setHasAvailableOrders] = useState(false);
-  const [unreadCount, setUnreadCount] = useState(0);
-  const [notifPreviewOpen, setNotifPreviewOpen] = useState(false);
-
   const loadData = useCallback(async () => {
     try {
       const token = await AsyncStorage.getItem('accessToken');
@@ -57,6 +53,7 @@ export default function DriverHome() {
         orderService.getDriverMyOrders().catch(() => [] as Order[]),
       ]);
       setDriver(profileRes.data);
+      await persistDriverIdentityFromMe(profileRes.data);
       const list = Array.isArray(orders) ? orders : [];
       syncDriverLocationTracking(list);
       setActiveOrders(list.filter((o) => ACTIVE_STATUSES.includes(o.status)));
@@ -71,13 +68,6 @@ export default function DriverHome() {
         setHasAvailableOrders(false);
       }
 
-      // Fetch unread notification count
-      try {
-        const notifCount = await notificationService.getUnreadCount();
-        setUnreadCount(notifCount.count);
-      } catch {
-        setUnreadCount(0);
-      }
     } catch (error: any) {
       if (error.response?.status === 401) {
         await stopOrderTrackingSilently();
@@ -105,42 +95,12 @@ export default function DriverHome() {
     return <View style={[s.loadingContainer, { backgroundColor: colors.background }]}><ActivityIndicator size="large" color={colors.primary} /></View>;
   }
 
-  const firstName = driver?.user?.firstName || 'Driver';
-  const statusColor = driver?.status === 'VERIFIED' ? '#16a34a'
-    : driver?.status === 'PENDING_REVIEW' ? '#ca8a04' : '#dc2626';
-  const statusLabel = driver?.status === 'VERIFIED' ? 'Verified'
-    : driver?.status === 'PENDING_REVIEW' ? 'Pending'
-    : driver?.status === 'INCOMPLETE' ? 'Incomplete'
-    : driver?.status || '';
   const isVerified = driver?.status === 'VERIFIED';
 
   return (
     <View style={[s.container, { backgroundColor: colors.background }]}>
-      <NotificationPreviewModal
-        visible={notifPreviewOpen}
-        onClose={() => setNotifPreviewOpen(false)}
-        variant="driver"
-        onOpenFullInbox={() => push('/(driver)/notifications')}
-        onMarkAllRead={() => setUnreadCount(0)}
-      />
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 100 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); loadData(); }} />}>
-
-        <View style={[s.heroStrip, { backgroundColor: colors.headerBg }]}>
-          <Text style={s.greeting}>Hello, {firstName} 👋</Text>
-          <View style={s.statusRow}>
-            <View style={[s.statusDot, { backgroundColor: statusColor }]} />
-            <Text style={s.statusLabel}>{statusLabel}</Text>
-          </View>
-          <TouchableOpacity onPress={() => setNotifPreviewOpen(true)} style={s.notifCorner} activeOpacity={0.85}>
-            <Ionicons name="notifications-outline" size={22} color="#fff" />
-            {unreadCount > 0 && (
-              <View style={s.badge}>
-                <Text style={s.badgeText}>{unreadCount > 99 ? '99+' : unreadCount}</Text>
-              </View>
-            )}
-          </TouchableOpacity>
-        </View>
 
         {/* Status Alerts */}
         {driver?.status === 'INCOMPLETE' && (
@@ -284,37 +244,6 @@ export default function DriverHome() {
 const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f8fafc' },
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f8fafc' },
-
-  heroStrip: {
-    marginHorizontal: 20,
-    marginTop: 8,
-    marginBottom: 8,
-    borderRadius: 18,
-    padding: 18,
-    paddingRight: 56,
-    position: 'relative',
-  },
-  greeting: { fontSize: 22, fontWeight: '800', color: '#fff', marginBottom: 6 },
-  statusRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  statusDot: { width: 8, height: 8, borderRadius: 4 },
-  statusLabel: { fontSize: 13, color: 'rgba(255,255,255,0.85)', fontWeight: '600' },
-  notifCorner: {
-    position: 'absolute',
-    right: 14,
-    top: 16,
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  badge: {
-    position: 'absolute', top: -4, right: -4, backgroundColor: '#ef4444',
-    borderRadius: 10, minWidth: 20, height: 20, justifyContent: 'center',
-    alignItems: 'center', paddingHorizontal: 4,
-  },
-  badgeText: { color: '#fff', fontSize: 11, fontWeight: '700' },
 
   section: { paddingHorizontal: 20, marginTop: 20 },
   sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2 },

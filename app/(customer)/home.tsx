@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import {
   View, Text, ScrollView, StyleSheet, TouchableOpacity,
-  ActivityIndicator, RefreshControl, Alert,
+  ActivityIndicator, RefreshControl,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
@@ -9,17 +9,16 @@ import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '../../contexts/ThemeContext';
 import { orderService, Order } from '../../services/api/order.service';
-import { notificationService } from '../../services/api/notification.service';
 import { restoreOrderTrackingForCustomer } from '../../services/notifications';
-import { NotificationPreviewModal } from '../../components/NotificationPreviewModal';
-import { getCustomerStatusDotColor } from '../../utils/customerStatus';
+import { appAlert } from '../../utils/appAlert';
 import { api } from '../../services/api/client';
 
 const ACTIVE_STATUSES = [
-  'SEARCHING_DRIVER', 'PENDING_CUSTOMER_APPROVAL', 'DRIVER_ASSIGNED', 'DRIVER_ARRIVED', 'PICKED_UP', 'DELIVERING',
+  'PENDING_PUBLISH', 'SEARCHING_DRIVER', 'PENDING_CUSTOMER_APPROVAL', 'DRIVER_ASSIGNED', 'DRIVER_ARRIVED', 'PICKED_UP', 'DELIVERING',
 ];
 
 const STATUS_META: Record<string, { icon: string; color: string; bg: string; label: string }> = {
+  PENDING_PUBLISH: { icon: 'calendar-outline', color: '#0284c7', bg: '#e0f2fe', label: 'Scheduled' },
   SEARCHING_DRIVER: { icon: 'search-outline', color: '#ca8a04', bg: '#fef9c3', label: 'Searching' },
   PENDING_CUSTOMER_APPROVAL: { icon: 'hourglass-outline', color: '#ea580c', bg: '#ffedd5', label: 'Approve Driver' },
   DRIVER_ASSIGNED:  { icon: 'person-outline', color: '#2563eb', bg: '#dbeafe', label: 'Assigned' },
@@ -31,22 +30,15 @@ const STATUS_META: Record<string, { icon: string; color: string; bg: string; lab
 export default function CustomerHomeScreen() {
   const router = useRouter();
   const { colors, isDark } = useTheme();
-  const [userName, setUserName] = useState('');
   const [customerStatus, setCustomerStatus] = useState<string>('ACTIVE');
   const [activeOrders, setActiveOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [unreadCount, setUnreadCount] = useState(0);
-  const [notifPreviewOpen, setNotifPreviewOpen] = useState(false);
   const [hasMainAddress, setHasMainAddress] = useState(false);
 
   const loadHeaderIdentity = useCallback(async () => {
     try {
-      const [u, c] = await Promise.all([AsyncStorage.getItem('user'), AsyncStorage.getItem('customer')]);
-      if (u) {
-        const user = JSON.parse(u);
-        setUserName([user.firstName, user.secondName].filter(Boolean).join(' ').trim() || user.firstName || user.secondName || '');
-      }
+      const c = await AsyncStorage.getItem('customer');
       if (c) {
         const cust = JSON.parse(c);
         if (cust?.customerStatus) setCustomerStatus(cust.customerStatus);
@@ -63,7 +55,7 @@ export default function CustomerHomeScreen() {
 
   useEffect(() => {
     if (customerStatus === 'CREATED' && !hasMainAddress) {
-      Alert.alert(
+      appAlert(
         'Address verification required',
         'Please add MAIN address to be verified.',
         [
@@ -76,13 +68,11 @@ export default function CustomerHomeScreen() {
 
   const loadOrders = useCallback(async () => {
     try {
-      const [orders, notifCount, addresses] = await Promise.all([
+      const [orders, addresses] = await Promise.all([
         orderService.getMyOrders(),
-        notificationService.getUnreadCount().catch(() => ({ count: 0 })),
         api.get<Array<{ nickname?: string | null }>>('/addresses').catch(() => []),
       ]);
       setActiveOrders(orders.filter(o => ACTIVE_STATUSES.includes(o.status)));
-      setUnreadCount(notifCount.count);
       setHasMainAddress(addresses.some((a) => String(a.nickname || '').toUpperCase() === 'MAIN'));
     } catch (e) {
       console.error(e);
@@ -106,40 +96,16 @@ export default function CustomerHomeScreen() {
 
   return (
     <View style={[s.container, { backgroundColor: colors.background }]}>
-      <NotificationPreviewModal
-        visible={notifPreviewOpen}
-        onClose={() => setNotifPreviewOpen(false)}
-        variant="customer"
-        onOpenFullInbox={() => router.push('/(customer)/notifications')}
-        onMarkAllRead={() => setUnreadCount(0)}
-      />
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 100 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); loadOrders(); }} />}>
 
-        <View style={[s.heroStrip, { backgroundColor: colors.headerBg }]}>
-          <View style={s.nameRow}>
-            <View
-              style={[s.headerStatusDot, { backgroundColor: getCustomerStatusDotColor(customerStatus) }]}
-              accessibilityLabel={`Account status: ${customerStatus}`}
-            />
-            <Text style={s.userName} numberOfLines={1}>
-              {userName || 'Customer'}
-            </Text>
-          </View>
-          <Text style={s.subtitle}>Where should we deliver today?</Text>
-          <TouchableOpacity style={s.notifBtnLight} onPress={() => setNotifPreviewOpen(true)} activeOpacity={0.85}>
-            <Ionicons name="notifications-outline" size={22} color="#fff" />
-            {unreadCount > 0 && (
-              <View style={s.badge}>
-                <Text style={s.badgeText}>{unreadCount > 99 ? '99+' : unreadCount}</Text>
-              </View>
-            )}
-          </TouchableOpacity>
-        </View>
-
         {/* Create Order CTA */}
         <View style={s.section}>
-          <TouchableOpacity style={[s.ctaCard, { backgroundColor: colors.primary }]} onPress={() => router.push('/(customer)/create-order')} activeOpacity={0.85}>
+          <TouchableOpacity
+            style={[s.ctaCard, { backgroundColor: isDark ? 'rgba(14,165,233,0.42)' : colors.primary }]}
+            onPress={() => router.push('/(customer)/create-order')}
+            activeOpacity={0.85}
+          >
             <View style={s.ctaIconWrap}>
               <Ionicons name="add-circle" size={32} color="#fff" />
             </View>
@@ -242,48 +208,6 @@ export default function CustomerHomeScreen() {
 
 const s = StyleSheet.create({
   container: { flex: 1 },
-  heroStrip: {
-    marginHorizontal: 20,
-    marginTop: 8,
-    marginBottom: 8,
-    borderRadius: 18,
-    padding: 18,
-    paddingRight: 56,
-    position: 'relative',
-  },
-  nameRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 6,
-    paddingRight: 8,
-  },
-  headerStatusDot: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    flexShrink: 0,
-    marginRight: 10,
-  },
-  userName: { fontSize: 22, fontWeight: '800', color: '#fff', flex: 1, minWidth: 0 },
-  subtitle: { fontSize: 14, color: 'rgba(255,255,255,0.82)', fontWeight: '500' },
-  notifBtnLight: {
-    position: 'absolute',
-    right: 14,
-    top: 18,
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  badge: {
-    position: 'absolute', top: -4, right: -4, backgroundColor: '#ef4444',
-    borderRadius: 10, minWidth: 20, height: 20, justifyContent: 'center',
-    alignItems: 'center', paddingHorizontal: 4,
-  },
-  badgeText: { color: '#fff', fontSize: 11, fontWeight: '700' },
-
   section: { paddingHorizontal: 20, marginTop: 20 },
   sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2 },
   sectionTitle: { fontSize: 17, fontWeight: '700', marginBottom: 14 },

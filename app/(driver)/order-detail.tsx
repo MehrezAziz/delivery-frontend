@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, ActivityIndicator,
-  RefreshControl, StyleSheet, TextInput, Alert, Image,
+  RefreshControl, StyleSheet, TextInput, Image,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -16,6 +16,7 @@ import {
   subscribeOrderDetailRefresh,
 } from '../../services/notifications';
 import { useOrderChatUnread } from '../../hooks/useOrderChatUnread';
+import { appAlert } from '../../utils/appAlert';
 import { ChatUnreadBadge } from '../../components/ChatUnreadBadge';
 
 const STATUS_META: Record<string, { icon: string; color: string; bg: string; label: string }> = {
@@ -123,7 +124,7 @@ export default function DriverOrderDetailScreen() {
   const pickReturnEvidenceImage = async () => {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!perm.granted) {
-      Alert.alert('Permission needed', 'Allow photo library access to attach a photo.');
+      appAlert('Permission needed', 'Allow photo library access to attach a photo.');
       return;
     }
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -141,7 +142,7 @@ export default function DriverOrderDetailScreen() {
     if (!order) return;
     const t = companyRejectionDraft.trim();
     if (t.length < 5) {
-      Alert.alert('Too short', 'Please write at least 5 characters.');
+      appAlert('Too short', 'Please write at least 5 characters.');
       return;
     }
     try {
@@ -149,9 +150,9 @@ export default function DriverOrderDetailScreen() {
       await orderService.respondToOrderDriverRejection(order.id, t);
       setCompanyRejectionDraft('');
       await load();
-      Alert.alert('Sent', 'Your response was saved.');
+      appAlert('Sent', 'Your response was saved.');
     } catch (e: any) {
-      Alert.alert('Error', e?.message || 'Could not save response');
+      appAlert('Error', e?.message || 'Could not save response');
     } finally {
       setCompanyRejectionSubmitting(false);
     }
@@ -159,7 +160,7 @@ export default function DriverOrderDetailScreen() {
 
   const cancelAssignment = () => {
     if (!order) return;
-    Alert.alert('Cancel', 'Cancel your assignment for this order?', [
+    appAlert('Cancel', 'Cancel your assignment for this order?', [
       { text: 'No', style: 'cancel' },
       {
         text: 'Yes',
@@ -170,7 +171,7 @@ export default function DriverOrderDetailScreen() {
             await stopOrderTrackingSilently();
             router.replace('/(driver)/available-orders');
           } catch (e: any) {
-            Alert.alert('Error', e?.message || 'Could not cancel');
+            appAlert('Error', e?.message || 'Could not cancel');
           }
         },
       },
@@ -181,7 +182,7 @@ export default function DriverOrderDetailScreen() {
     if (!order) return;
     const t = conflictFeedback.trim();
     if (t.length < 5) {
-      Alert.alert('Too short', 'Please write at least 5 characters.');
+      appAlert('Too short', 'Please write at least 5 characters.');
       return;
     }
     try {
@@ -189,9 +190,9 @@ export default function DriverOrderDetailScreen() {
       await orderService.submitArrivalConflictFeedback(order.id, t);
       setConflictFeedback('');
       await load();
-      Alert.alert('Sent', 'Your response was saved. Customer service will review if needed.');
+      appAlert('Sent', 'Your response was saved. Customer service will review if needed.');
     } catch (e: any) {
-      Alert.alert('Error', e?.message || 'Could not submit feedback');
+      appAlert('Error', e?.message || 'Could not submit feedback');
     } finally {
       setConflictSubmitting(false);
     }
@@ -262,6 +263,7 @@ export default function DriverOrderDetailScreen() {
   }
 
   const meta = STATUS_META[order.status] || STATUS_META.DELIVERED;
+  const isCompanyOrder = order.sourceType === 'DELIVERY_COMPANY';
   const da = order.driverAssignment;
   const showProofSection = ['DRIVER_ARRIVED', 'PICKED_UP', 'DELIVERING', 'RETURNED', 'RETURN_DEPOSIT', 'DELIVERED'].includes(order.status);
   const canRevert = ['DRIVER_ARRIVED', 'PICKED_UP', 'DELIVERING', 'RETURNED'].includes(order.status);
@@ -283,7 +285,7 @@ export default function DriverOrderDetailScreen() {
     mapTitle: string,
   ) => {
     if (lat == null || lng == null || !Number.isFinite(lat) || !Number.isFinite(lng)) {
-      Alert.alert('Location unavailable', 'Map coordinates are not available for this address.');
+      appAlert('Location unavailable', 'Map coordinates are not available for this address.');
       return;
     }
     push(`/(driver)/address-map?lat=${lat}&lng=${lng}&kind=${kind}&title=${encodeURIComponent(mapTitle)}`);
@@ -561,7 +563,7 @@ export default function DriverOrderDetailScreen() {
           </View>
         )}
 
-        {order.status === 'RETURNED' && (
+        {isCompanyOrder && order.status === 'RETURNED' && (
           <View
             style={[s.card, { backgroundColor: colors.card }]}
             onLayout={(e) => {
@@ -624,7 +626,7 @@ export default function DriverOrderDetailScreen() {
           </View>
         )}
 
-        {(canGoNext || order.status === 'DELIVERING' || order.status === 'RETURNED') && (
+        {(canGoNext || order.status === 'DELIVERING' || (isCompanyOrder && order.status === 'RETURNED')) && (
           <View style={[s.card, { backgroundColor: colors.card }]}>
             <Text style={[s.cardTitle, { color: colors.text }]}>Delivery Actions</Text>
             <View style={s.stepActionsRow}>
@@ -656,16 +658,18 @@ export default function DriverOrderDetailScreen() {
                   >
                     <Text style={s.nextBtnText}>Delivered</Text>
                   </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[s.nextBtn, { backgroundColor: '#b45309' }, statusUpdating && { opacity: 0.6 }]}
-                    onPress={handleReturned}
-                    disabled={statusUpdating}
-                  >
-                    <Text style={s.nextBtnText}>Returned</Text>
-                  </TouchableOpacity>
+                  {isCompanyOrder && (
+                    <TouchableOpacity
+                      style={[s.nextBtn, { backgroundColor: '#b45309' }, statusUpdating && { opacity: 0.6 }]}
+                      onPress={handleReturned}
+                      disabled={statusUpdating}
+                    >
+                      <Text style={s.nextBtnText}>Returned</Text>
+                    </TouchableOpacity>
+                  )}
                 </>
               )}
-              {order.status === 'RETURNED' && (
+              {isCompanyOrder && order.status === 'RETURNED' && (
                 <TouchableOpacity
                   style={[s.nextBtn, { backgroundColor: colors.primary }, statusUpdating && { opacity: 0.6 }]}
                   onPress={confirmReturnDeposit}
