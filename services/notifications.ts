@@ -67,7 +67,37 @@ const STATUS_BY_NOTIFICATION_TYPE: Record<string, string> = {
   DISPUTE_OPENED: 'DISPUTED',
 };
 
+function statusLabelForTracking(status: string): string {
+  switch (status) {
+    case 'SEARCHING_DRIVER':
+      return 'Searching driver';
+    case 'PENDING_CUSTOMER_APPROVAL':
+      return 'Driver found';
+    case 'DRIVER_ASSIGNED':
+      return 'Driver assigned';
+    case 'DRIVER_ARRIVED':
+      return 'Driver arrived';
+    case 'PICKED_UP':
+      return 'Package picked up';
+    case 'DELIVERING':
+      return 'Delivery in progress';
+    case 'DELIVERED':
+      return 'Delivered';
+    case 'CANCELLED':
+      return 'Cancelled';
+    case 'AUTO_CANCELLED':
+      return 'Auto-cancelled';
+    case 'FAILED':
+      return 'Failed';
+    case 'DISPUTED':
+      return 'Disputed';
+    default:
+      return 'Order update';
+  }
+}
+
 let backgroundHandlersRegistered = false;
+let foregroundServiceRegistered = false;
 
 const firebaseMessaging = getMessaging();
 
@@ -170,6 +200,15 @@ async function resolveOrderTrackingText(
   let body = data.body?.trim() || '';
   if (title && body) return { title, body };
 
+  const statusFromPayload =
+    data.orderStatus || (data.type ? STATUS_BY_NOTIFICATION_TYPE[data.type] : undefined);
+  if (statusFromPayload) {
+    return {
+      title: `Order status: ${statusLabelForTracking(statusFromPayload)}`,
+      body: title || body || 'Your order status was updated.',
+    };
+  }
+
   try {
     const order = await orderService.getOrder(oid);
     if (!order) return title && body ? { title, body } : null;
@@ -259,6 +298,8 @@ export async function registerForPushNotifications(): Promise<string | null> {
  * MUST be called at module level (outside React components).
  */
 export function registerOrderForegroundService() {
+  if (foregroundServiceRegistered) return;
+  foregroundServiceRegistered = true;
   notifee.registerForegroundService(() => {
     return new Promise(() => {});
   });
@@ -582,10 +623,11 @@ export async function startOrderTracking(orderId: string, title: string, body: s
 export async function updateOrderTracking(title: string, body: string, data?: Record<string, string>) {
   if (Platform.OS !== 'android') return;
 
+  const orderIdFromGroupKey = extractOrderIdFromOrderGroupKey(data?.groupKey);
   const orderId =
+    orderIdFromGroupKey ||
     data?.orderId ||
     data?.relatedEntityId ||
-    extractOrderIdFromOrderGroupKey(data?.groupKey) ||
     '';
   if (!orderId) return;
   await setTrackedOrderStatus(orderId, data?.orderStatus);
@@ -777,6 +819,12 @@ export async function syncCustomerOrderTrackingFromOrder(order: Order | null | u
   if (role && role !== 'CUSTOMER') return;
 
   if (!ORDER_ACTIVE_STATUSES.includes(order.status)) return;
+
+  const map = await getTrackingStatusMap();
+  const displayed = await getDisplayedTrackingOrderIds();
+  if (map[order.id] === order.status && displayed.has(order.id)) {
+    return;
+  }
 
   const { title, body } = getTrackingNotificationFromOrder(order);
   const actionButtons =
@@ -1259,7 +1307,7 @@ async function handleOrderFCMData(rawData: Record<string, unknown>) {
   const { orderId, groupKey, ongoing } = data;
 
   const isTerminal = ongoing === 'false';
-  const oid = orderId || extractOrderIdFromOrderGroupKey(groupKey) || '';
+  const oid = extractOrderIdFromOrderGroupKey(groupKey) || orderId || '';
   const inferredOrderStatus =
     data.orderStatus ||
     (data.type ? STATUS_BY_NOTIFICATION_TYPE[data.type] : undefined);
@@ -1299,6 +1347,13 @@ async function handleOrderFCMData(rawData: Record<string, unknown>) {
     ...(inferredOrderStatus ? { orderStatus: inferredOrderStatus } : {}),
   });
   emitOrderDetailAndDriverListRefresh(oid);
+}
+
+function isOrderTrackingPayload(data: Record<string, string>): boolean {
+  if (data.groupKey?.startsWith('order:')) return true;
+  if (Boolean(data.orderStatus)) return true;
+  if (Boolean(data.type) && Boolean(STATUS_BY_NOTIFICATION_TYPE[data.type])) return true;
+  return false;
 }
 
 async function displayRegularNotification(data: Record<string, string>, androidId?: string) {
@@ -1421,7 +1476,7 @@ export function setupBackgroundHandler() {
       return;
     }
     const { groupKey } = data;
-    if (groupKey?.startsWith('order:')) {
+    if (isOrderTrackingPayload(data)) {
       await handleOrderFCMData(raw);
       return;
     }
@@ -1507,6 +1562,7 @@ export function setupBackgroundHandler() {
 // Register background handlers at module load so they are available in headless mode
 // (app closed), not only after React layout mounts.
 setupBackgroundHandler();
+registerOrderForegroundService();
 
 
 // ============================================================

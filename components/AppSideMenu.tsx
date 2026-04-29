@@ -74,7 +74,7 @@ export function AppSideMenu({
       {
         text: 'Sign out',
         style: 'destructive',
-        onPress: async () => {
+          onPress: async () => {
           onClose();
           try {
             // Same cleanup as profile logout: drop persistent order-tracking notification + FCM before clearing storage.

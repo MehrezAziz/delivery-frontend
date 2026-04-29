@@ -87,7 +87,7 @@ export default function OrderDetailScreen() {
   useEffect(() => {
     if (!order) return;
     void syncCustomerOrderTrackingFromOrder(order);
-  }, [order]);
+  }, [order?.id, order?.status]);
 
   // Safety reconciliation with global tracker map (covers app reopen / stale map cases).
   useEffect(() => {
