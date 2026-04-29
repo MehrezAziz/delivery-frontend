@@ -168,7 +168,6 @@ export function NotificationPreviewModal({ visible, onClose, variant, onOpenFull
                     })),
                   );
                   onMarkAllRead?.();
-                  void load();
                 }}
                 hitSlop={12}
               >
