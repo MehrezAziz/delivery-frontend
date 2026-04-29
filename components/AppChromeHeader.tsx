@@ -11,6 +11,7 @@ import { ThemeToggle } from './ThemeToggle';
 import { AppSideMenu } from './AppSideMenu';
 import { NotificationPreviewModal } from './NotificationPreviewModal';
 import { notificationService } from '../services/api/notification.service';
+import { subscribeUnreadBadgeRefresh } from '../services/notifications';
 import {
   AUTH_ROUTE_TITLES,
   CUSTOMER_ROUTE_TITLES,
@@ -142,14 +143,22 @@ export function AppChromeHeader({
         : role !== 'guest' && isMainHome;
 
   const loadUnread = useCallback(async () => {
-    if (role === 'guest' || !isMainHome || !resolvedShowNotifications) return;
+    if (role === 'guest') return;
     try {
       const c = await notificationService.getUnreadCount();
       setUnreadCount(c.count ?? 0);
     } catch {
       setUnreadCount(0);
     }
-  }, [role, isMainHome, resolvedShowNotifications]);
+  }, [role]);
+
+  useEffect(() => {
+    if (role === 'guest') return undefined;
+    const unsub = subscribeUnreadBadgeRefresh(() => {
+      void loadUnread();
+    });
+    return unsub;
+  }, [role, loadUnread]);
 
   useFocusEffect(
     useCallback(() => {

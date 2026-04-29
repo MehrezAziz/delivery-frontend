@@ -13,7 +13,7 @@ import {
   requestPermission,
   setBackgroundMessageHandler,
 } from '@react-native-firebase/messaging';
-import { Platform } from 'react-native';
+import { AppState, Platform } from 'react-native';
 import { router } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { notificationService } from './api/notification.service';
@@ -40,6 +40,31 @@ export function clearActiveChatContextIfMatches(kind: ActiveChatContext['kind'],
   if (activeChatContext?.kind === kind && activeChatContext.id === id) {
     activeChatContext = null;
   }
+}
+
+/** Home header (and similar) can subscribe to refresh inbox unread count when FCM arrives. */
+const unreadBadgeListeners = new Set<() => void>();
+let unreadBadgeDebounce: ReturnType<typeof setTimeout> | null = null;
+
+export function subscribeUnreadBadgeRefresh(listener: () => void): () => void {
+  unreadBadgeListeners.add(listener);
+  return () => {
+    unreadBadgeListeners.delete(listener);
+  };
+}
+
+function emitUnreadBadgeRefreshDebounced() {
+  if (unreadBadgeDebounce) clearTimeout(unreadBadgeDebounce);
+  unreadBadgeDebounce = setTimeout(() => {
+    unreadBadgeDebounce = null;
+    unreadBadgeListeners.forEach((fn) => {
+      try {
+        fn();
+      } catch {
+        /* ignore */
+      }
+    });
+  }, 350);
 }
 
 const ORDER_ACTIVE_STATUSES = [
@@ -114,6 +139,30 @@ function coerceFcmData(
   for (const [k, v] of Object.entries(raw)) {
     if (v == null) continue;
     out[k] = typeof v === 'string' ? v : String(v);
+  }
+  return out;
+}
+
+/**
+ * FCM hybrid messages put title/body on `notification`; foreground handlers often only read `data`.
+ * Merge so Notifee always has strings to display.
+ */
+function mergeFcmNotificationIntoData(
+  remoteMessage: {
+    data?: Record<string, unknown>;
+    notification?: { title?: string | null; body?: string | null } | null;
+  },
+  data: Record<string, string>,
+): Record<string, string> {
+  const out = { ...data };
+  const n = remoteMessage.notification;
+  const t = (out.title || '').trim();
+  const b = (out.body || '').trim();
+  if (!t && n?.title != null && String(n.title).trim()) {
+    out.title = String(n.title).trim();
+  }
+  if (!b && n?.body != null && String(n.body).trim()) {
+    out.body = String(n.body).trim();
   }
   return out;
 }
@@ -1377,6 +1426,35 @@ function isOrderTrackingPayload(data: Record<string, string>): boolean {
   return false;
 }
 
+/** Order-chat messages: high-importance channel; stable id replaces prior banner for same thread. */
+async function displayChatNotification(data: Record<string, string>, androidId?: string) {
+  const title = (data.title || '').trim();
+  const body = (data.body || '').trim();
+  if (!title || !body) return;
+  if (shouldSuppressChatNotification(data)) return;
+
+  if (Platform.OS === 'android') {
+    try {
+      await createNotificationChannels();
+    } catch {
+      /* ignore */
+    }
+  }
+
+  await notifee.displayNotification({
+    ...(androidId ? { id: androidId } : {}),
+    title,
+    body,
+    android: {
+      channelId: CHANNEL_CHAT,
+      importance: AndroidImportance.HIGH,
+      pressAction: { id: 'default' },
+    },
+    ios: { sound: 'default' },
+    data,
+  });
+}
+
 async function displayRegularNotification(data: Record<string, string>, androidId?: string) {
   const { title, body } = data;
   if (!title || !body) return;
@@ -1414,9 +1492,12 @@ export function setupNotificationListeners() {
   flushPendingNotificationRoute();
 
   const unsubOpened = onNotificationOpenedApp(firebaseMessaging, async (remoteMessage) => {
-    const route = await notificationDataToRoute(
-      coerceFcmData(remoteMessage?.data as Record<string, unknown>),
+    const raw = remoteMessage?.data as Record<string, unknown> | undefined;
+    const data = mergeFcmNotificationIntoData(
+      remoteMessage,
+      coerceFcmData(raw && typeof raw === 'object' ? raw : undefined),
     );
+    const route = await notificationDataToRoute(data);
     if (route) router.push(route as any);
   });
 
@@ -1496,29 +1577,45 @@ export function setupBackgroundHandler() {
   }) => {
     const raw = remoteMessage?.data as Record<string, unknown> | undefined;
     if (!raw || typeof raw !== 'object') return;
-    const data = coerceFcmData(raw);
-    /** Driver/customer in order chat: skip Notifee banner for this thread (see activeChatContext). */
+    const data = mergeFcmNotificationIntoData(remoteMessage, coerceFcmData(raw));
+    emitUnreadBadgeRefreshDebounced();
+
+    /** Driver/customer in order chat: skip banner for the open thread (see activeChatContext). */
     if (
       (data.type === 'NEW_MESSAGE_FROM_DRIVER' || data.type === 'NEW_MESSAGE_FROM_CUSTOMER') &&
       shouldSuppressChatNotification(data)
     ) {
       return;
     }
+
     const { groupKey } = data;
     if (isOrderTrackingPayload(data)) {
       await handleOrderFCMData(raw);
       return;
     }
+
     if (groupKey?.startsWith('chat:')) {
-      // If Firebase already attached a visible notification payload, let the OS show it once.
-      if (fcmHasNativeNotificationTrayPayload(remoteMessage)) return;
-      const oid = data.orderId || groupKey.replace('chat:', '');
-      // Separate lightweight message banner — does not replace the persistent order-track notification.
-      await displayRegularNotification(data, oid ? `chat-msg-${oid}` : undefined);
+      const oid =
+        (data.orderId || '').trim() ||
+        groupKey.replace(/^chat:/i, '').trim() ||
+        effectiveOrderIdFromChatPayload(data);
+      const notifId = (data.notificationId || '').trim();
+      /** One Notifee id per server row — same order id used to replace updates and hid subsequent messages on Android. */
+      const nid = notifId ? `chat-${notifId}` : oid ? `chat-fallback-${oid}-${Date.now()}` : `chat-${Date.now()}`;
+      const hasTray = fcmHasNativeNotificationTrayPayload(remoteMessage);
+      const foreground = AppState.currentState === 'active';
+      /**
+       * Hybrid FCM (notification + data): Android does not show a system heads-up while the app is foregrounded,
+       * but `hasTray` is still true — we must show via Notifee. Background/quit: OS displays the native tray once.
+       */
+      if (foreground || !hasTray) {
+        await displayChatNotification(data, nid);
+      }
       return;
     }
-    // Non-order pushes use notification+data in firebase.service — OS shows native tray; skip Notifee to avoid duplicates.
-    if (fcmHasNativeNotificationTrayPayload(remoteMessage)) {
+
+    // Non-chat pushes with notification+data: OS shows tray when backgrounded; foreground needs Notifee (no system banner).
+    if (fcmHasNativeNotificationTrayPayload(remoteMessage) && AppState.currentState !== 'active') {
       return;
     }
     await displayRegularNotification(data);
@@ -1605,17 +1702,34 @@ export function setupNotificationReceivedListener(callback?: any) {
   return { remove: () => {} };
 }
 export async function handleFCMMessage(remoteMessage: any) {
-  const data = remoteMessage?.data as Record<string, string> | undefined;
-  if (!data) return;
+  const raw = remoteMessage?.data as Record<string, unknown> | undefined;
+  if (!raw || typeof raw !== 'object') return;
+  const data = mergeFcmNotificationIntoData(remoteMessage, coerceFcmData(raw));
+  emitUnreadBadgeRefreshDebounced();
   if (
     (data.type === 'NEW_MESSAGE_FROM_DRIVER' || data.type === 'NEW_MESSAGE_FROM_CUSTOMER') &&
     shouldSuppressChatNotification(data)
   ) {
     return;
   }
-  if (data.groupKey?.startsWith('order:')) await handleOrderFCMData(data);
-  else if (!fcmHasNativeNotificationTrayPayload(remoteMessage))
+  if (data.groupKey?.startsWith('order:')) await handleOrderFCMData(raw);
+  else if (data.groupKey?.startsWith('chat:')) {
+    const oid =
+      (data.orderId || '').trim() ||
+      (data.groupKey || '').replace(/^chat:/i, '').trim() ||
+      effectiveOrderIdFromChatPayload(data);
+    const notifId = (data.notificationId || '').trim();
+    const nid = notifId ? `chat-${notifId}` : oid ? `chat-fallback-${oid}-${Date.now()}` : `chat-${Date.now()}`;
+    const hasTray = fcmHasNativeNotificationTrayPayload(remoteMessage);
+    if (AppState.currentState === 'active' || !hasTray) {
+      await displayChatNotification(data, nid);
+    }
+  } else if (
+    !fcmHasNativeNotificationTrayPayload(remoteMessage) ||
+    AppState.currentState === 'active'
+  ) {
     await displayRegularNotification(data);
+  }
 }
 export async function handleDataMessage(data: Record<string, string>) {
   await handleFCMMessage({ data });
