@@ -1,4 +1,15 @@
-import { View, Text, TouchableOpacity, StyleSheet, FlatList, ActivityIndicator, Modal, TextInput, ScrollView, Pressable } from 'react-native';
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  TouchableWithoutFeedback,
+  StyleSheet,
+  FlatList,
+  ActivityIndicator,
+  Modal,
+  TextInput,
+  ScrollView,
+} from 'react-native';
 import { useState, useEffect, useCallback } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { supportService, SupportTicket } from '../../services/api/support.service';
@@ -131,54 +142,57 @@ export default function DriverSupportScreen() {
         animationType="slide"
         onRequestClose={closeCreateModal}
       >
-        <Pressable style={styles.modalOverlay} onPress={closeCreateModal}>
-          <Pressable
-            onPress={() => {}}
-            style={[
-              styles.modalCard,
-              { backgroundColor: colors.card, marginBottom: Math.max(insets.bottom, 20) },
-            ]}
-          >
-            <Text style={[styles.modalTitle, { color: colors.text }]}>New Support Ticket</Text>
-            <ScrollView>
-              <Text style={[styles.label, { color: colors.text }]}>Category</Text>
-              <View style={styles.chipRow}>
-                {CATEGORIES.map(c => (
-                  <TouchableOpacity key={c} style={[styles.chip, { backgroundColor: colors.surfaceVariant, borderColor: colors.border }, category === c && styles.chipActive]} onPress={() => setCategory(c)}>
-                    <Text style={[styles.chipText, { color: colors.text }, category === c && styles.chipTextActive]}>{c.replace('_', ' ')}</Text>
+        <TouchableWithoutFeedback onPress={closeCreateModal}>
+          <View style={styles.modalOverlay}>
+            <TouchableWithoutFeedback onPress={() => {}}>
+              <View
+                style={[
+                  styles.modalCard,
+                  { backgroundColor: colors.card, marginBottom: Math.max(insets.bottom, 20) },
+                ]}
+              >
+                <Text style={[styles.modalTitle, { color: colors.text }]}>New Support Ticket</Text>
+                <ScrollView>
+                  <Text style={[styles.label, { color: colors.text }]}>Category</Text>
+                  <View style={styles.chipRow}>
+                    {CATEGORIES.map(c => (
+                      <TouchableOpacity key={c} style={[styles.chip, { backgroundColor: colors.surfaceVariant, borderColor: colors.border }, category === c && styles.chipActive]} onPress={() => setCategory(c)}>
+                        <Text style={[styles.chipText, { color: colors.text }, category === c && styles.chipTextActive]}>{c.replace('_', ' ')}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                  <Text style={[styles.label, { color: colors.text }]}>Priority</Text>
+                  <View style={styles.chipRow}>
+                    {PRIORITIES.map(p => (
+                      <TouchableOpacity key={p} style={[styles.chip, { backgroundColor: colors.surfaceVariant, borderColor: colors.border }, priority === p && styles.chipActive]} onPress={() => setPriority(p)}>
+                        <Text style={[styles.chipText, { color: colors.text }, priority === p && styles.chipTextActive]}>{p}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                  <Text style={[styles.label, { color: colors.text }]}>Description</Text>
+                  <TextInput
+                    style={[styles.textArea, { backgroundColor: colors.surfaceVariant, borderColor: colors.border, color: colors.text }]}
+                    multiline
+                    numberOfLines={4}
+                    placeholder="Describe your issue..."
+                    placeholderTextColor={colors.textTertiary}
+                    value={description}
+                    onChangeText={setDescription}
+                  />
+                  {error ? <Text style={styles.error}>{error}</Text> : null}
+                </ScrollView>
+                <View style={styles.modalActions}>
+                  <TouchableOpacity style={styles.cancelBtn} onPress={closeCreateModal}>
+                    <Text style={styles.cancelBtnText}>Cancel</Text>
                   </TouchableOpacity>
-                ))}
-              </View>
-              <Text style={[styles.label, { color: colors.text }]}>Priority</Text>
-              <View style={styles.chipRow}>
-                {PRIORITIES.map(p => (
-                  <TouchableOpacity key={p} style={[styles.chip, { backgroundColor: colors.surfaceVariant, borderColor: colors.border }, priority === p && styles.chipActive]} onPress={() => setPriority(p)}>
-                    <Text style={[styles.chipText, { color: colors.text }, priority === p && styles.chipTextActive]}>{p}</Text>
+                  <TouchableOpacity style={[styles.submitBtn, creating && { opacity: 0.6 }]} onPress={handleCreate} disabled={creating}>
+                    <Text style={styles.submitBtnText}>{creating ? 'Creating...' : 'Create'}</Text>
                   </TouchableOpacity>
-                ))}
+                </View>
               </View>
-              <Text style={[styles.label, { color: colors.text }]}>Description</Text>
-              <TextInput
-                style={[styles.textArea, { backgroundColor: colors.surfaceVariant, borderColor: colors.border, color: colors.text }]}
-                multiline
-                numberOfLines={4}
-                placeholder="Describe your issue..."
-                placeholderTextColor={colors.textTertiary}
-                value={description}
-                onChangeText={setDescription}
-              />
-              {error ? <Text style={styles.error}>{error}</Text> : null}
-            </ScrollView>
-            <View style={styles.modalActions}>
-              <TouchableOpacity style={styles.cancelBtn} onPress={closeCreateModal}>
-                <Text style={styles.cancelBtnText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={[styles.submitBtn, creating && { opacity: 0.6 }]} onPress={handleCreate} disabled={creating}>
-                <Text style={styles.submitBtnText}>{creating ? 'Creating...' : 'Create'}</Text>
-              </TouchableOpacity>
-            </View>
-          </Pressable>
-        </Pressable>
+            </TouchableWithoutFeedback>
+          </View>
+        </TouchableWithoutFeedback>
       </Modal>
     </View>
   );
