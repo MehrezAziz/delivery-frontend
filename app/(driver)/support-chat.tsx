@@ -9,11 +9,10 @@ import {
   KeyboardAvoidingView,
   Platform,
   Keyboard,
-  Dimensions,
 } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   supportService,
   SupportMessage,
@@ -32,6 +31,7 @@ export default function DriverSupportChatScreen() {
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState('');
   const [sending, setSending] = useState(false);
+  /** Android: tab bar is `position: 'absolute'` — lift composer by keyboard height so it sits above the IME (incl. suggestion row). */
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const [streamingPreview, setStreamingPreview] = useState('');
   const [feedbackGiven, setFeedbackGiven] = useState<Record<string, boolean | undefined>>({});
@@ -63,20 +63,19 @@ export default function DriverSupportChatScreen() {
   }, [ticketId, loadTicket]);
 
   useEffect(() => {
-    const showSub = Keyboard.addListener('keyboardDidShow', (e) => {
-      const screenH = Dimensions.get('screen').height;
-      const screenY = e.endCoordinates?.screenY ?? screenH;
-      const overlap = Math.max(0, screenH - screenY - insets.bottom);
-      setKeyboardHeight(overlap);
-    });
-    const hideSub = Keyboard.addListener('keyboardDidHide', () => {
-      setKeyboardHeight(0);
-    });
+    if (Platform.OS !== 'android') return undefined;
+    const apply = (e: { endCoordinates?: { height?: number } }) => {
+      setKeyboardHeight(e.endCoordinates?.height ?? 0);
+    };
+    const showSub = Keyboard.addListener('keyboardDidShow', apply);
+    const frameSub = Keyboard.addListener('keyboardDidChangeFrame', apply);
+    const hideSub = Keyboard.addListener('keyboardDidHide', () => setKeyboardHeight(0));
     return () => {
       showSub.remove();
+      frameSub.remove();
       hideSub.remove();
     };
-  }, [insets.bottom]);
+  }, []);
 
   const onFeedback = useCallback(
     async (messageId: string, helpful: boolean) => {
@@ -138,6 +137,10 @@ export default function DriverSupportChatScreen() {
     }
   }
 
+  const tabBarLift = 60 + insets.bottom + 3;
+  const androidComposerBottom =
+    Platform.OS === 'android' ? (keyboardHeight > 0 ? keyboardHeight : tabBarLift) : 0;
+
   if (loading) {
     return (
       <View style={[styles.container, { justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background }]}>
@@ -157,10 +160,11 @@ export default function DriverSupportChatScreen() {
   const isClosed = ticket.status === 'CLOSED';
 
   return (
+    <SafeAreaView style={[styles.safeOuter, { backgroundColor: colors.background }]} edges={['bottom']}>
     <KeyboardAvoidingView
       style={[styles.container, { backgroundColor: colors.background }]}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top + 4 : 0}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top : 0}
     >
       <View style={[styles.ticketToolbar, { backgroundColor: colors.card, borderColor: colors.border }]}>
         <View style={{ flex: 1, minWidth: 0 }}>
@@ -175,11 +179,13 @@ export default function DriverSupportChatScreen() {
 
       <FlatList
         ref={flatListRef}
+        style={styles.messagesFlex}
         data={ticket.messages}
         keyExtractor={(m) => m.id}
         contentContainerStyle={styles.messagesList}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="interactive"
+        automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
         onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: false })}
         ListHeaderComponent={
           <View style={[styles.ticketInfo, { backgroundColor: colors.surfaceVariant }]}>
@@ -212,11 +218,31 @@ export default function DriverSupportChatScreen() {
       />
 
       {isClosed ? (
-        <View style={[styles.closedBanner, { backgroundColor: colors.surfaceVariant, borderTopColor: colors.border, paddingBottom: Platform.OS === 'android' ? (keyboardHeight > 0 ? 13 : 0) : Math.max(insets.bottom, 12), marginBottom: Platform.OS === 'android' ? (keyboardHeight > 0 ? keyboardHeight : 60 + insets.bottom + 3) : 0 }]}>
+        <View
+          style={[
+            styles.closedBanner,
+            {
+              backgroundColor: colors.surfaceVariant,
+              borderTopColor: colors.border,
+              paddingBottom: Platform.OS === 'android' ? (keyboardHeight > 0 ? 10 : Math.max(insets.bottom, 12)) : Math.max(insets.bottom, 12),
+              marginBottom: Platform.OS === 'android' ? androidComposerBottom : 0,
+            },
+          ]}
+        >
           <Text style={[styles.closedText, { color: colors.textSecondary }]}>This ticket is closed</Text>
         </View>
       ) : (
-        <View style={[styles.inputBar, { backgroundColor: colors.card, borderTopColor: colors.border, paddingBottom: Platform.OS === 'android' ? (keyboardHeight > 0 ? 13 : 0) : Math.max(insets.bottom, 12), marginBottom: Platform.OS === 'android' ? (keyboardHeight > 0 ? keyboardHeight : 60 + insets.bottom + 3) : 0 }]}>
+        <View
+          style={[
+            styles.inputBar,
+            {
+              backgroundColor: colors.card,
+              borderTopColor: colors.border,
+              paddingBottom: Platform.OS === 'android' ? (keyboardHeight > 0 ? 10 : Math.max(insets.bottom, 12)) : Math.max(insets.bottom, 12),
+              marginBottom: Platform.OS === 'android' ? androidComposerBottom : 0,
+            },
+          ]}
+        >
           <TextInput
             style={[styles.input, { backgroundColor: colors.surfaceVariant, borderColor: colors.border, color: colors.text }]}
             placeholder="Type a message..."
@@ -225,6 +251,7 @@ export default function DriverSupportChatScreen() {
             onChangeText={setMessage}
             multiline
             maxLength={2000}
+            textAlignVertical="top"
           />
           <TouchableOpacity
             style={[styles.sendBtn, (!message.trim() || sending) && { opacity: 0.5 }]}
@@ -236,10 +263,12 @@ export default function DriverSupportChatScreen() {
         </View>
       )}
     </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  safeOuter: { flex: 1 },
   container: { flex: 1 },
   ticketToolbar: {
     marginHorizontal: 16,
@@ -251,7 +280,8 @@ const styles = StyleSheet.create({
   },
   headerTitle: { fontSize: 15, fontWeight: '700' },
   headerStatus: { fontSize: 12, fontWeight: '600', marginTop: 2 },
-  messagesList: { padding: 16, paddingBottom: 8 },
+  messagesFlex: { flex: 1 },
+  messagesList: { padding: 16, paddingBottom: 8, flexGrow: 1 },
   ticketInfo: { borderRadius: 12, padding: 12, marginBottom: 16 },
   ticketInfoText: { fontSize: 14, marginBottom: 4 },
   ticketInfoDate: { fontSize: 11 },
@@ -264,8 +294,17 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   streamingLabel: { fontSize: 11, fontWeight: '600', marginBottom: 4 },
-  inputBar: { flexDirection: 'row', alignItems: 'flex-end', padding: 12, paddingBottom: 32, borderTopWidth: 1, gap: 8 },
-  input: { flex: 1, borderWidth: 1, borderRadius: 20, paddingHorizontal: 16, paddingVertical: 10, fontSize: 15, maxHeight: 100 },
+  inputBar: { flexDirection: 'row', alignItems: 'flex-end', paddingHorizontal: 12, paddingTop: 10, borderTopWidth: 1, gap: 8 },
+  input: {
+    flex: 1,
+    borderWidth: 1,
+    borderRadius: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    fontSize: 15,
+    minHeight: 52,
+    maxHeight: 160,
+  },
   sendBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#c026d3', alignItems: 'center', justifyContent: 'center' },
   sendBtnText: { color: '#fff', fontSize: 20, fontWeight: '600' },
   closedBanner: { padding: 16, paddingBottom: 32, alignItems: 'center', borderTopWidth: 1 },
