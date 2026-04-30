@@ -36,6 +36,8 @@ export default function RoleSelectionScreen() {
 
   const lottieRef         = useRef<LottieView>(null);
   const lottieOpacity     = useRef(new Animated.Value(0)).current;
+  const lottieTranslateX  = useRef(new Animated.Value(0)).current;
+  const lottieTranslateY  = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     checkExistingSession();
@@ -49,12 +51,17 @@ export default function RoleSelectionScreen() {
     const cycle = () => {
       if (cancelled) return;
 
+      // Reset position so every entrance starts from centre
+      lottieTranslateX.setValue(0);
+      lottieTranslateY.setValue(0);
+
       // Phase 1 – show text alone for HERO_TEXT_ONLY_MS
       const t1 = setTimeout(() => {
         if (cancelled) return;
         lottieRef.current?.reset();
         lottieRef.current?.play();
 
+        // Fade in (businessman enters from current position)
         Animated.timing(lottieOpacity, {
           toValue: 1,
           duration: HERO_FADE_MS,
@@ -66,12 +73,25 @@ export default function RoleSelectionScreen() {
           const t2 = setTimeout(() => {
             if (cancelled) return;
 
-            Animated.timing(lottieOpacity, {
-              toValue: 0,
-              duration: HERO_FADE_MS,
-              useNativeDriver: true,
-            }).start(() => {
-              if (!cancelled) cycle(); // restart the whole cycle
+            // Exit: slide right + lift 20 px + fade out simultaneously
+            Animated.parallel([
+              Animated.timing(lottieTranslateX, {
+                toValue: 340,
+                duration: 500,
+                useNativeDriver: true,
+              }),
+              Animated.timing(lottieTranslateY, {
+                toValue: -80,
+                duration: 500,
+                useNativeDriver: true,
+              }),
+              Animated.timing(lottieOpacity, {
+                toValue: 0,
+                duration: 500,
+                useNativeDriver: true,
+              }),
+            ]).start(() => {
+              if (!cancelled) cycle();
             });
           }, HERO_ANIM_VISIBLE_MS);
 
@@ -164,7 +184,16 @@ export default function RoleSelectionScreen() {
 
           {/* Businessman Lottie — floats on top of the text */}
           <Animated.View
-            style={[styles.lottieOverlay, { opacity: lottieOpacity }]}
+            style={[
+              styles.lottieOverlay,
+              {
+                opacity: lottieOpacity,
+                transform: [
+                  { translateX: lottieTranslateX },
+                  { translateY: lottieTranslateY },
+                ],
+              },
+            ]}
             pointerEvents="none"
           >
             <LottieView
