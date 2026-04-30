@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import {
   View, Text, TouchableOpacity, ScrollView, StyleSheet,
-  TextInput, ActivityIndicator, Alert, Modal,
+  TextInput, ActivityIndicator, Alert, Modal, FlatList,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -13,9 +13,8 @@ import {
   cachePhoneCountries,
   getCachedPreferredPhoneCountryIso,
   detectAndCachePreferredPhoneCountryIso,
-  resolvePreferredPhoneCountry,
+  inferPhoneCountryAndLocal,
   toE164Phone,
-  getLocalPhoneFromE164,
   type PhoneCountry,
 } from '../../services/phone-countries';
 
@@ -60,8 +59,7 @@ export default function DriverEditProfileScreen() {
       setPhoneCountries(countries);
       await cachePhoneCountries(countries);
       const cachedIso = await getCachedPreferredPhoneCountryIso();
-      const preferred = resolvePreferredPhoneCountry(countries, cachedIso || 'TN');
-      setSelectedPhoneCountry(preferred);
+      const fallbackIso = cachedIso || 'TN';
       if (!cachedIso) void detectAndCachePreferredPhoneCountryIso();
 
       const token = await AsyncStorage.getItem('accessToken');
@@ -72,7 +70,9 @@ export default function DriverEditProfileScreen() {
       setFirstName(d.user?.firstName || '');
       setSecondName(d.user?.secondName || '');
       const backendPhone = d.user?.phone || '';
-      setPhone(preferred ? getLocalPhoneFromE164(backendPhone, preferred.dialCode) : backendPhone);
+      const inferred = inferPhoneCountryAndLocal(countries, backendPhone, fallbackIso);
+      setSelectedPhoneCountry(inferred.country);
+      setPhone(inferred.localPhone);
       setEmail(d.user?.myEmail || '');
       setGender(d.user?.userGender || null);
       setVehicleType(d.vehicleType || '');
@@ -225,13 +225,18 @@ export default function DriverEditProfileScreen() {
                 placeholderTextColor={colors.textTertiary}
                 value={phoneCountrySearch}
                 onChangeText={setPhoneCountrySearch}
-                autoFocus
               />
             </View>
-            <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={s.pickerList}>
-              {filteredPhoneCountries.map((country) => (
+            <FlatList
+              keyboardShouldPersistTaps="handled"
+              data={filteredPhoneCountries}
+              keyExtractor={(country) => country.id}
+              initialNumToRender={24}
+              maxToRenderPerBatch={24}
+              windowSize={8}
+              contentContainerStyle={s.pickerList}
+              renderItem={({ item: country }) => (
                 <TouchableOpacity
-                  key={country.id}
                   style={[s.pickerItem, { borderBottomColor: colors.border }]}
                   onPress={() => {
                     setSelectedPhoneCountry(country);
@@ -245,8 +250,8 @@ export default function DriverEditProfileScreen() {
                     <Text style={[s.pickerItemSub, { color: colors.textSecondary }]}>{country.isoCode} · +{country.dialCode}</Text>
                   </View>
                 </TouchableOpacity>
-              ))}
-            </ScrollView>
+              )}
+            />
           </View>
         </View>
       </Modal>

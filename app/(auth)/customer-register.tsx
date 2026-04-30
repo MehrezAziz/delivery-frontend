@@ -1,4 +1,4 @@
-import { View, Text, TouchableOpacity, TextInput, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, ActivityIndicator, Modal } from 'react-native';
+import { View, Text, TouchableOpacity, TextInput, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, ActivityIndicator, Modal, FlatList } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
@@ -675,14 +675,19 @@ export default function CustomerRegisterScreen() {
                 placeholderTextColor={colors.textTertiary}
                 value={phoneCountrySearch}
                 onChangeText={setPhoneCountrySearch}
-                autoFocus
               />
             </View>
 
-            <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.pickerList}>
-              {filteredPhoneCountries.map((country) => (
+            <FlatList
+              keyboardShouldPersistTaps="handled"
+              data={filteredPhoneCountries}
+              keyExtractor={(country) => country.id}
+              initialNumToRender={24}
+              maxToRenderPerBatch={24}
+              windowSize={8}
+              contentContainerStyle={styles.pickerList}
+              renderItem={({ item: country }) => (
                 <TouchableOpacity
-                  key={country.id}
                   style={[styles.pickerItem, { borderBottomColor: colors.border }]}
                   onPress={() => {
                     setSelectedPhoneCountry(country);
@@ -698,11 +703,9 @@ export default function CustomerRegisterScreen() {
                     </Text>
                   </View>
                 </TouchableOpacity>
-              ))}
-              {filteredPhoneCountries.length === 0 && (
-                <Text style={[styles.pickerEmpty, { color: colors.textTertiary }]}>No matching countries</Text>
               )}
-            </ScrollView>
+              ListEmptyComponent={<Text style={[styles.pickerEmpty, { color: colors.textTertiary }]}>No matching countries</Text>}
+            />
           </View>
         </View>
       </Modal>

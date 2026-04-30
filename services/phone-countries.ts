@@ -61,6 +61,28 @@ export function getLocalPhoneFromE164(fullPhoneRaw: string, dialCode: string): s
   return digits;
 }
 
+export function inferPhoneCountryAndLocal(
+  countries: PhoneCountry[],
+  fullPhoneRaw: string,
+  preferredIso?: string | null,
+): { country: PhoneCountry | null; localPhone: string } {
+  const digits = fullPhoneRaw.replace(/\D/g, '');
+  const preferredCountry = resolvePreferredPhoneCountry(countries, preferredIso);
+  if (!digits) return { country: preferredCountry, localPhone: '' };
+
+  const candidates = countries
+    .filter((c) => digits.startsWith(c.dialCode))
+    .sort((a, b) => b.dialCode.length - a.dialCode.length);
+
+  const matchedCountry = candidates[0] || preferredCountry;
+  if (!matchedCountry) return { country: null, localPhone: digits };
+
+  return {
+    country: matchedCountry,
+    localPhone: getLocalPhoneFromE164(fullPhoneRaw, matchedCountry.dialCode),
+  };
+}
+
 export function resolvePreferredPhoneCountry(countries: PhoneCountry[], preferredIso?: string | null): PhoneCountry | null {
   const normalizedIso = preferredIso?.toUpperCase() || null;
   const fromPreferred = normalizedIso ? countries.find((c) => c.isoCode === normalizedIso) : null;

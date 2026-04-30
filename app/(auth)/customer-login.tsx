@@ -1,4 +1,4 @@
-import { View, Text, TouchableOpacity, TextInput, ScrollView, StyleSheet, Platform, ActivityIndicator, KeyboardAvoidingView, Modal } from 'react-native';
+import { View, Text, TouchableOpacity, TextInput, ScrollView, StyleSheet, Platform, ActivityIndicator, KeyboardAvoidingView, Modal, FlatList } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
@@ -354,13 +354,18 @@ export default function CustomerLoginScreen() {
                 placeholderTextColor={colors.textTertiary}
                 value={phoneCountrySearch}
                 onChangeText={setPhoneCountrySearch}
-                autoFocus
               />
             </View>
-            <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.pickerList}>
-              {filteredPhoneCountries.map((country) => (
+            <FlatList
+              keyboardShouldPersistTaps="handled"
+              data={filteredPhoneCountries}
+              keyExtractor={(country) => country.id}
+              initialNumToRender={24}
+              maxToRenderPerBatch={24}
+              windowSize={8}
+              contentContainerStyle={styles.pickerList}
+              renderItem={({ item: country }) => (
                 <TouchableOpacity
-                  key={country.id}
                   style={[styles.pickerItem, { borderBottomColor: colors.border }]}
                   onPress={() => {
                     setSelectedPhoneCountry(country);
@@ -374,8 +379,8 @@ export default function CustomerLoginScreen() {
                     <Text style={[styles.pickerItemSub, { color: colors.textSecondary }]}>{country.isoCode} · +{country.dialCode}</Text>
                   </View>
                 </TouchableOpacity>
-              ))}
-            </ScrollView>
+              )}
+            />
           </View>
         </View>
       </Modal>

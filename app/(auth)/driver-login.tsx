@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   StyleSheet,
   ScrollView,
+  FlatList,
   Alert,
   ActivityIndicator,
   Modal,
@@ -337,13 +338,18 @@ export default function DriverLogin() {
                 placeholderTextColor={colors.textTertiary}
                 value={phoneCountrySearch}
                 onChangeText={setPhoneCountrySearch}
-                autoFocus
               />
             </View>
-            <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.pickerList}>
-              {filteredPhoneCountries.map((country) => (
+            <FlatList
+              keyboardShouldPersistTaps="handled"
+              data={filteredPhoneCountries}
+              keyExtractor={(country) => country.id}
+              initialNumToRender={24}
+              maxToRenderPerBatch={24}
+              windowSize={8}
+              contentContainerStyle={styles.pickerList}
+              renderItem={({ item: country }) => (
                 <TouchableOpacity
-                  key={country.id}
                   style={[styles.pickerItem, { borderBottomColor: colors.border }]}
                   onPress={() => {
                     setSelectedPhoneCountry(country);
@@ -357,8 +363,8 @@ export default function DriverLogin() {
                     <Text style={[styles.pickerItemSub, { color: colors.textSecondary }]}>{country.isoCode} · +{country.dialCode}</Text>
                   </View>
                 </TouchableOpacity>
-              ))}
-            </ScrollView>
+              )}
+            />
           </View>
         </View>
       </Modal>

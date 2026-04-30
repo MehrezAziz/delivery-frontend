@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
-  ScrollView, Alert, ActivityIndicator, Image, Modal,
+  ScrollView, Alert, ActivityIndicator, Image, Modal, FlatList,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -311,13 +311,18 @@ export default function DriverRegisterStep1() {
                 placeholderTextColor={colors.textTertiary}
                 value={phoneCountrySearch}
                 onChangeText={setPhoneCountrySearch}
-                autoFocus
               />
             </View>
-            <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.pickerList}>
-              {filteredPhoneCountries.map((country) => (
+            <FlatList
+              keyboardShouldPersistTaps="handled"
+              data={filteredPhoneCountries}
+              keyExtractor={(country) => country.id}
+              initialNumToRender={24}
+              maxToRenderPerBatch={24}
+              windowSize={8}
+              contentContainerStyle={styles.pickerList}
+              renderItem={({ item: country }) => (
                 <TouchableOpacity
-                  key={country.id}
                   style={[styles.pickerItem, { borderBottomColor: colors.border }]}
                   onPress={() => {
                     setSelectedPhoneCountry(country);
@@ -332,8 +337,8 @@ export default function DriverRegisterStep1() {
                     <Text style={[styles.pickerItemSub, { color: colors.textSecondary }]}>{country.isoCode} · +{country.dialCode}</Text>
                   </View>
                 </TouchableOpacity>
-              ))}
-            </ScrollView>
+              )}
+            />
           </View>
         </View>
       </Modal>
