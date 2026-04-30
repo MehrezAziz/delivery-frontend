@@ -11,7 +11,7 @@ import {
   Modal,
   FlatList,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import axios from 'axios';
@@ -41,11 +41,13 @@ const MAIN_NICKNAME = 'MAIN';
 
 export default function CustomerAddressesScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ add?: string }>();
   const { colors, isDark } = useTheme();
   const [addresses, setAddresses] = useState<Address[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [showAddForm, setShowAddForm] = useState(false);
 
   // Edit form state
   const [editStreet, setEditStreet] = useState('');
@@ -62,8 +64,21 @@ export default function CustomerAddressesScreen() {
   const [pickerVisible, setPickerVisible] = useState(false);
   const [pickerType, setPickerType] = useState<'country' | 'governorate' | 'delegation'>('country');
   const [pickerData, setPickerData] = useState<{ id: string; label: string }[]>([]);
+  const [pickerSearch, setPickerSearch] = useState('');
 
   useEffect(() => { loadAddresses(); }, []);
+  useEffect(() => {
+    if (!params.add) return;
+    void (async () => {
+      await startAdd();
+      router.replace('/(customer)/addresses');
+    })();
+  }, [params.add]);
+
+  const getErrMsg = (err: any, fallback: string) => {
+    const m = err.response?.data?.message;
+    return Array.isArray(m) ? m.join(', ') : m || fallback;
+  };
 
   const loadAddresses = async () => {
     try {
@@ -75,8 +90,7 @@ export default function CustomerAddressesScreen() {
       });
       setAddresses(res.data);
     } catch (err: any) {
-      const msg = Array.isArray(err.response?.data?.message) ? err.response.data.message.join(', ') : err.response?.data?.message || 'Failed to load addresses';
-      Alert.alert('Error', msg);
+      Alert.alert('Error', getErrMsg(err, 'Failed to load addresses'));
     } finally { setLoading(false); }
   };
 
@@ -87,6 +101,10 @@ export default function CustomerAddressesScreen() {
       return data;
     } catch { setCountries([]); return []; }
   };
+
+  const mainAddress = addresses.find((a) => String(a.nickname || '').toUpperCase() === MAIN_NICKNAME) || null;
+  const isEditingMainAddress =
+    !!editingId && addresses.some((a) => a.id === editingId && String(a.nickname || '').toUpperCase() === MAIN_NICKNAME);
 
   const loadGovernorates = async (countryId: string) => {
     try {
@@ -108,24 +126,9 @@ export default function CustomerAddressesScreen() {
     finally { setLoadingGeo(false); }
   };
 
-  const startEdit = async (addr: Address) => {
-    setEditingId(addr.id);
-    setEditStreet(addr.street || '');
-    setEditNickname(addr.nickname || '');
-    setSelectedDelegationId(addr.delegation.id);
-    setSelectedGovernorateId(addr.delegation.governorate.id);
-    setSelectedCountryId(addr.delegation.governorate.country?.id || null);
-
-    // Load geography data for current address
-    const ctrs = await loadCountries();
-    if (addr.delegation.governorate.country?.id) {
-      const govs = await loadGovernorates(addr.delegation.governorate.country.id);
-      const dels = await loadDelegations(addr.delegation.governorate.id);
-    }
-  };
-
-  const cancelEdit = () => {
+  const resetForm = () => {
     setEditingId(null);
+    setShowAddForm(false);
     setEditStreet('');
     setEditNickname('');
     setSelectedCountryId(null);
@@ -136,25 +139,70 @@ export default function CustomerAddressesScreen() {
     setDelegations([]);
   };
 
+  const startEdit = async (addr: Address) => {
+    setShowAddForm(false);
+    setEditingId(addr.id);
+    setEditStreet(addr.street || '');
+    setEditNickname(addr.nickname || '');
+    setSelectedDelegationId(addr.delegation.id);
+    setSelectedGovernorateId(addr.delegation.governorate.id);
+    setSelectedCountryId(addr.delegation.governorate.country?.id || null);
+
+    // Load geography data for current address
+    await loadCountries();
+    if (addr.delegation.governorate.country?.id) {
+      await loadGovernorates(addr.delegation.governorate.country.id);
+      await loadDelegations(addr.delegation.governorate.id);
+    }
+  };
+
+  const startAdd = async () => {
+    resetForm();
+    setShowAddForm(true);
+    const loadedCountries = await loadCountries();
+    const mainCountryId = mainAddress?.delegation?.governorate?.country?.id || null;
+    if (mainCountryId && loadedCountries.some((c) => c.id === mainCountryId)) {
+      setSelectedCountryId(mainCountryId);
+      await loadGovernorates(mainCountryId);
+    }
+  };
+
   const saveEdit = async (addressId: string) => {
-    if (!editStreet.trim()) { Alert.alert('Error', 'Street cannot be empty'); return; }
     if (!selectedDelegationId) { Alert.alert('Error', 'Please select a delegation'); return; }
     setSaving(true);
     try {
       const token = await AsyncStorage.getItem('accessToken');
       await axios.patch(`${API_URL}/addresses/${addressId}`,
         {
-          street: editStreet.trim(),
+          street: editStreet.trim() || null,
           delegationId: selectedDelegationId,
-          nickname: editNickname.trim() || null,
+          nickname: isEditingMainAddress ? MAIN_NICKNAME : (editNickname.trim() || null),
         },
         { headers: { Authorization: `Bearer ${token}` } },
       );
-      cancelEdit();
+      resetForm();
       loadAddresses();
     } catch (err: any) {
-      const msg = Array.isArray(err.response?.data?.message) ? err.response.data.message.join(', ') : err.response?.data?.message || 'Failed to update address';
-      Alert.alert('Error', msg);
+      Alert.alert('Error', getErrMsg(err, 'Failed to update address'));
+    } finally { setSaving(false); }
+  };
+
+  const saveNewAddress = async () => {
+    if (!selectedDelegationId) { Alert.alert('Error', 'Please select a delegation'); return; }
+    setSaving(true);
+    try {
+      const token = await AsyncStorage.getItem('accessToken');
+      const body: any = { delegationId: selectedDelegationId };
+      if (editStreet.trim()) body.street = editStreet.trim();
+      if (editNickname.trim()) body.nickname = editNickname.trim();
+      if (addresses.length === 0) body.nickname = MAIN_NICKNAME;
+      await axios.post(`${API_URL}/addresses`, body, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      resetForm();
+      loadAddresses();
+    } catch (err: any) {
+      Alert.alert('Error', getErrMsg(err, 'Failed to add address'));
     } finally { setSaving(false); }
   };
 
@@ -175,8 +223,7 @@ export default function CustomerAddressesScreen() {
             });
             loadAddresses();
           } catch (err: any) {
-            const msg = Array.isArray(err.response?.data?.message) ? err.response.data.message.join(', ') : err.response?.data?.message || 'Failed to delete';
-            Alert.alert('Error', msg);
+            Alert.alert('Error', getErrMsg(err, 'Failed to delete'));
           }
         },
       },
@@ -193,8 +240,7 @@ export default function CustomerAddressesScreen() {
       );
       loadAddresses();
     } catch (err: any) {
-      const msg = Array.isArray(err.response?.data?.message) ? err.response.data.message.join(', ') : err.response?.data?.message || 'Failed to set MAIN address';
-      Alert.alert('Error', msg);
+      Alert.alert('Error', getErrMsg(err, 'Failed to set MAIN address'));
     }
   };
 
@@ -209,11 +255,13 @@ export default function CustomerAddressesScreen() {
     }
     setPickerType(type);
     setPickerData(data);
+    setPickerSearch('');
     setPickerVisible(true);
   };
 
   const onPickerSelect = async (id: string) => {
     setPickerVisible(false);
+    setPickerSearch('');
     if (pickerType === 'country') {
       setSelectedCountryId(id);
       setSelectedGovernorateId(null);
@@ -239,22 +287,95 @@ export default function CustomerAddressesScreen() {
     }
   };
 
+  const filteredPickerData =
+    pickerType !== 'country'
+      ? pickerData
+      : pickerData.filter((item) => item.label.toLowerCase().includes(pickerSearch.trim().toLowerCase()));
+
+  const renderGeoPickers = () => (
+    <>
+      <Text style={[s.fieldLabel, { color: colors.textSecondary }]}>Country</Text>
+      <TouchableOpacity style={[s.pickerBtn, { backgroundColor: colors.inputBg, borderColor: colors.inputBorder }]} onPress={() => openPicker('country')}>
+        <Text style={selectedCountryId ? [s.pickerBtnText, { color: colors.text }] : [s.pickerBtnPlaceholder, { color: colors.textTertiary }]}>
+          {getSelectedLabel('country')}
+        </Text>
+        <Ionicons name="chevron-down" size={18} color={colors.textSecondary} />
+      </TouchableOpacity>
+
+      <Text style={[s.fieldLabel, { color: colors.textSecondary }]}>Governorate</Text>
+      <TouchableOpacity
+        style={[s.pickerBtn, { backgroundColor: colors.inputBg, borderColor: colors.inputBorder }, !selectedCountryId && s.pickerBtnDisabled]}
+        onPress={() => selectedCountryId && openPicker('governorate')}
+        disabled={!selectedCountryId}
+      >
+        <Text style={selectedGovernorateId ? [s.pickerBtnText, { color: colors.text }] : [s.pickerBtnPlaceholder, { color: colors.textTertiary }]}>
+          {getSelectedLabel('governorate')}
+        </Text>
+        <Ionicons name="chevron-down" size={18} color={colors.textSecondary} />
+      </TouchableOpacity>
+
+      <Text style={[s.fieldLabel, { color: colors.textSecondary }]}>Delegation</Text>
+      <TouchableOpacity
+        style={[s.pickerBtn, { backgroundColor: colors.inputBg, borderColor: colors.inputBorder }, !selectedGovernorateId && s.pickerBtnDisabled]}
+        onPress={() => selectedGovernorateId && openPicker('delegation')}
+        disabled={!selectedGovernorateId}
+      >
+        <Text style={selectedDelegationId ? [s.pickerBtnText, { color: colors.text }] : [s.pickerBtnPlaceholder, { color: colors.textTertiary }]}>
+          {getSelectedLabel('delegation')}
+        </Text>
+        <Ionicons name="chevron-down" size={18} color={colors.textSecondary} />
+      </TouchableOpacity>
+    </>
+  );
+
   if (loading) return <View style={[s.centered, { backgroundColor: colors.background }]}><ActivityIndicator size="large" color={colors.primary} /></View>;
 
   return (
     <View style={[s.container, { backgroundColor: colors.background }]}>
-      <View style={[s.header, { backgroundColor: colors.card }]}>
-        <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace('/(customer)/home')} style={s.backBtn}>
-          <Ionicons name="arrow-back" size={24} color={colors.primary} />
-        </TouchableOpacity>
-        <Text style={[s.title, { color: colors.text }]}>My Addresses</Text>
-      </View>
       <ScrollView style={s.scroll} contentContainerStyle={s.scrollContent}>
-        {addresses.length === 0 && (
+        {/* Add Address Form */}
+        {showAddForm && (
+          <View style={[s.card, { backgroundColor: colors.card, borderColor: colors.primary, borderWidth: 1.5 }]}>
+            <View style={s.cardTop}>
+              <Ionicons name="add-circle" size={20} color={colors.primary} />
+              <Text style={[s.locationText, { color: colors.text }]}>New Address</Text>
+            </View>
+            <View style={s.editContainer}>
+              {renderGeoPickers()}
+              <Text style={[s.fieldLabel, { color: colors.textSecondary }]}>Your name for this address (optional)</Text>
+              <TextInput
+                style={[s.editInput, { backgroundColor: colors.inputBg, borderColor: colors.inputBorder, color: colors.text }]}
+                value={editNickname}
+                onChangeText={setEditNickname}
+                placeholder={addresses.length === 0 ? 'First address will be MAIN automatically' : "e.g. Father's house"}
+                placeholderTextColor={colors.textTertiary}
+                editable={addresses.length > 0}
+              />
+              <Text style={[s.fieldLabel, { color: colors.textSecondary }]}>Street (optional)</Text>
+              <TextInput
+                style={[s.editInput, { backgroundColor: colors.inputBg, borderColor: colors.inputBorder, color: colors.text }]}
+                value={editStreet}
+                onChangeText={setEditStreet}
+                placeholder="Street address"
+                placeholderTextColor={colors.textTertiary}
+              />
+              <View style={s.editActions}>
+                <TouchableOpacity style={[s.cancelBtn, { backgroundColor: colors.surfaceVariant }]} onPress={resetForm}>
+                  <Text style={[s.cancelBtnText, { color: colors.textSecondary }]}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[s.saveBtn, { backgroundColor: colors.primary }]} onPress={saveNewAddress} disabled={saving}>
+                  {saving ? <ActivityIndicator size="small" color="#fff" /> : <Text style={s.saveBtnText}>Add</Text>}
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        )}
+
+        {addresses.length === 0 && !showAddForm && (
           <View style={s.emptyBox}>
             <Ionicons name="location-outline" size={48} color={colors.textTertiary} />
             <Text style={[s.emptyTitle, { color: colors.text }]}>No Addresses</Text>
-            <Text style={[s.emptyText, { color: colors.textSecondary }]}>Add an address from your profile.</Text>
+            <Text style={[s.emptyText, { color: colors.textSecondary }]}>Tap the add button in the header to create your first address.</Text>
           </View>
         )}
         {addresses.map((addr) => (
@@ -267,61 +388,30 @@ export default function CustomerAddressesScreen() {
             </View>
             {editingId === addr.id ? (
               <View style={s.editContainer}>
-                {/* Country Picker */}
-                <Text style={s.fieldLabel}>Country</Text>
-                <TouchableOpacity style={s.pickerBtn} onPress={() => openPicker('country')}>
-                  <Text style={selectedCountryId ? s.pickerBtnText : s.pickerBtnPlaceholder}>
-                    {getSelectedLabel('country')}
-                  </Text>
-                  <Ionicons name="chevron-down" size={18} color="#6b7280" />
-                </TouchableOpacity>
-
-                {/* Governorate Picker */}
-                <Text style={s.fieldLabel}>Governorate</Text>
-                <TouchableOpacity
-                  style={[s.pickerBtn, !selectedCountryId && s.pickerBtnDisabled]}
-                  onPress={() => selectedCountryId && openPicker('governorate')}
-                  disabled={!selectedCountryId}
-                >
-                  <Text style={selectedGovernorateId ? s.pickerBtnText : s.pickerBtnPlaceholder}>
-                    {getSelectedLabel('governorate')}
-                  </Text>
-                  <Ionicons name="chevron-down" size={18} color="#6b7280" />
-                </TouchableOpacity>
-
-                {/* Delegation Picker */}
-                <Text style={s.fieldLabel}>Delegation</Text>
-                <TouchableOpacity
-                  style={[s.pickerBtn, !selectedGovernorateId && s.pickerBtnDisabled]}
-                  onPress={() => selectedGovernorateId && openPicker('delegation')}
-                  disabled={!selectedGovernorateId}
-                >
-                  <Text style={selectedDelegationId ? s.pickerBtnText : s.pickerBtnPlaceholder}>
-                    {getSelectedLabel('delegation')}
-                  </Text>
-                  <Ionicons name="chevron-down" size={18} color="#6b7280" />
-                </TouchableOpacity>
-
-                <Text style={s.fieldLabel}>Your name for this address</Text>
+                {renderGeoPickers()}
+                <Text style={[s.fieldLabel, { color: colors.textSecondary }]}>Your name for this address</Text>
                 <TextInput
-                  style={s.editInput}
-                  value={editNickname}
+                  style={[s.editInput, { backgroundColor: colors.inputBg, borderColor: colors.inputBorder, color: colors.text }]}
+                  value={isEditingMainAddress ? MAIN_NICKNAME : editNickname}
                   onChangeText={setEditNickname}
-                  placeholder="e.g. Father's house"
+                  placeholder={isEditingMainAddress ? MAIN_NICKNAME : "e.g. Father's house"}
+                  placeholderTextColor={colors.textTertiary}
+                  editable={!isEditingMainAddress}
                 />
                 {/* Street Input */}
-                <Text style={s.fieldLabel}>Street</Text>
+                <Text style={[s.fieldLabel, { color: colors.textSecondary }]}>Street (optional)</Text>
                 <TextInput
-                  style={s.editInput}
+                  style={[s.editInput, { backgroundColor: colors.inputBg, borderColor: colors.inputBorder, color: colors.text }]}
                   value={editStreet}
                   onChangeText={setEditStreet}
                   placeholder="Street address"
+                  placeholderTextColor={colors.textTertiary}
                 />
                 <View style={s.editActions}>
-                  <TouchableOpacity style={s.cancelBtn} onPress={cancelEdit}>
-                    <Text style={s.cancelBtnText}>Cancel</Text>
+                  <TouchableOpacity style={[s.cancelBtn, { backgroundColor: colors.surfaceVariant }]} onPress={resetForm}>
+                    <Text style={[s.cancelBtnText, { color: colors.textSecondary }]}>Cancel</Text>
                   </TouchableOpacity>
-                  <TouchableOpacity style={s.saveBtn} onPress={() => saveEdit(addr.id)} disabled={saving}>
+                  <TouchableOpacity style={[s.saveBtn, { backgroundColor: colors.primary }]} onPress={() => saveEdit(addr.id)} disabled={saving}>
                     {saving ? <ActivityIndicator size="small" color="#fff" /> : <Text style={s.saveBtnText}>Save</Text>}
                   </TouchableOpacity>
                 </View>
@@ -329,7 +419,9 @@ export default function CustomerAddressesScreen() {
             ) : (
               <>
                 {addr.nickname ? (
-                  <Text style={{ fontWeight: '700', color: colors.text, marginBottom: 4 }}>{addr.nickname}</Text>
+                  <Text style={{ fontWeight: '700', color: colors.text, marginBottom: 4 }}>
+                    {addr.nickname === MAIN_NICKNAME ? 'MAIN' : addr.nickname}
+                  </Text>
                 ) : null}
                 <Text style={[s.streetText, { color: colors.textSecondary }]}>{addr.street || 'No street specified'}</Text>
                 {addr.latitude && addr.longitude && (
@@ -368,25 +460,42 @@ export default function CustomerAddressesScreen() {
                 {pickerType === 'country' ? 'Select Country' : pickerType === 'governorate' ? 'Select Governorate' : 'Select Delegation'}
               </Text>
               <TouchableOpacity onPress={() => setPickerVisible(false)}>
-                <Ionicons name="close" size={24} color="#6b7280" />
+                <Ionicons name="close" size={24} color={colors.textSecondary} />
               </TouchableOpacity>
             </View>
+            {pickerType === 'country' ? (
+              <View style={[s.pickerSearchWrap, { backgroundColor: colors.inputBg, borderColor: colors.inputBorder }]}>
+                <Ionicons name="search" size={16} color={colors.textTertiary} />
+                <TextInput
+                  style={[s.pickerSearchInput, { color: colors.text }]}
+                  placeholder="Search country..."
+                  placeholderTextColor={colors.textTertiary}
+                  value={pickerSearch}
+                  onChangeText={setPickerSearch}
+                />
+              </View>
+            ) : null}
             {pickerData.length === 0 ? (
-              <View style={s.modalEmpty}><ActivityIndicator size="small" color="#0284c7" /></View>
+              <View style={s.modalEmpty}><ActivityIndicator size="small" color={colors.primary} /></View>
             ) : (
               <FlatList
-                data={pickerData}
+                data={filteredPickerData}
                 keyExtractor={(item) => item.id}
                 renderItem={({ item }) => (
-                  <TouchableOpacity style={s.modalItem} onPress={() => onPickerSelect(item.id)}>
-                    <Text style={s.modalItemText}>{item.label}</Text>
+                  <TouchableOpacity style={[s.modalItem, { borderBottomColor: colors.border }]} onPress={() => onPickerSelect(item.id)}>
+                    <Text style={[s.modalItemText, { color: colors.text }]}>{item.label}</Text>
                     {((pickerType === 'country' && item.id === selectedCountryId) ||
                       (pickerType === 'governorate' && item.id === selectedGovernorateId) ||
                       (pickerType === 'delegation' && item.id === selectedDelegationId)) && (
-                      <Ionicons name="checkmark" size={20} color="#0284c7" />
+                      <Ionicons name="checkmark" size={20} color={colors.primary} />
                     )}
                   </TouchableOpacity>
                 )}
+                ListEmptyComponent={
+                  pickerType === 'country'
+                    ? <Text style={[s.modalEmptyText, { color: colors.textTertiary }]}>No matching countries</Text>
+                    : null
+                }
               />
             )}
           </View>
@@ -399,9 +508,6 @@ export default function CustomerAddressesScreen() {
 const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f9fafb' },
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingTop: 56, paddingBottom: 16, backgroundColor: '#fff', gap: 12 },
-  backBtn: { padding: 4 },
-  title: { fontSize: 22, fontWeight: 'bold', color: '#111827' },
   scroll: { flex: 1 },
   scrollContent: { padding: 16, paddingBottom: 32 },
   emptyBox: { alignItems: 'center', paddingVertical: 48 },
@@ -435,6 +541,21 @@ const s = StyleSheet.create({
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
   modalTitle: { fontSize: 17, fontWeight: '600', color: '#111827' },
   modalEmpty: { padding: 32, alignItems: 'center' },
+  modalEmptyText: { paddingHorizontal: 16, paddingVertical: 20, textAlign: 'center', fontSize: 14 },
+  pickerSearchWrap: {
+    marginHorizontal: 16,
+    marginTop: 12,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  pickerSearchInput: { flex: 1, fontSize: 14, padding: 0 },
   modalItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#f9fafb' },
   modalItemText: { fontSize: 15, color: '#111827' },
 });

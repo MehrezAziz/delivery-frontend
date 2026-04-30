@@ -70,12 +70,12 @@ export default function CreateOrderScreen() {
   const [pickupNickSave, setPickupNickSave] = useState('');
   const [dropoffNickSave, setDropoffNickSave] = useState('');
   const [savedAddresses, setSavedAddresses] = useState<SavedAddress[]>([]);
+  const [hasMainAddress, setHasMainAddress] = useState(false);
   const [savedPickerVisible, setSavedPickerVisible] = useState(false);
   const [savedPickerTarget, setSavedPickerTarget] = useState<'pickup' | 'dropoff'>('pickup');
   const [savedSearch, setSavedSearch] = useState('');
   const [recentAddressIds, setRecentAddressIds] = useState<string[]>([]);
   const [customerStatus, setCustomerStatus] = useState<string>('ACTIVE');
-  const hasMainAddress = savedAddresses.some((a) => String(a.nickname || '').toUpperCase() === 'MAIN');
   const [scheduleLater, setScheduleLater] = useState(false);
   const [publishAt, setPublishAt] = useState(() => new Date(Date.now() + 15 * 60 * 1000));
   /** Android: `datetime` mode is invalid — use date then time (see @react-native-community/datetimepicker). */
@@ -117,10 +117,14 @@ export default function CreateOrderScreen() {
     useCallback(() => {
       (async () => {
         try {
+          const me = await api.get<{ customerStatus?: string; id: string; userId: string; completedOrders: number }>('/customers/me');
+          const nextStatus = me?.customerStatus || 'ACTIVE';
+          setCustomerStatus(nextStatus);
           const raw = await AsyncStorage.getItem('customer');
-          if (!raw) return;
-          const customer = JSON.parse(raw);
-          setCustomerStatus(customer?.customerStatus || 'ACTIVE');
+          if (raw) {
+            const customer = JSON.parse(raw);
+            await AsyncStorage.setItem('customer', JSON.stringify({ ...customer, customerStatus: nextStatus }));
+          }
         } catch {
           setCustomerStatus('ACTIVE');
         }
@@ -133,6 +137,7 @@ export default function CreateOrderScreen() {
       const rows = await api.get<
         { id: string; latitude: number | null; longitude: number | null; street: string | null; nickname: string | null; delegation: { nameDelegation: string; governorate: { nameGovernorate: string } } }[]
       >('/addresses');
+      setHasMainAddress(rows.some((a) => String(a.nickname || '').toUpperCase() === 'MAIN'));
       setSavedAddresses(
         rows
           .filter((a) => a.latitude != null && a.longitude != null)
@@ -151,6 +156,11 @@ export default function CreateOrderScreen() {
     }
   }, []);
   useEffect(() => { loadSavedAddresses(); }, [loadSavedAddresses]);
+  useFocusEffect(
+    useCallback(() => {
+      void loadSavedAddresses();
+    }, [loadSavedAddresses]),
+  );
   useEffect(() => {
     (async () => {
       try {
@@ -341,7 +351,16 @@ export default function CreateOrderScreen() {
   // Calculate price
   const handleCalculatePrice = async () => {
     if (customerStatus === 'CREATED' && !hasMainAddress) {
-      appAlert('Address verification required', 'Please add MAIN address to be verified before creating orders.');
+      appAlert(
+        'Address verification required',
+        'Please add MAIN address to be verified before creating orders.',
+        [
+          {
+            text: 'OK',
+            onPress: () => router.push(`/(customer)/addresses?add=${Date.now()}` as never),
+          },
+        ],
+      );
       return;
     }
     if (!pickupAddress || !dropoffAddress) {

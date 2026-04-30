@@ -206,6 +206,12 @@ export function AppChromeHeader({
   const showDriverAddressesAdd =
     role === 'driver' &&
     (normalizedPath === '/(driver)/addresses' || normalizedPath.endsWith('/addresses'));
+  const showCustomerAddressesAdd =
+    role === 'customer' &&
+    (normalizedPath === '/(customer)/addresses' || normalizedPath.endsWith('/addresses'));
+  const showCustomerOrdersAdd =
+    role === 'customer' &&
+    (normalizedPath === '/(customer)/orders' || normalizedPath.endsWith('/orders'));
 
   const headerBg = role === 'guest' ? colors.card : colors.headerBg;
   const textColor = role === 'guest' ? colors.text : '#fff';
@@ -296,6 +302,24 @@ export function AppChromeHeader({
                     <Ionicons name="add" size={22} color={textColor} />
                   </TouchableOpacity>
                 ) : null}
+                {showCustomerAddressesAdd ? (
+                  <TouchableOpacity
+                    onPress={() => router.replace(`/(customer)/addresses?add=${Date.now()}` as never)}
+                    style={[styles.iconBtn, { backgroundColor: iconBtnBg }]}
+                    activeOpacity={0.75}
+                  >
+                    <Ionicons name="add" size={22} color={textColor} />
+                  </TouchableOpacity>
+                ) : null}
+                {showCustomerOrdersAdd ? (
+                  <TouchableOpacity
+                    onPress={() => push('/(customer)/create-order')}
+                    style={[styles.iconBtn, { backgroundColor: iconBtnBg }]}
+                    activeOpacity={0.75}
+                  >
+                    <Ionicons name="add" size={22} color={textColor} />
+                  </TouchableOpacity>
+                ) : null}
                 {resolvedShowNotifications ? (
                   <TouchableOpacity
                     onPress={() => setNotifPreviewOpen(true)}
@@ -339,6 +363,24 @@ export function AppChromeHeader({
                 {showDriverAddressesAdd ? (
                   <TouchableOpacity
                     onPress={() => router.replace(`/(driver)/addresses?add=${Date.now()}` as never)}
+                    style={[styles.iconBtn, { backgroundColor: iconBtnBg }]}
+                    activeOpacity={0.75}
+                  >
+                    <Ionicons name="add" size={22} color={textColor} />
+                  </TouchableOpacity>
+                ) : null}
+                {showCustomerAddressesAdd ? (
+                  <TouchableOpacity
+                    onPress={() => router.replace(`/(customer)/addresses?add=${Date.now()}` as never)}
+                    style={[styles.iconBtn, { backgroundColor: iconBtnBg }]}
+                    activeOpacity={0.75}
+                  >
+                    <Ionicons name="add" size={22} color={textColor} />
+                  </TouchableOpacity>
+                ) : null}
+                {showCustomerOrdersAdd ? (
+                  <TouchableOpacity
+                    onPress={() => push('/(customer)/create-order')}
                     style={[styles.iconBtn, { backgroundColor: iconBtnBg }]}
                     activeOpacity={0.75}
                   >
