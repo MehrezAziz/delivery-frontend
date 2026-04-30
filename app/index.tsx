@@ -1,6 +1,15 @@
-import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, ScrollView } from 'react-native';
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  ActivityIndicator,
+  ScrollView,
+  Animated,
+} from 'react-native';
 import { useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import LottieView from 'lottie-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { isSessionValid, clearSession } from '../services/auth-session';
 import { resolveLaunchRouteAfterLogin, stopOrderTrackingSilently } from '../services/notifications';
@@ -9,6 +18,15 @@ import { AppChromeHeader } from '../components/AppChromeHeader';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { warmupPhoneCountriesData } from '../services/phone-countries';
 
+/** How long the text is visible alone before animation appears (ms) */
+const HERO_TEXT_ONLY_MS   = 6000;
+/** How long the businessman animation stays on top of the text (ms) */
+const HERO_ANIM_VISIBLE_MS = 5000;
+/** Cross-fade duration (ms) */
+const HERO_FADE_MS         = 400;
+
+const BUSINESSMAN_LOTTIE = require('../assets/lottie/businessman-rocket.json');
+
 export default function RoleSelectionScreen() {
   const router = useRouter();
   const { colors, isDark } = useTheme();
@@ -16,9 +34,57 @@ export default function RoleSelectionScreen() {
   const [checking, setChecking] = useState(true);
   const [selectedRole, setSelectedRole] = useState<'CUSTOMER' | 'DRIVER'>('CUSTOMER');
 
+  const lottieRef         = useRef<LottieView>(null);
+  const lottieOpacity     = useRef(new Animated.Value(0)).current;
+
   useEffect(() => {
     checkExistingSession();
     void warmupPhoneCountriesData();
+  }, []);
+
+  // Overlay cycle: 6 s text → fade-in → 5 s animation → fade-out → 6 s text → …
+  useEffect(() => {
+    let cancelled = false;
+
+    const cycle = () => {
+      if (cancelled) return;
+
+      // Phase 1 – show text alone for HERO_TEXT_ONLY_MS
+      const t1 = setTimeout(() => {
+        if (cancelled) return;
+        lottieRef.current?.reset();
+        lottieRef.current?.play();
+
+        Animated.timing(lottieOpacity, {
+          toValue: 1,
+          duration: HERO_FADE_MS,
+          useNativeDriver: true,
+        }).start(() => {
+          if (cancelled) return;
+
+          // Phase 2 – keep animation visible for HERO_ANIM_VISIBLE_MS
+          const t2 = setTimeout(() => {
+            if (cancelled) return;
+
+            Animated.timing(lottieOpacity, {
+              toValue: 0,
+              duration: HERO_FADE_MS,
+              useNativeDriver: true,
+            }).start(() => {
+              if (!cancelled) cycle(); // restart the whole cycle
+            });
+          }, HERO_ANIM_VISIBLE_MS);
+
+          return () => clearTimeout(t2);
+        });
+      }, HERO_TEXT_ONLY_MS);
+
+      return () => clearTimeout(t1);
+    };
+
+    cycle();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function checkExistingSession() {
@@ -84,14 +150,33 @@ export default function RoleSelectionScreen() {
         contentContainerStyle={[styles.content, { paddingBottom: Math.max(40, insets.bottom + 24) }]}
         showsVerticalScrollIndicator={false}
       >
+        {/* Hero card — text is always the background layer */}
         <View style={[styles.heroCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <View style={[styles.heroBadge, { backgroundColor: colors.primaryLight }]}>
             <Text style={[styles.heroBadgeText, { color: colors.primary }]}>Fast delivery</Text>
           </View>
+
+          {/* Text — permanently visible underneath */}
           <Text style={[styles.title, { color: colors.text }]}>Deliver anything, faster and smarter</Text>
           <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
             Reliable pickup and delivery for customers, with earning opportunities for drivers.
           </Text>
+
+          {/* Businessman Lottie — floats on top of the text */}
+          <Animated.View
+            style={[styles.lottieOverlay, { opacity: lottieOpacity }]}
+            pointerEvents="none"
+          >
+            <LottieView
+              ref={lottieRef}
+              source={BUSINESSMAN_LOTTIE}
+              style={styles.lottieView}
+              loop={true}
+              autoPlay={false}
+              resizeMode="contain"
+              renderMode="AUTOMATIC"
+            />
+          </Animated.View>
         </View>
 
         <Text style={[styles.roleHeading, { color: colors.text }]}>Choose your role</Text>
@@ -235,6 +320,23 @@ const styles = StyleSheet.create({
   subtitle: {
     fontSize: 15,
     lineHeight: 22,
+  },
+  /** Businessman Lottie positioned absolutely over the full heroCard */
+  lottieOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 22,
+    overflow: 'hidden',
+  },
+  lottieView: {
+    width: '100%',
+    height: '100%',
   },
   roleHeading: {
     fontSize: 17,
