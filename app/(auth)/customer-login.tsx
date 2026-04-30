@@ -1,12 +1,22 @@
-import { View, Text, TouchableOpacity, TextInput, ScrollView, StyleSheet, Platform, ActivityIndicator, KeyboardAvoidingView } from 'react-native';
+import { View, Text, TouchableOpacity, TextInput, ScrollView, StyleSheet, Platform, ActivityIndicator, KeyboardAvoidingView, Modal } from 'react-native';
 import { useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useGoogleAuth } from '../../hooks/useGoogleAuth';
 import { saveLoginTimestamp } from '../../services/auth-session';
 import { registerForPushNotifications, restoreOrderTrackingForCustomer } from '../../services/notifications';
 import { useTheme } from '../../contexts/ThemeContext';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import {
+  ensurePhoneCountriesLoaded,
+  cachePhoneCountries,
+  getCachedPreferredPhoneCountryIso,
+  detectAndCachePreferredPhoneCountryIso,
+  resolvePreferredPhoneCountry,
+  toE164Phone,
+  type PhoneCountry,
+} from '../../services/phone-countries';
 
 // For Android emulator, use 10.0.2.2 instead of localhost
 // For physical device with USB + ADB reverse, use localhost
@@ -19,6 +29,12 @@ const API_BASE_URL = Platform.OS === 'android'
 export default function CustomerLoginScreen() {
   const router = useRouter();
   const { colors, isDark } = useTheme();
+  const insets = useSafeAreaInsets();
+  const [phoneCountries, setPhoneCountries] = useState<PhoneCountry[]>([]);
+  const [selectedPhoneCountry, setSelectedPhoneCountry] = useState<PhoneCountry | null>(null);
+  const [showPhoneCountryModal, setShowPhoneCountryModal] = useState(false);
+  const [phoneCountrySearch, setPhoneCountrySearch] = useState('');
+  const [resolvingPhoneCountry, setResolvingPhoneCountry] = useState(true);
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -27,6 +43,38 @@ export default function CustomerLoginScreen() {
   // Google Auth - pass isLogin: true to prevent auto-registration
   const { handleGoogleSignIn, isLoading: isGoogleLoading, error: googleError } = useGoogleAuth('CUSTOMER', undefined, true);
 
+  const filteredPhoneCountries = useMemo(() => {
+    const q = phoneCountrySearch.trim().toLowerCase();
+    if (!q) return phoneCountries;
+    return phoneCountries.filter((c) =>
+      c.name.toLowerCase().includes(q) || c.isoCode.toLowerCase().includes(q) || c.dialCode.includes(q),
+    );
+  }, [phoneCountries, phoneCountrySearch]);
+
+  useEffect(() => {
+    const bootstrapPhoneCountry = async () => {
+      setResolvingPhoneCountry(true);
+      try {
+        const enriched = await ensurePhoneCountriesLoaded();
+        setPhoneCountries(enriched);
+        await cachePhoneCountries(enriched);
+        const cachedIso = await getCachedPreferredPhoneCountryIso();
+        const preferred = resolvePreferredPhoneCountry(enriched, cachedIso || 'TN');
+        setSelectedPhoneCountry(preferred);
+        if (!cachedIso) {
+          void detectAndCachePreferredPhoneCountryIso().then((detectedIso) => {
+            if (!detectedIso) return;
+            const matched = resolvePreferredPhoneCountry(enriched, detectedIso);
+            if (matched) setSelectedPhoneCountry(matched);
+          });
+        }
+      } finally {
+        setResolvingPhoneCountry(false);
+      }
+    };
+    void bootstrapPhoneCountry();
+  }, []);
+
   const handleLogin = async () => {
     // Reset error
     setError(null);
@@ -34,6 +82,10 @@ export default function CustomerLoginScreen() {
     // Basic validation
     if (!phone || !password) {
       setError('Phone and password are required');
+      return;
+    }
+    if (!selectedPhoneCountry) {
+      setError('Please select a country for the phone number');
       return;
     }
 
@@ -56,7 +108,7 @@ export default function CustomerLoginScreen() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          phone,
+          phone: toE164Phone(selectedPhoneCountry.dialCode, phone),
           password,
           role: 'CUSTOMER',
         }),
@@ -151,7 +203,10 @@ export default function CustomerLoginScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       style={[styles.container, { backgroundColor: colors.background }]}
     >
-      <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
+      <ScrollView
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: Math.max(40, insets.bottom + 24) }]}
+        keyboardShouldPersistTaps="handled"
+      >
         <View style={styles.content}>
           <View style={[styles.heroCard, { backgroundColor: colors.surfaceVariant, borderColor: colors.border }]}>
             <View style={[styles.iconContainer, { backgroundColor: colors.primary }]}>
@@ -164,15 +219,35 @@ export default function CustomerLoginScreen() {
           <View style={styles.form}>
             <View style={styles.inputGroup}>
               <Text style={[styles.label, { color: colors.text }]}>Phone Number</Text>
-              <TextInput
-                style={[styles.input, { backgroundColor: colors.inputBg, borderColor: colors.inputBorder, color: colors.text }]}
-                placeholder="+216 XX XXX XXX"
-                placeholderTextColor={colors.textTertiary}
-                keyboardType="phone-pad"
-                value={phone}
-                onChangeText={setPhone}
-                editable={!isSubmitting}
-              />
+              <View style={[styles.phoneRow, { backgroundColor: colors.inputBg, borderColor: colors.inputBorder }]}>
+                <TouchableOpacity
+                  style={[styles.countryCodeBtn, { borderRightColor: colors.inputBorder }]}
+                  onPress={() => setShowPhoneCountryModal(true)}
+                  activeOpacity={0.7}
+                >
+                  {resolvingPhoneCountry ? (
+                    <ActivityIndicator size="small" color={colors.primary} />
+                  ) : (
+                    <>
+                      <Text style={styles.countryFlag}>{selectedPhoneCountry?.flag || '🏳️'}</Text>
+                      <Text style={[styles.countryMeta, { color: colors.text }]}>
+                        {selectedPhoneCountry?.isoCode || 'TN'} +{selectedPhoneCountry?.dialCode || '216'}
+                      </Text>
+                      <Text style={[styles.countryArrow, { color: colors.textTertiary }]}>▾</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+                <TextInput
+                  style={[styles.phoneInput, { color: colors.text }]}
+                  placeholder="XX XXX XXX"
+                  placeholderTextColor={colors.textTertiary}
+                  keyboardType="phone-pad"
+                  value={phone}
+                  onChangeText={(text) => setPhone(text.replace(/[^\d\s]/g, ''))}
+                  editable={!isSubmitting}
+                />
+              </View>
+              <Text style={[styles.phoneHint, { color: colors.textTertiary }]}>International calling code is added automatically.</Text>
             </View>
 
             <View style={styles.inputGroup}>
@@ -257,6 +332,53 @@ export default function CustomerLoginScreen() {
           </View>
         </View>
       </ScrollView>
+      <Modal
+        visible={showPhoneCountryModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowPhoneCountryModal(false)}
+      >
+        <View style={styles.pickerOverlay}>
+          <View style={[styles.pickerCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <View style={[styles.pickerHeader, { borderBottomColor: colors.border }]}>
+              <Text style={[styles.pickerTitle, { color: colors.text }]}>Select country code</Text>
+              <TouchableOpacity onPress={() => setShowPhoneCountryModal(false)} style={styles.pickerCloseBtn}>
+                <Text style={[styles.pickerCloseText, { color: colors.textTertiary }]}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            <View style={[styles.pickerSearchWrap, { backgroundColor: colors.inputBg, borderColor: colors.inputBorder }]}>
+              <Text style={styles.pickerSearchIcon}>🔍</Text>
+              <TextInput
+                style={[styles.pickerSearchInput, { color: colors.text }]}
+                placeholder="Search country, ISO or code"
+                placeholderTextColor={colors.textTertiary}
+                value={phoneCountrySearch}
+                onChangeText={setPhoneCountrySearch}
+                autoFocus
+              />
+            </View>
+            <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.pickerList}>
+              {filteredPhoneCountries.map((country) => (
+                <TouchableOpacity
+                  key={country.id}
+                  style={[styles.pickerItem, { borderBottomColor: colors.border }]}
+                  onPress={() => {
+                    setSelectedPhoneCountry(country);
+                    setShowPhoneCountryModal(false);
+                    setPhoneCountrySearch('');
+                  }}
+                >
+                  <Text style={styles.pickerItemFlag}>{country.flag}</Text>
+                  <View style={styles.pickerItemTextWrap}>
+                    <Text style={[styles.pickerItemTitle, { color: colors.text }]}>{country.name}</Text>
+                    <Text style={[styles.pickerItemSub, { color: colors.textSecondary }]}>{country.isoCode} · +{country.dialCode}</Text>
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </KeyboardAvoidingView>
   );
 }
@@ -272,7 +394,7 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingHorizontal: 22,
     paddingTop: 8,
-    paddingBottom: 36,
+    paddingBottom: 24,
   },
   heroCard: {
     borderRadius: 20,
@@ -322,6 +444,28 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     fontSize: 16,
   },
+  phoneRow: {
+    borderWidth: 1,
+    borderRadius: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    overflow: 'hidden',
+  },
+  countryCodeBtn: {
+    minWidth: 124,
+    maxWidth: 152,
+    paddingHorizontal: 10,
+    paddingVertical: 14,
+    borderRightWidth: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  countryFlag: { fontSize: 20 },
+  countryMeta: { fontSize: 13, fontWeight: '700', flexShrink: 1 },
+  countryArrow: { fontSize: 13, fontWeight: '700' },
+  phoneInput: { flex: 1, fontSize: 16, paddingHorizontal: 12, paddingVertical: 16 },
+  phoneHint: { marginTop: 6, fontSize: 12 },
   forgotButton: {
     alignSelf: 'flex-end',
   },
@@ -433,4 +577,53 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     fontSize: 15,
   },
+  pickerOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(2, 6, 23, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  pickerCard: {
+    maxHeight: '78%',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    borderWidth: 1,
+  },
+  pickerHeader: {
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  pickerTitle: { fontSize: 17, fontWeight: '700' },
+  pickerCloseBtn: { paddingHorizontal: 8, paddingVertical: 4 },
+  pickerCloseText: { fontSize: 18, fontWeight: '700' },
+  pickerSearchWrap: {
+    marginHorizontal: 14,
+    marginTop: 12,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  pickerSearchIcon: { fontSize: 14 },
+  pickerSearchInput: { flex: 1, fontSize: 14, padding: 0 },
+  pickerList: { paddingBottom: 18 },
+  pickerItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    gap: 10,
+  },
+  pickerItemFlag: { fontSize: 20 },
+  pickerItemTextWrap: { flex: 1 },
+  pickerItemTitle: { fontSize: 15, fontWeight: '600' },
+  pickerItemSub: { fontSize: 12, marginTop: 2 },
 });

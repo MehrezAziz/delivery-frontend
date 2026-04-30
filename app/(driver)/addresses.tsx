@@ -11,7 +11,7 @@ import {
   Modal,
   FlatList,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import axios from 'axios';
@@ -38,6 +38,7 @@ interface Address {
 
 export default function DriverAddressesScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ add?: string }>();
   const { colors, isDark } = useTheme();
   const [addresses, setAddresses] = useState<Address[]>([]);
   const [loading, setLoading] = useState(true);
@@ -61,6 +62,13 @@ export default function DriverAddressesScreen() {
   const [pickerData, setPickerData] = useState<{ id: string; label: string }[]>([]);
 
   useEffect(() => { loadAddresses(); }, []);
+  useEffect(() => {
+    if (!params.add) return;
+    void (async () => {
+      await startAdd();
+      router.replace('/(driver)/addresses');
+    })();
+  }, [params.add]);
 
   const getErrMsg = (err: any, fallback: string) => {
     const m = err.response?.data?.message;
@@ -233,30 +241,36 @@ export default function DriverAddressesScreen() {
 
   const renderGeoPickers = () => (
     <>
-      <Text style={s.fieldLabel}>Country</Text>
-      <TouchableOpacity style={s.pickerBtn} onPress={() => openPicker('country')}>
-        <Text style={selectedCountryId ? s.pickerBtnText : s.pickerBtnPlaceholder}>{getSelectedLabel('country')}</Text>
-        <Ionicons name="chevron-down" size={18} color="#666" />
+      <Text style={[s.fieldLabel, { color: colors.textSecondary }]}>Country</Text>
+      <TouchableOpacity style={[s.pickerBtn, { backgroundColor: colors.inputBg, borderColor: colors.inputBorder }]} onPress={() => openPicker('country')}>
+        <Text style={selectedCountryId ? [s.pickerBtnText, { color: colors.text }] : [s.pickerBtnPlaceholder, { color: colors.textTertiary }]}>
+          {getSelectedLabel('country')}
+        </Text>
+        <Ionicons name="chevron-down" size={18} color={colors.textSecondary} />
       </TouchableOpacity>
 
-      <Text style={s.fieldLabel}>Governorate</Text>
+      <Text style={[s.fieldLabel, { color: colors.textSecondary }]}>Governorate</Text>
       <TouchableOpacity
-        style={[s.pickerBtn, !selectedCountryId && s.pickerBtnDisabled]}
+        style={[s.pickerBtn, { backgroundColor: colors.inputBg, borderColor: colors.inputBorder }, !selectedCountryId && s.pickerBtnDisabled]}
         onPress={() => selectedCountryId && openPicker('governorate')}
         disabled={!selectedCountryId}
       >
-        <Text style={selectedGovernorateId ? s.pickerBtnText : s.pickerBtnPlaceholder}>{getSelectedLabel('governorate')}</Text>
-        <Ionicons name="chevron-down" size={18} color="#666" />
+        <Text style={selectedGovernorateId ? [s.pickerBtnText, { color: colors.text }] : [s.pickerBtnPlaceholder, { color: colors.textTertiary }]}>
+          {getSelectedLabel('governorate')}
+        </Text>
+        <Ionicons name="chevron-down" size={18} color={colors.textSecondary} />
       </TouchableOpacity>
 
-      <Text style={s.fieldLabel}>Delegation</Text>
+      <Text style={[s.fieldLabel, { color: colors.textSecondary }]}>Delegation</Text>
       <TouchableOpacity
-        style={[s.pickerBtn, !selectedGovernorateId && s.pickerBtnDisabled]}
+        style={[s.pickerBtn, { backgroundColor: colors.inputBg, borderColor: colors.inputBorder }, !selectedGovernorateId && s.pickerBtnDisabled]}
         onPress={() => selectedGovernorateId && openPicker('delegation')}
         disabled={!selectedGovernorateId}
       >
-        <Text style={selectedDelegationId ? s.pickerBtnText : s.pickerBtnPlaceholder}>{getSelectedLabel('delegation')}</Text>
-        <Ionicons name="chevron-down" size={18} color="#666" />
+        <Text style={selectedDelegationId ? [s.pickerBtnText, { color: colors.text }] : [s.pickerBtnPlaceholder, { color: colors.textTertiary }]}>
+          {getSelectedLabel('delegation')}
+        </Text>
+        <Ionicons name="chevron-down" size={18} color={colors.textSecondary} />
       </TouchableOpacity>
     </>
   );
@@ -265,39 +279,29 @@ export default function DriverAddressesScreen() {
 
   return (
     <View style={[s.container, { backgroundColor: colors.background }]}>
-      <View style={[s.header, { backgroundColor: colors.card, borderBottomColor: colors.border }]}>
-        <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace('/(driver)/home')} style={s.backBtn}>
-          <Ionicons name="arrow-back" size={24} color={colors.primary} />
-        </TouchableOpacity>
-        <Text style={[s.title, { color: colors.text }]}>My Addresses</Text>
-        {!showAddForm && !editingId && (
-          <TouchableOpacity style={s.addHeaderBtn} onPress={startAdd}>
-            <Ionicons name="add-circle" size={28} color="#007AFF" />
-          </TouchableOpacity>
-        )}
-      </View>
       <ScrollView style={s.scroll} contentContainerStyle={s.scrollContent}>
         {/* Add Address Form */}
         {showAddForm && (
-          <View style={[s.card, { borderColor: '#007AFF', borderWidth: 1.5 }]}>
+          <View style={[s.card, { backgroundColor: colors.card, borderColor: colors.primary, borderWidth: 1.5 }]}>
             <View style={s.cardTop}>
-              <Ionicons name="add-circle" size={20} color="#007AFF" />
-              <Text style={s.locationText}>New Address</Text>
+              <Ionicons name="add-circle" size={20} color={colors.primary} />
+              <Text style={[s.locationText, { color: colors.text }]}>New Address</Text>
             </View>
             <View style={s.editContainer}>
               {renderGeoPickers()}
-              <Text style={s.fieldLabel}>Street (optional)</Text>
+              <Text style={[s.fieldLabel, { color: colors.textSecondary }]}>Street (optional)</Text>
               <TextInput
-                style={s.editInput}
+                style={[s.editInput, { backgroundColor: colors.inputBg, borderColor: colors.inputBorder, color: colors.text }]}
                 value={editStreet}
                 onChangeText={setEditStreet}
                 placeholder="Street address"
+                placeholderTextColor={colors.textTertiary}
               />
               <View style={s.editActions}>
-                <TouchableOpacity style={s.cancelBtn} onPress={resetForm}>
-                  <Text style={s.cancelBtnText}>Cancel</Text>
+                <TouchableOpacity style={[s.cancelBtn, { backgroundColor: colors.surfaceVariant }]} onPress={resetForm}>
+                  <Text style={[s.cancelBtnText, { color: colors.textSecondary }]}>Cancel</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={s.saveBtn} onPress={saveNewAddress} disabled={saving}>
+                <TouchableOpacity style={[s.saveBtn, { backgroundColor: colors.primary }]} onPress={saveNewAddress} disabled={saving}>
                   {saving ? <ActivityIndicator size="small" color="#fff" /> : <Text style={s.saveBtnText}>Add</Text>}
                 </TouchableOpacity>
               </View>
@@ -322,13 +326,19 @@ export default function DriverAddressesScreen() {
             {editingId === addr.id ? (
               <View style={s.editContainer}>
                 {renderGeoPickers()}
-                <Text style={s.fieldLabel}>Street</Text>
-                <TextInput style={s.editInput} value={editStreet} onChangeText={setEditStreet} placeholder="Street address" />
+                <Text style={[s.fieldLabel, { color: colors.textSecondary }]}>Street</Text>
+                <TextInput
+                  style={[s.editInput, { backgroundColor: colors.inputBg, borderColor: colors.inputBorder, color: colors.text }]}
+                  value={editStreet}
+                  onChangeText={setEditStreet}
+                  placeholder="Street address"
+                  placeholderTextColor={colors.textTertiary}
+                />
                 <View style={s.editActions}>
-                  <TouchableOpacity style={s.cancelBtn} onPress={resetForm}>
-                    <Text style={s.cancelBtnText}>Cancel</Text>
+                  <TouchableOpacity style={[s.cancelBtn, { backgroundColor: colors.surfaceVariant }]} onPress={resetForm}>
+                    <Text style={[s.cancelBtnText, { color: colors.textSecondary }]}>Cancel</Text>
                   </TouchableOpacity>
-                  <TouchableOpacity style={s.saveBtn} onPress={() => saveEdit(addr.id)} disabled={saving}>
+                  <TouchableOpacity style={[s.saveBtn, { backgroundColor: colors.primary }]} onPress={() => saveEdit(addr.id)} disabled={saving}>
                     {saving ? <ActivityIndicator size="small" color="#fff" /> : <Text style={s.saveBtnText}>Save</Text>}
                   </TouchableOpacity>
                 </View>
@@ -341,8 +351,8 @@ export default function DriverAddressesScreen() {
                 )}
                 <View style={[s.cardActions, { borderTopColor: colors.border }]}>
                   <TouchableOpacity style={s.editBtn} onPress={() => startEdit(addr)}>
-                    <Ionicons name="pencil" size={16} color="#007AFF" />
-                    <Text style={s.editBtnText}>Edit</Text>
+                    <Ionicons name="pencil" size={16} color={colors.primary} />
+                    <Text style={[s.editBtnText, { color: colors.primary }]}>Edit</Text>
                   </TouchableOpacity>
                   {addresses.length > 1 && (
                     <TouchableOpacity style={s.deleteBtn} onPress={() => deleteAddress(addr.id)}>
@@ -366,22 +376,22 @@ export default function DriverAddressesScreen() {
                 {pickerType === 'country' ? 'Select Country' : pickerType === 'governorate' ? 'Select Governorate' : 'Select Delegation'}
               </Text>
               <TouchableOpacity onPress={() => setPickerVisible(false)}>
-                <Ionicons name="close" size={24} color="#666" />
+                <Ionicons name="close" size={24} color={colors.textSecondary} />
               </TouchableOpacity>
             </View>
             {pickerData.length === 0 ? (
-              <View style={s.modalEmpty}><ActivityIndicator size="small" color="#007AFF" /></View>
+              <View style={s.modalEmpty}><ActivityIndicator size="small" color={colors.primary} /></View>
             ) : (
               <FlatList
                 data={pickerData}
                 keyExtractor={(item) => item.id}
                 renderItem={({ item }) => (
-                  <TouchableOpacity style={s.modalItem} onPress={() => onPickerSelect(item.id)}>
-                    <Text style={s.modalItemText}>{item.label}</Text>
+                  <TouchableOpacity style={[s.modalItem, { borderBottomColor: colors.border }]} onPress={() => onPickerSelect(item.id)}>
+                    <Text style={[s.modalItemText, { color: colors.text }]}>{item.label}</Text>
                     {((pickerType === 'country' && item.id === selectedCountryId) ||
                       (pickerType === 'governorate' && item.id === selectedGovernorateId) ||
                       (pickerType === 'delegation' && item.id === selectedDelegationId)) && (
-                      <Ionicons name="checkmark" size={20} color="#007AFF" />
+                      <Ionicons name="checkmark" size={20} color={colors.primary} />
                     )}
                   </TouchableOpacity>
                 )}
@@ -397,10 +407,6 @@ export default function DriverAddressesScreen() {
 const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f5f5f5' },
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  header: { flexDirection: 'row', alignItems: 'center', padding: 16, paddingTop: 56, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#eee', gap: 12 },
-  backBtn: { padding: 4 },
-  title: { fontSize: 20, fontWeight: 'bold', color: '#333', flex: 1 },
-  addHeaderBtn: { padding: 4 },
   scroll: { flex: 1 },
   scrollContent: { padding: 16, paddingBottom: 32 },
   emptyBox: { alignItems: 'center', paddingVertical: 48 },

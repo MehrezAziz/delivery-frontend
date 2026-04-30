@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -8,6 +8,7 @@ import {
   ScrollView,
   Alert,
   ActivityIndicator,
+  Modal,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -18,6 +19,15 @@ import { saveLoginTimestamp } from '../../services/auth-session';
 import { registerForPushNotifications, restoreOrderTrackingForDriver } from '../../services/notifications';
 import { useTheme } from '../../contexts/ThemeContext';
 import { persistDriverIdentityFromMe } from '../../utils/persistDriverIdentity';
+import {
+  ensurePhoneCountriesLoaded,
+  cachePhoneCountries,
+  getCachedPreferredPhoneCountryIso,
+  detectAndCachePreferredPhoneCountryIso,
+  resolvePreferredPhoneCountry,
+  toE164Phone,
+  type PhoneCountry,
+} from '../../services/phone-countries';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
 
@@ -35,6 +45,43 @@ export default function DriverLogin() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [phoneCountries, setPhoneCountries] = useState<PhoneCountry[]>([]);
+  const [selectedPhoneCountry, setSelectedPhoneCountry] = useState<PhoneCountry | null>(null);
+  const [showPhoneCountryModal, setShowPhoneCountryModal] = useState(false);
+  const [phoneCountrySearch, setPhoneCountrySearch] = useState('');
+  const [resolvingPhoneCountry, setResolvingPhoneCountry] = useState(true);
+
+  const filteredPhoneCountries = useMemo(() => {
+    const q = phoneCountrySearch.trim().toLowerCase();
+    if (!q) return phoneCountries;
+    return phoneCountries.filter((c) =>
+      c.name.toLowerCase().includes(q) || c.isoCode.toLowerCase().includes(q) || c.dialCode.includes(q),
+    );
+  }, [phoneCountries, phoneCountrySearch]);
+
+  useEffect(() => {
+    const bootstrapPhoneCountry = async () => {
+      setResolvingPhoneCountry(true);
+      try {
+        const enriched = await ensurePhoneCountriesLoaded();
+        setPhoneCountries(enriched);
+        await cachePhoneCountries(enriched);
+        const cachedIso = await getCachedPreferredPhoneCountryIso();
+        const preferred = resolvePreferredPhoneCountry(enriched, cachedIso || 'TN');
+        setSelectedPhoneCountry(preferred);
+        if (!cachedIso) {
+          void detectAndCachePreferredPhoneCountryIso().then((detectedIso) => {
+            if (!detectedIso) return;
+            const matched = resolvePreferredPhoneCountry(enriched, detectedIso);
+            if (matched) setSelectedPhoneCountry(matched);
+          });
+        }
+      } finally {
+        setResolvingPhoneCountry(false);
+      }
+    };
+    void bootstrapPhoneCountry();
+  }, []);
 
   const handleLogin = async () => {
     // Validation
@@ -42,12 +89,16 @@ export default function DriverLogin() {
       Alert.alert('Error', 'Please enter phone and password');
       return;
     }
+    if (!selectedPhoneCountry) {
+      Alert.alert('Error', 'Please select a country for the phone number');
+      return;
+    }
 
     setLoading(true);
 
     try {
       const response = await axios.post(`${API_URL}/auth/driver/login`, {
-        phone,
+        phone: toE164Phone(selectedPhoneCountry.dialCode, phone),
         password,
       });
 
@@ -165,15 +216,34 @@ export default function DriverLogin() {
       {/* Phone Input */}
       <View style={styles.inputGroup}>
         <Text style={[styles.label, { color: colors.text }]}>Phone Number</Text>
-        <TextInput
-          style={[styles.input, { borderColor: colors.inputBorder, backgroundColor: colors.inputBg, color: colors.text }]}
-          placeholder="+1234567890"
-          placeholderTextColor={colors.textTertiary}
-          value={phone}
-          onChangeText={setPhone}
-          keyboardType="phone-pad"
-          autoCapitalize="none"
-        />
+        <View style={[styles.phoneRow, { borderColor: colors.inputBorder, backgroundColor: colors.inputBg }]}>
+          <TouchableOpacity
+            style={[styles.countryCodeBtn, { borderRightColor: colors.inputBorder }]}
+            onPress={() => setShowPhoneCountryModal(true)}
+            activeOpacity={0.7}
+          >
+            {resolvingPhoneCountry ? (
+              <ActivityIndicator size="small" color={colors.primary} />
+            ) : (
+              <>
+                <Text style={styles.countryFlag}>{selectedPhoneCountry?.flag || '🏳️'}</Text>
+                <Text style={[styles.countryMeta, { color: colors.text }]}>
+                  {selectedPhoneCountry?.isoCode || 'TN'} +{selectedPhoneCountry?.dialCode || '216'}
+                </Text>
+                <Text style={[styles.countryArrow, { color: colors.textTertiary }]}>▾</Text>
+              </>
+            )}
+          </TouchableOpacity>
+          <TextInput
+            style={[styles.phoneInput, { color: colors.text }]}
+            placeholder="XX XXX XXX"
+            placeholderTextColor={colors.textTertiary}
+            value={phone}
+            onChangeText={(text) => setPhone(text.replace(/[^\d\s]/g, ''))}
+            keyboardType="phone-pad"
+            autoCapitalize="none"
+          />
+        </View>
       </View>
 
       {/* Password Input */}
@@ -245,6 +315,53 @@ export default function DriverLogin() {
       <TouchableOpacity style={styles.forgotPassword}>
         <Text style={[styles.forgotPasswordText, { color: colors.primary }]}>Forgot Password?</Text>
       </TouchableOpacity>
+      <Modal
+        visible={showPhoneCountryModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowPhoneCountryModal(false)}
+      >
+        <View style={styles.pickerOverlay}>
+          <View style={[styles.pickerCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <View style={[styles.pickerHeader, { borderBottomColor: colors.border }]}>
+              <Text style={[styles.pickerTitle, { color: colors.text }]}>Select country code</Text>
+              <TouchableOpacity onPress={() => setShowPhoneCountryModal(false)} style={styles.pickerCloseBtn}>
+                <Text style={[styles.pickerCloseText, { color: colors.textTertiary }]}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            <View style={[styles.pickerSearchWrap, { borderColor: colors.inputBorder, backgroundColor: colors.inputBg }]}>
+              <Text style={styles.pickerSearchIcon}>🔍</Text>
+              <TextInput
+                style={[styles.pickerSearchInput, { color: colors.text }]}
+                placeholder="Search country, ISO or code"
+                placeholderTextColor={colors.textTertiary}
+                value={phoneCountrySearch}
+                onChangeText={setPhoneCountrySearch}
+                autoFocus
+              />
+            </View>
+            <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.pickerList}>
+              {filteredPhoneCountries.map((country) => (
+                <TouchableOpacity
+                  key={country.id}
+                  style={[styles.pickerItem, { borderBottomColor: colors.border }]}
+                  onPress={() => {
+                    setSelectedPhoneCountry(country);
+                    setShowPhoneCountryModal(false);
+                    setPhoneCountrySearch('');
+                  }}
+                >
+                  <Text style={styles.pickerItemFlag}>{country.flag}</Text>
+                  <View style={styles.pickerItemTextWrap}>
+                    <Text style={[styles.pickerItemTitle, { color: colors.text }]}>{country.name}</Text>
+                    <Text style={[styles.pickerItemSub, { color: colors.textSecondary }]}>{country.isoCode} · +{country.dialCode}</Text>
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </ScrollView>
   );
 }
@@ -301,6 +418,27 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     fontSize: 16,
   },
+  phoneRow: {
+    borderWidth: 1,
+    borderRadius: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    overflow: 'hidden',
+  },
+  countryCodeBtn: {
+    minWidth: 124,
+    maxWidth: 152,
+    paddingHorizontal: 10,
+    paddingVertical: 14,
+    borderRightWidth: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  countryFlag: { fontSize: 20 },
+  countryMeta: { fontSize: 13, fontWeight: '700', flexShrink: 1 },
+  countryArrow: { fontSize: 13, fontWeight: '700' },
+  phoneInput: { flex: 1, fontSize: 16, paddingHorizontal: 12, paddingVertical: 14 },
   passwordContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -378,4 +516,53 @@ const styles = StyleSheet.create({
   forgotPasswordText: {
     fontSize: 16,
   },
+  pickerOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(2, 6, 23, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  pickerCard: {
+    maxHeight: '78%',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    borderWidth: 1,
+  },
+  pickerHeader: {
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  pickerTitle: { fontSize: 17, fontWeight: '700' },
+  pickerCloseBtn: { paddingHorizontal: 8, paddingVertical: 4 },
+  pickerCloseText: { fontSize: 18, fontWeight: '700' },
+  pickerSearchWrap: {
+    marginHorizontal: 14,
+    marginTop: 12,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  pickerSearchIcon: { fontSize: 14 },
+  pickerSearchInput: { flex: 1, fontSize: 14, padding: 0 },
+  pickerList: { paddingBottom: 18 },
+  pickerItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    gap: 10,
+  },
+  pickerItemFlag: { fontSize: 20 },
+  pickerItemTextWrap: { flex: 1 },
+  pickerItemTitle: { fontSize: 15, fontWeight: '600' },
+  pickerItemSub: { fontSize: 12, marginTop: 2 },
 });

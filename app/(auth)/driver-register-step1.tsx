@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
-  ScrollView, Alert, ActivityIndicator, Image,
+  ScrollView, Alert, ActivityIndicator, Image, Modal,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -10,6 +10,16 @@ import { Ionicons } from '@expo/vector-icons';
 import axios from 'axios';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import { useTheme } from '../../contexts/ThemeContext';
+import {
+  ensurePhoneCountriesLoaded,
+  cachePhoneCountries,
+  getCachedPreferredPhoneCountryIso,
+  detectAndCachePreferredPhoneCountryIso,
+  setCachedPreferredPhoneCountryIso,
+  resolvePreferredPhoneCountry,
+  toE164Phone,
+  type PhoneCountry,
+} from '../../services/phone-countries';
 
 const API_BASE = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api';
 
@@ -31,6 +41,43 @@ export default function DriverRegisterStep1() {
   const [profileImage, setProfileImage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [phoneCountries, setPhoneCountries] = useState<PhoneCountry[]>([]);
+  const [selectedPhoneCountry, setSelectedPhoneCountry] = useState<PhoneCountry | null>(null);
+  const [showPhoneCountryModal, setShowPhoneCountryModal] = useState(false);
+  const [phoneCountrySearch, setPhoneCountrySearch] = useState('');
+  const [resolvingPhoneCountry, setResolvingPhoneCountry] = useState(true);
+
+  const filteredPhoneCountries = useMemo(() => {
+    const q = phoneCountrySearch.trim().toLowerCase();
+    if (!q) return phoneCountries;
+    return phoneCountries.filter((c) =>
+      c.name.toLowerCase().includes(q) || c.isoCode.toLowerCase().includes(q) || c.dialCode.includes(q),
+    );
+  }, [phoneCountries, phoneCountrySearch]);
+
+  useEffect(() => {
+    const bootstrapPhoneCountry = async () => {
+      setResolvingPhoneCountry(true);
+      try {
+        const enriched = await ensurePhoneCountriesLoaded();
+        setPhoneCountries(enriched);
+        await cachePhoneCountries(enriched);
+        const cachedIso = await getCachedPreferredPhoneCountryIso();
+        const preferred = resolvePreferredPhoneCountry(enriched, cachedIso || 'TN');
+        setSelectedPhoneCountry(preferred);
+        if (!cachedIso) {
+          void detectAndCachePreferredPhoneCountryIso().then((detectedIso) => {
+            if (!detectedIso) return;
+            const matched = resolvePreferredPhoneCountry(enriched, detectedIso);
+            if (matched) setSelectedPhoneCountry(matched);
+          });
+        }
+      } finally {
+        setResolvingPhoneCountry(false);
+      }
+    };
+    void bootstrapPhoneCountry();
+  }, []);
 
   const pickImage = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -79,6 +126,9 @@ export default function DriverRegisterStep1() {
     if (!formData.phone || !formData.password) {
       Alert.alert('Error', 'Phone and password are required'); return;
     }
+    if (!selectedPhoneCountry) {
+      Alert.alert('Error', 'Please select a country for the phone number'); return;
+    }
     if (formData.password.length < 8) {
       Alert.alert('Error', 'Password must be at least 8 characters'); return;
     }
@@ -86,7 +136,7 @@ export default function DriverRegisterStep1() {
     setLoading(true);
     try {
       const formDataToSend = new FormData();
-      formDataToSend.append('phone', formData.phone);
+      formDataToSend.append('phone', toE164Phone(selectedPhoneCountry.dialCode, formData.phone));
       formDataToSend.append('password', formData.password);
       if (formData.firstName) formDataToSend.append('firstName', formData.firstName);
       if (formData.secondName) formDataToSend.append('secondName', formData.secondName);
@@ -153,9 +203,34 @@ export default function DriverRegisterStep1() {
 
       <View style={styles.inputGroup}>
         <Text style={[styles.label, { color: colors.text }]}>Phone Number *</Text>
-        <TextInput style={[styles.input, { borderColor: colors.inputBorder, backgroundColor: colors.inputBg, color: colors.text }]} placeholder="+1234567890" placeholderTextColor={colors.textTertiary} value={formData.phone}
-          onChangeText={text => setFormData({ ...formData, phone: text })}
-          keyboardType="phone-pad" autoCapitalize="none" />
+        <View style={[styles.phoneRow, { borderColor: colors.inputBorder, backgroundColor: colors.inputBg }]}>
+          <TouchableOpacity
+            style={[styles.countryCodeBtn, { borderRightColor: colors.inputBorder }]}
+            onPress={() => setShowPhoneCountryModal(true)}
+            activeOpacity={0.7}
+          >
+            {resolvingPhoneCountry ? (
+              <ActivityIndicator size="small" color={colors.primary} />
+            ) : (
+              <>
+                <Text style={styles.countryFlag}>{selectedPhoneCountry?.flag || '🏳️'}</Text>
+                <Text style={[styles.countryMeta, { color: colors.text }]}>
+                  {selectedPhoneCountry?.isoCode || 'TN'} +{selectedPhoneCountry?.dialCode || '216'}
+                </Text>
+                <Text style={[styles.countryArrow, { color: colors.textTertiary }]}>▾</Text>
+              </>
+            )}
+          </TouchableOpacity>
+          <TextInput
+            style={[styles.phoneInput, { color: colors.text }]}
+            placeholder="XX XXX XXX"
+            placeholderTextColor={colors.textTertiary}
+            value={formData.phone}
+            onChangeText={text => setFormData({ ...formData, phone: text.replace(/[^\d\s]/g, '') })}
+            keyboardType="phone-pad"
+            autoCapitalize="none"
+          />
+        </View>
       </View>
 
       <View style={styles.inputGroup}>
@@ -214,6 +289,54 @@ export default function DriverRegisterStep1() {
           Already have an account? <Text style={[styles.loginLinkBold, { color: colors.primary }]}>Login</Text>
         </Text>
       </TouchableOpacity>
+      <Modal
+        visible={showPhoneCountryModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowPhoneCountryModal(false)}
+      >
+        <View style={styles.pickerOverlay}>
+          <View style={[styles.pickerCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <View style={[styles.pickerHeader, { borderBottomColor: colors.border }]}>
+              <Text style={[styles.pickerTitle, { color: colors.text }]}>Select country code</Text>
+              <TouchableOpacity onPress={() => setShowPhoneCountryModal(false)} style={styles.pickerCloseBtn}>
+                <Text style={[styles.pickerCloseText, { color: colors.textTertiary }]}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            <View style={[styles.pickerSearchWrap, { borderColor: colors.inputBorder, backgroundColor: colors.inputBg }]}>
+              <Text style={styles.pickerSearchIcon}>🔍</Text>
+              <TextInput
+                style={[styles.pickerSearchInput, { color: colors.text }]}
+                placeholder="Search country, ISO or code"
+                placeholderTextColor={colors.textTertiary}
+                value={phoneCountrySearch}
+                onChangeText={setPhoneCountrySearch}
+                autoFocus
+              />
+            </View>
+            <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.pickerList}>
+              {filteredPhoneCountries.map((country) => (
+                <TouchableOpacity
+                  key={country.id}
+                  style={[styles.pickerItem, { borderBottomColor: colors.border }]}
+                  onPress={() => {
+                    setSelectedPhoneCountry(country);
+                    void setCachedPreferredPhoneCountryIso(country.isoCode);
+                    setShowPhoneCountryModal(false);
+                    setPhoneCountrySearch('');
+                  }}
+                >
+                  <Text style={styles.pickerItemFlag}>{country.flag}</Text>
+                  <View style={styles.pickerItemTextWrap}>
+                    <Text style={[styles.pickerItemTitle, { color: colors.text }]}>{country.name}</Text>
+                    <Text style={[styles.pickerItemSub, { color: colors.textSecondary }]}>{country.isoCode} · +{country.dialCode}</Text>
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </ScrollView>
   );
 }
@@ -254,6 +377,27 @@ const styles = StyleSheet.create({
   inputGroup: { marginBottom: 20 },
   label: { fontSize: 16, fontWeight: '600', marginBottom: 8 },
   input: { borderWidth: 1, borderRadius: 8, padding: 12, fontSize: 16 },
+  phoneRow: {
+    borderWidth: 1,
+    borderRadius: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    overflow: 'hidden',
+  },
+  countryCodeBtn: {
+    minWidth: 124,
+    maxWidth: 152,
+    paddingHorizontal: 10,
+    paddingVertical: 12,
+    borderRightWidth: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  countryFlag: { fontSize: 20 },
+  countryMeta: { fontSize: 13, fontWeight: '700', flexShrink: 1 },
+  countryArrow: { fontSize: 13, fontWeight: '700' },
+  phoneInput: { flex: 1, padding: 12, fontSize: 16 },
   passwordContainer: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderRadius: 8 },
   passwordInput: { flex: 1, padding: 12, fontSize: 16 },
   eyeIcon: { padding: 12 },
@@ -267,4 +411,53 @@ const styles = StyleSheet.create({
   loginLink: { marginTop: 20, marginBottom: 40, alignItems: 'center' },
   loginLinkText: { fontSize: 16 },
   loginLinkBold: { fontWeight: '600' },
+  pickerOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(2, 6, 23, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  pickerCard: {
+    maxHeight: '78%',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    borderWidth: 1,
+  },
+  pickerHeader: {
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  pickerTitle: { fontSize: 17, fontWeight: '700' },
+  pickerCloseBtn: { paddingHorizontal: 8, paddingVertical: 4 },
+  pickerCloseText: { fontSize: 18, fontWeight: '700' },
+  pickerSearchWrap: {
+    marginHorizontal: 14,
+    marginTop: 12,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  pickerSearchIcon: { fontSize: 14 },
+  pickerSearchInput: { flex: 1, fontSize: 14, padding: 0 },
+  pickerList: { paddingBottom: 18 },
+  pickerItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    gap: 10,
+  },
+  pickerItemFlag: { fontSize: 20 },
+  pickerItemTextWrap: { flex: 1 },
+  pickerItemTitle: { fontSize: 15, fontWeight: '600' },
+  pickerItemSub: { fontSize: 12, marginTop: 2 },
 });

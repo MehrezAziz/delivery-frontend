@@ -1,12 +1,22 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import {
   View, Text, TouchableOpacity, ScrollView, StyleSheet,
-  TextInput, ActivityIndicator, Alert,
+  TextInput, ActivityIndicator, Alert, Modal,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '../../contexts/ThemeContext';
+import {
+  ensurePhoneCountriesLoaded,
+  cachePhoneCountries,
+  getCachedPreferredPhoneCountryIso,
+  detectAndCachePreferredPhoneCountryIso,
+  resolvePreferredPhoneCountry,
+  toE164Phone,
+  getLocalPhoneFromE164,
+  type PhoneCountry,
+} from '../../services/phone-countries';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api';
 
@@ -23,16 +33,35 @@ export default function CustomerEditProfileScreen() {
   const [firstName, setFirstName] = useState('');
   const [secondName, setSecondName] = useState('');
   const [phone, setPhone] = useState('');
+  const [phoneCountries, setPhoneCountries] = useState<PhoneCountry[]>([]);
+  const [selectedPhoneCountry, setSelectedPhoneCountry] = useState<PhoneCountry | null>(null);
+  const [showPhoneCountryModal, setShowPhoneCountryModal] = useState(false);
+  const [phoneCountrySearch, setPhoneCountrySearch] = useState('');
   const [email, setEmail] = useState('');
   const [gender, setGender] = useState<string | null>(null);
   const [referralCodeInput, setReferralCodeInput] = useState('');
   const [hasReferralCode, setHasReferralCode] = useState(false);
   const [referralApplying, setReferralApplying] = useState(false);
+  const filteredPhoneCountries = useMemo(() => {
+    const q = phoneCountrySearch.trim().toLowerCase();
+    if (!q) return phoneCountries;
+    return phoneCountries.filter((c) =>
+      c.name.toLowerCase().includes(q) || c.isoCode.toLowerCase().includes(q) || c.dialCode.includes(q),
+    );
+  }, [phoneCountries, phoneCountrySearch]);
 
   useEffect(() => { loadProfile(); }, []);
 
   const loadProfile = async () => {
     try {
+      const countries = await ensurePhoneCountriesLoaded();
+      setPhoneCountries(countries);
+      await cachePhoneCountries(countries);
+      const cachedIso = await getCachedPreferredPhoneCountryIso();
+      const preferred = resolvePreferredPhoneCountry(countries, cachedIso || 'TN');
+      setSelectedPhoneCountry(preferred);
+      if (!cachedIso) void detectAndCachePreferredPhoneCountryIso();
+
       const token = await AsyncStorage.getItem('accessToken');
       const res = await fetch(`${API_URL}/customers/me`, {
         headers: { Authorization: `Bearer ${token}` },
@@ -40,7 +69,8 @@ export default function CustomerEditProfileScreen() {
       const d = await res.json();
       setFirstName(d.user?.firstName || '');
       setSecondName(d.user?.secondName || '');
-      setPhone(d.user?.phone || '');
+      const backendPhone = d.user?.phone || '';
+      setPhone(preferred ? getLocalPhoneFromE164(backendPhone, preferred.dialCode) : backendPhone);
       setEmail(d.user?.myEmail || '');
       setGender(d.user?.userGender || null);
       setHasReferralCode(!!d.referredByCodeId);
@@ -101,7 +131,7 @@ export default function CustomerEditProfileScreen() {
           secondName: secondName.trim() || undefined,
           myEmail: email.trim() || undefined,
           userGender: gender || undefined,
-          phone: phone.trim() || undefined,
+          phone: selectedPhoneCountry ? toE164Phone(selectedPhoneCountry.dialCode, phone) : phone.trim() || undefined,
         }),
       });
       const data = await res.json();
@@ -139,7 +169,23 @@ export default function CustomerEditProfileScreen() {
       <ScrollView style={{ flex: 1 }} contentContainerStyle={s.content}>
         <Field label="First Name" value={firstName} onChange={setFirstName} />
         <Field label="Last Name" value={secondName} onChange={setSecondName} />
-        <Field label="Phone" value={phone} onChange={setPhone} keyboardType="phone-pad" />
+        <View style={{ marginBottom: 16 }}>
+          <Text style={s.fieldLabel}>Phone</Text>
+          <View style={s.phoneRow}>
+            <TouchableOpacity style={s.countryCodeBtn} onPress={() => setShowPhoneCountryModal(true)} activeOpacity={0.7}>
+              <Text style={s.countryFlag}>{selectedPhoneCountry?.flag || '🏳️'}</Text>
+              <Text style={s.countryMeta}>{selectedPhoneCountry?.isoCode || 'TN'} +{selectedPhoneCountry?.dialCode || '216'}</Text>
+              <Text style={s.countryArrow}>▾</Text>
+            </TouchableOpacity>
+            <TextInput
+              style={[s.input, { flex: 1, marginBottom: 0, borderWidth: 0, borderRadius: 0 }]}
+              value={phone}
+              onChangeText={(text) => setPhone(text.replace(/[^\d\s]/g, ''))}
+              keyboardType="phone-pad"
+              placeholderTextColor="#9ca3af"
+            />
+          </View>
+        </View>
         <Field label="Email" value={email} onChange={setEmail} keyboardType="email-address" />
 
         <Text style={s.fieldLabel}>Gender</Text>
@@ -189,6 +235,48 @@ export default function CustomerEditProfileScreen() {
           {saving ? <ActivityIndicator color="#fff" /> : <Text style={s.saveBtnText}>Save Changes</Text>}
         </TouchableOpacity>
       </ScrollView>
+      <Modal visible={showPhoneCountryModal} transparent animationType="slide" onRequestClose={() => setShowPhoneCountryModal(false)}>
+        <View style={s.pickerOverlay}>
+          <View style={s.pickerCard}>
+            <View style={s.pickerHeader}>
+              <Text style={s.pickerTitle}>Select country code</Text>
+              <TouchableOpacity onPress={() => setShowPhoneCountryModal(false)} style={s.pickerCloseBtn}>
+                <Text style={s.pickerCloseText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            <View style={s.pickerSearchWrap}>
+              <Text style={s.pickerSearchIcon}>🔍</Text>
+              <TextInput
+                style={s.pickerSearchInput}
+                placeholder="Search country, ISO or code"
+                placeholderTextColor="#9ca3af"
+                value={phoneCountrySearch}
+                onChangeText={setPhoneCountrySearch}
+                autoFocus
+              />
+            </View>
+            <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={s.pickerList}>
+              {filteredPhoneCountries.map((country) => (
+                <TouchableOpacity
+                  key={country.id}
+                  style={s.pickerItem}
+                  onPress={() => {
+                    setSelectedPhoneCountry(country);
+                    setShowPhoneCountryModal(false);
+                    setPhoneCountrySearch('');
+                  }}
+                >
+                  <Text style={s.pickerItemFlag}>{country.flag}</Text>
+                  <View style={s.pickerItemTextWrap}>
+                    <Text style={s.pickerItemTitle}>{country.name}</Text>
+                    <Text style={s.pickerItemSub}>{country.isoCode} · +{country.dialCode}</Text>
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -226,6 +314,22 @@ const s = StyleSheet.create({
     backgroundColor: '#fff', borderRadius: 12, padding: 14, fontSize: 15, color: '#111827',
     borderWidth: 1, borderColor: '#e5e7eb',
   },
+  phoneRow: { borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 12, flexDirection: 'row', alignItems: 'center', overflow: 'hidden' },
+  countryCodeBtn: {
+    minWidth: 124,
+    maxWidth: 152,
+    paddingHorizontal: 10,
+    paddingVertical: 14,
+    borderRightWidth: 1,
+    borderRightColor: '#e5e7eb',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#fff',
+  },
+  countryFlag: { fontSize: 20 },
+  countryMeta: { fontSize: 13, fontWeight: '700', color: '#111827', flexShrink: 1 },
+  countryArrow: { fontSize: 13, fontWeight: '700', color: '#6b7280' },
   genderBtn: {
     flex: 1, paddingVertical: 12, borderRadius: 12, backgroundColor: '#f3f4f6',
     alignItems: 'center', borderWidth: 1, borderColor: '#e5e7eb',
@@ -234,4 +338,19 @@ const s = StyleSheet.create({
   genderBtnText: { fontSize: 14, fontWeight: '600', color: '#374151' },
   saveBtn: { backgroundColor: '#0284c7', borderRadius: 14, paddingVertical: 16, alignItems: 'center', marginTop: 8 },
   saveBtnText: { color: '#fff', fontSize: 16, fontWeight: '700' },
+  pickerOverlay: { flex: 1, backgroundColor: 'rgba(2, 6, 23, 0.5)', justifyContent: 'flex-end' },
+  pickerCard: { maxHeight: '78%', backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20, borderWidth: 1, borderColor: '#e5e7eb' },
+  pickerHeader: { paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#e5e7eb', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  pickerTitle: { fontSize: 17, fontWeight: '700', color: '#111827' },
+  pickerCloseBtn: { paddingHorizontal: 8, paddingVertical: 4 },
+  pickerCloseText: { fontSize: 18, fontWeight: '700', color: '#6b7280' },
+  pickerSearchWrap: { marginHorizontal: 14, marginTop: 12, marginBottom: 8, borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10, flexDirection: 'row', alignItems: 'center', gap: 8 },
+  pickerSearchIcon: { fontSize: 14 },
+  pickerSearchInput: { flex: 1, fontSize: 14, color: '#111827', padding: 0 },
+  pickerList: { paddingBottom: 18 },
+  pickerItem: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#e5e7eb', gap: 10 },
+  pickerItemFlag: { fontSize: 20 },
+  pickerItemTextWrap: { flex: 1 },
+  pickerItemTitle: { fontSize: 15, fontWeight: '600', color: '#111827' },
+  pickerItemSub: { fontSize: 12, marginTop: 2, color: '#6b7280' },
 });

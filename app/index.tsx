@@ -7,6 +7,7 @@ import { resolveLaunchRouteAfterLogin, stopOrderTrackingSilently } from '../serv
 import { useTheme } from '../contexts/ThemeContext';
 import { AppChromeHeader } from '../components/AppChromeHeader';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { warmupPhoneCountriesData } from '../services/phone-countries';
 
 export default function RoleSelectionScreen() {
   const router = useRouter();
@@ -17,6 +18,7 @@ export default function RoleSelectionScreen() {
 
   useEffect(() => {
     checkExistingSession();
+    void warmupPhoneCountriesData();
   }, []);
 
   async function checkExistingSession() {
@@ -168,7 +170,14 @@ export default function RoleSelectionScreen() {
 
         <View style={styles.footer}>
           <Text style={[styles.footerText, { color: colors.textSecondary }]}>
-            By continuing, you agree to our Terms & Privacy Policy
+            By continuing, you agree to our{' '}
+            <Text style={[styles.footerLink, { color: colors.primary }]} onPress={() => router.push('/(auth)/terms')}>
+              Terms
+            </Text>
+            {' & '}
+            <Text style={[styles.footerLink, { color: colors.primary }]} onPress={() => router.push('/(auth)/privacy')}>
+              Privacy Policy
+            </Text>
           </Text>
         </View>
       </ScrollView>
@@ -324,6 +333,11 @@ const styles = StyleSheet.create({
     color: '#64748b',
     textAlign: 'center',
     fontSize: 12,
+    lineHeight: 18,
+  },
+  footerLink: {
+    fontWeight: '700',
+    textDecorationLine: 'underline',
   },
   bgCircleDark: {
     opacity: 0.35,

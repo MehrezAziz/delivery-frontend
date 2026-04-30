@@ -202,6 +202,10 @@ export function AppChromeHeader({
     if (role === 'customer') push('/(customer)/profile');
     else if (role === 'driver') push('/(driver)/profile');
   };
+  const normalizedPath = (pathname || '').split('?')[0];
+  const showDriverAddressesAdd =
+    role === 'driver' &&
+    (normalizedPath === '/(driver)/addresses' || normalizedPath.endsWith('/addresses'));
 
   const headerBg = role === 'guest' ? colors.card : colors.headerBg;
   const textColor = role === 'guest' ? colors.text : '#fff';
@@ -283,6 +287,15 @@ export function AppChromeHeader({
             <>
               {homeIdentityBlock}
               <View style={styles.rightCluster}>
+                {showDriverAddressesAdd ? (
+                  <TouchableOpacity
+                    onPress={() => router.replace(`/(driver)/addresses?add=${Date.now()}` as never)}
+                    style={[styles.iconBtn, { backgroundColor: iconBtnBg }]}
+                    activeOpacity={0.75}
+                  >
+                    <Ionicons name="add" size={22} color={textColor} />
+                  </TouchableOpacity>
+                ) : null}
                 {resolvedShowNotifications ? (
                   <TouchableOpacity
                     onPress={() => setNotifPreviewOpen(true)}
@@ -323,6 +336,15 @@ export function AppChromeHeader({
               )}
               {homeIdentityBlock}
               <View style={styles.rightCluster}>
+                {showDriverAddressesAdd ? (
+                  <TouchableOpacity
+                    onPress={() => router.replace(`/(driver)/addresses?add=${Date.now()}` as never)}
+                    style={[styles.iconBtn, { backgroundColor: iconBtnBg }]}
+                    activeOpacity={0.75}
+                  >
+                    <Ionicons name="add" size={22} color={textColor} />
+                  </TouchableOpacity>
+                ) : null}
                 {resolvedShowNotifications && role !== 'guest' ? (
                   <TouchableOpacity
                     onPress={() => setNotifPreviewOpen(true)}

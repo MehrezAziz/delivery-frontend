@@ -9,6 +9,12 @@ import { Ionicons } from '@expo/vector-icons';
 import axios from 'axios';
 import { saveLoginTimestamp } from '../../services/auth-session';
 import { useTheme } from '../../contexts/ThemeContext';
+import {
+  ensurePhoneCountriesLoaded,
+  cachePhoneCountries,
+  getCachedPreferredPhoneCountryIso,
+  resolvePreferredPhoneCountry,
+} from '../../services/phone-countries';
 
 const API_BASE = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api';
 const API_URL = API_BASE.replace(/\/api$/, '');
@@ -78,10 +84,22 @@ export default function DriverRegisterStep2() {
   const [delSearch, setDelSearch] = useState('');
 
   useEffect(() => {
-    fetch(`${API_BASE}/geography/countries`)
-      .then(r => r.json())
-      .then(data => setCountries(Array.isArray(data) ? data : []))
-      .catch(() => setCountries([]));
+    const bootstrapCountries = async () => {
+      try {
+        const loaded = await ensurePhoneCountriesLoaded();
+        setCountries(loaded);
+        await cachePhoneCountries(loaded);
+
+        const preferredIso = await getCachedPreferredPhoneCountryIso();
+        const preferred = resolvePreferredPhoneCountry(loaded as any, preferredIso || 'TN');
+        if (preferred) {
+          await handleSelectCountry(preferred as Country);
+        }
+      } catch {
+        setCountries([]);
+      }
+    };
+    void bootstrapCountries();
   }, []);
 
   const filteredCountries = useMemo(() =>
