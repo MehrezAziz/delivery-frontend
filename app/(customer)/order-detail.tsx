@@ -557,7 +557,7 @@ export default function OrderDetailScreen() {
         {(canOpenChat || canTrack) && (
           <View style={s.quickActionsRow}>
             {canOpenChat && (
-              <View style={{ position: 'relative' }}>
+              <View style={s.quickActionSlot}>
                 <TouchableOpacity style={[s.quickAction, { backgroundColor: '#3b82f6' }]}
                   onPress={() => router.push(`/(customer)/order-chat?orderId=${order.id}`)} activeOpacity={0.8}>
                   <Ionicons name="chatbubbles" size={20} color="#fff" />
@@ -567,11 +567,13 @@ export default function OrderDetailScreen() {
               </View>
             )}
             {canTrack && (
-              <TouchableOpacity style={[s.quickAction, { backgroundColor: '#6366f1' }]}
-                onPress={() => router.push(`/(customer)/track-driver?orderId=${order.id}`)} activeOpacity={0.8}>
-                <Ionicons name="navigate" size={20} color="#fff" />
-                <Text style={s.quickActionText}>Track</Text>
-              </TouchableOpacity>
+              <View style={s.quickActionSlot}>
+                <TouchableOpacity style={[s.quickAction, { backgroundColor: '#6366f1' }]}
+                  onPress={() => router.push(`/(customer)/track-driver?orderId=${order.id}`)} activeOpacity={0.8}>
+                  <Ionicons name="navigate" size={20} color="#fff" />
+                  <Text style={s.quickActionText}>Track</Text>
+                </TouchableOpacity>
+              </View>
             )}
           </View>
         )}
@@ -1254,7 +1256,8 @@ const s = StyleSheet.create({
   progressOneLineLabel: { fontSize: 9, fontWeight: '600', textAlign: 'center', lineHeight: 11, width: '100%' },
 
   // Quick actions
-  quickActionsRow: { flexDirection: 'row', gap: 10, marginBottom: 14 },
+  quickActionsRow: { flexDirection: 'row', gap: 10, marginBottom: 14, justifyContent: 'center', alignSelf: 'center', width: '100%', maxWidth: 460 },
+  quickActionSlot: { flex: 1, position: 'relative' },
   quickAction: {
     flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
     paddingVertical: 14, borderRadius: 14, gap: 8,

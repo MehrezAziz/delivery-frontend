@@ -11,12 +11,14 @@ import {
   onMessage,
   onNotificationOpenedApp,
   onTokenRefresh,
+  registerDeviceForRemoteMessages,
   requestPermission,
   setBackgroundMessageHandler,
 } from '@react-native-firebase/messaging';
 import { AppState, Platform } from 'react-native';
 import { router } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as ExpoNotifications from 'expo-notifications';
 import { notificationService } from './api/notification.service';
 import { api } from './api/client';
 import { orderService, Order } from './api/order.service';
@@ -187,7 +189,7 @@ function extractOrderIdFromOrderGroupKey(groupKey?: string): string {
   return firstSegment || '';
 }
 
-async function getStoredUserRole(): Promise<string | null> {
+export async function getStoredUserRole(): Promise<string | null> {
   const direct = await AsyncStorage.getItem('userRole');
   if (direct) return direct;
   const rawUser = await AsyncStorage.getItem('user');
@@ -337,6 +339,15 @@ export async function createNotificationChannels() {
  */
 export async function registerForPushNotifications(): Promise<string | null> {
   try {
+    if (Platform.OS === 'android') {
+      const current = await ExpoNotifications.getPermissionsAsync();
+      if (!current.granted) {
+        const requested = await ExpoNotifications.requestPermissionsAsync();
+        if (!requested.granted) return null;
+      }
+    }
+
+    await registerDeviceForRemoteMessages(firebaseMessaging);
     const authStatus = await requestPermission(firebaseMessaging);
     const enabled =
       authStatus === AuthorizationStatus.AUTHORIZED ||
@@ -944,7 +955,7 @@ export async function restoreOrderTrackingForDriver() {
   if (Platform.OS !== 'android') return;
 
   try {
-    const role = await AsyncStorage.getItem('userRole');
+    const role = await getStoredUserRole();
     if (role !== 'DRIVER') return;
 
     const orders = await orderService.getDriverMyOrders();
@@ -1738,8 +1749,9 @@ export function setupBackgroundHandler() {
     data?: Record<string, unknown>;
     notification?: { title?: string | null; body?: string | null } | null;
   }) => {
-    const raw = remoteMessage?.data as Record<string, unknown> | undefined;
-    if (!raw || typeof raw !== 'object') return;
+    const rawUnknown = remoteMessage?.data as Record<string, unknown> | undefined;
+    if (rawUnknown != null && typeof rawUnknown !== 'object') return;
+    const raw = rawUnknown && typeof rawUnknown === 'object' ? rawUnknown : {};
     const data = mergeFcmNotificationIntoData(remoteMessage, coerceFcmData(raw));
     emitUnreadBadgeRefreshDebounced();
 
@@ -1863,8 +1875,9 @@ export function setupNotificationReceivedListener(callback?: any) {
   return { remove: () => {} };
 }
 export async function handleFCMMessage(remoteMessage: any) {
-  const raw = remoteMessage?.data as Record<string, unknown> | undefined;
-  if (!raw || typeof raw !== 'object') return;
+  const rawUnknown = remoteMessage?.data as Record<string, unknown> | undefined;
+  if (rawUnknown != null && typeof rawUnknown !== 'object') return;
+  const raw = rawUnknown && typeof rawUnknown === 'object' ? rawUnknown : {};
   const data = mergeFcmNotificationIntoData(remoteMessage, coerceFcmData(raw));
   emitUnreadBadgeRefreshDebounced();
   if (

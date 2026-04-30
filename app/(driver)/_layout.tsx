@@ -5,6 +5,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { ensureDriverPushNotificationSetup } from '../../services/driverPushSetup';
+import { getStoredUserRole, restoreOrderTrackingForDriver } from '../../services/notifications';
 import { DriverTabsHeader } from '../../components/AppChromeHeader';
 import { useTheme } from '../../contexts/ThemeContext';
 
@@ -18,18 +19,17 @@ const TAB_ICONS: Record<string, { active: keyof typeof Ionicons.glyphMap; inacti
 export default function DriverLayout() {
   const { colors, isDark } = useTheme();
   const insets = useSafeAreaInsets();
-  const tabBarBottom = insets.bottom;
-  const tabBarHeight = 58 + (insets.bottom > 0 ? 6 : 0);
-  const bottomOverlayClearance = tabBarHeight + tabBarBottom + 18;
+  const tabBarHeight = 60 + insets.bottom;
+  const bottomOverlayClearance = tabBarHeight - 1;
+  const noSceneBottomInsetRoutes = new Set(['order-chat', 'support-chat']);
 
   useEffect(() => {
     void (async () => {
-      const [token, role] = await Promise.all([
-        AsyncStorage.getItem('accessToken'),
-        AsyncStorage.getItem('userRole'),
-      ]);
+      const token = await AsyncStorage.getItem('accessToken');
+      const role = await getStoredUserRole();
       if (token && role === 'DRIVER') {
         await ensureDriverPushNotificationSetup();
+        await restoreOrderTrackingForDriver();
       }
     })();
   }, []);
@@ -46,7 +46,7 @@ export default function DriverLayout() {
         tabBarShowLabel: true,
         tabBarLabelStyle: styles.tabLabel,
         sceneStyle: {
-          paddingBottom: bottomOverlayClearance,
+          paddingBottom: noSceneBottomInsetRoutes.has(route.name) ? 0 : bottomOverlayClearance,
         },
         tabBarIcon: ({ color, focused }) => {
           const pair = TAB_ICONS[route.name];
@@ -55,14 +55,14 @@ export default function DriverLayout() {
         },
         tabBarStyle: {
           position: 'absolute',
-          left: 14,
-          right: 14,
-          bottom: tabBarBottom,
+          left: 0,
+          right: 0,
+          bottom: 0,
           minHeight: 58,
           height: tabBarHeight,
           paddingTop: 6,
-          paddingBottom: insets.bottom > 0 ? 6 : 10,
-          borderRadius: 18,
+          paddingBottom: Math.max(insets.bottom, 10),
+          borderRadius: 0,
           backgroundColor: isDark ? 'rgba(30,41,59,0.98)' : 'rgba(255,255,255,0.98)',
           borderTopWidth: 0,
           borderWidth: StyleSheet.hairlineWidth,

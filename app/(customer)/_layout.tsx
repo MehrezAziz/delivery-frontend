@@ -1,9 +1,12 @@
+import { useEffect } from 'react';
 import { Tabs } from 'expo-router';
 import { Platform, StyleSheet } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../contexts/ThemeContext';
 import { CustomerTabsHeader } from '../../components/AppChromeHeader';
+import { registerForPushNotifications, restoreOrderTrackingForCustomer } from '../../services/notifications';
 
 const TAB_ICON_NAMES: Record<string, { active: keyof typeof Ionicons.glyphMap; inactive: keyof typeof Ionicons.glyphMap }> = {
   home: { active: 'home', inactive: 'home-outline' },
@@ -15,10 +18,22 @@ const TAB_ICON_NAMES: Record<string, { active: keyof typeof Ionicons.glyphMap; i
 export default function CustomerLayout() {
   const { colors, isDark } = useTheme();
   const insets = useSafeAreaInsets();
-  /** Flush with system navigation: bar bottom aligns to safe-area inset (no extra gap). */
-  const tabBarBottom = insets.bottom;
-  const tabBarHeight = 58 + (insets.bottom > 0 ? 6 : 0);
-  const bottomOverlayClearance = tabBarHeight + tabBarBottom + 18;
+  const tabBarHeight = 60 + insets.bottom;
+  const bottomOverlayClearance = tabBarHeight - 1;
+  const noSceneBottomInsetRoutes = new Set(['order-chat', 'support-chat']);
+
+  useEffect(() => {
+    void (async () => {
+      const [token, role] = await Promise.all([
+        AsyncStorage.getItem('accessToken'),
+        AsyncStorage.getItem('userRole'),
+      ]);
+      if (token && role === 'CUSTOMER') {
+        await registerForPushNotifications();
+        await restoreOrderTrackingForCustomer();
+      }
+    })();
+  }, []);
 
   return (
     <Tabs
@@ -32,7 +47,7 @@ export default function CustomerLayout() {
         tabBarShowLabel: true,
         tabBarLabelStyle: styles.tabLabel,
         sceneStyle: {
-          paddingBottom: bottomOverlayClearance,
+          paddingBottom: noSceneBottomInsetRoutes.has(route.name) ? 0 : bottomOverlayClearance,
         },
         tabBarIcon: ({ color, focused }) => {
           const pair = TAB_ICON_NAMES[route.name];
@@ -41,14 +56,14 @@ export default function CustomerLayout() {
         },
         tabBarStyle: {
           position: 'absolute',
-          left: 14,
-          right: 14,
-          bottom: tabBarBottom,
+          left: 0,
+          right: 0,
+          bottom: 0,
           minHeight: 58,
           height: tabBarHeight,
           paddingTop: 6,
-          paddingBottom: insets.bottom > 0 ? 6 : 10,
-          borderRadius: 18,
+          paddingBottom: Math.max(insets.bottom, 10),
+          borderRadius: 0,
           backgroundColor: isDark ? 'rgba(30,41,59,0.98)' : 'rgba(255,255,255,0.98)',
           borderTopWidth: 0,
           borderWidth: StyleSheet.hairlineWidth,

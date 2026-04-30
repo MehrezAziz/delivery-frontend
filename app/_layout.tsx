@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { AppState, type AppStateStatus, View } from 'react-native';
+import { AppState, type AppStateStatus, Platform, View } from 'react-native';
 import { Stack } from 'expo-router';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
@@ -18,6 +18,7 @@ import {
   registerOrderForegroundService,
   restoreOrderTrackingForCustomer,
   restoreOrderTrackingForDriver,
+  getStoredUserRole,
 } from '../services/notifications';
 // Register background handler at module level (required by React Native Firebase)
 setupBackgroundHandler();
@@ -39,6 +40,23 @@ function RootContent() {
     title: '',
     message: '',
   });
+
+  useEffect(() => {
+    if (Platform.OS !== 'android') return;
+    const applySystemBottomBarTheme = async () => {
+      try {
+        // Lazy-require to avoid crashing if current dev build lacks ExpoNavigationBar native module.
+        // In that case we silently skip and keep app booting.
+        const NavigationBar = require('expo-navigation-bar');
+        // `setBackgroundColorAsync` warns when edge-to-edge is enabled on current native build.
+        // Keep behavior warning-free until a full native rebuild applies edgeToEdgeEnabled=false.
+        await NavigationBar.setButtonStyleAsync(isDark ? 'light' : 'dark');
+      } catch {
+        // Best effort: some devices/OS versions can ignore nav bar styling.
+      }
+    };
+    void applySystemBottomBarTheme();
+  }, [isDark]);
 
   useEffect(() => {
     const showFriendlyError = (title: string, message: string) => {
@@ -87,12 +105,16 @@ function RootContent() {
     // Create notification channels
     createNotificationChannels();
 
-    // Register push notifications if user is logged in
-    AsyncStorage.getItem('accessToken').then((token) => {
-      if (token) {
-        registerForPushNotifications();
-      }
-    });
+    // Register push + restore persistent order tracking on cold start (AppState "change"
+    // does not fire for the initial active state, so driver tabs used to miss restore until a tab did it).
+    void (async () => {
+      const token = await AsyncStorage.getItem('accessToken');
+      if (!token) return;
+      await registerForPushNotifications();
+      const role = await getStoredUserRole();
+      if (role === 'CUSTOMER') await restoreOrderTrackingForCustomer();
+      if (role === 'DRIVER') await restoreOrderTrackingForDriver();
+    })();
 
     // Set up foreground notification listeners
     cleanupRef.current = setupNotificationListeners();
@@ -104,7 +126,7 @@ function RootContent() {
       AsyncStorage.getItem('accessToken').then(async (accessToken) => {
         if (!accessToken) return;
         await registerForPushNotifications();
-        const role = await AsyncStorage.getItem('userRole');
+        const role = await getStoredUserRole();
         if (role === 'CUSTOMER') await restoreOrderTrackingForCustomer();
         if (role === 'DRIVER') await restoreOrderTrackingForDriver();
       });

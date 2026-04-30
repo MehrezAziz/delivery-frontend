@@ -1,8 +1,9 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import {
   View, Text, FlatList, TextInput, TouchableOpacity,
-  KeyboardAvoidingView, Platform, ActivityIndicator, StyleSheet,
+  KeyboardAvoidingView, Platform, ActivityIndicator, StyleSheet, Keyboard, Dimensions,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -16,12 +17,14 @@ export default function OrderChatScreen() {
   const { orderId: orderIdParam } = useLocalSearchParams<{ orderId: string | string[] }>();
   const orderId = typeof orderIdParam === 'string' ? orderIdParam : orderIdParam?.[0] ?? '';
   const { colors, isDark } = useTheme();
+  const insets = useSafeAreaInsets();
   const [chatRoom, setChatRoom] = useState<ChatRoom | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [myUserId, setMyUserId] = useState('');
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
   const flatListRef = useRef<FlatList>(null);
 
   useEffect(() => {
@@ -62,6 +65,22 @@ export default function OrderChatScreen() {
     const interval = setInterval(loadChat, 3000);
     return () => clearInterval(interval);
   }, [loadChat]);
+
+  useEffect(() => {
+    const showSub = Keyboard.addListener('keyboardDidShow', (e) => {
+      const screenH = Dimensions.get('screen').height;
+      const screenY = e.endCoordinates?.screenY ?? screenH;
+      const overlap = Math.max(0, screenH - screenY - insets.bottom);
+      setKeyboardHeight(overlap);
+    });
+    const hideSub = Keyboard.addListener('keyboardDidHide', () => {
+      setKeyboardHeight(0);
+    });
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, [insets.bottom]);
 
   const handleSend = async () => {
     if (!input.trim() || sending) return;
@@ -106,7 +125,11 @@ export default function OrderChatScreen() {
   };
 
   return (
-    <KeyboardAvoidingView style={[s.container, { backgroundColor: colors.background }]} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+    <KeyboardAvoidingView
+      style={[s.container, { backgroundColor: colors.background }]}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top + 4 : 0}
+    >
       <View style={[s.chatToolbar, { backgroundColor: colors.card, borderColor: colors.border }]}>
         <View style={{ flex: 1, minWidth: 0 }}>
           <Text style={[s.toolbarMeta, { color: colors.textTertiary }]}>Order</Text>
@@ -130,6 +153,8 @@ export default function OrderChatScreen() {
         keyExtractor={m => m.id}
         style={s.messagesList}
         contentContainerStyle={s.messagesContent}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="interactive"
         onContentSizeChange={() => flatListRef.current?.scrollToEnd()}
         renderItem={renderMessage}
         ListEmptyComponent={
@@ -143,12 +168,12 @@ export default function OrderChatScreen() {
 
       {/* Input */}
       {isClosed ? (
-        <View style={[s.closedBar, { backgroundColor: colors.surfaceVariant }]}>
+        <View style={[s.closedBar, { backgroundColor: colors.surfaceVariant, paddingBottom: Platform.OS === 'android' ? (keyboardHeight > 0 ? 13 : 0) : Math.max(insets.bottom, 12), marginBottom: Platform.OS === 'android' ? (keyboardHeight > 0 ? keyboardHeight : 60 + insets.bottom + 3) : 0 }]}>
           <Ionicons name="lock-closed-outline" size={16} color={colors.textTertiary} />
           <Text style={[s.closedText, { color: colors.textTertiary }]}>chatroom closed</Text>
         </View>
       ) : (
-        <View style={[s.inputBar, { backgroundColor: colors.card, borderTopColor: colors.border }]}>
+        <View style={[s.inputBar, { backgroundColor: colors.card, borderTopColor: colors.border, paddingBottom: Platform.OS === 'android' ? (keyboardHeight > 0 ? 13 : 0) : Math.max(insets.bottom, 12), marginBottom: Platform.OS === 'android' ? (keyboardHeight > 0 ? keyboardHeight : 60 + insets.bottom + 3) : 0 }]}>
           <TextInput
             style={[s.textInput, { backgroundColor: colors.surfaceVariant, color: colors.text }]}
             value={input}
@@ -237,3 +262,15 @@ const s = StyleSheet.create({
   sendBtnActive: { backgroundColor: '#0284c7' },
   sendBtnDisabled: { backgroundColor: '#d1d5db' },
 });
+
+
+
+
+
+
+
+
+
+
+
+

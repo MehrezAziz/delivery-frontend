@@ -198,7 +198,7 @@ export function AppChromeHeader({
     else router.replace('/(driver)/home');
   };
 
-  const onProfilePicturePress = () => {
+  const onProfileNamePress = () => {
     if (role === 'customer') push('/(customer)/profile');
     else if (role === 'driver') push('/(driver)/profile');
   };
@@ -222,10 +222,9 @@ export function AppChromeHeader({
       {showHomeIdentity ? (
         <View style={styles.homeIdentityRow}>
           <TouchableOpacity
-            onPress={onProfilePicturePress}
-            activeOpacity={0.75}
-            accessibilityRole="button"
-            accessibilityLabel="Open profile"
+            activeOpacity={1}
+            accessibilityRole="imagebutton"
+            accessibilityLabel="Profile picture"
           >
             {profileImageUri ? (
               <Image source={{ uri: profileImageUri }} style={styles.headerAvatar} />
@@ -237,7 +236,13 @@ export function AppChromeHeader({
               </View>
             )}
           </TouchableOpacity>
-          <View style={styles.homeIdentityText}>
+          <TouchableOpacity
+            onPress={onProfileNamePress}
+            activeOpacity={0.75}
+            accessibilityRole="button"
+            accessibilityLabel="Open profile"
+            style={styles.homeIdentityText}
+          >
             <Text style={[styles.title, { color: textColor }]} numberOfLines={1}>
               {resolvedTitle}
             </Text>
@@ -253,7 +258,7 @@ export function AppChromeHeader({
                 </Text>
               </View>
             ) : null}
-          </View>
+          </TouchableOpacity>
         </View>
       ) : (
         <>

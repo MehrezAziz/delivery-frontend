@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import {
   View, Text, FlatList, TextInput, TouchableOpacity,
-  KeyboardAvoidingView, Platform, ActivityIndicator, StyleSheet,
+  KeyboardAvoidingView, Platform, ActivityIndicator, StyleSheet, Keyboard, Dimensions,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams } from 'expo-router';
@@ -25,6 +25,7 @@ export default function DriverOrderChatScreen() {
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [myUserId, setMyUserId] = useState('');
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
   const flatListRef = useRef<FlatList>(null);
 
   useEffect(() => {
@@ -69,6 +70,22 @@ export default function DriverOrderChatScreen() {
     const interval = setInterval(loadChat, 3000);
     return () => clearInterval(interval);
   }, [loadChat]);
+
+  useEffect(() => {
+    const showSub = Keyboard.addListener('keyboardDidShow', (e) => {
+      const screenH = Dimensions.get('screen').height;
+      const screenY = e.endCoordinates?.screenY ?? screenH;
+      const overlap = Math.max(0, screenH - screenY - insets.bottom);
+      setKeyboardHeight(overlap);
+    });
+    const hideSub = Keyboard.addListener('keyboardDidHide', () => {
+      setKeyboardHeight(0);
+    });
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, [insets.bottom]);
 
   const handleSend = async () => {
     if (!input.trim() || sending) return;
@@ -159,12 +176,12 @@ export default function DriverOrderChatScreen() {
 
       {/* Input */}
       {isClosed ? (
-        <View style={[s.closedBar, { backgroundColor: colors.surfaceVariant }]}>
+        <View style={[s.closedBar, { backgroundColor: colors.surfaceVariant, paddingBottom: Platform.OS === 'android' ? (keyboardHeight > 0 ? 13 : 0) : Math.max(insets.bottom, 12), marginBottom: Platform.OS === 'android' ? (keyboardHeight > 0 ? keyboardHeight : 60 + insets.bottom + 3) : 0 }]}>
           <Ionicons name="lock-closed-outline" size={16} color={colors.textTertiary} />
           <Text style={[s.closedText, { color: colors.textTertiary }]}>chatroom closed</Text>
         </View>
       ) : (
-        <View style={[s.inputBar, { backgroundColor: colors.card, borderTopColor: colors.border, paddingBottom: Math.max(insets.bottom, 12) }]}>
+        <View style={[s.inputBar, { backgroundColor: colors.card, borderTopColor: colors.border, paddingBottom: Platform.OS === 'android' ? (keyboardHeight > 0 ? 13 : 0) : Math.max(insets.bottom, 12), marginBottom: Platform.OS === 'android' ? (keyboardHeight > 0 ? keyboardHeight : 60 + insets.bottom + 3) : 0 }]}>
           <TextInput
             style={[s.textInput, { backgroundColor: colors.surfaceVariant, color: colors.text }]}
             value={input}
@@ -254,3 +271,15 @@ const s = StyleSheet.create({
   sendBtnActive: { backgroundColor: '#16a34a' },
   sendBtnDisabled: { backgroundColor: '#d1d5db' },
 });
+
+
+
+
+
+
+
+
+
+
+
+

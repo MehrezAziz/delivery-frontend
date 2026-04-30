@@ -1,6 +1,7 @@
-import { View, Text, TouchableOpacity, StyleSheet, FlatList, TextInput, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, FlatList, TextInput, ActivityIndicator, KeyboardAvoidingView, Platform, Keyboard } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   supportService,
   SupportMessage,
@@ -15,10 +16,12 @@ export default function SupportChatScreen() {
   const router = useRouter();
   const { ticketId } = useLocalSearchParams<{ ticketId: string }>();
   const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
   const [ticket, setTicket] = useState<(SupportTicket & { messages: SupportMessage[] }) | null>(null);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState('');
   const [sending, setSending] = useState(false);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
   const [streamingPreview, setStreamingPreview] = useState('');
   const [feedbackGiven, setFeedbackGiven] = useState<Record<string, boolean | undefined>>({});
   const flatListRef = useRef<FlatList>(null);
@@ -47,6 +50,22 @@ export default function SupportChatScreen() {
     const interval = setInterval(loadTicket, 5000);
     return () => clearInterval(interval);
   }, [ticketId, loadTicket]);
+
+  useEffect(() => {
+    const showSub = Keyboard.addListener('keyboardDidShow', (e) => {
+      const screenH = Dimensions.get('screen').height;
+      const screenY = e.endCoordinates?.screenY ?? screenH;
+      const overlap = Math.max(0, screenH - screenY - insets.bottom);
+      setKeyboardHeight(overlap);
+    });
+    const hideSub = Keyboard.addListener('keyboardDidHide', () => {
+      setKeyboardHeight(0);
+    });
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, [insets.bottom]);
 
   const onTrackPress = useCallback(
     (orderId: string) => {
@@ -136,8 +155,8 @@ export default function SupportChatScreen() {
   return (
     <KeyboardAvoidingView
       style={[styles.container, { backgroundColor: colors.background }]}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top + 4 : 0}
     >
       <View style={[styles.ticketToolbar, { backgroundColor: colors.card, borderColor: colors.border }]}>
         <View style={{ flex: 1, minWidth: 0 }}>
@@ -155,6 +174,8 @@ export default function SupportChatScreen() {
         data={ticket.messages}
         keyExtractor={(m) => m.id}
         contentContainerStyle={styles.messagesList}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="interactive"
         onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: false })}
         ListHeaderComponent={
           <View style={styles.ticketInfo}>
@@ -186,11 +207,11 @@ export default function SupportChatScreen() {
       />
 
       {isClosed ? (
-        <View style={[styles.closedBanner, { backgroundColor: colors.surfaceVariant, borderTopColor: colors.border }]}>
+        <View style={[styles.closedBanner, { backgroundColor: colors.surfaceVariant, borderTopColor: colors.border, paddingBottom: Platform.OS === 'android' ? (keyboardHeight > 0 ? 13 : 0) : Math.max(insets.bottom, 12), marginBottom: Platform.OS === 'android' ? (keyboardHeight > 0 ? keyboardHeight : 60 + insets.bottom + 3) : 0 }]}>
           <Text style={[styles.closedText, { color: colors.textSecondary }]}>This ticket is closed</Text>
         </View>
       ) : (
-        <View style={[styles.inputBar, { backgroundColor: colors.card, borderTopColor: colors.border }]}>
+        <View style={[styles.inputBar, { backgroundColor: colors.card, borderTopColor: colors.border, paddingBottom: Platform.OS === 'android' ? (keyboardHeight > 0 ? 13 : 0) : Math.max(insets.bottom, 12), marginBottom: Platform.OS === 'android' ? (keyboardHeight > 0 ? keyboardHeight : 60 + insets.bottom + 3) : 0 }]}>
           <TextInput
             style={[styles.input, { backgroundColor: colors.inputBg, borderColor: colors.inputBorder, color: colors.text }]}
             placeholder="Type a message..."
@@ -265,3 +286,15 @@ const styles = StyleSheet.create({
   closedBanner: { padding: 16, paddingBottom: 32, alignItems: 'center', borderTopWidth: 1 },
   closedText: { fontSize: 14, fontWeight: '500' },
 });
+
+
+
+
+
+
+
+
+
+
+
+
