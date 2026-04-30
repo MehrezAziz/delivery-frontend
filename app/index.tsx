@@ -65,6 +65,18 @@ export default function RoleSelectionScreen() {
     );
   }
 
+  const goToLoginForRole = (role: 'CUSTOMER' | 'DRIVER') => {
+    router.push(role === 'CUSTOMER' ? '/(auth)/customer-login' : '/(auth)/driver-login');
+  };
+
+  const handleRoleCardPress = (role: 'CUSTOMER' | 'DRIVER') => {
+    if (selectedRole === role) {
+      goToLoginForRole(role);
+    } else {
+      setSelectedRole(role);
+    }
+  };
+
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <AppChromeHeader role="guest" title="Local Smart Delivery" hideBack showMenu={false} showThemeToggle={false} showProfile={false} />
@@ -82,13 +94,6 @@ export default function RoleSelectionScreen() {
           </Text>
         </View>
 
-        <View style={[styles.introSection, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          <Text style={[styles.introTitle, { color: colors.text }]}>Why use the app?</Text>
-          <Text style={[styles.introItem, { color: colors.textSecondary }]}>• Live order tracking and transparent pricing</Text>
-          <Text style={[styles.introItem, { color: colors.textSecondary }]}>• Secure payments and easy address management</Text>
-          <Text style={[styles.introItem, { color: colors.textSecondary }]}>• Fast onboarding for both customers and drivers</Text>
-        </View>
-
         <Text style={[styles.roleHeading, { color: colors.text }]}>Choose your role</Text>
         <View style={styles.cardsContainer}>
           <TouchableOpacity
@@ -99,7 +104,7 @@ export default function RoleSelectionScreen() {
                 ? [styles.cardActiveCustomer, { backgroundColor: isDark ? '#1e3a5f' : '#eff6ff', borderColor: isDark ? '#60a5fa' : '#2563eb' }]
                 : { backgroundColor: colors.card },
             ]}
-            onPress={() => setSelectedRole('CUSTOMER')}
+            onPress={() => handleRoleCardPress('CUSTOMER')}
             activeOpacity={0.9}
           >
             <View
@@ -117,7 +122,7 @@ export default function RoleSelectionScreen() {
               </Text>
             </View>
             <Text style={[styles.cardState, { color: colors.textTertiary }, selectedRole === 'CUSTOMER' && { color: colors.primary }]}>
-              {selectedRole === 'CUSTOMER' ? 'Selected' : 'Tap to select'}
+              {selectedRole === 'CUSTOMER' ? 'Continue' : 'Select'}
             </Text>
           </TouchableOpacity>
 
@@ -129,7 +134,7 @@ export default function RoleSelectionScreen() {
                 ? [styles.cardActiveDriver, { backgroundColor: isDark ? '#3b2758' : '#faf5ff', borderColor: isDark ? '#c084fc' : '#9333ea' }]
                 : { backgroundColor: colors.card },
             ]}
-            onPress={() => setSelectedRole('DRIVER')}
+            onPress={() => handleRoleCardPress('DRIVER')}
             activeOpacity={0.9}
           >
             <View
@@ -153,14 +158,14 @@ export default function RoleSelectionScreen() {
                 selectedRole === 'DRIVER' && { color: isDark ? '#d8b4fe' : '#9333ea' },
               ]}
             >
-              {selectedRole === 'DRIVER' ? 'Selected' : 'Tap to select'}
+              {selectedRole === 'DRIVER' ? 'Continue' : 'Select'}
             </Text>
           </TouchableOpacity>
         </View>
 
         <TouchableOpacity
           style={[styles.continueBtn, { backgroundColor: colors.primary, shadowColor: colors.primary }]}
-          onPress={() => router.push(selectedRole === 'CUSTOMER' ? '/(auth)/customer-login' : '/(auth)/driver-login')}
+          onPress={() => goToLoginForRole(selectedRole)}
           activeOpacity={0.85}
         >
           <Text style={styles.continueBtnText}>
@@ -230,20 +235,6 @@ const styles = StyleSheet.create({
   subtitle: {
     fontSize: 15,
     lineHeight: 22,
-  },
-  introSection: {
-    borderRadius: 18,
-    padding: 18,
-    borderWidth: 1,
-  },
-  introTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    marginBottom: 8,
-  },
-  introItem: {
-    fontSize: 13,
-    marginBottom: 5,
   },
   roleHeading: {
     fontSize: 17,
