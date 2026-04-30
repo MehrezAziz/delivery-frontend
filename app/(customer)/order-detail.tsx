@@ -869,29 +869,44 @@ export default function OrderDetailScreen() {
         {/* ── Actions ── */}
         <View style={{ gap: 10, marginTop: 4 }}>
           {canChangePayment && (
-            <TouchableOpacity style={[s.actionBtn, { backgroundColor: colors.card, borderColor: colors.border }]}
-              onPress={() => handleChangePayment(order.paymentType === 'COD' ? 'WALLET' : 'COD')} activeOpacity={0.8}>
-              <View style={[s.actionIconCircle, { backgroundColor: '#e0e7ff' }]}>
-                <Ionicons name="swap-horizontal" size={18} color="#4f46e5" />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={[s.actionTitle, { color: colors.text }]}>Switch to {order.paymentType === 'COD' ? 'Wallet' : 'Cash'}</Text>
-                <Text style={s.actionSub}>Change payment method</Text>
-              </View>
-              <Ionicons name="chevron-forward" size={18} color="#9ca3af" />
-            </TouchableOpacity>
+            <>
+              <TouchableOpacity style={[s.actionBtn, { backgroundColor: colors.card, borderColor: colors.border }]}
+                onPress={() => handleChangePayment(order.paymentType === 'COD' ? 'WALLET' : 'COD')} activeOpacity={0.8}>
+                <View style={[s.actionIconCircle, { backgroundColor: '#e0e7ff' }]}>
+                  <Ionicons name="swap-horizontal" size={18} color="#4f46e5" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={[s.actionTitle, { color: colors.text }]}>Switch to {order.paymentType === 'COD' ? 'Wallet' : 'Cash'}</Text>
+                  <Text style={s.actionSub}>Change payment method</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color="#9ca3af" />
+              </TouchableOpacity>
+              {canCancel && (
+                <TouchableOpacity
+                  style={[
+                    s.cancelOrderInline,
+                    { backgroundColor: isDark ? '#7f1d1d' : '#dc2626' },
+                  ]}
+                  onPress={handleCancel}
+                  activeOpacity={0.85}
+                >
+                  <Ionicons name="close-circle" size={14} color="#fff" />
+                  <Text style={s.cancelOrderText}>Cancel order</Text>
+                </TouchableOpacity>
+              )}
+            </>
           )}
-          {canCancel && (
-            <TouchableOpacity style={[s.actionBtn, { borderColor: '#fecaca' }]}
-              onPress={handleCancel} activeOpacity={0.8}>
-              <View style={[s.actionIconCircle, { backgroundColor: '#fee2e2' }]}>
-                <Ionicons name="close-circle" size={18} color="#dc2626" />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={[s.actionTitle, { color: '#dc2626' }]}>Cancel Order</Text>
-                <Text style={s.actionSub}>This action cannot be undone</Text>
-              </View>
-              <Ionicons name="chevron-forward" size={18} color="#fca5a5" />
+          {canCancel && !canChangePayment && (
+            <TouchableOpacity
+              style={[
+                s.cancelOrderInline,
+                { backgroundColor: isDark ? '#7f1d1d' : '#dc2626' },
+              ]}
+              onPress={handleCancel}
+              activeOpacity={0.85}
+            >
+              <Ionicons name="close-circle" size={14} color="#fff" />
+              <Text style={s.cancelOrderText}>Cancel order</Text>
             </TouchableOpacity>
           )}
           {canReactivate && (
@@ -1348,4 +1363,14 @@ const s = StyleSheet.create({
     flex: 1, paddingVertical: 14, borderRadius: 14, backgroundColor: '#ea580c', alignItems: 'center',
   },
   modalSubmitText: { fontSize: 15, fontWeight: '700', color: '#fff' },
+  cancelOrderInline: {
+    alignSelf: 'flex-end',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+  },
+  cancelOrderText: { color: '#fff', fontSize: 12, fontWeight: '700' },
 });

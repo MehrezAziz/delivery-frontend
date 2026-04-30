@@ -50,6 +50,19 @@ interface PricePreview {
 export default function CreateOrderScreen() {
   const router = useRouter();
   const { colors, isDark } = useTheme();
+  const surfaceSoft = isDark ? '#1f2937' : '#f9fafb';
+  const surfaceMuted = isDark ? '#111827' : '#f3f4f6';
+  const borderSoft = isDark ? '#374151' : '#e5e7eb';
+  const successBg = isDark ? 'rgba(34,197,94,0.16)' : '#dcfce7';
+  const successText = isDark ? '#86efac' : '#166534';
+  const infoBg = isDark ? 'rgba(59,130,246,0.18)' : '#dbeafe';
+  const infoText = isDark ? '#93c5fd' : '#1e40af';
+  /** Selected pickup — dim green tint */
+  const pickupSelectedBg = isDark ? 'rgba(34,197,94,0.14)' : '#f0fdf4';
+  const pickupSelectedBorder = isDark ? 'rgba(74,222,128,0.45)' : '#86efac';
+  /** Selected delivery (destination) — dim green, harmonious with dark bg */
+  const dropoffSelectedBg = isDark ? 'rgba(16,185,129,0.16)' : '#ecfdf5';
+  const dropoffSelectedBorder = isDark ? 'rgba(52,211,153,0.42)' : '#6ee7b7';
 
   const [step, setStep] = useState<'form' | 'preview'>('form');
   const [pickupAddress, setPickupAddress] = useState<SavedAddress | null>(null);
@@ -588,19 +601,19 @@ export default function CreateOrderScreen() {
             <View style={s.routeRow}>
               <View style={s.routeIconCol}>
                 <View style={[s.routeDot, { backgroundColor: '#22c55e' }]} />
-                <View style={s.routeLine} />
+                <View style={[s.routeLine, { backgroundColor: colors.border }]} />
                 <View style={[s.routeDot, { backgroundColor: '#ef4444' }]} />
               </View>
               <View style={{ flex: 1 }}>
                 <View style={{ marginBottom: 20 }}>
-                  <Text style={s.routeLabel}>PICKUP</Text>
-                  <Text style={s.routeAddress}>{pickupAddress?.label}</Text>
-                  <Text style={s.routeSub}>{pickupAddress?.sublabel}</Text>
+                  <Text style={[s.routeLabel, { color: colors.textTertiary }]}>PICKUP</Text>
+                  <Text style={[s.routeAddress, { color: colors.text }]}>{pickupAddress?.label}</Text>
+                  <Text style={[s.routeSub, { color: colors.textSecondary }]}>{pickupAddress?.sublabel}</Text>
                 </View>
                 <View>
-                  <Text style={s.routeLabel}>DELIVERY</Text>
-                  <Text style={s.routeAddress}>{dropoffAddress?.label}</Text>
-                  <Text style={s.routeSub}>{dropoffAddress?.sublabel}</Text>
+                  <Text style={[s.routeLabel, { color: colors.textTertiary }]}>DELIVERY</Text>
+                  <Text style={[s.routeAddress, { color: colors.text }]}>{dropoffAddress?.label}</Text>
+                  <Text style={[s.routeSub, { color: colors.textSecondary }]}>{dropoffAddress?.sublabel}</Text>
                 </View>
               </View>
             </View>
@@ -608,24 +621,24 @@ export default function CreateOrderScreen() {
 
           {/* Info chips */}
           <View style={s.chipsRow}>
-            <View style={[s.chip, { backgroundColor: isCash ? '#dcfce7' : '#dbeafe' }]}>
+            <View style={[s.chip, { backgroundColor: isCash ? successBg : infoBg }]}>
               <Text style={{ fontSize: 14 }}>{isCash ? '💵' : '💰'}</Text>
-              <Text style={[s.chipText, { color: isCash ? '#166534' : '#1e40af' }]}>
+              <Text style={[s.chipText, { color: isCash ? successText : infoText }]}>
                 {isCash ? 'Cash' : 'Wallet'}
               </Text>
             </View>
-            <View style={[s.chip, { backgroundColor: '#f3f4f6' }]}>
+            <View style={[s.chip, { backgroundColor: surfaceMuted }]}>
               <Text style={{ fontSize: 14 }}>📦</Text>
-              <Text style={[s.chipText, { color: '#374151' }]}>{weight} kg</Text>
+              <Text style={[s.chipText, { color: colors.text }]}>{weight} kg</Text>
             </View>
-            <View style={[s.chip, { backgroundColor: '#f3f4f6' }]}>
+            <View style={[s.chip, { backgroundColor: surfaceMuted }]}>
               <Text style={{ fontSize: 14 }}>📏</Text>
-              <Text style={[s.chipText, { color: '#374151' }]}>{preview.distanceKm.toFixed(1)} km</Text>
+              <Text style={[s.chipText, { color: colors.text }]}>{preview.distanceKm.toFixed(1)} km</Text>
             </View>
             {preview.isNightDelivery && (
-              <View style={[s.chip, { backgroundColor: '#e0e7ff' }]}>
+              <View style={[s.chip, { backgroundColor: isDark ? 'rgba(129,140,248,0.22)' : '#e0e7ff' }]}>
                 <Text style={{ fontSize: 14 }}>🌙</Text>
-                <Text style={[s.chipText, { color: '#3730a3' }]}>Night</Text>
+                <Text style={[s.chipText, { color: isDark ? '#c4b5fd' : '#3730a3' }]}>Night</Text>
               </View>
             )}
             {scheduleLater && (
@@ -655,7 +668,7 @@ export default function CreateOrderScreen() {
                 disabled={loading || parseFloat((customerExtraAmount || '0').replace(',', '.')) <= 0}
                 activeOpacity={0.7}
               >
-                <Text style={s.extraStepperBtnText}>-</Text>
+                <Text style={[s.extraStepperBtnText, { color: colors.text }]}>-</Text>
               </TouchableOpacity>
               <View style={[s.extraStepperValueBox, { backgroundColor: colors.inputBg, borderColor: colors.border }]}>
                 <Text style={[s.extraStepperValueText, { color: colors.text }]}>
@@ -668,7 +681,7 @@ export default function CreateOrderScreen() {
                 disabled={loading}
                 activeOpacity={0.7}
               >
-                <Text style={s.extraStepperBtnText}>+</Text>
+                <Text style={[s.extraStepperBtnText, { color: colors.text }]}>+</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -676,14 +689,30 @@ export default function CreateOrderScreen() {
           {/* Price breakdown */}
           <View style={[s.card, { backgroundColor: colors.card }]}>
             <Text style={[s.cardTitle, { color: colors.text }]}>Price Breakdown</Text>
-            <PriceRow label="Base Fee" value={preview.baseFee} unit={unit} />
-            <PriceRow label="Distance Fee" value={preview.distanceFee} unit={unit} />
-            {preview.extraWeightFee > 0 && <PriceRow label="Extra Weight" value={preview.extraWeightFee} unit={unit} />}
-            {preview.nightFee > 0 && <PriceRow label="Night Fee 🌙" value={preview.nightFee} unit={unit} />}
+            <PriceRow label="Base Fee" value={preview.baseFee} unit={unit} labelColor={colors.textSecondary} valueColor={colors.text} />
+            <PriceRow label="Distance Fee" value={preview.distanceFee} unit={unit} labelColor={colors.textSecondary} valueColor={colors.text} />
+            {preview.extraWeightFee > 0 && (
+              <PriceRow label="Extra Weight" value={preview.extraWeightFee} unit={unit} labelColor={colors.textSecondary} valueColor={colors.text} />
+            )}
+            {preview.nightFee > 0 && (
+              <PriceRow label="Night Fee 🌙" value={preview.nightFee} unit={unit} labelColor={colors.textSecondary} valueColor={colors.text} />
+            )}
             <View style={[s.divider, { backgroundColor: colors.border }]} />
-            <PriceRow label="Delivery (calculated)" value={preview.calculatedPrice} unit={unit} />
+            <PriceRow
+              label="Delivery (calculated)"
+              value={preview.calculatedPrice}
+              unit={unit}
+              labelColor={colors.textSecondary}
+              valueColor={colors.text}
+            />
             {preview.customerExtraAmount > 0 && (
-              <PriceRow label="Your extra (driver time / errand)" value={preview.customerExtraAmount} unit={unit} />
+              <PriceRow
+                label="Your extra (driver time / errand)"
+                value={preview.customerExtraAmount}
+                unit={unit}
+                labelColor={colors.textSecondary}
+                valueColor={colors.text}
+              />
             )}
             <View style={[s.divider, { backgroundColor: colors.border }]} />
             <View style={s.priceRow}>
@@ -694,9 +723,9 @@ export default function CreateOrderScreen() {
 
           {/* Wallet balance warning / Insufficient balance prompt */}
           {!isCash && preview.walletBalance !== null && (
-            <View style={[s.walletBanner, insufficientWallet ? s.walletBannerDanger : s.walletBannerOk]}>
-              <Ionicons name="wallet-outline" size={18} color={insufficientWallet ? '#dc2626' : '#16a34a'} />
-              <Text style={[s.walletText, { color: insufficientWallet ? '#dc2626' : '#16a34a' }]}>
+            <View style={[s.walletBanner, { backgroundColor: insufficientWallet ? (isDark ? 'rgba(239,68,68,0.16)' : '#fef2f2') : (isDark ? 'rgba(34,197,94,0.16)' : '#f0fdf4') }]}>
+              <Ionicons name="wallet-outline" size={18} color={insufficientWallet ? colors.danger : colors.success} />
+              <Text style={[s.walletText, { color: insufficientWallet ? colors.danger : colors.success }]}>
                 Balance: {preview.walletBalance.toFixed(2)} coins
                 {insufficientWallet ? ' — Insufficient funds' : ''}
               </Text>
@@ -707,20 +736,20 @@ export default function CreateOrderScreen() {
           {insufficientWallet && (
             <View style={s.insufficientActions}>
               <TouchableOpacity
-                style={[s.insufficientBtn, { backgroundColor: '#dbeafe' }]}
+                style={[s.insufficientBtn, { backgroundColor: isDark ? 'rgba(59,130,246,0.2)' : '#dbeafe' }]}
                 onPress={() => appAlert('Coming Soon', 'The Add Coins feature will be available soon.')}
                 activeOpacity={0.7}
               >
-                <Ionicons name="add-circle-outline" size={18} color="#1e40af" />
-                <Text style={[s.insufficientBtnText, { color: '#1e40af' }]}>Add Coins</Text>
+                <Ionicons name="add-circle-outline" size={18} color={isDark ? '#93c5fd' : '#1e40af'} />
+                <Text style={[s.insufficientBtnText, { color: isDark ? '#93c5fd' : '#1e40af' }]}>Add Coins</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[s.insufficientBtn, { backgroundColor: '#dcfce7' }]}
+                style={[s.insufficientBtn, { backgroundColor: isDark ? 'rgba(34,197,94,0.2)' : '#dcfce7' }]}
                 onPress={handleSwitchToCash}
                 activeOpacity={0.7}
               >
-                <Ionicons name="cash-outline" size={18} color="#166534" />
-                <Text style={[s.insufficientBtnText, { color: '#166534' }]}>Switch to Cash</Text>
+                <Ionicons name="cash-outline" size={18} color={isDark ? '#86efac' : '#166534'} />
+                <Text style={[s.insufficientBtnText, { color: isDark ? '#86efac' : '#166534' }]}>Switch to Cash</Text>
               </TouchableOpacity>
             </View>
           )}
@@ -774,8 +803,8 @@ export default function CreateOrderScreen() {
 
           {/* ── Active Orders ── */}
           {activeOrders.length > 0 && (
-            <View style={s.activeOrdersCard}>
-              <Text style={s.activeOrdersTitle}>📦 Active Orders ({activeOrders.length})</Text>
+            <View style={[s.activeOrdersCard, { backgroundColor: isDark ? 'rgba(180,83,9,0.18)' : '#fffbeb', borderColor: isDark ? '#92400e' : '#fde68a' }]}>
+              <Text style={[s.activeOrdersTitle, { color: isDark ? '#fcd34d' : '#92400e' }]}>📦 Active Orders ({activeOrders.length})</Text>
               {activeOrders.map(o => (
                 <TouchableOpacity
                   key={o.id}
@@ -788,10 +817,10 @@ export default function CreateOrderScreen() {
                       o.status === 'DELIVERING' ? '#6366f1' : '#3b82f6'
                   }]} />
                   <View style={{ flex: 1 }}>
-                    <Text style={s.activeOrderText}>#{o.id.slice(0, 8)} — {o.status.replace(/_/g, ' ')}</Text>
+                    <Text style={[s.activeOrderText, { color: isDark ? '#fde68a' : '#78350f' }]}>#{o.id.slice(0, 8)} — {o.status.replace(/_/g, ' ')}</Text>
                   </View>
-                  <Text style={s.activeOrderPrice}>{o.price.toFixed(2)}</Text>
-                  <Ionicons name="chevron-forward" size={14} color="#9ca3af" />
+                  <Text style={[s.activeOrderPrice, { color: isDark ? '#f59e0b' : '#92400e' }]}>{o.price.toFixed(2)}</Text>
+                  <Ionicons name="chevron-forward" size={14} color={isDark ? '#d1d5db' : '#9ca3af'} />
                 </TouchableOpacity>
               ))}
             </View>
@@ -802,69 +831,89 @@ export default function CreateOrderScreen() {
             <Text style={[s.cardTitle, { color: colors.text }]}>Route</Text>
 
             {/* Pickup */}
-            <View style={[s.addressBtn, pickupAddress && s.addressBtnActive]}>
-              <View style={[s.addressDot, { backgroundColor: pickupAddress ? '#22c55e' : '#d1d5db' }]} />
+            <View
+              style={[
+                s.addressBtn,
+                { backgroundColor: surfaceSoft, borderColor: borderSoft },
+                pickupAddress && {
+                  borderColor: pickupSelectedBorder,
+                  borderStyle: 'solid',
+                  backgroundColor: pickupSelectedBg,
+                },
+              ]}
+            >
+              <View style={[s.addressDot, { backgroundColor: pickupAddress ? '#22c55e' : colors.border }]} />
               <View style={{ flex: 1 }}>
                 {resolvingPickup ? (
-                  <Text style={s.addressFetching}>Fetching your current position...</Text>
+                  <Text style={[s.addressFetching, { color: colors.primary }]}>Fetching your current position...</Text>
                 ) : pickupAddress ? (
                   <>
-                    <Text style={s.addressMainText}>{pickupAddress.label}</Text>
-                    <Text style={s.addressSubText}>{pickupAddress.sublabel}</Text>
+                    <Text style={[s.addressMainText, { color: colors.text }]}>{pickupAddress.label}</Text>
+                    <Text style={[s.addressSubText, { color: colors.textSecondary }]}>{pickupAddress.sublabel}</Text>
                   </>
                 ) : (
-                  <Text style={s.addressPlaceholder}>Tap to select pickup location</Text>
+                  <Text style={[s.addressPlaceholder, { color: colors.textTertiary }]}>Tap to select pickup location</Text>
                 )}
                 <View style={{ flexDirection: 'row', gap: 8, marginTop: 10 }}>
-                  <TouchableOpacity style={s.inlineActionBtn} onPress={() => openMapPicker('pickup')} activeOpacity={0.7}>
+                  <TouchableOpacity style={[s.inlineActionBtn, { backgroundColor: surfaceMuted }]} onPress={() => openMapPicker('pickup')} activeOpacity={0.7}>
                     <Ionicons name="map-outline" size={16} color="#16a34a" />
-                    <Text style={s.inlineActionTxt}>Map</Text>
+                    <Text style={[s.inlineActionTxt, { color: colors.text }]}>Map</Text>
                   </TouchableOpacity>
                   {savedAddresses.length > 0 && (
-                    <TouchableOpacity style={s.inlineActionBtn} onPress={() => openSavedPicker('pickup')} activeOpacity={0.7}>
+                    <TouchableOpacity style={[s.inlineActionBtn, { backgroundColor: surfaceMuted }]} onPress={() => openSavedPicker('pickup')} activeOpacity={0.7}>
                       <Ionicons name="list-outline" size={16} color="#166534" />
-                      <Text style={s.inlineActionTxt}>List</Text>
+                      <Text style={[s.inlineActionTxt, { color: colors.text }]}>List</Text>
                     </TouchableOpacity>
                   )}
-                  <TouchableOpacity style={s.inlineActionBtn} onPress={() => useMyLocation('pickup')} disabled={resolvingPickup} activeOpacity={0.7}>
+                  <TouchableOpacity style={[s.inlineActionBtn, { backgroundColor: surfaceMuted }]} onPress={() => useMyLocation('pickup')} disabled={resolvingPickup} activeOpacity={0.7}>
                     <Ionicons name="locate" size={16} color="#2563eb" />
-                    <Text style={s.inlineActionTxt}>My Position</Text>
+                    <Text style={[s.inlineActionTxt, { color: colors.text }]}>My Position</Text>
                   </TouchableOpacity>
                 </View>
               </View>
             </View>
 
             {/* Connector line */}
-            <View style={s.connectorLine} />
+            <View style={[s.connectorLine, { backgroundColor: colors.border }]} />
 
             {/* Dropoff */}
-            <View style={[s.addressBtn, dropoffAddress && { borderColor: '#fecaca', backgroundColor: '#fff7f7' }]}>
-              <View style={[s.addressDot, { backgroundColor: dropoffAddress ? '#ef4444' : '#d1d5db' }]} />
+            <View
+              style={[
+                s.addressBtn,
+                { backgroundColor: surfaceSoft, borderColor: borderSoft },
+                dropoffAddress && {
+                  borderColor: dropoffSelectedBorder,
+                  borderStyle: 'solid',
+                  backgroundColor: dropoffSelectedBg,
+                },
+              ]}
+            >
+              <View style={[s.addressDot, { backgroundColor: dropoffAddress ? '#ef4444' : colors.border }]} />
               <View style={{ flex: 1 }}>
                 {resolvingDropoff ? (
-                  <Text style={s.addressFetching}>Fetching your current position...</Text>
+                  <Text style={[s.addressFetching, { color: colors.primary }]}>Fetching your current position...</Text>
                 ) : dropoffAddress ? (
                   <>
-                    <Text style={s.addressMainText}>{dropoffAddress.label}</Text>
-                    <Text style={s.addressSubText}>{dropoffAddress.sublabel}</Text>
+                    <Text style={[s.addressMainText, { color: colors.text }]}>{dropoffAddress.label}</Text>
+                    <Text style={[s.addressSubText, { color: colors.textSecondary }]}>{dropoffAddress.sublabel}</Text>
                   </>
                 ) : (
-                  <Text style={s.addressPlaceholder}>Tap to select delivery location</Text>
+                  <Text style={[s.addressPlaceholder, { color: colors.textTertiary }]}>Tap to select delivery location</Text>
                 )}
                 <View style={{ flexDirection: 'row', gap: 8, marginTop: 10 }}>
-                  <TouchableOpacity style={s.inlineActionBtn} onPress={() => openMapPicker('dropoff')} activeOpacity={0.7}>
+                  <TouchableOpacity style={[s.inlineActionBtn, { backgroundColor: surfaceMuted }]} onPress={() => openMapPicker('dropoff')} activeOpacity={0.7}>
                     <Ionicons name="map-outline" size={16} color="#ef4444" />
-                    <Text style={s.inlineActionTxt}>Map</Text>
+                    <Text style={[s.inlineActionTxt, { color: colors.text }]}>Map</Text>
                   </TouchableOpacity>
                   {savedAddresses.length > 0 && (
-                    <TouchableOpacity style={s.inlineActionBtn} onPress={() => openSavedPicker('dropoff')} activeOpacity={0.7}>
+                    <TouchableOpacity style={[s.inlineActionBtn, { backgroundColor: surfaceMuted }]} onPress={() => openSavedPicker('dropoff')} activeOpacity={0.7}>
                       <Ionicons name="list-outline" size={16} color="#b91c1c" />
-                      <Text style={s.inlineActionTxt}>List</Text>
+                      <Text style={[s.inlineActionTxt, { color: colors.text }]}>List</Text>
                     </TouchableOpacity>
                   )}
-                  <TouchableOpacity style={s.inlineActionBtn} onPress={() => useMyLocation('dropoff')} disabled={resolvingDropoff} activeOpacity={0.7}>
+                  <TouchableOpacity style={[s.inlineActionBtn, { backgroundColor: surfaceMuted }]} onPress={() => useMyLocation('dropoff')} disabled={resolvingDropoff} activeOpacity={0.7}>
                     <Ionicons name="locate" size={16} color="#2563eb" />
-                    <Text style={s.inlineActionTxt}>My Position</Text>
+                    <Text style={[s.inlineActionTxt, { color: colors.text }]}>My Position</Text>
                   </TouchableOpacity>
                 </View>
               </View>
@@ -884,7 +933,7 @@ export default function CreateOrderScreen() {
                 <View style={{ marginBottom: 12 }}>
                   <Text style={[s.inputLabel, { color: colors.text }]}>Pickup (new)</Text>
                   <TextInput
-                    style={[s.descInput, { color: colors.text, borderColor: colors.inputBorder }]}
+                    style={[s.descInput, { color: colors.text, borderColor: colors.inputBorder, backgroundColor: colors.inputBg }]}
                     placeholder="e.g. Home, Office…"
                     placeholderTextColor={colors.textTertiary}
                     value={pickupNickSave}
@@ -896,7 +945,7 @@ export default function CreateOrderScreen() {
                 <View>
                   <Text style={[s.inputLabel, { color: colors.text }]}>Delivery (new)</Text>
                   <TextInput
-                    style={[s.descInput, { color: colors.text, borderColor: colors.inputBorder }]}
+                    style={[s.descInput, { color: colors.text, borderColor: colors.inputBorder, backgroundColor: colors.inputBg }]}
                     placeholder="e.g. Father's house…"
                     placeholderTextColor={colors.textTertiary}
                     value={dropoffNickSave}
@@ -912,23 +961,31 @@ export default function CreateOrderScreen() {
             <Text style={[s.cardTitle, { color: colors.text }]}>Payment</Text>
             <View style={s.paymentRow}>
               <TouchableOpacity
-                style={[s.paymentOption, paymentType === 'COD' && s.paymentOptionActiveCash]}
+                style={[
+                  s.paymentOption,
+                  { backgroundColor: surfaceSoft, borderColor: borderSoft },
+                  paymentType === 'COD' && s.paymentOptionActiveCash,
+                ]}
                 onPress={() => setPaymentType('COD')}
                 activeOpacity={0.7}
               >
                 <Text style={s.paymentEmoji}>💵</Text>
-                <Text style={[s.paymentLabel, paymentType === 'COD' && { color: '#fff' }]}>Cash</Text>
-                <Text style={[s.paymentSub, paymentType === 'COD' && { color: 'rgba(255,255,255,0.8)' }]}>Pay on delivery</Text>
+                <Text style={[s.paymentLabel, { color: colors.text }, paymentType === 'COD' && { color: '#fff' }]}>Cash</Text>
+                <Text style={[s.paymentSub, { color: colors.textSecondary }, paymentType === 'COD' && { color: 'rgba(255,255,255,0.8)' }]}>Pay on delivery</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[s.paymentOption, paymentType === 'WALLET' && s.paymentOptionActiveWallet]}
+                style={[
+                  s.paymentOption,
+                  { backgroundColor: surfaceSoft, borderColor: borderSoft },
+                  paymentType === 'WALLET' && s.paymentOptionActiveWallet,
+                ]}
                 onPress={() => setPaymentType('WALLET')}
                 activeOpacity={0.7}
               >
                 <Text style={s.paymentEmoji}>💰</Text>
-                <Text style={[s.paymentLabel, paymentType === 'WALLET' && { color: '#fff' }]}>Wallet</Text>
-                <Text style={[s.paymentSub, paymentType === 'WALLET' && { color: 'rgba(255,255,255,0.8)' }]}>Use coins</Text>
-                <Text style={[s.paymentSub, paymentType === 'WALLET' && { color: 'rgba(255,255,255,0.8)' }]}>{walletBalance} coins</Text>
+                <Text style={[s.paymentLabel, { color: colors.text }, paymentType === 'WALLET' && { color: '#fff' }]}>Wallet</Text>
+                <Text style={[s.paymentSub, { color: colors.textSecondary }, paymentType === 'WALLET' && { color: 'rgba(255,255,255,0.8)' }]}>Use coins</Text>
+                <Text style={[s.paymentSub, { color: colors.textSecondary }, paymentType === 'WALLET' && { color: 'rgba(255,255,255,0.8)' }]}>{walletBalance} coins</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -937,32 +994,32 @@ export default function CreateOrderScreen() {
           <View style={[s.card, { backgroundColor: colors.card }]}>
             <Text style={[s.cardTitle, { color: colors.text }]}>Package Details</Text>
 
-            <Text style={s.inputLabel}>Weight (kg)</Text>
+            <Text style={[s.inputLabel, { color: colors.textSecondary }]}>Weight (kg)</Text>
             <View style={s.weightRow}>
-              <TouchableOpacity style={s.weightBtn} onPress={() => {
+              <TouchableOpacity style={[s.weightBtn, { backgroundColor: surfaceMuted }]} onPress={() => {
                 const w = Math.max(0.5, parseFloat(weight || '1') - 0.5);
                 setWeight(String(w));
               }}>
-                <Ionicons name="remove" size={20} color="#374151" />
+                <Ionicons name="remove" size={20} color={colors.text} />
               </TouchableOpacity>
               <TextInput
-                style={s.weightInput}
+                style={[s.weightInput, { backgroundColor: surfaceSoft, borderColor: borderSoft, color: colors.text }]}
                 value={weight}
                 onChangeText={setWeight}
                 keyboardType="numeric"
                 textAlign="center"
               />
-              <TouchableOpacity style={s.weightBtn} onPress={() => {
+              <TouchableOpacity style={[s.weightBtn, { backgroundColor: surfaceMuted }]} onPress={() => {
                 const w = parseFloat(weight || '1') + 0.5;
                 setWeight(String(w));
               }}>
-                <Ionicons name="add" size={20} color="#374151" />
+                <Ionicons name="add" size={20} color={colors.text} />
               </TouchableOpacity>
             </View>
 
             <Text style={[s.inputLabel, { marginTop: 16 }]}>Description (optional)</Text>
             <TextInput
-              style={s.descInput}
+              style={[s.descInput, { backgroundColor: surfaceSoft, borderColor: borderSoft, color: colors.text }]}
               value={description}
               onChangeText={setDescription}
               placeholder="What are you sending?"
@@ -976,15 +1033,15 @@ export default function CreateOrderScreen() {
           {/* ── Auto-Cancel Timer ── */}
           <View style={[s.card, { backgroundColor: colors.card }]}>
             <Text style={[s.cardTitle, { color: colors.text }]}>Auto-Cancel Timer</Text>
-            <Text style={s.inputLabel}>Cancel if no driver responds (minutes)</Text>
+            <Text style={[s.inputLabel, { color: colors.textSecondary }]}>Cancel if no driver responds (minutes)</Text>
             <View style={s.weightRow}>
-              <TouchableOpacity style={s.weightBtn} onPress={() => {
+              <TouchableOpacity style={[s.weightBtn, { backgroundColor: surfaceMuted }]} onPress={() => {
                 setCancelAfterMinutes(prev => Math.max(15, prev - 1));
               }}>
-                <Ionicons name="remove" size={20} color="#374151" />
+                <Ionicons name="remove" size={20} color={colors.text} />
               </TouchableOpacity>
               <TextInput
-                style={s.weightInput}
+                style={[s.weightInput, { backgroundColor: surfaceSoft, borderColor: borderSoft, color: colors.text }]}
                 value={String(cancelAfterMinutes)}
                 onChangeText={(text) => {
                   const num = parseInt(text, 10);
@@ -993,14 +1050,14 @@ export default function CreateOrderScreen() {
                 keyboardType="numeric"
                 textAlign="center"
               />
-              <TouchableOpacity style={s.weightBtn} onPress={() => {
+              <TouchableOpacity style={[s.weightBtn, { backgroundColor: surfaceMuted }]} onPress={() => {
                 setCancelAfterMinutes(prev => Math.min(1440, prev + 1));
               }}>
-                <Ionicons name="add" size={20} color="#374151" />
+                <Ionicons name="add" size={20} color={colors.text} />
               </TouchableOpacity>
             </View>
             {cancelAfterMinutes > 1440 && (
-              <Text style={s.validationError}>Must be 1440 minutes (24h) or less</Text>
+              <Text style={[s.validationError, { color: colors.danger }]}>Must be 1440 minutes (24h) or less</Text>
             )}
           </View>
 
@@ -1175,11 +1232,23 @@ export default function CreateOrderScreen() {
 }
 
 // ── Helper component ──
-function PriceRow({ label, value, unit }: { label: string; value: number; unit: string }) {
+function PriceRow({
+  label,
+  value,
+  unit,
+  labelColor,
+  valueColor,
+}: {
+  label: string;
+  value: number;
+  unit: string;
+  labelColor?: string;
+  valueColor?: string;
+}) {
   return (
     <View style={s.priceRow}>
-      <Text style={s.priceLabel}>{label}</Text>
-      <Text style={s.priceValue}>{value.toFixed(2)} {unit}</Text>
+      <Text style={[s.priceLabel, labelColor ? { color: labelColor } : undefined]}>{label}</Text>
+      <Text style={[s.priceValue, valueColor ? { color: valueColor } : undefined]}>{value.toFixed(2)} {unit}</Text>
     </View>
   );
 }

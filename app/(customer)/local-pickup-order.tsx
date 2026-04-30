@@ -8,7 +8,7 @@ import {
   TextInput, KeyboardAvoidingView, Platform, StyleSheet, Modal, FlatList, Switch,
 } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -34,11 +34,13 @@ const LOCAL_PICKUP_MAX_CANCEL_MINUTES = 240;
 
 export default function LocalPickupOrderScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ returnTo?: string }>();
-  const returnTo = params.returnTo
-    ? decodeURIComponent(params.returnTo)
-    : '/(customer)/create-order';
   const { colors, isDark } = useTheme();
+  const backToNewOrder = '/(customer)/create-order';
+  const surfaceSoft = isDark ? '#1f2937' : '#f9fafb';
+  const surfaceMuted = isDark ? '#111827' : '#f3f4f6';
+  const borderSoft = isDark ? '#374151' : '#e5e7eb';
+  const selectedBg = isDark ? 'rgba(16,185,129,0.16)' : '#ecfdf5';
+  const selectedText = isDark ? '#a7f3d0' : '#166534';
   const [source, setSource] = useState<SavedAddress | null>(null);
   const [paymentType, setPaymentType] = useState<'COD' | 'WALLET'>('COD');
   const [weight, setWeight] = useState('1');
@@ -275,43 +277,45 @@ export default function LocalPickupOrderScreen() {
   return (
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <View style={[s.container, { backgroundColor: colors.background }]}>
-        <View style={[s.header, { backgroundColor: colors.headerBg }]}>
-          <TouchableOpacity onPress={() => router.replace(returnTo as any)} style={s.back}>
-            <Ionicons name="chevron-back" size={22} color="#fff" />
-          </TouchableOpacity>
-          <Text style={s.title}>Local pickup</Text>
-          <View style={{ width: 36 }} />
-        </View>
         <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 40 }}>
+          <TouchableOpacity
+            style={[s.backInline, { backgroundColor: colors.card, borderColor: colors.border }]}
+            onPress={() => router.replace(backToNewOrder as any)}
+            activeOpacity={0.75}
+          >
+            <Ionicons name="chevron-back" size={18} color={colors.primary} />
+            <Text style={[s.backInlineText, { color: colors.primary }]}>Go back to New Order</Text>
+          </TouchableOpacity>
+
           <Text style={[s.hint, { color: colors.textSecondary }]}>
             Driver brings items to you (within your delegation). No separate delivery address.
           </Text>
 
           <View style={[s.card, { backgroundColor: colors.card }]}>
             <Text style={[s.cardTitle, { color: colors.text }]}>Your location</Text>
-            <TouchableOpacity style={s.row} onPress={useCurrent} disabled={resolving}>
+            <TouchableOpacity style={[s.row, { borderBottomColor: colors.border }]} onPress={useCurrent} disabled={resolving}>
               <Ionicons name="navigate" size={20} color="#2563eb" />
               <Text style={{ color: colors.text, marginLeft: 8, flex: 1 }}>Use my current position</Text>
               {resolving ? <ActivityIndicator /> : null}
             </TouchableOpacity>
-            <TouchableOpacity style={s.row} onPress={() => router.push(`/(customer)/pick-location?type=pickup&returnTo=${encodeURIComponent('/(customer)/local-pickup-order')}`)}>
+            <TouchableOpacity style={[s.row, { borderBottomColor: colors.border }]} onPress={() => router.push(`/(customer)/pick-location?type=pickup&returnTo=${encodeURIComponent('/(customer)/local-pickup-order')}`)}>
               <Ionicons name="map" size={20} color="#16a34a" />
               <Text style={{ color: colors.text, marginLeft: 8 }}>Choose on map</Text>
             </TouchableOpacity>
             {savedList.length > 0 && (
               <>
                 <Text style={[s.sub, { color: colors.textSecondary, marginTop: 12 }]}>Saved addresses</Text>
-                <TouchableOpacity style={s.savedPickerBtn} onPress={() => { setSavedSearch(''); setSavedPickerVisible(true); }}>
+                <TouchableOpacity style={[s.savedPickerBtn, { backgroundColor: isDark ? 'rgba(34,197,94,0.18)' : '#dcfce7' }]} onPress={() => { setSavedSearch(''); setSavedPickerVisible(true); }}>
                   <Ionicons name="search-outline" size={16} color="#166534" />
-                  <Text style={s.savedPickerBtnText}>Search in saved addresses</Text>
+                  <Text style={[s.savedPickerBtnText, { color: isDark ? '#86efac' : '#166534' }]}>Search in saved addresses</Text>
                 </TouchableOpacity>
               </>
             )}
             {source && (
-              <View style={{ marginTop: 12, padding: 12, backgroundColor: '#ecfdf5', borderRadius: 8 }}>
-                <Text style={{ color: '#166534', fontWeight: '700' }}>Selected</Text>
-                <Text style={{ color: '#166534' }}>{source.label}</Text>
-                <Text style={{ color: '#15803d', fontSize: 12 }}>{source.sublabel}</Text>
+              <View style={{ marginTop: 12, padding: 12, backgroundColor: selectedBg, borderRadius: 8 }}>
+                <Text style={{ color: selectedText, fontWeight: '700' }}>Selected</Text>
+                <Text style={{ color: selectedText }}>{source.label}</Text>
+                <Text style={{ color: selectedText, fontSize: 12, opacity: 0.9 }}>{source.sublabel}</Text>
               </View>
             )}
           </View>
@@ -320,13 +324,13 @@ export default function LocalPickupOrderScreen() {
             <Text style={[s.cardTitle, { color: colors.text }]}>Payment</Text>
             <View style={{ flexDirection: 'row', gap: 12 }}>
               <TouchableOpacity
-                style={[s.pay, paymentType === 'COD' && s.payOn]}
+                style={[s.pay, { backgroundColor: surfaceSoft, borderColor: borderSoft }, paymentType === 'COD' && s.payOn]}
                 onPress={() => setPaymentType('COD')}
               >
                 <Text style={{ color: paymentType === 'COD' ? '#fff' : colors.text }}>Cash</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[s.pay, paymentType === 'WALLET' && s.payOn]}
+                style={[s.pay, { backgroundColor: surfaceSoft, borderColor: borderSoft }, paymentType === 'WALLET' && s.payOn]}
                 onPress={() => setPaymentType('WALLET')}
               >
                 <Text style={{ color: paymentType === 'WALLET' ? '#fff' : colors.text }}>Wallet ({walletBalance})</Text>
@@ -336,20 +340,20 @@ export default function LocalPickupOrderScreen() {
 
           <View style={[s.card, { backgroundColor: colors.card }]}>
             <Text style={[s.cardTitle, { color: colors.text }]}>Details</Text>
-            <Text style={s.lab}>Weight (kg)</Text>
-            <TextInput style={[s.inp, { color: colors.text }]} value={weight} onChangeText={setWeight} keyboardType="numeric" />
-            <Text style={[s.lab, { marginTop: 12 }]}>What you need *</Text>
+            <Text style={[s.lab, { color: colors.textSecondary }]}>Weight (kg)</Text>
+            <TextInput style={[s.inp, { color: colors.text, borderColor: borderSoft, backgroundColor: surfaceSoft }]} value={weight} onChangeText={setWeight} keyboardType="numeric" />
+            <Text style={[s.lab, { marginTop: 12, color: colors.textSecondary }]}>What you need *</Text>
             <TextInput
-              style={[s.inp, { minHeight: 72, textAlignVertical: 'top' }]}
+              style={[s.inp, { minHeight: 72, textAlignVertical: 'top', color: colors.text, borderColor: borderSoft, backgroundColor: surfaceSoft }]}
               value={description}
               onChangeText={setDescription}
               multiline
               placeholder="e.g. fever medicine from pharmacy"
               placeholderTextColor={colors.textTertiary}
             />
-            <Text style={[s.lab, { marginTop: 12 }]}>Optional extra for driver time / errand ({MAX_CUSTOMER_EXTRA} max)</Text>
+            <Text style={[s.lab, { marginTop: 12, color: colors.textSecondary }]}>Optional extra for driver time / errand ({MAX_CUSTOMER_EXTRA} max)</Text>
             <TextInput
-              style={[s.inp, { color: colors.text }]}
+              style={[s.inp, { color: colors.text, borderColor: borderSoft, backgroundColor: surfaceSoft }]}
               value={customerExtraAmount}
               onChangeText={setCustomerExtraAmount}
               keyboardType="decimal-pad"
@@ -437,13 +441,13 @@ export default function LocalPickupOrderScreen() {
 
           <View style={[s.card, { backgroundColor: colors.card }]}>
             <Text style={[s.cardTitle, { color: colors.text }]}>Auto-Cancel Timer</Text>
-            <Text style={s.lab}>Cancel if no driver responds (minutes)</Text>
+            <Text style={[s.lab, { color: colors.textSecondary }]}>Cancel if no driver responds (minutes)</Text>
             <View style={s.timerRow}>
-              <TouchableOpacity style={s.timerBtn} onPress={() => setCancelAfterMinutes((prev) => Math.max(LOCAL_PICKUP_MIN_CANCEL_MINUTES, prev - 1))}>
-                <Ionicons name="remove" size={20} color="#374151" />
+              <TouchableOpacity style={[s.timerBtn, { backgroundColor: surfaceMuted }]} onPress={() => setCancelAfterMinutes((prev) => Math.max(LOCAL_PICKUP_MIN_CANCEL_MINUTES, prev - 1))}>
+                <Ionicons name="remove" size={20} color={colors.text} />
               </TouchableOpacity>
               <TextInput
-                style={[s.timerInput, { color: colors.text }]}
+                style={[s.timerInput, { color: colors.text, borderColor: borderSoft, backgroundColor: surfaceSoft }]}
                 value={String(cancelAfterMinutes)}
                 onChangeText={(text) => {
                   const num = parseInt(text, 10);
@@ -452,18 +456,18 @@ export default function LocalPickupOrderScreen() {
                 keyboardType="numeric"
                 textAlign="center"
               />
-              <TouchableOpacity style={s.timerBtn} onPress={() => setCancelAfterMinutes((prev) => Math.min(LOCAL_PICKUP_MAX_CANCEL_MINUTES, prev + 1))}>
-                <Ionicons name="add" size={20} color="#374151" />
+              <TouchableOpacity style={[s.timerBtn, { backgroundColor: surfaceMuted }]} onPress={() => setCancelAfterMinutes((prev) => Math.min(LOCAL_PICKUP_MAX_CANCEL_MINUTES, prev + 1))}>
+                <Ionicons name="add" size={20} color={colors.text} />
               </TouchableOpacity>
             </View>
             {cancelAfterMinutes > LOCAL_PICKUP_MAX_CANCEL_MINUTES && (
-              <Text style={{ color: '#dc2626', marginTop: 8, fontSize: 12 }}>
+              <Text style={{ color: colors.danger, marginTop: 8, fontSize: 12 }}>
                 Must be {LOCAL_PICKUP_MAX_CANCEL_MINUTES} minutes (4h) or less
               </Text>
             )}
           </View>
 
-          <TouchableOpacity style={[s.cta, loading && { opacity: 0.6 }]} onPress={submit} disabled={loading || submitting}>
+          <TouchableOpacity style={[s.cta, { backgroundColor: colors.success }, loading && { opacity: 0.6 }]} onPress={submit} disabled={loading || submitting}>
             {loading || submitting ? <ActivityIndicator color="#fff" /> : <Text style={s.ctaText}>Preview & create</Text>}
           </TouchableOpacity>
         </ScrollView>
@@ -539,9 +543,18 @@ export default function LocalPickupOrderScreen() {
 
 const s = StyleSheet.create({
   container: { flex: 1 },
-  header: { flexDirection: 'row', alignItems: 'center', paddingTop: 48, paddingBottom: 14, paddingHorizontal: 8 },
-  back: { padding: 8 },
-  title: { flex: 1, textAlign: 'center', color: '#fff', fontSize: 18, fontWeight: '700' },
+  backInline: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 6,
+    borderRadius: 10,
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    marginBottom: 12,
+  },
+  backInlineText: { fontSize: 13, fontWeight: '700' },
   hint: { marginBottom: 16, fontSize: 14, lineHeight: 20 },
   card: { borderRadius: 12, padding: 16, marginBottom: 16 },
   cardTitle: { fontSize: 16, fontWeight: '700', marginBottom: 12 },
