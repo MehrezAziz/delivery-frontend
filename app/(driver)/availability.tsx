@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -9,6 +9,10 @@ import {
   Alert,
   ActivityIndicator,
   Modal,
+  NativeSyntheticEvent,
+  NativeScrollEvent,
+  LayoutChangeEvent,
+  Platform,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -21,6 +25,14 @@ const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
 const DAYS = ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY', 'SUNDAY'];
 const DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 const HOURS = Array.from({ length: 24 }, (_, i) => i);
+
+const DAY_COL_WIDTH = 52;
+const HOUR_COL_WIDTH = 52;
+const HEADER_ROW_HEIGHT = 44;
+const DATA_ROW_HEIGHT = 40;
+/** Total height of day rows (no extra empty strip below Sun). */
+const GRID_BODY_CONTENT_HEIGHT = DAYS.length * DATA_ROW_HEIGHT;
+const GRID_LINE_WIDTH = 1;
 
 interface TimePeriod {
   startHour: number;
@@ -50,6 +62,47 @@ export default function DriverAvailability() {
   const [availabilityStatus, setAvailabilityStatus] = useState<'ACTIVE' | 'INACTIVE'>('ACTIVE');
   const [savedModalVisible, setSavedModalVisible] = useState(false);
   const [clearModalVisible, setClearModalVisible] = useState(false);
+
+  const leftColScrollRef = useRef<ScrollView>(null);
+  const gridBodyScrollRef = useRef<ScrollView>(null);
+  const syncScrollLock = useRef(false);
+
+  const syncVerticalScroll = useCallback((y: number, source: 'left' | 'grid') => {
+    if (syncScrollLock.current) return;
+    syncScrollLock.current = true;
+    if (source === 'left') {
+      gridBodyScrollRef.current?.scrollTo({ y, animated: false });
+    } else {
+      leftColScrollRef.current?.scrollTo({ y, animated: false });
+    }
+    requestAnimationFrame(() => {
+      syncScrollLock.current = false;
+    });
+  }, []);
+
+  const onLeftColumnScroll = useCallback(
+    (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+      syncVerticalScroll(e.nativeEvent.contentOffset.y, 'left');
+    },
+    [syncVerticalScroll],
+  );
+
+  const onGridBodyScroll = useCallback(
+    (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+      syncVerticalScroll(e.nativeEvent.contentOffset.y, 'grid');
+    },
+    [syncVerticalScroll],
+  );
+
+  const [gridBodyScrollHeight, setGridBodyScrollHeight] = useState(GRID_BODY_CONTENT_HEIGHT);
+  const onGridTableLayout = useCallback((e: LayoutChangeEvent) => {
+    const h = e.nativeEvent.layout.height;
+    const maxBody = Math.max(80, h - HEADER_ROW_HEIGHT);
+    setGridBodyScrollHeight(Math.min(maxBody, GRID_BODY_CONTENT_HEIGHT));
+  }, []);
+
+  /** Stronger than `border` so vertical rules stay visible on dark surfaces (card vs surfaceVariant). */
+  const gridLine = colors.inputBorder;
 
   const currentSerialized = serializeAvailabilityCells(selectedCells);
   const isDirty = currentSerialized !== lastSavedSerialized;
@@ -253,48 +306,133 @@ export default function DriverAvailability() {
         </Text>
       </View>
 
-      {/* Schedule Grid */}
-      <ScrollView horizontal showsHorizontalScrollIndicator={true} style={styles.gridScroll}>
-        <View>
-          {/* Hour Headers */}
-          <View style={styles.hourHeaderRow}>
-            <View style={styles.dayLabelCell} />
-            {HOURS.map(hour => (
-              <View key={hour} style={styles.hourCell}>
-                <Text style={styles.hourStartText}>{String(hour).padStart(2, '0')}:00</Text>
-                <Text style={styles.hourEndText}>{String(hour + 1).padStart(2, '0')}:00</Text>
-              </View>
-            ))}
-          </View>
-
-          {/* Day Rows */}
-          <ScrollView showsVerticalScrollIndicator={false}>
+      {/* Schedule grid: fixed day column + horizontally scrollable hours (vertical scroll synced) */}
+      <View style={styles.gridTableWrap} onLayout={onGridTableLayout}>
+        <View
+          style={[
+            styles.dayStrip,
+            {
+              width: DAY_COL_WIDTH,
+              borderRightColor: gridLine,
+              borderRightWidth: GRID_LINE_WIDTH,
+              backgroundColor: colors.surfaceVariant,
+              ...Platform.select({
+                ios: {
+                  shadowColor: '#000',
+                  shadowOffset: { width: 4, height: 0 },
+                  shadowOpacity: 0.12,
+                  shadowRadius: 6,
+                },
+                android: { elevation: 8 },
+              }),
+            },
+          ]}
+        >
+          <View
+            style={{
+              height: HEADER_ROW_HEIGHT,
+              width: DAY_COL_WIDTH,
+              borderBottomColor: gridLine,
+              borderBottomWidth: 2,
+              backgroundColor: colors.surfaceVariant,
+            }}
+          />
+          <ScrollView
+            ref={leftColScrollRef}
+            style={[styles.dayStripScroll, { height: gridBodyScrollHeight }]}
+            showsVerticalScrollIndicator={false}
+            nestedScrollEnabled
+            scrollEventThrottle={16}
+            onScroll={onLeftColumnScroll}
+          >
             {DAYS.map((day, dayIndex) => (
-              <View key={day} style={styles.dayRow}>
-                <TouchableOpacity
-                  style={styles.dayLabelCell}
-                  onPress={() => selectFullDay(day)}
-                >
-                  <Text style={styles.dayLabel}>{DAY_LABELS[dayIndex]}</Text>
-                </TouchableOpacity>
-                {HOURS.map(hour => (
-                  <TouchableOpacity
-                    key={`${day}-${hour}`}
-                    style={[
-                      styles.timeCell,
-                      selectedCells[`${day}-${hour}`] && styles.timeCellSelected,
-                    ]}
-                    onPress={() => toggleCell(day, hour)}
-                  />
-                ))}
-              </View>
+              <TouchableOpacity
+                key={day}
+                style={[
+                  styles.dayLabelCellFixed,
+                  {
+                    width: DAY_COL_WIDTH,
+                    height: DATA_ROW_HEIGHT,
+                    borderBottomColor: gridLine,
+                    borderBottomWidth: GRID_LINE_WIDTH,
+                    backgroundColor: colors.surfaceVariant,
+                  },
+                ]}
+                onPress={() => selectFullDay(day)}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.dayLabel, { color: colors.text }]}>{DAY_LABELS[dayIndex]}</Text>
+              </TouchableOpacity>
             ))}
           </ScrollView>
         </View>
-      </ScrollView>
+
+        <ScrollView
+          horizontal
+          style={styles.hoursScroll}
+          contentContainerStyle={styles.hoursScrollContent}
+          showsHorizontalScrollIndicator
+          nestedScrollEnabled
+        >
+          <View style={styles.hoursInner}>
+            <View style={[styles.hourHeaderRowOnly, { borderBottomColor: gridLine, borderBottomWidth: 2 }]}>
+              {HOURS.map(hour => (
+                <View
+                  key={hour}
+                  style={[
+                    styles.hourCell,
+                    {
+                      width: HOUR_COL_WIDTH,
+                      height: HEADER_ROW_HEIGHT,
+                      borderRightWidth: GRID_LINE_WIDTH,
+                      borderRightColor: gridLine,
+                      backgroundColor: colors.card,
+                    },
+                  ]}
+                >
+                  <Text style={[styles.hourStartText, { color: colors.text }]}>{String(hour).padStart(2, '0')}:00</Text>
+                  <Text style={[styles.hourEndText, { color: colors.textTertiary }]}>{String(hour + 1).padStart(2, '0')}:00</Text>
+                </View>
+              ))}
+            </View>
+            <ScrollView
+              ref={gridBodyScrollRef}
+              style={[styles.gridBodyScroll, { height: gridBodyScrollHeight }]}
+              showsVerticalScrollIndicator={false}
+              nestedScrollEnabled
+              scrollEventThrottle={16}
+              onScroll={onGridBodyScroll}
+            >
+              {DAYS.map(day => (
+                <View
+                  key={day}
+                  style={[
+                    styles.dayRowHours,
+                    { borderBottomColor: gridLine, borderBottomWidth: GRID_LINE_WIDTH },
+                  ]}
+                >
+                  {HOURS.map(hour => (
+                    <TouchableOpacity
+                      key={`${day}-${hour}`}
+                      style={{
+                        width: HOUR_COL_WIDTH,
+                        height: DATA_ROW_HEIGHT,
+                        borderRightWidth: GRID_LINE_WIDTH,
+                        borderRightColor: gridLine,
+                        backgroundColor: selectedCells[`${day}-${hour}`] ? colors.primary : colors.card,
+                      }}
+                      onPress={() => toggleCell(day, hour)}
+                    />
+                  ))}
+                </View>
+              ))}
+            </ScrollView>
+          </View>
+        </ScrollView>
+      </View>
 
       {/* Action Buttons */}
-      <View style={[styles.actions, { borderTopColor: colors.border }]}>
+      <View style={[styles.actions, { borderTopColor: gridLine }]}>
         <TouchableOpacity style={styles.clearButton} onPress={() => setClearModalVisible(true)}>
           <Text style={styles.clearButtonText}>Clear All</Text>
         </TouchableOpacity>
@@ -419,6 +557,7 @@ export default function DriverAvailability() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    minHeight: 0,
     backgroundColor: '#fff',
   },
   loadingContainer: {
@@ -459,28 +598,46 @@ const styles = StyleSheet.create({
     color: '#666',
     lineHeight: 18,
   },
-  gridScroll: {
+  gridTableWrap: {
     flex: 1,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'flex-start',
     marginTop: 16,
+    minHeight: 0,
+    flexShrink: 1,
   },
-  hourHeaderRow: {
-    flexDirection: 'row',
-    borderBottomWidth: 2,
-    borderBottomColor: '#ddd',
+  dayStrip: {
+    flexDirection: 'column',
+    alignSelf: 'flex-start',
+    zIndex: 2,
   },
-  dayRow: {
-    flexDirection: 'row',
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+  dayStripScroll: {
+    flexGrow: 0,
   },
-  dayLabelCell: {
-    width: 50,
-    height: 40,
+  dayLabelCellFixed: {
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#f5f5f5',
-    borderRightWidth: 2,
-    borderRightColor: '#ddd',
+  },
+  hoursScroll: {
+    flex: 1,
+    minWidth: 0,
+    alignSelf: 'flex-start',
+  },
+  hoursScrollContent: {
+    alignItems: 'flex-start',
+  },
+  hoursInner: {
+    alignSelf: 'flex-start',
+  },
+  hourHeaderRowOnly: {
+    flexDirection: 'row',
+  },
+  gridBodyScroll: {
+    flexGrow: 0,
+  },
+  dayRowHours: {
+    flexDirection: 'row',
   },
   dayLabel: {
     fontSize: 13,
@@ -488,12 +645,8 @@ const styles = StyleSheet.create({
     color: '#333',
   },
   hourCell: {
-    width: 52,
-    height: 44,
     justifyContent: 'space-between',
     alignItems: 'stretch',
-    borderRightWidth: 1,
-    borderRightColor: '#eee',
     paddingVertical: 3,
     paddingHorizontal: 2,
   },
@@ -508,22 +661,13 @@ const styles = StyleSheet.create({
     color: '#999',
     textAlign: 'right',
   },
-  timeCell: {
-    width: 52,
-    height: 40,
-    backgroundColor: '#fff',
-    borderRightWidth: 1,
-    borderRightColor: '#eee',
-  },
-  timeCellSelected: {
-    backgroundColor: '#007AFF',
-  },
   actions: {
     flexDirection: 'row',
     padding: 16,
     gap: 12,
     borderTopWidth: 1,
     borderTopColor: '#eee',
+    flexShrink: 0,
   },
   clearButton: {
     flex: 1,
