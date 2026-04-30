@@ -26,7 +26,7 @@ interface Restriction {
 
 export default function DriverRestrictionsScreen() {
   const router = useRouter();
-  const { colors, isDark } = useTheme();
+  const { colors } = useTheme();
   const [restrictions, setRestrictions] = useState<Restriction[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -62,12 +62,6 @@ export default function DriverRestrictionsScreen() {
 
   return (
     <View style={[s.container, { backgroundColor: colors.background }]}>
-      <View style={[s.header, { backgroundColor: colors.card, borderBottomColor: colors.border }]}>
-        <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace('/(driver)/home')} style={s.backBtn}>
-          <Ionicons name="arrow-back" size={24} color={colors.primary} />
-        </TouchableOpacity>
-        <Text style={[s.title, { color: colors.text }]}>My Restrictions</Text>
-      </View>
       <ScrollView style={s.scroll} contentContainerStyle={s.scrollContent}>
         {error && (
           <View style={s.errorBox}>
@@ -104,9 +98,6 @@ export default function DriverRestrictionsScreen() {
 const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f5f5f5' },
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  header: { flexDirection: 'row', alignItems: 'center', padding: 16, paddingTop: 56, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#eee', gap: 12 },
-  backBtn: { padding: 4 },
-  title: { fontSize: 20, fontWeight: 'bold', color: '#333' },
   scroll: { flex: 1 },
   scrollContent: { padding: 16, paddingBottom: 32 },
   errorBox: { backgroundColor: '#fef2f2', padding: 16, borderRadius: 12, alignItems: 'center', marginBottom: 16 },

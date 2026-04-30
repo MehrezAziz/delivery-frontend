@@ -206,6 +206,9 @@ export function AppChromeHeader({
   const showDriverAddressesAdd =
     role === 'driver' &&
     (normalizedPath === '/(driver)/addresses' || normalizedPath.endsWith('/addresses'));
+  const showDriverRestrictionsSupport =
+    role === 'driver' &&
+    (normalizedPath === '/(driver)/restrictions' || normalizedPath.endsWith('/restrictions'));
   const showCustomerAddressesAdd =
     role === 'customer' &&
     (normalizedPath === '/(customer)/addresses' || normalizedPath.endsWith('/addresses'));
@@ -302,6 +305,16 @@ export function AppChromeHeader({
                     <Ionicons name="add" size={22} color={textColor} />
                   </TouchableOpacity>
                 ) : null}
+                {showDriverRestrictionsSupport ? (
+                  <TouchableOpacity
+                    onPress={() => push('/(driver)/support')}
+                    style={[styles.iconBtn, { backgroundColor: iconBtnBg }]}
+                    activeOpacity={0.75}
+                    accessibilityLabel="Support"
+                  >
+                    <Ionicons name="headset-outline" size={22} color={textColor} />
+                  </TouchableOpacity>
+                ) : null}
                 {showCustomerAddressesAdd ? (
                   <TouchableOpacity
                     onPress={() => router.replace(`/(customer)/addresses?add=${Date.now()}` as never)}
@@ -367,6 +380,16 @@ export function AppChromeHeader({
                     activeOpacity={0.75}
                   >
                     <Ionicons name="add" size={22} color={textColor} />
+                  </TouchableOpacity>
+                ) : null}
+                {showDriverRestrictionsSupport ? (
+                  <TouchableOpacity
+                    onPress={() => push('/(driver)/support')}
+                    style={[styles.iconBtn, { backgroundColor: iconBtnBg }]}
+                    activeOpacity={0.75}
+                    accessibilityLabel="Support"
+                  >
+                    <Ionicons name="headset-outline" size={22} color={textColor} />
                   </TouchableOpacity>
                 ) : null}
                 {showCustomerAddressesAdd ? (

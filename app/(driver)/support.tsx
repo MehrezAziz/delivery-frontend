@@ -1,5 +1,6 @@
-import { View, Text, TouchableOpacity, StyleSheet, FlatList, ActivityIndicator, Modal, TextInput, ScrollView } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, FlatList, ActivityIndicator, Modal, TextInput, ScrollView, Pressable } from 'react-native';
 import { useState, useEffect, useCallback } from 'react';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { supportService, SupportTicket } from '../../services/api/support.service';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useAppNavigation } from '../../contexts/AppNavigationContext';
@@ -17,6 +18,7 @@ const STATUS_COLORS: Record<string, string> = {
 export default function DriverSupportScreen() {
   const { push } = useAppNavigation();
   const { colors, isDark } = useTheme();
+  const insets = useSafeAreaInsets();
   const [tickets, setTickets] = useState<SupportTicket[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
@@ -45,13 +47,18 @@ export default function DriverSupportScreen() {
     return () => clearInterval(interval);
   }, [loadTickets]);
 
+  function closeCreateModal() {
+    setShowCreate(false);
+    setError('');
+  }
+
   async function handleCreate() {
     if (!description.trim()) { setError('Description is required'); return; }
     setCreating(true);
     setError('');
     try {
       await supportService.createTicket({ category, priority, description: description.trim() });
-      setShowCreate(false);
+      closeCreateModal();
       setDescription('');
       setCategory('OTHER');
       setPriority('MEDIUM');
@@ -118,9 +125,20 @@ export default function DriverSupportScreen() {
         />
       )}
 
-      <Modal visible={showCreate} transparent animationType="slide">
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalCard, { backgroundColor: colors.card }]}>
+      <Modal
+        visible={showCreate}
+        transparent
+        animationType="slide"
+        onRequestClose={closeCreateModal}
+      >
+        <Pressable style={styles.modalOverlay} onPress={closeCreateModal}>
+          <Pressable
+            onPress={() => {}}
+            style={[
+              styles.modalCard,
+              { backgroundColor: colors.card, marginBottom: Math.max(insets.bottom, 20) },
+            ]}
+          >
             <Text style={[styles.modalTitle, { color: colors.text }]}>New Support Ticket</Text>
             <ScrollView>
               <Text style={[styles.label, { color: colors.text }]}>Category</Text>
@@ -152,15 +170,15 @@ export default function DriverSupportScreen() {
               {error ? <Text style={styles.error}>{error}</Text> : null}
             </ScrollView>
             <View style={styles.modalActions}>
-              <TouchableOpacity style={styles.cancelBtn} onPress={() => { setShowCreate(false); setError(''); }}>
+              <TouchableOpacity style={styles.cancelBtn} onPress={closeCreateModal}>
                 <Text style={styles.cancelBtnText}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity style={[styles.submitBtn, creating && { opacity: 0.6 }]} onPress={handleCreate} disabled={creating}>
                 <Text style={styles.submitBtnText}>{creating ? 'Creating...' : 'Create'}</Text>
               </TouchableOpacity>
             </View>
-          </View>
-        </View>
+          </Pressable>
+        </Pressable>
       </Modal>
     </View>
   );
