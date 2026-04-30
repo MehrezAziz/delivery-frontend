@@ -3,10 +3,12 @@ import {
   View,
   Text,
   TouchableOpacity,
+  TouchableWithoutFeedback,
   StyleSheet,
   ScrollView,
   Alert,
   ActivityIndicator,
+  Modal,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -30,13 +32,28 @@ interface DayAvailability {
   timePeriods: TimePeriod[];
 }
 
+function serializeAvailabilityCells(cells: { [key: string]: boolean }): string {
+  return JSON.stringify(
+    Object.keys(cells)
+      .filter((k) => cells[k])
+      .sort(),
+  );
+}
+
 export default function DriverAvailability() {
   const router = useRouter();
-  const { colors, isDark } = useTheme();
+  const { colors } = useTheme();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [selectedCells, setSelectedCells] = useState<{ [key: string]: boolean }>({});
+  const [lastSavedSerialized, setLastSavedSerialized] = useState('');
   const [availabilityStatus, setAvailabilityStatus] = useState<'ACTIVE' | 'INACTIVE'>('ACTIVE');
+  const [savedModalVisible, setSavedModalVisible] = useState(false);
+  const [clearModalVisible, setClearModalVisible] = useState(false);
+
+  const currentSerialized = serializeAvailabilityCells(selectedCells);
+  const isDirty = currentSerialized !== lastSavedSerialized;
+  const hasAnySlot = Object.values(selectedCells).some(Boolean);
 
   useEffect(() => {
     loadAvailability();
@@ -68,11 +85,13 @@ export default function DriverAvailability() {
       });
 
       setSelectedCells(cells);
+      setLastSavedSerialized(serializeAvailabilityCells(cells));
     } catch (error: any) {
       console.error('Load availability error:', error);
       if (error.response?.status === 404) {
         // Availability not initialized yet - show empty grid
         setSelectedCells({});
+        setLastSavedSerialized(serializeAvailabilityCells({}));
         setAvailabilityStatus('ACTIVE');
       } else {
         Alert.alert('Error', 'Failed to load availability');
@@ -102,15 +121,9 @@ export default function DriverAvailability() {
     setSelectedCells(newCells);
   };
 
-  const clearAll = () => {
-    Alert.alert(
-      'Clear All',
-      'Are you sure you want to clear all availability?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Clear', style: 'destructive', onPress: () => setSelectedCells({}) },
-      ]
-    );
+  const confirmClearAll = () => {
+    setSelectedCells({});
+    setClearModalVisible(false);
   };
 
   const handleSave = async () => {
@@ -169,7 +182,8 @@ export default function DriverAvailability() {
         { headers: { Authorization: `Bearer ${token}` } }
       );
 
-      Alert.alert('Success', 'Availability updated successfully');
+      setLastSavedSerialized(serializeAvailabilityCells(selectedCells));
+      setSavedModalVisible(true);
     } catch (error: any) {
       console.error('Save availability error:', error);
       Alert.alert('Error', error.response?.data?.message || 'Failed to save availability');
@@ -208,30 +222,25 @@ export default function DriverAvailability() {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      {/* Header */}
-      <View style={[styles.header, { backgroundColor: colors.card, borderBottomColor: colors.border }]}>
-        <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace('/(driver)/home')} style={styles.backButton}>
-          <Ionicons name="arrow-back" size={24} color={colors.primary} />
-        </TouchableOpacity>
-        <Text style={[styles.title, { color: colors.text }]}>My Availability</Text>
-        <TouchableOpacity onPress={toggleStatus} style={styles.statusButton}>
+      <View
+        style={[
+          styles.statusBadge,
+          { backgroundColor: availabilityStatus === 'ACTIVE' ? '#e8f5e9' : '#ffebee' },
+        ]}
+      >
+        <TouchableOpacity onPress={toggleStatus} style={styles.statusToggleBtn} accessibilityLabel="Toggle availability status">
           <Ionicons
             name={availabilityStatus === 'ACTIVE' ? 'checkmark-circle' : 'close-circle'}
             size={28}
             color={availabilityStatus === 'ACTIVE' ? '#34C759' : '#FF3B30'}
           />
         </TouchableOpacity>
-      </View>
-
-      {/* Status Badge */}
-      <View style={[
-        styles.statusBadge,
-        { backgroundColor: availabilityStatus === 'ACTIVE' ? '#e8f5e9' : '#ffebee' }
-      ]}>
-        <Text style={[
-          styles.statusText,
-          { color: availabilityStatus === 'ACTIVE' ? '#2e7d32' : '#c62828' }
-        ]}>
+        <Text
+          style={[
+            styles.statusText,
+            { color: availabilityStatus === 'ACTIVE' ? '#2e7d32' : '#c62828' },
+          ]}
+        >
           Status: {availabilityStatus}
         </Text>
       </View>
@@ -286,14 +295,17 @@ export default function DriverAvailability() {
 
       {/* Action Buttons */}
       <View style={[styles.actions, { borderTopColor: colors.border }]}>
-        <TouchableOpacity style={styles.clearButton} onPress={clearAll}>
+        <TouchableOpacity style={styles.clearButton} onPress={() => setClearModalVisible(true)}>
           <Text style={styles.clearButtonText}>Clear All</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
-          style={[styles.saveButton, saving && styles.saveButtonDisabled]}
+          style={[
+            styles.saveButton,
+            (saving || !isDirty || !hasAnySlot) && styles.saveButtonDisabled,
+          ]}
           onPress={handleSave}
-          disabled={saving}
+          disabled={saving || !isDirty || !hasAnySlot}
         >
           {saving ? (
             <ActivityIndicator color="#fff" />
@@ -305,6 +317,101 @@ export default function DriverAvailability() {
           )}
         </TouchableOpacity>
       </View>
+
+      <Modal
+        visible={savedModalVisible}
+        transparent
+        animationType="fade"
+        statusBarTranslucent
+        onRequestClose={() => setSavedModalVisible(false)}
+      >
+        <TouchableWithoutFeedback onPress={() => setSavedModalVisible(false)}>
+          <View style={styles.savedOverlay}>
+            <TouchableWithoutFeedback onPress={() => {}}>
+              <View
+                style={[
+                  styles.savedCard,
+                  {
+                    backgroundColor: colors.card,
+                    borderColor: colors.border,
+                    shadowColor: '#000',
+                  },
+                ]}
+              >
+                <View style={[styles.savedIconRing, { backgroundColor: colors.successBg }]}>
+                  <View style={[styles.savedIconCircle, { backgroundColor: colors.success }]}>
+                    <Ionicons name="checkmark" size={28} color="#fff" />
+                  </View>
+                </View>
+                <Text style={[styles.savedTitle, { color: colors.text }]}>Saved</Text>
+                <Text style={[styles.savedMessage, { color: colors.textSecondary }]}>
+                  Your availability schedule was updated successfully.
+                </Text>
+                <TouchableOpacity
+                  style={[styles.savedOkButton, { backgroundColor: colors.primary }]}
+                  onPress={() => setSavedModalVisible(false)}
+                  activeOpacity={0.85}
+                  accessibilityRole="button"
+                  accessibilityLabel="OK"
+                >
+                  <Text style={styles.savedOkButtonText}>OK</Text>
+                </TouchableOpacity>
+                <Text style={[styles.savedHint, { color: colors.textTertiary }]}>Tap outside to close</Text>
+              </View>
+            </TouchableWithoutFeedback>
+          </View>
+        </TouchableWithoutFeedback>
+      </Modal>
+
+      <Modal
+        visible={clearModalVisible}
+        transparent
+        animationType="fade"
+        statusBarTranslucent
+        onRequestClose={() => setClearModalVisible(false)}
+      >
+        <TouchableWithoutFeedback onPress={() => setClearModalVisible(false)}>
+          <View style={styles.dialogOverlay}>
+            <TouchableWithoutFeedback onPress={() => {}}>
+              <View
+                style={[
+                  styles.dialogCard,
+                  {
+                    backgroundColor: colors.card,
+                    borderColor: colors.border,
+                    shadowColor: '#000',
+                  },
+                ]}
+              >
+                <View style={[styles.clearDialogIconWrap, { backgroundColor: colors.dangerBg }]}>
+                  <Ionicons name="trash-outline" size={26} color={colors.danger} />
+                </View>
+                <Text style={[styles.dialogTitle, { color: colors.text }]}>Clear all availability?</Text>
+                <Text style={[styles.dialogBody, { color: colors.textSecondary }]}>
+                  This removes every selected hour for all days. You can set your schedule again before saving. Your
+                  active or inactive status stays the same.
+                </Text>
+                <View style={styles.dialogActions}>
+                  <TouchableOpacity
+                    style={[styles.dialogBtnSecondary, { borderColor: colors.border, backgroundColor: colors.surfaceVariant }]}
+                    onPress={() => setClearModalVisible(false)}
+                    activeOpacity={0.85}
+                  >
+                    <Text style={[styles.dialogBtnSecondaryText, { color: colors.text }]}>Cancel</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.dialogBtnDanger, { backgroundColor: colors.danger }]}
+                    onPress={confirmClearAll}
+                    activeOpacity={0.85}
+                  >
+                    <Text style={styles.dialogBtnDangerText}>Clear all</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </TouchableWithoutFeedback>
+          </View>
+        </TouchableWithoutFeedback>
+      </Modal>
     </View>
   );
 }
@@ -319,32 +426,18 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  header: {
+  statusBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: 16,
-    paddingTop: 60,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
-  },
-  backButton: {
-    padding: 4,
-  },
-  title: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#333',
-  },
-  statusButton: {
-    padding: 4,
-  },
-  statusBadge: {
+    justifyContent: 'center',
+    gap: 10,
     padding: 12,
     marginHorizontal: 16,
-    marginTop: 16,
+    marginTop: 12,
     borderRadius: 8,
-    alignItems: 'center',
+  },
+  statusToggleBtn: {
+    padding: 4,
   },
   statusText: {
     fontSize: 14,
@@ -462,5 +555,138 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontWeight: '600',
+  },
+  savedOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.55)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 28,
+  },
+  savedCard: {
+    width: '100%',
+    maxWidth: 340,
+    borderRadius: 20,
+    paddingVertical: 28,
+    paddingHorizontal: 24,
+    alignItems: 'center',
+    borderWidth: StyleSheet.hairlineWidth,
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.18,
+    shadowRadius: 24,
+    elevation: 12,
+  },
+  savedIconRing: {
+    padding: 10,
+    borderRadius: 999,
+    marginBottom: 18,
+  },
+  savedIconCircle: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  savedTitle: {
+    fontSize: 22,
+    fontWeight: '800',
+    letterSpacing: -0.4,
+    marginBottom: 8,
+  },
+  savedMessage: {
+    fontSize: 15,
+    lineHeight: 22,
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+  savedHint: {
+    fontSize: 12,
+    fontWeight: '600',
+    letterSpacing: 0.2,
+    marginTop: 10,
+  },
+  savedOkButton: {
+    alignSelf: 'stretch',
+    marginTop: 4,
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  savedOkButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '800',
+    letterSpacing: 0.3,
+  },
+  dialogOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.55)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 28,
+  },
+  dialogCard: {
+    width: '100%',
+    maxWidth: 360,
+    borderRadius: 20,
+    paddingVertical: 26,
+    paddingHorizontal: 22,
+    borderWidth: StyleSheet.hairlineWidth,
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.18,
+    shadowRadius: 24,
+    elevation: 12,
+  },
+  clearDialogIconWrap: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    alignItems: 'center',
+    justifyContent: 'center',
+    alignSelf: 'center',
+    marginBottom: 16,
+  },
+  dialogTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    letterSpacing: -0.3,
+    textAlign: 'center',
+    marginBottom: 10,
+  },
+  dialogBody: {
+    fontSize: 15,
+    lineHeight: 22,
+    textAlign: 'center',
+    marginBottom: 22,
+  },
+  dialogActions: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  dialogBtnSecondary: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dialogBtnSecondaryText: {
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  dialogBtnDanger: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dialogBtnDangerText: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '800',
   },
 });
