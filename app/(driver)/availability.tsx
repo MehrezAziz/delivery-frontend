@@ -29,6 +29,9 @@ const HOURS = Array.from({ length: 24 }, (_, i) => i);
 const DAY_COL_WIDTH = 52;
 const HOUR_COL_WIDTH = 52;
 const HEADER_ROW_HEIGHT = 44;
+/** Corner + hour header row include a 2px bottom rule; body scroll height subtracts this full block. */
+const HEADER_RULE = 2;
+const HEADER_BLOCK_HEIGHT = HEADER_ROW_HEIGHT + HEADER_RULE;
 const DATA_ROW_HEIGHT = 40;
 /** Total height of day rows (no extra empty strip below Sun). */
 const GRID_BODY_CONTENT_HEIGHT = DAYS.length * DATA_ROW_HEIGHT;
@@ -97,7 +100,7 @@ export default function DriverAvailability() {
   const [gridBodyScrollHeight, setGridBodyScrollHeight] = useState(GRID_BODY_CONTENT_HEIGHT);
   const onGridTableLayout = useCallback((e: LayoutChangeEvent) => {
     const h = e.nativeEvent.layout.height;
-    const maxBody = Math.max(80, h - HEADER_ROW_HEIGHT);
+    const maxBody = Math.max(80, h - HEADER_BLOCK_HEIGHT);
     setGridBodyScrollHeight(Math.min(maxBody, GRID_BODY_CONTENT_HEIGHT));
   }, []);
 
@@ -313,30 +316,33 @@ export default function DriverAvailability() {
             styles.dayStrip,
             {
               width: DAY_COL_WIDTH,
-              borderRightColor: gridLine,
-              borderRightWidth: GRID_LINE_WIDTH,
               backgroundColor: colors.surfaceVariant,
               ...Platform.select({
                 ios: {
                   shadowColor: '#000',
-                  shadowOffset: { width: 4, height: 0 },
-                  shadowOpacity: 0.12,
-                  shadowRadius: 6,
+                  shadowOffset: { width: 2, height: 0 },
+                  shadowOpacity: 0.1,
+                  shadowRadius: 4,
                 },
-                android: { elevation: 8 },
+                android: { elevation: 3 },
               }),
             },
           ]}
         >
           <View
-            style={{
-              height: HEADER_ROW_HEIGHT,
-              width: DAY_COL_WIDTH,
-              borderBottomColor: gridLine,
-              borderBottomWidth: 2,
-              backgroundColor: colors.surfaceVariant,
-            }}
+            pointerEvents="none"
+            style={[styles.dayStripDivider, { backgroundColor: gridLine, width: GRID_LINE_WIDTH }]}
           />
+          <View style={{ width: DAY_COL_WIDTH }}>
+            <View
+              style={{
+                height: HEADER_ROW_HEIGHT,
+                width: DAY_COL_WIDTH,
+                backgroundColor: colors.surfaceVariant,
+              }}
+            />
+            <View style={{ height: HEADER_RULE, width: DAY_COL_WIDTH, backgroundColor: gridLine }} />
+          </View>
           <ScrollView
             ref={leftColScrollRef}
             style={[styles.dayStripScroll, { height: gridBodyScrollHeight }]}
@@ -375,25 +381,34 @@ export default function DriverAvailability() {
           nestedScrollEnabled
         >
           <View style={styles.hoursInner}>
-            <View style={[styles.hourHeaderRowOnly, { borderBottomColor: gridLine, borderBottomWidth: 2 }]}>
-              {HOURS.map(hour => (
-                <View
-                  key={hour}
-                  style={[
-                    styles.hourCell,
-                    {
-                      width: HOUR_COL_WIDTH,
-                      height: HEADER_ROW_HEIGHT,
-                      borderRightWidth: GRID_LINE_WIDTH,
-                      borderRightColor: gridLine,
-                      backgroundColor: colors.card,
-                    },
-                  ]}
-                >
-                  <Text style={[styles.hourStartText, { color: colors.text }]}>{String(hour).padStart(2, '0')}:00</Text>
-                  <Text style={[styles.hourEndText, { color: colors.textTertiary }]}>{String(hour + 1).padStart(2, '0')}:00</Text>
-                </View>
-              ))}
+            <View style={styles.hourHeaderStack}>
+              <View style={styles.hourHeaderRowOnly}>
+                {HOURS.map(hour => (
+                  <View
+                    key={hour}
+                    style={[
+                      styles.hourCell,
+                      {
+                        width: HOUR_COL_WIDTH,
+                        height: HEADER_ROW_HEIGHT,
+                        borderRightWidth: GRID_LINE_WIDTH,
+                        borderRightColor: gridLine,
+                        backgroundColor: colors.card,
+                      },
+                    ]}
+                  >
+                    <Text style={[styles.hourStartText, { color: colors.text }]}>{String(hour).padStart(2, '0')}:00</Text>
+                    <Text style={[styles.hourEndText, { color: colors.textTertiary }]}>{String(hour + 1).padStart(2, '0')}:00</Text>
+                  </View>
+                ))}
+              </View>
+              <View
+                style={{
+                  height: HEADER_RULE,
+                  width: HOURS.length * HOUR_COL_WIDTH,
+                  backgroundColor: gridLine,
+                }}
+              />
             </View>
             <ScrollView
               ref={gridBodyScrollRef}
@@ -404,13 +419,7 @@ export default function DriverAvailability() {
               onScroll={onGridBodyScroll}
             >
               {DAYS.map(day => (
-                <View
-                  key={day}
-                  style={[
-                    styles.dayRowHours,
-                    { borderBottomColor: gridLine, borderBottomWidth: GRID_LINE_WIDTH },
-                  ]}
-                >
+                <View key={day} style={styles.dayRowHours}>
                   {HOURS.map(hour => (
                     <TouchableOpacity
                       key={`${day}-${hour}`}
@@ -419,6 +428,8 @@ export default function DriverAvailability() {
                         height: DATA_ROW_HEIGHT,
                         borderRightWidth: GRID_LINE_WIDTH,
                         borderRightColor: gridLine,
+                        borderBottomWidth: GRID_LINE_WIDTH,
+                        borderBottomColor: gridLine,
                         backgroundColor: selectedCells[`${day}-${hour}`] ? colors.primary : colors.card,
                       }}
                       onPress={() => toggleCell(day, hour)}
@@ -611,6 +622,14 @@ const styles = StyleSheet.create({
     flexDirection: 'column',
     alignSelf: 'flex-start',
     zIndex: 2,
+    overflow: 'hidden',
+  },
+  dayStripDivider: {
+    position: 'absolute',
+    right: 0,
+    top: 0,
+    bottom: 0,
+    zIndex: 1,
   },
   dayStripScroll: {
     flexGrow: 0,
@@ -630,8 +649,12 @@ const styles = StyleSheet.create({
   hoursInner: {
     alignSelf: 'flex-start',
   },
+  hourHeaderStack: {
+    flexDirection: 'column',
+  },
   hourHeaderRowOnly: {
     flexDirection: 'row',
+    height: HEADER_ROW_HEIGHT,
   },
   gridBodyScroll: {
     flexGrow: 0,
