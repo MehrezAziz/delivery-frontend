@@ -16,6 +16,7 @@ export default function AuthLayout() {
       <Stack.Screen name="customer-register" />
       <Stack.Screen name="terms" />
       <Stack.Screen name="driver-login" />
+      <Stack.Screen name="driver-forgot-password" />
       <Stack.Screen name="driver-register" />
       <Stack.Screen name="driver-register-step1" />
       <Stack.Screen name="driver-register-step2" />

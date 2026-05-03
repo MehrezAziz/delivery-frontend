@@ -265,7 +265,16 @@ export default function CustomerLoginScreen() {
 
             <TouchableOpacity
               style={styles.forgotButton}
-              onPress={() => router.push('/(auth)/customer-forgot-password')}
+              onPress={() =>
+                router.push({
+                  pathname: '/(auth)/customer-forgot-password',
+                  params: {
+                    prefillPhone: phone.trim(),
+                    prefillDialCode: selectedPhoneCountry?.dialCode ?? '',
+                    prefillIso: selectedPhoneCountry?.isoCode ?? '',
+                  },
+                })
+              }
               disabled={isSubmitting}
             >
               <Text style={[styles.forgotText, { color: colors.primary }]}>Forgot Password?</Text>

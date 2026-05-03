@@ -15,7 +15,7 @@ import {
   type NativeSyntheticEvent,
   type TextInputKeyPressEventData,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -31,9 +31,14 @@ import {
   type PhoneCountry,
 } from '../../services/phone-countries';
 
-const API_BASE_URL =
+const RAW_API =
   process.env.EXPO_PUBLIC_API_URL ||
-  (Platform.OS === 'android' ? 'http://localhost:3000/api' : 'http://localhost:3000/api');
+  (Platform.OS === 'android' ? 'http://localhost:3000' : 'http://localhost:3000');
+const API_BASE_URL = RAW_API.replace(/\/$/, '').endsWith('/api')
+  ? RAW_API.replace(/\/$/, '')
+  : `${RAW_API.replace(/\/$/, '')}/api`;
+
+const FORGOT_PW_ROLE = 'CUSTOMER' as const;
 
 type Step = 'method' | 'identifier' | 'emailConfirm' | 'otp' | 'newPassword';
 
@@ -45,6 +50,11 @@ function extractSixDigits(text: string): string | null {
 
 export default function CustomerForgotPasswordScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<{
+    prefillPhone?: string;
+    prefillDialCode?: string;
+    prefillIso?: string;
+  }>();
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
 
@@ -80,6 +90,7 @@ export default function CustomerForgotPasswordScreen() {
   const [error, setError] = useState<string | null>(null);
 
   const submittingOtpRef = useRef(false);
+  const loginPrefillAppliedRef = useRef(false);
 
   const filteredPhoneCountries = useMemo(() => {
     const q = phoneCountrySearch.trim().toLowerCase();
@@ -115,6 +126,46 @@ export default function CustomerForgotPasswordScreen() {
     };
     void bootstrapPhoneCountry();
   }, []);
+
+  /** Prefill phone + country from login screen route params */
+  useEffect(() => {
+    if (loginPrefillAppliedRef.current || resolvingPhoneCountry || phoneCountries.length === 0) return;
+
+    const p =
+      typeof params.prefillPhone === 'string'
+        ? params.prefillPhone
+        : Array.isArray(params.prefillPhone)
+          ? params.prefillPhone[0]
+          : '';
+    const dial =
+      typeof params.prefillDialCode === 'string'
+        ? params.prefillDialCode
+        : Array.isArray(params.prefillDialCode)
+          ? params.prefillDialCode[0]
+          : '';
+    const iso =
+      typeof params.prefillIso === 'string'
+        ? params.prefillIso
+        : Array.isArray(params.prefillIso)
+          ? params.prefillIso[0]
+          : '';
+
+    if (!p?.trim()) return;
+
+    const matched =
+      (dial && phoneCountries.find((c) => c.dialCode === dial)) ||
+      (iso ? resolvePreferredPhoneCountry(phoneCountries, iso) : null);
+
+    if (matched) setSelectedPhoneCountry(matched);
+    setPhoneLocal(p.replace(/[^\d\s]/g, ''));
+    loginPrefillAppliedRef.current = true;
+  }, [
+    params.prefillPhone,
+    params.prefillDialCode,
+    params.prefillIso,
+    phoneCountries,
+    resolvingPhoneCountry,
+  ]);
 
   const otpComplete = otpDigits.every((d) => d.length === 1 && /\d/.test(d));
 
@@ -152,7 +203,7 @@ export default function CustomerForgotPasswordScreen() {
         const res = await fetch(`${API_BASE_URL}/auth/user/forgot-password/verify-firebase`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ idToken }),
+          body: JSON.stringify({ idToken, role: FORGOT_PW_ROLE }),
         });
         const data = await res.json().catch(() => ({}));
         await auth().signOut();
@@ -244,7 +295,7 @@ export default function CustomerForgotPasswordScreen() {
       const res = await fetch(`${API_BASE_URL}/auth/user/forgot-password/email-preview`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone: e164 }),
+        body: JSON.stringify({ phone: e164, role: FORGOT_PW_ROLE }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -287,7 +338,7 @@ export default function CustomerForgotPasswordScreen() {
       const res = await fetch(`${API_BASE_URL}/auth/user/forgot-password/request`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ channel: 'EMAIL', phone: emailRecoveryE164 }),
+        body: JSON.stringify({ channel: 'EMAIL', phone: emailRecoveryE164, role: FORGOT_PW_ROLE }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.message || 'Request failed');
@@ -317,7 +368,7 @@ export default function CustomerForgotPasswordScreen() {
         const res = await fetch(`${API_BASE_URL}/auth/user/forgot-password/request`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ channel: 'WHATSAPP', phone: e164 }),
+          body: JSON.stringify({ channel: 'WHATSAPP', phone: e164, role: FORGOT_PW_ROLE }),
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(data.message || 'Request failed');
@@ -339,7 +390,7 @@ export default function CustomerForgotPasswordScreen() {
         const res = await fetch(`${API_BASE_URL}/auth/user/forgot-password/request`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ channel: 'SMS', phone: e164 }),
+          body: JSON.stringify({ channel: 'SMS', phone: e164, role: FORGOT_PW_ROLE }),
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(data.message || 'Request failed');
@@ -500,7 +551,7 @@ export default function CustomerForgotPasswordScreen() {
               >
                 <Text style={[styles.choiceTitle, { color: colors.text }]}>Phone</Text>
                 <Text style={[styles.choiceSub, { color: colors.textSecondary }]}>
-                  SMS (Firebase) or WhatsApp
+                  SMS (Firebase)
                 </Text>
               </TouchableOpacity>
             </View>
@@ -517,15 +568,19 @@ export default function CustomerForgotPasswordScreen() {
                   Code via Firebase (your device receives the SMS)
                 </Text>
               </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.choiceBtn, { backgroundColor: colors.surfaceVariant, borderColor: colors.border }]}
-                onPress={() => setPhoneChannel('whatsapp')}
+              <View
+                style={[
+                  styles.choiceBtn,
+                  styles.choiceDisabled,
+                  { backgroundColor: colors.surfaceVariant, borderColor: colors.border, opacity: 0.55 },
+                ]}
               >
                 <Text style={[styles.choiceTitle, { color: colors.text }]}>WhatsApp</Text>
+                <Text style={[styles.choiceSoon, { color: colors.primary }]}>Coming soon</Text>
                 <Text style={[styles.choiceSub, { color: colors.textSecondary }]}>
-                  Code from our WhatsApp Business number
+                  WhatsApp Business recovery is not available yet
                 </Text>
-              </TouchableOpacity>
+              </View>
               <TouchableOpacity onPress={() => setStep('method')}>
                 <Text style={{ color: colors.primary, textAlign: 'center', marginTop: 8 }}>Back</Text>
               </TouchableOpacity>
@@ -566,7 +621,11 @@ export default function CustomerForgotPasswordScreen() {
                 onPress={submitEmailPhoneForPreview}
                 disabled={loading}
               >
-                {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryBtnText}>Continue</Text>}
+                {loading ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text style={styles.primaryBtnText}>Check email</Text>
+                )}
               </TouchableOpacity>
               <TouchableOpacity onPress={() => setStep('method')}>
                 <Text style={{ color: colors.primary, textAlign: 'center' }}>Back</Text>
@@ -640,7 +699,11 @@ export default function CustomerForgotPasswordScreen() {
                 onPress={handleSendCode}
                 disabled={loading}
               >
-                {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryBtnText}>Continue</Text>}
+                {loading ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text style={styles.primaryBtnText}>Send code</Text>
+                )}
               </TouchableOpacity>
               <TouchableOpacity
                 onPress={() => {
@@ -842,6 +905,8 @@ const styles = StyleSheet.create({
     padding: 18,
     borderWidth: StyleSheet.hairlineWidth,
   },
+  choiceDisabled: {},
+  choiceSoon: { fontSize: 13, fontWeight: '700', marginBottom: 4 },
   choiceTitle: { fontSize: 17, fontWeight: '700', marginBottom: 4 },
   choiceSub: { fontSize: 14 },
   form: { gap: 14 },

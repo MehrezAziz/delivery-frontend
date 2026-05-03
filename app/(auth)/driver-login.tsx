@@ -30,7 +30,11 @@ import {
   type PhoneCountry,
 } from '../../services/phone-countries';
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
+/** Backend routes use global prefix `/api`. Env may already include `/api`. */
+const RAW_API = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
+const API_URL = RAW_API.replace(/\/$/, '').endsWith('/api')
+  ? RAW_API.replace(/\/$/, '')
+  : `${RAW_API.replace(/\/$/, '')}/api`;
 
 // Configure Google Sign-In
 GoogleSignin.configure({
@@ -38,6 +42,26 @@ GoogleSignin.configure({
   iosClientId: '295733709390-cmkprqadbcrannp1l4gl3drlab8b37r9.apps.googleusercontent.com',
   offlineAccess: true,
 });
+
+function getDriverLoginErrorMessage(error: unknown): string {
+  if (!axios.isAxiosError(error)) {
+    return 'Phone number or password is incorrect';
+  }
+  const status = error.response?.status;
+  const raw = (error.response?.data as { message?: string | string[] } | undefined)?.message;
+  const serverMsg = Array.isArray(raw) ? raw.join(' ') : typeof raw === 'string' ? raw : '';
+
+  if (serverMsg.includes('Google OAuth') || serverMsg.includes('Google sign-in')) {
+    return serverMsg;
+  }
+  if (serverMsg.toLowerCase().includes('suspend')) {
+    return serverMsg;
+  }
+  if (status && status >= 500) {
+    return 'Something went wrong. Please try again.';
+  }
+  return 'Phone number or password is incorrect';
+}
 
 export default function DriverLogin() {
   const router = useRouter();
@@ -51,6 +75,7 @@ export default function DriverLogin() {
   const [showPhoneCountryModal, setShowPhoneCountryModal] = useState(false);
   const [phoneCountrySearch, setPhoneCountrySearch] = useState('');
   const [resolvingPhoneCountry, setResolvingPhoneCountry] = useState(true);
+  const [loginError, setLoginError] = useState<string | null>(null);
 
   const filteredPhoneCountries = useMemo(() => {
     const q = phoneCountrySearch.trim().toLowerCase();
@@ -95,6 +120,7 @@ export default function DriverLogin() {
       return;
     }
 
+    setLoginError(null);
     setLoading(true);
 
     try {
@@ -125,18 +151,18 @@ export default function DriverLogin() {
 
       // Navigate to driver home
       router.replace('/(driver)/home');
-    } catch (error: any) {
-      console.error('Login error:', error);
-      Alert.alert(
-        'Login Failed',
-        error.response?.data?.message || 'Invalid credentials'
-      );
+    } catch (error: unknown) {
+      if (__DEV__) {
+        console.error('Login error:', error);
+      }
+      setLoginError(getDriverLoginErrorMessage(error));
     } finally {
       setLoading(false);
     }
   };
 
   const handleGoogleLogin = async () => {
+    setLoginError(null);
     setLoading(true);
     try {
       await GoogleSignin.hasPlayServices();
@@ -220,7 +246,10 @@ export default function DriverLogin() {
         <View style={[styles.phoneRow, { borderColor: colors.inputBorder, backgroundColor: colors.inputBg }]}>
           <TouchableOpacity
             style={[styles.countryCodeBtn, { borderRightColor: colors.inputBorder }]}
-            onPress={() => setShowPhoneCountryModal(true)}
+            onPress={() => {
+              setLoginError(null);
+              setShowPhoneCountryModal(true);
+            }}
             activeOpacity={0.7}
           >
             {resolvingPhoneCountry ? (
@@ -240,7 +269,10 @@ export default function DriverLogin() {
             placeholder="XX XXX XXX"
             placeholderTextColor={colors.textTertiary}
             value={phone}
-            onChangeText={(text) => setPhone(text.replace(/[^\d\s]/g, ''))}
+            onChangeText={(text) => {
+              setLoginError(null);
+              setPhone(text.replace(/[^\d\s]/g, ''));
+            }}
             keyboardType="phone-pad"
             autoCapitalize="none"
           />
@@ -256,7 +288,10 @@ export default function DriverLogin() {
             placeholder="Enter your password"
             placeholderTextColor={colors.textTertiary}
             value={password}
-            onChangeText={setPassword}
+            onChangeText={(text) => {
+              setLoginError(null);
+              setPassword(text);
+            }}
             secureTextEntry={!showPassword}
             autoCapitalize="none"
           />
@@ -271,6 +306,12 @@ export default function DriverLogin() {
             />
           </TouchableOpacity>
         </View>
+        {loginError ? (
+          <View style={styles.loginErrorBlock} accessibilityLiveRegion="polite">
+            <Text style={[styles.loginErrorTitle, { color: colors.danger }]}>Login failed</Text>
+            <Text style={[styles.loginErrorBody, { color: colors.danger }]}>{loginError}</Text>
+          </View>
+        ) : null}
       </View>
 
       {/* Login Button */}
@@ -313,7 +354,20 @@ export default function DriverLogin() {
       </TouchableOpacity>
 
       {/* Forgot Password */}
-      <TouchableOpacity style={styles.forgotPassword}>
+      <TouchableOpacity
+        style={styles.forgotPassword}
+        onPress={() =>
+          router.push({
+            pathname: '/(auth)/driver-forgot-password',
+            params: {
+              prefillPhone: phone.trim(),
+              prefillDialCode: selectedPhoneCountry?.dialCode ?? '',
+              prefillIso: selectedPhoneCountry?.isoCode ?? '',
+            },
+          })
+        }
+        disabled={loading}
+      >
         <Text style={[styles.forgotPasswordText, { color: colors.primary }]}>Forgot Password?</Text>
       </TouchableOpacity>
       <Modal
@@ -352,6 +406,7 @@ export default function DriverLogin() {
                 <TouchableOpacity
                   style={[styles.pickerItem, { borderBottomColor: colors.border }]}
                   onPress={() => {
+                    setLoginError(null);
                     setSelectedPhoneCountry(country);
                     setShowPhoneCountryModal(false);
                     setPhoneCountrySearch('');
@@ -458,6 +513,18 @@ const styles = StyleSheet.create({
   },
   eyeIcon: {
     padding: 12,
+  },
+  loginErrorBlock: {
+    marginTop: 10,
+    gap: 4,
+  },
+  loginErrorTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  loginErrorBody: {
+    fontSize: 14,
+    lineHeight: 20,
   },
   loginButton: {
     paddingVertical: 16,
