@@ -2,6 +2,7 @@
 
 export const AUTH_ROUTE_TITLES: Record<string, string> = {
   'customer-login': 'Customer sign in',
+  'customer-forgot-password': 'Forgot password',
   'driver-login': 'Driver sign in',
   'customer-register': 'Create account',
   'driver-register': 'Driver registration',

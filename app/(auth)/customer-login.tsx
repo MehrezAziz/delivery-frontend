@@ -263,7 +263,11 @@ export default function CustomerLoginScreen() {
               />
             </View>
 
-            <TouchableOpacity style={styles.forgotButton}>
+            <TouchableOpacity
+              style={styles.forgotButton}
+              onPress={() => router.push('/(auth)/customer-forgot-password')}
+              disabled={isSubmitting}
+            >
               <Text style={[styles.forgotText, { color: colors.primary }]}>Forgot Password?</Text>
             </TouchableOpacity>
 

@@ -12,6 +12,7 @@ export default function AuthLayout() {
       })}
     >
       <Stack.Screen name="customer-login" />
+      <Stack.Screen name="customer-forgot-password" />
       <Stack.Screen name="customer-register" />
       <Stack.Screen name="terms" />
       <Stack.Screen name="driver-login" />
