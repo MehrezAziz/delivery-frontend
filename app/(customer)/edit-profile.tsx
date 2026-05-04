@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import {
   View, Text, TouchableOpacity, ScrollView, StyleSheet,
-  TextInput, ActivityIndicator, Alert, Modal, FlatList,
+  TextInput, ActivityIndicator, Modal, FlatList,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -14,14 +14,23 @@ import {
   detectAndCachePreferredPhoneCountryIso,
   inferPhoneCountryAndLocal,
   toE164Phone,
+  validateNationalPhoneForCountry,
   type PhoneCountry,
 } from '../../services/phone-countries';
+import { ProfileFeedbackModal } from '../../components/ProfileFeedbackModal';
+import type { ThemeColors } from '../../contexts/ThemeContext';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api';
 
 export default function CustomerEditProfileScreen() {
   const router = useRouter();
-  const { colors, isDark } = useTheme();
+  const { colors } = useTheme();
+  const [feedback, setFeedback] = useState<{
+    variant: 'success' | 'error';
+    title: string;
+    message: string;
+    okNavigates: boolean;
+  } | null>(null);
   const [verified, setVerified] = useState(false);
   const [isGoogleUser, setIsGoogleUser] = useState(false);
   const [password, setPassword] = useState('');
@@ -95,7 +104,12 @@ export default function CustomerEditProfileScreen() {
       if (!res.ok) { const d = await res.json(); throw new Error(d.message || 'Invalid password'); }
       setVerified(true);
     } catch (e: any) {
-      Alert.alert('Error', e.message || 'Invalid password');
+      setFeedback({
+        variant: 'error',
+        title: 'Verification failed',
+        message: e.message || 'Invalid password',
+        okNavigates: false,
+      });
     } finally { setVerifying(false); }
   };
 
@@ -113,13 +127,47 @@ export default function CustomerEditProfileScreen() {
       if (!res.ok) throw new Error(data.message || 'Failed to apply referral code');
       setHasReferralCode(true);
       setReferralCodeInput('');
-      Alert.alert('Success', 'Referral code applied successfully');
+      setFeedback({
+        variant: 'success',
+        title: 'Success',
+        message: 'Referral code applied successfully.',
+        okNavigates: false,
+      });
     } catch (e: any) {
-      Alert.alert('Error', e.message || 'Failed to apply referral code');
+      setFeedback({
+        variant: 'error',
+        title: 'Could not apply code',
+        message: e.message || 'Failed to apply referral code',
+        okNavigates: false,
+      });
     } finally { setReferralApplying(false); }
   };
 
   const handleSave = async () => {
+    if (!selectedPhoneCountry) {
+      setFeedback({
+        variant: 'error',
+        title: 'Country required',
+        message: 'Please select a country for the phone number.',
+        okNavigates: false,
+      });
+      return;
+    }
+    const phoneCheck = validateNationalPhoneForCountry(
+      selectedPhoneCountry.isoCode,
+      selectedPhoneCountry.dialCode,
+      phone,
+    );
+    if (!phoneCheck.ok) {
+      setFeedback({
+        variant: 'error',
+        title: 'Invalid phone',
+        message: phoneCheck.message,
+        okNavigates: false,
+      });
+      return;
+    }
+
     setSaving(true);
     try {
       const token = await AsyncStorage.getItem('accessToken');
@@ -136,10 +184,30 @@ export default function CustomerEditProfileScreen() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || 'Failed to update profile');
-      Alert.alert('Success', 'Profile updated', [{ text: 'OK', onPress: () => router.canGoBack() ? router.back() : router.replace('/(customer)/home') }]);
+      setFeedback({
+        variant: 'success',
+        title: 'Profile updated',
+        message: 'Your changes have been saved.',
+        okNavigates: true,
+      });
     } catch (e: any) {
-      Alert.alert('Error', 'Failed to update, phone number exists!');
+      setFeedback({
+        variant: 'error',
+        title: 'Could not save',
+        message: e?.message || 'Failed to update profile. This phone number may already be in use.',
+        okNavigates: false,
+      });
     } finally { setSaving(false); }
+  };
+
+  const dismissFeedback = () => setFeedback(null);
+
+  const handleFeedbackOk = () => {
+    const shouldLeave = feedback?.okNavigates;
+    setFeedback(null);
+    if (shouldLeave) {
+      router.canGoBack() ? router.back() : router.replace('/(customer)/home');
+    }
   };
 
   if (loading) return <View style={[s.center, { backgroundColor: colors.background }]}><ActivityIndicator size="large" color={colors.primary} /></View>;
@@ -147,8 +215,17 @@ export default function CustomerEditProfileScreen() {
   if (!verified) {
     return (
       <View style={[s.container, { backgroundColor: colors.background }]}>
+        <ProfileFeedbackModal
+          visible={!!feedback}
+          variant={feedback?.variant ?? 'error'}
+          title={feedback?.title ?? ''}
+          message={feedback?.message ?? ''}
+          okNavigatesOnPress={!!feedback?.okNavigates}
+          onBackdropPress={dismissFeedback}
+          onOkPress={handleFeedbackOk}
+        />
         <View style={[s.gateContainer, { backgroundColor: colors.background }]}>
-          <View style={s.gateIconWrap}>
+          <View style={[s.gateIconWrap, { backgroundColor: colors.primaryLight }]}>
             <Ionicons name="lock-closed" size={40} color={colors.primary} />
           </View>
           <Text style={[s.gateTitle, { color: colors.text }]}>Verify Your Identity</Text>
@@ -166,34 +243,54 @@ export default function CustomerEditProfileScreen() {
 
   return (
     <View style={[s.container, { backgroundColor: colors.background }]}>
+      <ProfileFeedbackModal
+        visible={!!feedback}
+        variant={feedback?.variant ?? 'error'}
+        title={feedback?.title ?? ''}
+        message={feedback?.message ?? ''}
+        okNavigatesOnPress={!!feedback?.okNavigates}
+        onBackdropPress={dismissFeedback}
+        onOkPress={handleFeedbackOk}
+      />
       <ScrollView style={{ flex: 1 }} contentContainerStyle={s.content}>
-        <Field label="First Name" value={firstName} onChange={setFirstName} />
-        <Field label="Last Name" value={secondName} onChange={setSecondName} />
+        <Field label="First Name" value={firstName} onChange={setFirstName} colors={colors} />
+        <Field label="Last Name" value={secondName} onChange={setSecondName} colors={colors} />
         <View style={{ marginBottom: 16 }}>
-          <Text style={s.fieldLabel}>Phone</Text>
-          <View style={s.phoneRow}>
-            <TouchableOpacity style={s.countryCodeBtn} onPress={() => setShowPhoneCountryModal(true)} activeOpacity={0.7}>
+          <Text style={[s.fieldLabel, { color: colors.textSecondary }]}>Phone</Text>
+          <View style={[s.phoneRow, { borderColor: colors.border, backgroundColor: colors.inputBg }]}>
+            <TouchableOpacity
+              style={[s.countryCodeBtn, { borderRightColor: colors.border, backgroundColor: colors.surfaceVariant }]}
+              onPress={() => setShowPhoneCountryModal(true)}
+              activeOpacity={0.7}
+            >
               <Text style={s.countryFlag}>{selectedPhoneCountry?.flag || '🏳️'}</Text>
-              <Text style={s.countryMeta}>{selectedPhoneCountry?.isoCode || 'TN'} +{selectedPhoneCountry?.dialCode || '216'}</Text>
-              <Text style={s.countryArrow}>▾</Text>
+              <Text style={[s.countryMeta, { color: colors.text }]}>{selectedPhoneCountry?.isoCode || 'TN'} +{selectedPhoneCountry?.dialCode || '216'}</Text>
+              <Text style={[s.countryArrow, { color: colors.textTertiary }]}>▾</Text>
             </TouchableOpacity>
             <TextInput
-              style={[s.input, { flex: 1, marginBottom: 0, borderWidth: 0, borderRadius: 0 }]}
+              style={[s.input, { flex: 1, marginBottom: 0, borderWidth: 0, borderRadius: 0, backgroundColor: 'transparent', color: colors.text }]}
               value={phone}
               onChangeText={(text) => setPhone(text.replace(/[^\d\s]/g, ''))}
               keyboardType="phone-pad"
-              placeholderTextColor="#9ca3af"
+              placeholderTextColor={colors.textTertiary}
             />
           </View>
         </View>
-        <Field label="Email" value={email} onChange={setEmail} keyboardType="email-address" />
+        <Field label="Email" value={email} onChange={setEmail} keyboardType="email-address" colors={colors} />
 
-        <Text style={s.fieldLabel}>Gender</Text>
+        <Text style={[s.fieldLabel, { color: colors.textSecondary }]}>Gender</Text>
         <View style={{ flexDirection: 'row', gap: 10, marginBottom: 16 }}>
           {['MALE', 'FEMALE'].map(g => (
-            <TouchableOpacity key={g} style={[s.genderBtn, gender === g && s.genderBtnActive]}
-              onPress={() => setGender(g)}>
-              <Text style={[s.genderBtnText, gender === g && { color: '#fff' }]}>{g}</Text>
+            <TouchableOpacity
+              key={g}
+              style={[
+                s.genderBtn,
+                { backgroundColor: colors.surfaceVariant, borderColor: colors.border },
+                gender === g && { backgroundColor: colors.primary, borderColor: colors.primary },
+              ]}
+              onPress={() => setGender(g)}
+            >
+              <Text style={[s.genderBtnText, { color: colors.text }, gender === g && { color: '#fff' }]}>{g}</Text>
             </TouchableOpacity>
           ))}
         </View>
@@ -201,55 +298,55 @@ export default function CustomerEditProfileScreen() {
         {/* Referral Code Section */}
         {!hasReferralCode && (
           <View style={{ marginBottom: 16 }}>
-            <Text style={s.fieldLabel}>Referral Code</Text>
+            <Text style={[s.fieldLabel, { color: colors.textSecondary }]}>Referral Code</Text>
             <View style={{ flexDirection: 'row', gap: 10 }}>
               <TextInput
-                style={[s.input, { flex: 1 }]}
+                style={[s.input, { flex: 1, backgroundColor: colors.inputBg, borderColor: colors.border, color: colors.text }]}
                 value={referralCodeInput}
                 onChangeText={setReferralCodeInput}
                 placeholder="Enter a referral code"
-                placeholderTextColor="#9ca3af"
+                placeholderTextColor={colors.textTertiary}
                 autoCapitalize="characters"
               />
               <TouchableOpacity
-                style={[s.saveBtn, { flex: 0, paddingHorizontal: 20, marginTop: 0 }, (!referralCodeInput.trim() || referralApplying) && { opacity: 0.5 }]}
+                style={[s.saveBtn, { flex: 0, paddingHorizontal: 20, marginTop: 0, backgroundColor: colors.primary }, (!referralCodeInput.trim() || referralApplying) && { opacity: 0.5 }]}
                 onPress={handleApplyReferralCode}
                 disabled={!referralCodeInput.trim() || referralApplying}
               >
                 {referralApplying ? <ActivityIndicator color="#fff" size="small" /> : <Text style={s.saveBtnText}>Apply</Text>}
               </TouchableOpacity>
             </View>
-            <Text style={{ fontSize: 12, color: '#9ca3af', marginTop: 4 }}>
+            <Text style={{ fontSize: 12, color: colors.textTertiary, marginTop: 4 }}>
               You can only add a referral code once. It cannot be changed later.
             </Text>
           </View>
         )}
         {hasReferralCode && (
           <View style={{ marginBottom: 16 }}>
-            <Text style={s.fieldLabel}>Referral Code</Text>
-            <Text style={{ fontSize: 14, color: '#10b981', fontWeight: '600' }}>✓ Referral code already applied</Text>
+            <Text style={[s.fieldLabel, { color: colors.textSecondary }]}>Referral Code</Text>
+            <Text style={{ fontSize: 14, color: colors.success, fontWeight: '600' }}>✓ Referral code already applied</Text>
           </View>
         )}
 
-        <TouchableOpacity style={s.saveBtn} onPress={handleSave} disabled={saving}>
+        <TouchableOpacity style={[s.saveBtn, { backgroundColor: colors.primary }]} onPress={handleSave} disabled={saving}>
           {saving ? <ActivityIndicator color="#fff" /> : <Text style={s.saveBtnText}>Save Changes</Text>}
         </TouchableOpacity>
       </ScrollView>
       <Modal visible={showPhoneCountryModal} transparent animationType="slide" onRequestClose={() => setShowPhoneCountryModal(false)}>
         <View style={s.pickerOverlay}>
-          <View style={s.pickerCard}>
-            <View style={s.pickerHeader}>
-              <Text style={s.pickerTitle}>Select country code</Text>
+          <View style={[s.pickerCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <View style={[s.pickerHeader, { borderBottomColor: colors.border }]}>
+              <Text style={[s.pickerTitle, { color: colors.text }]}>Select country code</Text>
               <TouchableOpacity onPress={() => setShowPhoneCountryModal(false)} style={s.pickerCloseBtn}>
-                <Text style={s.pickerCloseText}>✕</Text>
+                <Text style={[s.pickerCloseText, { color: colors.textTertiary }]}>✕</Text>
               </TouchableOpacity>
             </View>
-            <View style={s.pickerSearchWrap}>
+            <View style={[s.pickerSearchWrap, { borderColor: colors.border, backgroundColor: colors.surfaceVariant }]}>
               <Text style={s.pickerSearchIcon}>🔍</Text>
               <TextInput
-                style={s.pickerSearchInput}
+                style={[s.pickerSearchInput, { color: colors.text }]}
                 placeholder="Search country, ISO or code"
-                placeholderTextColor="#9ca3af"
+                placeholderTextColor={colors.textTertiary}
                 value={phoneCountrySearch}
                 onChangeText={setPhoneCountrySearch}
               />
@@ -264,7 +361,7 @@ export default function CustomerEditProfileScreen() {
               contentContainerStyle={s.pickerList}
               renderItem={({ item: country }) => (
                 <TouchableOpacity
-                  style={s.pickerItem}
+                  style={[s.pickerItem, { borderBottomColor: colors.border }]}
                   onPress={() => {
                     setSelectedPhoneCountry(country);
                     setShowPhoneCountryModal(false);
@@ -273,8 +370,8 @@ export default function CustomerEditProfileScreen() {
                 >
                   <Text style={s.pickerItemFlag}>{country.flag}</Text>
                   <View style={s.pickerItemTextWrap}>
-                    <Text style={s.pickerItemTitle}>{country.name}</Text>
-                    <Text style={s.pickerItemSub}>{country.isoCode} · +{country.dialCode}</Text>
+                    <Text style={[s.pickerItemTitle, { color: colors.text }]}>{country.name}</Text>
+                    <Text style={[s.pickerItemSub, { color: colors.textSecondary }]}>{country.isoCode} · +{country.dialCode}</Text>
                   </View>
                 </TouchableOpacity>
               )}
@@ -286,13 +383,44 @@ export default function CustomerEditProfileScreen() {
   );
 }
 
-function Field({ label, value, onChange, keyboardType, editable = true, multiline }: any) {
+function Field({
+  label,
+  value,
+  onChange,
+  keyboardType,
+  editable = true,
+  multiline,
+  colors,
+}: {
+  label: string;
+  value: string;
+  onChange: (t: string) => void;
+  keyboardType?: 'default' | 'email-address' | 'numeric' | 'phone-pad' | undefined;
+  editable?: boolean;
+  multiline?: boolean;
+  colors: ThemeColors;
+}) {
   return (
     <View style={{ marginBottom: 16 }}>
-      <Text style={s.fieldLabel}>{label}</Text>
-      <TextInput style={[s.input, multiline && { height: 80, textAlignVertical: 'top' }, !editable && { backgroundColor: '#f3f4f6', color: '#9ca3af' }]}
-        value={value} onChangeText={onChange} keyboardType={keyboardType}
-        multiline={multiline} editable={editable} placeholderTextColor="#9ca3af" />
+      <Text style={[s.fieldLabel, { color: colors.textSecondary }]}>{label}</Text>
+      <TextInput
+        style={[
+          s.input,
+          {
+            backgroundColor: colors.inputBg,
+            color: colors.text,
+            borderColor: colors.border,
+          },
+          multiline && { height: 80, textAlignVertical: 'top' },
+          !editable && { backgroundColor: colors.surfaceVariant, color: colors.textTertiary },
+        ]}
+        value={value}
+        onChangeText={onChange}
+        keyboardType={keyboardType}
+        multiline={multiline}
+        editable={editable}
+        placeholderTextColor={colors.textTertiary}
+      />
     </View>
   );
 }
@@ -303,8 +431,12 @@ const s = StyleSheet.create({
   content: { padding: 20, paddingTop: 8, paddingBottom: 40 },
   gateContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 32 },
   gateIconWrap: {
-    width: 80, height: 80, borderRadius: 40, backgroundColor: '#dbeafe',
-    alignItems: 'center', justifyContent: 'center', marginBottom: 20,
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 20,
   },
   gateTitle: { fontSize: 22, fontWeight: '800', color: '#111827', marginBottom: 8 },
   gateSub: { fontSize: 14, color: '#6b7280', textAlign: 'center', marginBottom: 24 },
@@ -336,12 +468,14 @@ const s = StyleSheet.create({
   countryMeta: { fontSize: 13, fontWeight: '700', color: '#111827', flexShrink: 1 },
   countryArrow: { fontSize: 13, fontWeight: '700', color: '#6b7280' },
   genderBtn: {
-    flex: 1, paddingVertical: 12, borderRadius: 12, backgroundColor: '#f3f4f6',
-    alignItems: 'center', borderWidth: 1, borderColor: '#e5e7eb',
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: 'center',
+    borderWidth: 1,
   },
-  genderBtnActive: { backgroundColor: '#0284c7', borderColor: '#0284c7' },
-  genderBtnText: { fontSize: 14, fontWeight: '600', color: '#374151' },
-  saveBtn: { backgroundColor: '#0284c7', borderRadius: 14, paddingVertical: 16, alignItems: 'center', marginTop: 8 },
+  genderBtnText: { fontSize: 14, fontWeight: '600' },
+  saveBtn: { borderRadius: 14, paddingVertical: 16, alignItems: 'center', marginTop: 8 },
   saveBtnText: { color: '#fff', fontSize: 16, fontWeight: '700' },
   pickerOverlay: { flex: 1, backgroundColor: 'rgba(2, 6, 23, 0.5)', justifyContent: 'flex-end' },
   pickerCard: { maxHeight: '78%', backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20, borderWidth: 1, borderColor: '#e5e7eb' },

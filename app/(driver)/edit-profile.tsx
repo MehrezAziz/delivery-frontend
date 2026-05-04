@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import {
   View, Text, TouchableOpacity, ScrollView, StyleSheet,
-  TextInput, ActivityIndicator, Alert, Modal, FlatList,
+  TextInput, ActivityIndicator, Modal, FlatList,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -15,14 +15,22 @@ import {
   detectAndCachePreferredPhoneCountryIso,
   inferPhoneCountryAndLocal,
   toE164Phone,
+  validateNationalPhoneForCountry,
   type PhoneCountry,
 } from '../../services/phone-countries';
+import { ProfileFeedbackModal } from '../../components/ProfileFeedbackModal';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
 
 export default function DriverEditProfileScreen() {
   const router = useRouter();
-  const { colors, isDark } = useTheme();
+  const { colors } = useTheme();
+  const [feedback, setFeedback] = useState<{
+    variant: 'success' | 'error';
+    title: string;
+    message: string;
+    okNavigates: boolean;
+  } | null>(null);
   const [verified, setVerified] = useState(false);
   const [isGoogleUser, setIsGoogleUser] = useState(false);
   const [password, setPassword] = useState('');
@@ -96,11 +104,40 @@ export default function DriverEditProfileScreen() {
       });
       setVerified(true);
     } catch (e: any) {
-      Alert.alert('Error', e.response?.data?.message || 'Invalid password');
+      setFeedback({
+        variant: 'error',
+        title: 'Verification failed',
+        message: e.response?.data?.message || 'Invalid password',
+        okNavigates: false,
+      });
     } finally { setVerifying(false); }
   };
 
   const handleSave = async () => {
+    if (!selectedPhoneCountry) {
+      setFeedback({
+        variant: 'error',
+        title: 'Country required',
+        message: 'Please select a country for the phone number.',
+        okNavigates: false,
+      });
+      return;
+    }
+    const phoneCheck = validateNationalPhoneForCountry(
+      selectedPhoneCountry.isoCode,
+      selectedPhoneCountry.dialCode,
+      phone,
+    );
+    if (!phoneCheck.ok) {
+      setFeedback({
+        variant: 'error',
+        title: 'Invalid phone',
+        message: phoneCheck.message,
+        okNavigates: false,
+      });
+      return;
+    }
+
     setSaving(true);
     try {
       const token = await AsyncStorage.getItem('accessToken');
@@ -121,12 +158,30 @@ export default function DriverEditProfileScreen() {
         userGender: gender || undefined,
       }, { headers: { Authorization: `Bearer ${token}` } });
 
-      Alert.alert('Success', 'Profile updated', [
-        { text: 'OK', onPress: () => router.canGoBack() ? router.back() : router.replace('/(driver)/home') },
-      ]);
+      setFeedback({
+        variant: 'success',
+        title: 'Profile updated',
+        message: 'Your changes have been saved.',
+        okNavigates: true,
+      });
     } catch (e: any) {
-      Alert.alert('Error', e.response?.data?.message || 'Failed to update');
+      setFeedback({
+        variant: 'error',
+        title: 'Could not save',
+        message: e.response?.data?.message || 'Failed to update profile.',
+        okNavigates: false,
+      });
     } finally { setSaving(false); }
+  };
+
+  const dismissFeedback = () => setFeedback(null);
+
+  const handleFeedbackOk = () => {
+    const shouldLeave = feedback?.okNavigates;
+    setFeedback(null);
+    if (shouldLeave) {
+      router.canGoBack() ? router.back() : router.replace('/(driver)/home');
+    }
   };
 
   if (loading) {
@@ -137,8 +192,17 @@ export default function DriverEditProfileScreen() {
   if (!verified) {
     return (
       <View style={[s.container, { backgroundColor: colors.background }]}>
+        <ProfileFeedbackModal
+          visible={!!feedback}
+          variant={feedback?.variant ?? 'error'}
+          title={feedback?.title ?? ''}
+          message={feedback?.message ?? ''}
+          okNavigatesOnPress={!!feedback?.okNavigates}
+          onBackdropPress={dismissFeedback}
+          onOkPress={handleFeedbackOk}
+        />
         <View style={s.gateContainer}>
-          <View style={s.gateIconWrap}>
+          <View style={[s.gateIconWrap, { backgroundColor: colors.primaryLight }]}>
             <Ionicons name="lock-closed" size={40} color={colors.primary} />
           </View>
           <Text style={[s.gateTitle, { color: colors.text }]}>Verify Your Identity</Text>
@@ -153,7 +217,7 @@ export default function DriverEditProfileScreen() {
             autoFocus
           />
           <TouchableOpacity
-            style={[s.gateBtn, !password.trim() && { opacity: 0.5 }]}
+            style={[s.gateBtn, { backgroundColor: colors.primary }, !password.trim() && { opacity: 0.5 }]}
             onPress={handleVerify}
             disabled={verifying || !password.trim()}
           >
@@ -166,6 +230,15 @@ export default function DriverEditProfileScreen() {
 
   return (
     <View style={[s.container, { backgroundColor: colors.background }]}>
+      <ProfileFeedbackModal
+        visible={!!feedback}
+        variant={feedback?.variant ?? 'error'}
+        title={feedback?.title ?? ''}
+        message={feedback?.message ?? ''}
+        okNavigatesOnPress={!!feedback?.okNavigates}
+        onBackdropPress={dismissFeedback}
+        onOkPress={handleFeedbackOk}
+      />
       <ScrollView style={{ flex: 1 }} contentContainerStyle={s.content}>
         <Field label="First Name" value={firstName} onChange={setFirstName} colors={colors} />
         <Field label="Last Name" value={secondName} onChange={setSecondName} colors={colors} />
@@ -197,14 +270,21 @@ export default function DriverEditProfileScreen() {
         <Text style={[s.fieldLabel, { color: colors.textSecondary }]}>Gender</Text>
         <View style={{ flexDirection: 'row', gap: 10, marginBottom: 16 }}>
           {['MALE', 'FEMALE'].map(g => (
-            <TouchableOpacity key={g} style={[s.genderBtn, { backgroundColor: colors.surfaceVariant, borderColor: colors.border }, gender === g && s.genderBtnActive]}
-              onPress={() => setGender(g)}>
+            <TouchableOpacity
+              key={g}
+              style={[
+                s.genderBtn,
+                { backgroundColor: colors.surfaceVariant, borderColor: colors.border },
+                gender === g && { backgroundColor: colors.primary, borderColor: colors.primary },
+              ]}
+              onPress={() => setGender(g)}
+            >
               <Text style={[s.genderBtnText, { color: colors.text }, gender === g && { color: '#fff' }]}>{g}</Text>
             </TouchableOpacity>
           ))}
         </View>
 
-        <TouchableOpacity style={s.saveBtn} onPress={handleSave} disabled={saving}>
+        <TouchableOpacity style={[s.saveBtn, { backgroundColor: colors.primary }]} onPress={handleSave} disabled={saving}>
           {saving ? <ActivityIndicator color="#fff" /> : <Text style={s.saveBtnText}>Save Changes</Text>}
         </TouchableOpacity>
       </ScrollView>
@@ -277,8 +357,12 @@ const s = StyleSheet.create({
   // Password gate
   gateContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 32 },
   gateIconWrap: {
-    width: 80, height: 80, borderRadius: 40, backgroundColor: '#dbeafe',
-    alignItems: 'center', justifyContent: 'center', marginBottom: 20,
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 20,
   },
   gateTitle: { fontSize: 22, fontWeight: '800', color: '#111827', marginBottom: 8 },
   gateSub: { fontSize: 14, color: '#6b7280', textAlign: 'center', marginBottom: 24 },
@@ -287,7 +371,9 @@ const s = StyleSheet.create({
     fontSize: 16, color: '#111827', borderWidth: 1, borderColor: '#e5e7eb', marginBottom: 16,
   },
   gateBtn: {
-    width: '100%', backgroundColor: '#0284c7', borderRadius: 14, paddingVertical: 16,
+    width: '100%',
+    borderRadius: 14,
+    paddingVertical: 16,
     alignItems: 'center',
   },
   gateBtnText: { color: '#fff', fontSize: 16, fontWeight: '700' },
@@ -312,14 +398,18 @@ const s = StyleSheet.create({
   countryMeta: { fontSize: 13, fontWeight: '700', flexShrink: 1 },
   countryArrow: { fontSize: 13, fontWeight: '700' },
   genderBtn: {
-    flex: 1, paddingVertical: 12, borderRadius: 12, backgroundColor: '#f3f4f6',
-    alignItems: 'center', borderWidth: 1, borderColor: '#e5e7eb',
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: 'center',
+    borderWidth: 1,
   },
-  genderBtnActive: { backgroundColor: '#0284c7', borderColor: '#0284c7' },
-  genderBtnText: { fontSize: 14, fontWeight: '600', color: '#374151' },
+  genderBtnText: { fontSize: 14, fontWeight: '600' },
   saveBtn: {
-    backgroundColor: '#0284c7', borderRadius: 14, paddingVertical: 16,
-    alignItems: 'center', marginTop: 8,
+    borderRadius: 14,
+    paddingVertical: 16,
+    alignItems: 'center',
+    marginTop: 8,
   },
   saveBtnText: { color: '#fff', fontSize: 16, fontWeight: '700' },
   pickerOverlay: { flex: 1, backgroundColor: 'rgba(2, 6, 23, 0.5)', justifyContent: 'flex-end' },
