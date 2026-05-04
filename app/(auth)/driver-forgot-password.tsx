@@ -21,7 +21,13 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Clipboard from 'expo-clipboard';
-import auth, { type FirebaseAuthTypes } from '@react-native-firebase/auth';
+import {
+  getAuth,
+  getIdToken,
+  signInWithPhoneNumber,
+  signOut,
+  type FirebaseAuthTypes,
+} from '@react-native-firebase/auth';
 import {
   ensurePhoneCountriesLoaded,
   cachePhoneCountries,
@@ -313,16 +319,16 @@ export default function DriverForgotPasswordScreen() {
           setTimeout(() => otpRefs.current[0]?.focus(), 0);
           throw new Error('Invalid code');
         }
-        const user = auth().currentUser;
+        const user = getAuth().currentUser;
         if (!user) throw new Error('Verification incomplete');
-        const idToken = await user.getIdToken(true);
+        const idToken = await getIdToken(user, true);
         const res = await fetch(`${API_BASE_URL}/auth/user/forgot-password/verify-firebase`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ idToken, role: FORGOT_PW_ROLE }),
         });
         const data = await res.json().catch(() => ({}));
-        await auth().signOut();
+        await signOut(getAuth());
         if (!res.ok) {
           setOtpError(true);
           setOtpDigits(['', '', '', '', '', '']);
@@ -577,7 +583,7 @@ export default function DriverForgotPasswordScreen() {
         const data = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(data.message || 'Request failed');
         if (data.mode !== 'FIREBASE_SMS') throw new Error('SMS setup error');
-        const confirmation = await auth().signInWithPhoneNumber(data.phoneE164);
+        const confirmation = await signInWithPhoneNumber(getAuth(), data.phoneE164);
         firebaseConfirmationRef.current = confirmation;
         setSessionId(null);
         setOtpExpiresAt(Date.now() + FIREBASE_OTP_TTL_MS);
@@ -651,7 +657,7 @@ export default function DriverForgotPasswordScreen() {
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.message || 'Request failed');
       if (data.mode !== 'FIREBASE_SMS') throw new Error('SMS setup error');
-      const confirmation = await auth().signInWithPhoneNumber(data.phoneE164);
+      const confirmation = await signInWithPhoneNumber(getAuth(), data.phoneE164);
       firebaseConfirmationRef.current = confirmation;
       setSessionId(null);
       setOtpExpiresAt(Date.now() + FIREBASE_OTP_TTL_MS);
