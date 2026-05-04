@@ -14,6 +14,7 @@ import {
   detectAndCachePreferredPhoneCountryIso,
   inferPhoneCountryAndLocal,
   toE164Phone,
+  validateNationalPhoneForCountry,
   type PhoneCountry,
 } from '../../services/phone-countries';
 
@@ -120,6 +121,20 @@ export default function CustomerEditProfileScreen() {
   };
 
   const handleSave = async () => {
+    if (!selectedPhoneCountry) {
+      Alert.alert('Error', 'Please select a country for the phone number');
+      return;
+    }
+    const phoneCheck = validateNationalPhoneForCountry(
+      selectedPhoneCountry.isoCode,
+      selectedPhoneCountry.dialCode,
+      phone,
+    );
+    if (!phoneCheck.ok) {
+      Alert.alert('Invalid phone', phoneCheck.message);
+      return;
+    }
+
     setSaving(true);
     try {
       const token = await AsyncStorage.getItem('accessToken');
