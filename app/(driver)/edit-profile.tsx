@@ -20,6 +20,11 @@ import {
 } from '../../services/phone-countries';
 import { ProfileFeedbackModal } from '../../components/ProfileFeedbackModal';
 import { markDriverProfileNeedsRefresh } from '../../utils/profileRefreshSignals';
+import {
+  getBiometricPrimaryLabel,
+  getBiometricSwitchLinkLabel,
+  getLocalAuthentication,
+} from '../../utils/editProfileBiometricGate';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
 
@@ -50,6 +55,10 @@ export default function DriverEditProfileScreen() {
   const [gender, setGender] = useState<string | null>(null);
   const [vehicleType, setVehicleType] = useState('');
   const [description, setDescription] = useState('');
+  const [canUseBiometric, setCanUseBiometric] = useState(false);
+  const [biometricPrimaryLabel, setBiometricPrimaryLabel] = useState('Verify with biometrics');
+  const [biometricSwitchLinkLabel, setBiometricSwitchLinkLabel] = useState('Use biometrics');
+  const [preferPassword, setPreferPassword] = useState(false);
   const filteredPhoneCountries = useMemo(() => {
     const q = phoneCountrySearch.trim().toLowerCase();
     if (!q) return phoneCountries;
@@ -90,9 +99,90 @@ export default function DriverEditProfileScreen() {
       if (!d.user?.hasPassword) {
         setIsGoogleUser(true);
         setVerified(true);
+        setCanUseBiometric(false);
+      } else {
+        let bioOk = false;
+        let label = 'Verify with biometrics';
+        const LA = await getLocalAuthentication();
+        if (LA) {
+          try {
+            const hw = await LA.hasHardwareAsync();
+            const enrolled = await LA.isEnrolledAsync();
+            bioOk = hw && enrolled;
+            if (bioOk) {
+              const types = await LA.supportedAuthenticationTypesAsync();
+              label = getBiometricPrimaryLabel(types);
+              setBiometricSwitchLinkLabel(getBiometricSwitchLinkLabel(types));
+            }
+          } catch {
+            bioOk = false;
+          }
+        }
+        setCanUseBiometric(bioOk);
+        setBiometricPrimaryLabel(label);
+        if (!bioOk) setPreferPassword(true);
+        else setPreferPassword(false);
       }
     } catch (e) { console.error(e); }
     finally { setLoading(false); }
+  };
+
+  const handleBiometricVerify = async () => {
+    setVerifying(true);
+    try {
+      const LA = await getLocalAuthentication();
+      if (!LA) {
+        setPreferPassword(true);
+        setFeedback({
+          variant: 'error',
+          title: 'Biometrics unavailable',
+          message: 'This app build doesn’t include biometric support yet. Rebuild the app, or use your password.',
+          okNavigates: false,
+        });
+        return;
+      }
+      const compatible = await LA.hasHardwareAsync();
+      const enrolled = await LA.isEnrolledAsync();
+      if (!compatible || !enrolled) {
+        setPreferPassword(true);
+        setFeedback({
+          variant: 'error',
+          title: 'Biometrics unavailable',
+          message: 'No biometric login is set up on this device. Use your password instead.',
+          okNavigates: false,
+        });
+        return;
+      }
+      const auth = await LA.authenticateAsync({
+        promptMessage: 'Confirm it’s you to edit your profile',
+        cancelLabel: 'Cancel',
+        disableDeviceFallback: true,
+      });
+      if (auth.success) {
+        setVerified(true);
+      } else if (auth.error === 'user_cancel' || auth.error === 'system_cancel') {
+        /* quiet */
+      } else {
+        setFeedback({
+          variant: 'error',
+          title: 'Not verified',
+          message:
+            auth.error === 'lockout'
+              ? 'Too many attempts. Try again later or use your password.'
+              : 'Could not verify. Try again or use your password.',
+          okNavigates: false,
+        });
+      }
+    } catch (e: any) {
+      setFeedback({
+        variant: 'error',
+        title: 'Verification failed',
+        message: e?.message || 'Biometric verification failed.',
+        okNavigates: false,
+      });
+    } finally {
+      setVerifying(false);
+    }
   };
 
   const handleVerify = async () => {
@@ -190,8 +280,14 @@ export default function DriverEditProfileScreen() {
     return <View style={[s.center, { backgroundColor: colors.background }]}><ActivityIndicator size="large" color={colors.primary} /></View>;
   }
 
-  // Password gate
+  // Password / biometric gate
   if (!verified) {
+    const showBiometricFirst = canUseBiometric && !preferPassword;
+    const biometricIconName =
+      biometricPrimaryLabel.includes('fingerprint') && !biometricPrimaryLabel.includes('Face')
+        ? 'finger-print-outline'
+        : 'scan-outline';
+
     return (
       <View style={[s.container, { backgroundColor: colors.background }]}>
         <ProfileFeedbackModal
@@ -203,28 +299,63 @@ export default function DriverEditProfileScreen() {
           onBackdropPress={dismissFeedback}
           onOkPress={handleFeedbackOk}
         />
-        <View style={s.gateContainer}>
+        <View style={[s.gateContainer, { backgroundColor: colors.background }]}>
           <View style={[s.gateIconWrap, { backgroundColor: colors.primaryLight }]}>
-            <Ionicons name="lock-closed" size={40} color={colors.primary} />
+            <Ionicons
+              name={showBiometricFirst ? biometricIconName : 'lock-closed'}
+              size={40}
+              color={colors.primary}
+            />
           </View>
           <Text style={[s.gateTitle, { color: colors.text }]}>Verify Your Identity</Text>
-          <Text style={[s.gateSub, { color: colors.textSecondary }]}>Enter your password to access profile editing</Text>
-          <TextInput
-            style={[s.gateInput, { backgroundColor: colors.card, color: colors.text, borderColor: colors.border }]}
-            value={password}
-            onChangeText={setPassword}
-            placeholder="Enter your password"
-            placeholderTextColor={colors.textTertiary}
-            secureTextEntry
-            autoFocus
-          />
-          <TouchableOpacity
-            style={[s.gateBtn, { backgroundColor: colors.primary }, !password.trim() && { opacity: 0.5 }]}
-            onPress={handleVerify}
-            disabled={verifying || !password.trim()}
-          >
-            {verifying ? <ActivityIndicator color="#fff" /> : <Text style={s.gateBtnText}>Verify</Text>}
-          </TouchableOpacity>
+          <Text style={[s.gateSub, { color: colors.textSecondary }]}>
+            {showBiometricFirst
+              ? 'Confirm with your device to edit your profile.'
+              : 'Enter your account password to edit your profile.'}
+          </Text>
+
+          {showBiometricFirst ? (
+            <>
+              <TouchableOpacity
+                style={[s.gateBtn, { backgroundColor: colors.primary }, verifying && { opacity: 0.85 }]}
+                onPress={handleBiometricVerify}
+                disabled={verifying}
+              >
+                {verifying ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text style={s.gateBtnText}>{biometricPrimaryLabel}</Text>
+                )}
+              </TouchableOpacity>
+              <TouchableOpacity style={s.gateLinkBtn} onPress={() => setPreferPassword(true)} disabled={verifying}>
+                <Text style={[s.gateLinkText, { color: colors.primary }]}>Use password instead</Text>
+              </TouchableOpacity>
+            </>
+          ) : (
+            <>
+              <TextInput
+                style={[s.gateInput, { backgroundColor: colors.card, color: colors.text, borderColor: colors.border }]}
+                value={password}
+                onChangeText={setPassword}
+                placeholder="Enter your password"
+                placeholderTextColor={colors.textTertiary}
+                secureTextEntry
+                autoFocus
+              />
+              <TouchableOpacity
+                style={[s.gateBtn, { backgroundColor: colors.primary }, !password.trim() && { opacity: 0.5 }]}
+                onPress={handleVerify}
+                disabled={verifying || !password.trim()}
+              >
+                {verifying ? <ActivityIndicator color="#fff" /> : <Text style={s.gateBtnText}>Verify</Text>}
+              </TouchableOpacity>
+              {canUseBiometric ? (
+                <TouchableOpacity style={s.gateLinkBtn} onPress={() => setPreferPassword(false)} disabled={verifying}>
+                  <Text style={[s.gateLinkText, { color: colors.primary }]}>{biometricSwitchLinkLabel}</Text>
+                </TouchableOpacity>
+              ) : null}
+            </>
+          )}
         </View>
       </View>
     );
@@ -379,6 +510,8 @@ const s = StyleSheet.create({
     alignItems: 'center',
   },
   gateBtnText: { color: '#fff', fontSize: 16, fontWeight: '700' },
+  gateLinkBtn: { marginTop: 18, paddingVertical: 12, paddingHorizontal: 16 },
+  gateLinkText: { fontSize: 15, fontWeight: '600', textAlign: 'center' },
   // Form
   fieldLabel: { fontSize: 13, fontWeight: '600', color: '#6b7280', marginBottom: 6 },
   input: {

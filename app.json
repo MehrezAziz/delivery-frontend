@@ -32,7 +32,13 @@
           "enableFrameProcessors": false
         }
       ],
-      "expo-audio"
+      "expo-audio",
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Allow $(PRODUCT_NAME) to confirm your identity before editing your profile."
+        }
+      ]
     ],
     "ios": {
       "supportsTablet": true,

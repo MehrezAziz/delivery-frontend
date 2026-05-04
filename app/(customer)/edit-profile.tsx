@@ -1,7 +1,14 @@
 import { useState, useEffect, useMemo } from 'react';
 import {
-  View, Text, TouchableOpacity, ScrollView, StyleSheet,
-  TextInput, ActivityIndicator, Modal, FlatList,
+  View,
+  Text,
+  TouchableOpacity,
+  ScrollView,
+  StyleSheet,
+  TextInput,
+  ActivityIndicator,
+  Modal,
+  FlatList,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -18,10 +25,18 @@ import {
   type PhoneCountry,
 } from '../../services/phone-countries';
 import { ProfileFeedbackModal } from '../../components/ProfileFeedbackModal';
+import { EditProfileBiometricVerifyButton } from '../../components/EditProfileBiometricVerifyButton';
 import { markCustomerProfileNeedsRefresh } from '../../utils/profileRefreshSignals';
+import {
+  getBiometricPrimaryLabel,
+  getBiometricSwitchLinkLabel,
+  getLocalAuthentication,
+} from '../../utils/editProfileBiometricGate';
 import type { ThemeColors } from '../../contexts/ThemeContext';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api';
+
+const GATE_MAX_ATTEMPTS = 3;
 
 export default function CustomerEditProfileScreen() {
   const router = useRouter();
@@ -51,6 +66,14 @@ export default function CustomerEditProfileScreen() {
   const [referralCodeInput, setReferralCodeInput] = useState('');
   const [hasReferralCode, setHasReferralCode] = useState(false);
   const [referralApplying, setReferralApplying] = useState(false);
+  /** Device biometrics enrolled — offered before account password */
+  const [canUseBiometric, setCanUseBiometric] = useState(false);
+  const [biometricPrimaryLabel, setBiometricPrimaryLabel] = useState('Verify with biometrics');
+  const [biometricSwitchLinkLabel, setBiometricSwitchLinkLabel] = useState('Use biometrics');
+  const [preferPassword, setPreferPassword] = useState(false);
+  const [bioAttemptsLeft, setBioAttemptsLeft] = useState(GATE_MAX_ATTEMPTS);
+  const [pwdAttemptsLeft, setPwdAttemptsLeft] = useState(GATE_MAX_ATTEMPTS);
+  const [gateHint, setGateHint] = useState<string | null>(null);
   const filteredPhoneCountries = useMemo(() => {
     const q = phoneCountrySearch.trim().toLowerCase();
     if (!q) return phoneCountries;
@@ -87,9 +110,119 @@ export default function CustomerEditProfileScreen() {
       if (!d.user?.hasPassword) {
         setIsGoogleUser(true);
         setVerified(true);
+        setCanUseBiometric(false);
+      } else {
+        let bioOk = false;
+        let label = 'Verify with biometrics';
+        const LA = await getLocalAuthentication();
+        if (LA) {
+          try {
+            const hw = await LA.hasHardwareAsync();
+            const enrolled = await LA.isEnrolledAsync();
+            bioOk = hw && enrolled;
+            if (bioOk) {
+              const types = await LA.supportedAuthenticationTypesAsync();
+              label = getBiometricPrimaryLabel(types);
+              setBiometricSwitchLinkLabel(getBiometricSwitchLinkLabel(types));
+            }
+          } catch {
+            bioOk = false;
+          }
+        }
+        setCanUseBiometric(bioOk);
+        setBiometricPrimaryLabel(label);
+        if (!bioOk) setPreferPassword(true);
+        else setPreferPassword(false);
+        setBioAttemptsLeft(GATE_MAX_ATTEMPTS);
+        setPwdAttemptsLeft(GATE_MAX_ATTEMPTS);
+        setGateHint(null);
       }
     } catch (e) { console.error(e); }
     finally { setLoading(false); }
+  };
+
+  const handleBiometricVerify = async () => {
+    setVerifying(true);
+    try {
+      const LA = await getLocalAuthentication();
+      if (!LA) {
+        setPreferPassword(true);
+        setGateHint(null);
+        setFeedback({
+          variant: 'error',
+          title: 'Biometrics unavailable',
+          message: 'This app build doesn’t include biometric support yet. Rebuild the app, or use your password.',
+          okNavigates: false,
+        });
+        return;
+      }
+      const compatible = await LA.hasHardwareAsync();
+      const enrolled = await LA.isEnrolledAsync();
+      if (!compatible || !enrolled) {
+        setPreferPassword(true);
+        setGateHint(null);
+        setFeedback({
+          variant: 'error',
+          title: 'Biometrics unavailable',
+          message: 'No biometric login is set up on this device. Use your password instead.',
+          okNavigates: false,
+        });
+        return;
+      }
+      const auth = await LA.authenticateAsync({
+        promptMessage: 'Confirm it’s you to edit your profile',
+        cancelLabel: 'Cancel',
+        disableDeviceFallback: true,
+      });
+      if (auth.success) {
+        setGateHint(null);
+        setVerified(true);
+        return;
+      }
+      if (auth.error === 'user_cancel' || auth.error === 'system_cancel') {
+        return;
+      }
+
+      const next = bioAttemptsLeft - 1;
+      if (next <= 0) {
+        setGateHint(null);
+        setFeedback({
+          variant: 'error',
+          title: 'Biometric attempts used',
+          message: 'You reached 3 failed biometric attempts. Use your password to continue.',
+          okNavigates: false,
+        });
+        setPreferPassword(true);
+        setBioAttemptsLeft(GATE_MAX_ATTEMPTS);
+        setPwdAttemptsLeft(GATE_MAX_ATTEMPTS);
+      } else {
+        setBioAttemptsLeft(next);
+        setGateHint(
+          auth.error === 'lockout'
+            ? 'Biometric locked. Try again later or use your password.'
+            : `${next} biometric attempt${next === 1 ? '' : 's'} remaining.`,
+        );
+      }
+    } catch (e: any) {
+      const next = bioAttemptsLeft - 1;
+      if (next <= 0) {
+        setGateHint(null);
+        setFeedback({
+          variant: 'error',
+          title: 'Biometric attempts used',
+          message: 'You reached 3 failed biometric attempts. Use your password to continue.',
+          okNavigates: false,
+        });
+        setPreferPassword(true);
+        setBioAttemptsLeft(GATE_MAX_ATTEMPTS);
+        setPwdAttemptsLeft(GATE_MAX_ATTEMPTS);
+      } else {
+        setBioAttemptsLeft(next);
+        setGateHint(`${next} biometric attempt${next === 1 ? '' : 's'} remaining.`);
+      }
+    } finally {
+      setVerifying(false);
+    }
   };
 
   const handleVerify = async () => {
@@ -102,16 +235,41 @@ export default function CustomerEditProfileScreen() {
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ password }),
       });
-      if (!res.ok) { const d = await res.json(); throw new Error(d.message || 'Invalid password'); }
+      if (!res.ok) {
+        const d = await res.json();
+        throw new Error(d.message || 'Invalid password');
+      }
+      setGateHint(null);
       setVerified(true);
     } catch (e: any) {
-      setFeedback({
-        variant: 'error',
-        title: 'Verification failed',
-        message: e.message || 'Invalid password',
-        okNavigates: false,
-      });
-    } finally { setVerifying(false); }
+      const next = pwdAttemptsLeft - 1;
+      setPwdAttemptsLeft(next);
+      if (next <= 0) {
+        setGateHint(null);
+        if (canUseBiometric) {
+          setFeedback({
+            variant: 'error',
+            title: 'Password attempts used',
+            message: 'You reached 3 failed password attempts. Use Face ID or fingerprint instead.',
+            okNavigates: false,
+          });
+          setPreferPassword(false);
+        } else {
+          setFeedback({
+            variant: 'error',
+            title: 'Password attempts used',
+            message: 'You reached 3 failed password attempts. Try again when you remember your password.',
+            okNavigates: false,
+          });
+        }
+        setPwdAttemptsLeft(GATE_MAX_ATTEMPTS);
+        setBioAttemptsLeft(GATE_MAX_ATTEMPTS);
+      } else {
+        setGateHint(`Incorrect password. ${next} attempt${next === 1 ? '' : 's'} remaining.`);
+      }
+    } finally {
+      setVerifying(false);
+    }
   };
 
   const handleApplyReferralCode = async () => {
@@ -215,6 +373,12 @@ export default function CustomerEditProfileScreen() {
   if (loading) return <View style={[s.center, { backgroundColor: colors.background }]}><ActivityIndicator size="large" color={colors.primary} /></View>;
 
   if (!verified) {
+    const showBiometricFirst = canUseBiometric && !preferPassword;
+    const biometricIconName =
+      biometricPrimaryLabel.includes('fingerprint') && !biometricPrimaryLabel.includes('Face')
+        ? 'finger-print-outline'
+        : 'scan-outline';
+
     return (
       <View style={[s.container, { backgroundColor: colors.background }]}>
         <ProfileFeedbackModal
@@ -228,16 +392,80 @@ export default function CustomerEditProfileScreen() {
         />
         <View style={[s.gateContainer, { backgroundColor: colors.background }]}>
           <View style={[s.gateIconWrap, { backgroundColor: colors.primaryLight }]}>
-            <Ionicons name="lock-closed" size={40} color={colors.primary} />
+            <Ionicons
+              name={showBiometricFirst ? biometricIconName : 'lock-closed'}
+              size={40}
+              color={colors.primary}
+            />
           </View>
           <Text style={[s.gateTitle, { color: colors.text }]}>Verify Your Identity</Text>
-          <Text style={[s.gateSub, { color: colors.textSecondary }]}>Enter your password to edit your profile</Text>
-          <TextInput style={[s.gateInput, { backgroundColor: colors.inputBg, color: colors.text, borderColor: colors.inputBorder }]} value={password} onChangeText={setPassword}
-            placeholder="Enter your password" placeholderTextColor={colors.textTertiary} secureTextEntry autoFocus />
-          <TouchableOpacity style={[s.gateBtn, { backgroundColor: colors.primary }, !password.trim() && { opacity: 0.5 }]}
-            onPress={handleVerify} disabled={verifying || !password.trim()}>
-            {verifying ? <ActivityIndicator color="#fff" /> : <Text style={s.gateBtnText}>Verify</Text>}
-          </TouchableOpacity>
+          <Text style={[s.gateSub, { color: colors.textSecondary }]}>
+            {showBiometricFirst
+              ? 'Confirm with your device to edit your profile.'
+              : 'Enter your account password to edit your profile.'}
+          </Text>
+
+          {showBiometricFirst ? (
+            <>
+              <EditProfileBiometricVerifyButton
+                onPress={handleBiometricVerify}
+                verifying={verifying}
+                disabled={verifying}
+                colors={colors}
+              />
+              {gateHint ? (
+                <Text style={[s.gateHint, { color: colors.textSecondary }]}>{gateHint}</Text>
+              ) : null}
+              <TouchableOpacity
+                style={s.gateLinkBtn}
+                onPress={() => {
+                  setPreferPassword(true);
+                  setBioAttemptsLeft(GATE_MAX_ATTEMPTS);
+                  setPwdAttemptsLeft(GATE_MAX_ATTEMPTS);
+                  setGateHint(null);
+                }}
+                disabled={verifying}
+              >
+                <Text style={[s.gateLinkText, { color: colors.primary }]}>Use password instead</Text>
+              </TouchableOpacity>
+            </>
+          ) : (
+            <>
+              <TextInput
+                style={[s.gateInput, { backgroundColor: colors.inputBg, color: colors.text, borderColor: colors.inputBorder }]}
+                value={password}
+                onChangeText={setPassword}
+                placeholder="Enter your password"
+                placeholderTextColor={colors.textTertiary}
+                secureTextEntry
+                autoFocus
+              />
+              <TouchableOpacity
+                style={[s.gateBtn, { backgroundColor: colors.primary }, !password.trim() && { opacity: 0.5 }]}
+                onPress={handleVerify}
+                disabled={verifying || !password.trim()}
+              >
+                {verifying ? <ActivityIndicator color="#fff" /> : <Text style={s.gateBtnText}>Verify</Text>}
+              </TouchableOpacity>
+              {gateHint ? (
+                <Text style={[s.gateHint, { color: colors.danger }]}>{gateHint}</Text>
+              ) : null}
+              {canUseBiometric ? (
+                <TouchableOpacity
+                  style={s.gateLinkBtn}
+                  onPress={() => {
+                    setPreferPassword(false);
+                    setBioAttemptsLeft(GATE_MAX_ATTEMPTS);
+                    setPwdAttemptsLeft(GATE_MAX_ATTEMPTS);
+                    setGateHint(null);
+                  }}
+                  disabled={verifying}
+                >
+                  <Text style={[s.gateLinkText, { color: colors.primary }]}>{biometricSwitchLinkLabel}</Text>
+                </TouchableOpacity>
+              ) : null}
+            </>
+          )}
         </View>
       </View>
     );
@@ -448,6 +676,9 @@ const s = StyleSheet.create({
   },
   gateBtn: { width: '100%', backgroundColor: '#0284c7', borderRadius: 14, paddingVertical: 16, alignItems: 'center' },
   gateBtnText: { color: '#fff', fontSize: 16, fontWeight: '700' },
+  gateLinkBtn: { marginTop: 18, paddingVertical: 12, paddingHorizontal: 16 },
+  gateLinkText: { fontSize: 15, fontWeight: '600', textAlign: 'center' },
+  gateHint: { fontSize: 13, fontWeight: '600', textAlign: 'center', marginTop: 12, paddingHorizontal: 8, lineHeight: 18 },
   fieldLabel: { fontSize: 13, fontWeight: '600', color: '#6b7280', marginBottom: 6 },
   input: {
     backgroundColor: '#fff', borderRadius: 12, padding: 14, fontSize: 15, color: '#111827',
