@@ -19,6 +19,7 @@ import {
   type PhoneCountry,
 } from '../../services/phone-countries';
 import { ProfileFeedbackModal } from '../../components/ProfileFeedbackModal';
+import { markDriverProfileNeedsRefresh } from '../../utils/profileRefreshSignals';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
 
@@ -180,7 +181,8 @@ export default function DriverEditProfileScreen() {
     const shouldLeave = feedback?.okNavigates;
     setFeedback(null);
     if (shouldLeave) {
-      router.canGoBack() ? router.back() : router.replace('/(driver)/home');
+      markDriverProfileNeedsRefresh();
+      router.replace('/(driver)/profile');
     }
   };
 

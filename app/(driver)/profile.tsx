@@ -1,11 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import {
   View, Text, TouchableOpacity, ScrollView, StyleSheet,
-  ActivityIndicator, Alert, Image,
+  ActivityIndicator, Alert, Image, RefreshControl,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
-import { useCallback } from 'react';
 import { clearPushToken } from '../../services/api/notification.service';
 import { stopOrderTrackingSilently } from '../../services/notifications';
 import { Ionicons } from '@expo/vector-icons';
@@ -15,6 +14,7 @@ import axios from 'axios';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useAppNavigation } from '../../contexts/AppNavigationContext';
 import { persistDriverIdentityFromMe } from '../../utils/persistDriverIdentity';
+import { consumeDriverProfileNeedsRefresh } from '../../utils/profileRefreshSignals';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
 
@@ -24,17 +24,19 @@ export default function DriverProfileScreen() {
   const { colors, isDark, toggleTheme } = useTheme();
   const [driver, setDriver] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
-  useEffect(() => {
-    loadProfile();
-  }, []);
+  type LoadKind = 'initial' | 'silent' | 'pull';
 
-  useFocusEffect(useCallback(() => { loadProfile(); }, []));
-
-  const loadProfile = async () => {
+  const loadProfile = async (kind: LoadKind = 'initial') => {
     try {
       const token = await AsyncStorage.getItem('accessToken');
-      if (!token) { router.replace('/(auth)/driver-login'); return; }
+      if (!token) {
+        if (kind === 'initial') router.replace('/(auth)/driver-login');
+        return;
+      }
+      if (kind === 'initial') setLoading(true);
+      if (kind === 'pull') setRefreshing(true);
       const res = await axios.get(`${API_URL}/drivers/me`, {
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -43,9 +45,20 @@ export default function DriverProfileScreen() {
     } catch (e) {
       console.error(e);
     } finally {
-      setLoading(false);
+      if (kind === 'initial') setLoading(false);
+      if (kind === 'pull') setRefreshing(false);
     }
   };
+
+  useEffect(() => {
+    void loadProfile('initial');
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (consumeDriverProfileNeedsRefresh()) void loadProfile('silent');
+    }, []),
+  );
 
   const handleChangePhoto = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -64,7 +77,7 @@ export default function DriverProfileScreen() {
       await axios.patch(`${API_URL}/auth/user/complete-profile`, { image: uri }, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      loadProfile();
+      void loadProfile('silent');
     } catch (e: any) {
       Alert.alert('Error', 'Failed to update photo');
     }
@@ -79,7 +92,7 @@ export default function DriverProfileScreen() {
           await axios.patch(`${API_URL}/auth/user/complete-profile`, { image: null }, {
             headers: { Authorization: `Bearer ${token}` },
           });
-          loadProfile();
+          void loadProfile('silent');
         } catch (e) { Alert.alert('Error', 'Failed to remove photo'); }
       }},
     ]);
@@ -135,7 +148,18 @@ export default function DriverProfileScreen() {
 
   return (
     <View style={[s.container, { backgroundColor: colors.background }]}>
-      <ScrollView style={{ flex: 1 }} contentContainerStyle={s.content}>
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={s.content}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => void loadProfile('pull')}
+            tintColor={colors.primary}
+            colors={[colors.primary]}
+          />
+        }
+      >
         {/* Profile Card */}
         <View style={[s.profileCard, { backgroundColor: colors.card }]}>
           <View style={s.avatarWrap}>

@@ -17,6 +17,7 @@ import { Ionicons } from '@expo/vector-icons';
 import axios from 'axios';
 import { geographyService, Country, Governorate, Delegation } from '../../services/api/geography.service';
 import { useTheme } from '../../contexts/ThemeContext';
+import { markCustomerProfileNeedsRefresh } from '../../utils/profileRefreshSignals';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api';
 
@@ -181,6 +182,7 @@ export default function CustomerAddressesScreen() {
         { headers: { Authorization: `Bearer ${token}` } },
       );
       resetForm();
+      markCustomerProfileNeedsRefresh();
       loadAddresses();
     } catch (err: any) {
       Alert.alert('Error', getErrMsg(err, 'Failed to update address'));
@@ -200,6 +202,7 @@ export default function CustomerAddressesScreen() {
         headers: { Authorization: `Bearer ${token}` },
       });
       resetForm();
+      markCustomerProfileNeedsRefresh();
       loadAddresses();
     } catch (err: any) {
       Alert.alert('Error', getErrMsg(err, 'Failed to add address'));
@@ -238,6 +241,7 @@ export default function CustomerAddressesScreen() {
         { nickname: MAIN_NICKNAME },
         { headers: { Authorization: `Bearer ${token}` } },
       );
+      markCustomerProfileNeedsRefresh();
       loadAddresses();
     } catch (err: any) {
       Alert.alert('Error', getErrMsg(err, 'Failed to set MAIN address'));

@@ -1,12 +1,14 @@
-import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Share, ActivityIndicator, TextInput, Alert } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Share, ActivityIndicator, TextInput, Alert, RefreshControl } from 'react-native';
 import { useRouter } from 'expo-router';
-import { useState, useEffect } from 'react';
+import { useState, useCallback, useEffect } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Clipboard from 'expo-clipboard';
 import { clearPushToken } from '../../services/api/notification.service';
 import { stopOrderTrackingSilently } from '../../services/notifications';
 import { useTheme } from '../../contexts/ThemeContext';
 import { getCustomerStatusLabel, getCustomerStatusTextColor } from '../../utils/customerStatus';
+import { consumeCustomerProfileNeedsRefresh } from '../../utils/profileRefreshSignals';
 
 // Get API URL from environment variable
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api';
@@ -21,6 +23,7 @@ export default function CustomerProfileScreen() {
   const [referralCode, setReferralCode] = useState<any | null>(null);
   const [referralStats, setReferralStats] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // Edit states
@@ -28,21 +31,29 @@ export default function CustomerProfileScreen() {
   const [editValue, setEditValue] = useState<string>('');
   const [isSaving, setIsSaving] = useState(false);
 
-  // Fetch user data from AsyncStorage and API
   useEffect(() => {
-    loadUserData();
+    void loadUserData('initial');
   }, []);
 
-  const loadUserData = async () => {
+  useFocusEffect(
+    useCallback(() => {
+      if (consumeCustomerProfileNeedsRefresh()) void loadUserData('silent');
+    }, []),
+  );
+
+  type LoadKind = 'initial' | 'silent' | 'pull';
+
+  const loadUserData = async (kind: LoadKind = 'initial') => {
     try {
-      setLoading(true);
-      setError(null);
+      if (kind === 'initial') setLoading(true);
+      if (kind === 'pull') setRefreshing(true);
+      if (kind !== 'silent') setError(null);
 
       // Get auth token first
       const token = await AsyncStorage.getItem('accessToken');
       
       if (!token) {
-        setError('No auth token found. Please login again.');
+        if (kind !== 'silent') setError('No auth token found. Please login again.');
         return;
       }
 
@@ -87,9 +98,10 @@ export default function CustomerProfileScreen() {
       await loadReferralData();
     } catch (err) {
       console.error('Error loading user data:', err);
-      setError('Failed to load profile data');
+      if (kind !== 'silent') setError('Failed to load profile data');
     } finally {
-      setLoading(false);
+      if (kind === 'initial') setLoading(false);
+      if (kind === 'pull') setRefreshing(false);
     }
   };
 
@@ -317,7 +329,7 @@ export default function CustomerProfileScreen() {
       <View style={[styles.container, { backgroundColor: colors.background }]}>
         <View style={styles.errorContainer}>
           <Text style={[styles.errorText, { color: colors.danger }]}>{error || 'Failed to load profile'}</Text>
-          <TouchableOpacity style={[styles.retryButton, { backgroundColor: colors.primary }]} onPress={loadUserData}>
+          <TouchableOpacity style={[styles.retryButton, { backgroundColor: colors.primary }]} onPress={() => void loadUserData('initial')}>
             <Text style={styles.retryButtonText}>Retry</Text>
           </TouchableOpacity>
           <TouchableOpacity style={[styles.logoutButton, { marginTop: 24, width: '100%', backgroundColor: colors.dangerBg }]} onPress={handleLogout}>
@@ -331,7 +343,18 @@ export default function CustomerProfileScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollContent}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => void loadUserData('pull')}
+            tintColor={colors.primary}
+            colors={[colors.primary]}
+          />
+        }
+      >
         {/* Profile Info */}
         <View style={[styles.profileCard, { backgroundColor: colors.card }]}>
           <View style={styles.profileHeader}>

@@ -9,7 +9,7 @@ type Props = {
   variant: ProfileFeedbackVariant;
   title: string;
   message: string;
-  /** When true, OK navigates back to profile; backdrop always dismisses without navigating. */
+  /** When true, OK goes to the Profile tab; backdrop dismisses without navigating. */
   okNavigatesOnPress: boolean;
   onBackdropPress: () => void;
   onOkPress: () => void;
@@ -69,7 +69,7 @@ export function ProfileFeedbackModal({
             </TouchableOpacity>
             <Text style={[styles.hint, { color: colors.textTertiary }]}>
               {okNavigatesOnPress
-                ? 'Tap outside to stay on this screen.'
+                ? 'Tap OK to open Profile. Tap outside to stay here.'
                 : 'Tap outside to close.'}
             </Text>
           </View>

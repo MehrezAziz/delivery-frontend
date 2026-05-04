@@ -18,6 +18,7 @@ import {
   type PhoneCountry,
 } from '../../services/phone-countries';
 import { ProfileFeedbackModal } from '../../components/ProfileFeedbackModal';
+import { markCustomerProfileNeedsRefresh } from '../../utils/profileRefreshSignals';
 import type { ThemeColors } from '../../contexts/ThemeContext';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api';
@@ -206,7 +207,8 @@ export default function CustomerEditProfileScreen() {
     const shouldLeave = feedback?.okNavigates;
     setFeedback(null);
     if (shouldLeave) {
-      router.canGoBack() ? router.back() : router.replace('/(customer)/home');
+      markCustomerProfileNeedsRefresh();
+      router.replace('/(customer)/profile');
     }
   };
 
