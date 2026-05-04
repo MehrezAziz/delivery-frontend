@@ -37,6 +37,8 @@ export default function PickLocationScreen() {
   const [predictions, setPredictions] = useState<PlacePrediction[]>([]);
   const [loading, setLoading] = useState(false);
   const [gettingLocation, setGettingLocation] = useState(true);
+  /** GPS fix for “you are here” — avoid MapView `showsUserLocation` (Fabric / topUserLocationChange crash on RN 0.83+). */
+  const [userGps, setUserGps] = useState<{ latitude: number; longitude: number } | null>(null);
   const searchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Get user's current location on mount
@@ -46,9 +48,10 @@ export default function PickLocationScreen() {
         const { status } = await Location.requestForegroundPermissionsAsync();
         if (status === 'granted') {
           const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+          const pt = { latitude: loc.coords.latitude, longitude: loc.coords.longitude };
+          setUserGps(pt);
           const newRegion = {
-            latitude: loc.coords.latitude,
-            longitude: loc.coords.longitude,
+            ...pt,
             latitudeDelta: 0.01,
             longitudeDelta: 0.01,
           };
@@ -189,10 +192,12 @@ export default function PickLocationScreen() {
         style={StyleSheet.absoluteFillObject}
         initialRegion={region}
         onPress={handleMapPress}
-        showsUserLocation
         showsMyLocationButton={false}
         customMapStyle={isDark ? GOOGLE_MAPS_DARK_STYLE : undefined}
       >
+        {userGps && (
+          <Marker coordinate={userGps} title="Your location" pinColor="#3b82f6" opacity={0.9} />
+        )}
         {marker && (
           <Marker coordinate={marker} pinColor={accentColor} />
         )}

@@ -121,7 +121,6 @@ export default function TrackDriverScreen() {
         onRegionChangeComplete={(r) => {
           if (hasCenteredOnDriver.current) setMapRegion(r);
         }}
-        showsUserLocation
         customMapStyle={isDark ? GOOGLE_MAPS_DARK_STYLE : undefined}
       >
         {driverLoc && (
