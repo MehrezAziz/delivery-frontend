@@ -7,10 +7,20 @@ type Props = {
   disabled?: boolean;
   verifying: boolean;
   colors: ThemeColors;
+  /** Device-specific label (e.g. edit-profile gate). Defaults to neutral copy for flows like create-order. */
+  label?: string;
 };
 
+const DEFAULT_LABEL = 'Face ID - Fingerprint';
+
 /** Primary gate action: fingerprint + Face ID copy + face mesh icons */
-export function EditProfileBiometricVerifyButton({ onPress, disabled, verifying, colors }: Props) {
+export function EditProfileBiometricVerifyButton({
+  onPress,
+  disabled,
+  verifying,
+  colors,
+  label = DEFAULT_LABEL,
+}: Props) {
   const iconColor = '#ffffff';
 
   return (
@@ -29,7 +39,7 @@ export function EditProfileBiometricVerifyButton({ onPress, disabled, verifying,
           <SvgFaceIdBadge size={26} color={iconColor} />
           
           <Text style={styles.label} numberOfLines={2}>
-            Face ID - Fingerprint
+            {label}
           </Text>
           <SvgFingerprintBadge size={26} color={iconColor} />
         </View>

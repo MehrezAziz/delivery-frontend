@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import {
   View,
   Text,
@@ -26,6 +26,7 @@ import {
 } from '../../services/phone-countries';
 import { ProfileFeedbackModal } from '../../components/ProfileFeedbackModal';
 import { EditProfileBiometricVerifyButton } from '../../components/EditProfileBiometricVerifyButton';
+import { PasswordTextField } from '../../components/PasswordTextField';
 import { markCustomerProfileNeedsRefresh } from '../../utils/profileRefreshSignals';
 import {
   getBiometricPrimaryLabel,
@@ -74,6 +75,10 @@ export default function CustomerEditProfileScreen() {
   const [bioAttemptsLeft, setBioAttemptsLeft] = useState(GATE_MAX_ATTEMPTS);
   const [pwdAttemptsLeft, setPwdAttemptsLeft] = useState(GATE_MAX_ATTEMPTS);
   const [gateHint, setGateHint] = useState<string | null>(null);
+  /** After first biometric attempt finishes without unlocking, show “Use password instead”. */
+  const [showBiometricPasswordFallback, setShowBiometricPasswordFallback] = useState(false);
+  const autoBiometricPromptedRef = useRef(false);
+  const biometricVerifyRef = useRef<() => Promise<void>>(async () => {});
   const filteredPhoneCountries = useMemo(() => {
     const q = phoneCountrySearch.trim().toLowerCase();
     if (!q) return phoneCountries;
@@ -136,6 +141,8 @@ export default function CustomerEditProfileScreen() {
         setBioAttemptsLeft(GATE_MAX_ATTEMPTS);
         setPwdAttemptsLeft(GATE_MAX_ATTEMPTS);
         setGateHint(null);
+        setShowBiometricPasswordFallback(false);
+        autoBiometricPromptedRef.current = false;
       }
     } catch (e) { console.error(e); }
     finally { setLoading(false); }
@@ -143,6 +150,7 @@ export default function CustomerEditProfileScreen() {
 
   const handleBiometricVerify = async () => {
     setVerifying(true);
+    let success = false;
     try {
       const LA = await getLocalAuthentication();
       if (!LA) {
@@ -177,6 +185,7 @@ export default function CustomerEditProfileScreen() {
       if (auth.success) {
         setGateHint(null);
         setVerified(true);
+        success = true;
         return;
       }
       if (auth.error === 'user_cancel' || auth.error === 'system_cancel') {
@@ -222,8 +231,18 @@ export default function CustomerEditProfileScreen() {
       }
     } finally {
       setVerifying(false);
+      if (!success) setShowBiometricPasswordFallback(true);
     }
   };
+
+  biometricVerifyRef.current = handleBiometricVerify;
+
+  useEffect(() => {
+    if (loading || verified || !canUseBiometric || preferPassword) return;
+    if (autoBiometricPromptedRef.current) return;
+    autoBiometricPromptedRef.current = true;
+    void biometricVerifyRef.current();
+  }, [loading, verified, canUseBiometric, preferPassword]);
 
   const handleVerify = async () => {
     if (!password.trim()) return;
@@ -412,33 +431,35 @@ export default function CustomerEditProfileScreen() {
                 verifying={verifying}
                 disabled={verifying}
                 colors={colors}
+                label={biometricPrimaryLabel}
               />
               {gateHint ? (
                 <Text style={[s.gateHint, { color: colors.textSecondary }]}>{gateHint}</Text>
               ) : null}
-              <TouchableOpacity
-                style={s.gateLinkBtn}
-                onPress={() => {
-                  setPreferPassword(true);
-                  setBioAttemptsLeft(GATE_MAX_ATTEMPTS);
-                  setPwdAttemptsLeft(GATE_MAX_ATTEMPTS);
-                  setGateHint(null);
-                }}
-                disabled={verifying}
-              >
-                <Text style={[s.gateLinkText, { color: colors.primary }]}>Use password instead</Text>
-              </TouchableOpacity>
+              {showBiometricPasswordFallback ? (
+                <TouchableOpacity
+                  style={s.gateLinkBtn}
+                  onPress={() => {
+                    setPreferPassword(true);
+                    setBioAttemptsLeft(GATE_MAX_ATTEMPTS);
+                    setPwdAttemptsLeft(GATE_MAX_ATTEMPTS);
+                    setGateHint(null);
+                  }}
+                  disabled={verifying}
+                >
+                  <Text style={[s.gateLinkText, { color: colors.primary }]}>Use password instead</Text>
+                </TouchableOpacity>
+              ) : null}
             </>
           ) : (
             <>
-              <TextInput
-                style={[s.gateInput, { backgroundColor: colors.inputBg, color: colors.text, borderColor: colors.inputBorder }]}
+              <PasswordTextField
                 value={password}
                 onChangeText={setPassword}
+                colors={colors}
                 placeholder="Enter your password"
-                placeholderTextColor={colors.textTertiary}
-                secureTextEntry
                 autoFocus
+                containerStyle={{ marginBottom: 16 }}
               />
               <TouchableOpacity
                 style={[s.gateBtn, { backgroundColor: colors.primary }, !password.trim() && { opacity: 0.5 }]}

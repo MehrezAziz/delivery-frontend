@@ -9,6 +9,7 @@ import { stopOrderTrackingSilently } from '../../services/notifications';
 import { useTheme } from '../../contexts/ThemeContext';
 import { getCustomerStatusLabel, getCustomerStatusTextColor } from '../../utils/customerStatus';
 import { consumeCustomerProfileNeedsRefresh } from '../../utils/profileRefreshSignals';
+import { resetOrderConfirmIdentitySession } from '../../utils/createOrderStepUpSession';
 
 // Get API URL from environment variable
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api';
@@ -158,6 +159,7 @@ export default function CustomerProfileScreen() {
       await AsyncStorage.removeItem('accessToken');
       await AsyncStorage.removeItem('user');
       await AsyncStorage.removeItem('customer');
+      resetOrderConfirmIdentitySession();
       // Navigate to customer login screen
       router.replace('/(auth)/customer-login');
     } catch (err) {

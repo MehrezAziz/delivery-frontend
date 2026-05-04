@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import {
   View, Text, TouchableOpacity, ScrollView, StyleSheet,
   TextInput, ActivityIndicator, Modal, FlatList,
@@ -19,6 +19,7 @@ import {
   type PhoneCountry,
 } from '../../services/phone-countries';
 import { ProfileFeedbackModal } from '../../components/ProfileFeedbackModal';
+import { EditProfileBiometricVerifyButton } from '../../components/EditProfileBiometricVerifyButton';
 import { markDriverProfileNeedsRefresh } from '../../utils/profileRefreshSignals';
 import {
   getBiometricPrimaryLabel,
@@ -59,6 +60,9 @@ export default function DriverEditProfileScreen() {
   const [biometricPrimaryLabel, setBiometricPrimaryLabel] = useState('Verify with biometrics');
   const [biometricSwitchLinkLabel, setBiometricSwitchLinkLabel] = useState('Use biometrics');
   const [preferPassword, setPreferPassword] = useState(false);
+  const [showBiometricPasswordFallback, setShowBiometricPasswordFallback] = useState(false);
+  const autoBiometricPromptedRef = useRef(false);
+  const biometricVerifyRef = useRef<() => Promise<void>>(async () => {});
   const filteredPhoneCountries = useMemo(() => {
     const q = phoneCountrySearch.trim().toLowerCase();
     if (!q) return phoneCountries;
@@ -122,6 +126,8 @@ export default function DriverEditProfileScreen() {
         setBiometricPrimaryLabel(label);
         if (!bioOk) setPreferPassword(true);
         else setPreferPassword(false);
+        setShowBiometricPasswordFallback(false);
+        autoBiometricPromptedRef.current = false;
       }
     } catch (e) { console.error(e); }
     finally { setLoading(false); }
@@ -129,6 +135,7 @@ export default function DriverEditProfileScreen() {
 
   const handleBiometricVerify = async () => {
     setVerifying(true);
+    let success = false;
     try {
       const LA = await getLocalAuthentication();
       if (!LA) {
@@ -160,6 +167,7 @@ export default function DriverEditProfileScreen() {
       });
       if (auth.success) {
         setVerified(true);
+        success = true;
       } else if (auth.error === 'user_cancel' || auth.error === 'system_cancel') {
         /* quiet */
       } else {
@@ -182,8 +190,18 @@ export default function DriverEditProfileScreen() {
       });
     } finally {
       setVerifying(false);
+      if (!success) setShowBiometricPasswordFallback(true);
     }
   };
+
+  biometricVerifyRef.current = handleBiometricVerify;
+
+  useEffect(() => {
+    if (loading || verified || !canUseBiometric || preferPassword) return;
+    if (autoBiometricPromptedRef.current) return;
+    autoBiometricPromptedRef.current = true;
+    void biometricVerifyRef.current();
+  }, [loading, verified, canUseBiometric, preferPassword]);
 
   const handleVerify = async () => {
     if (!password.trim()) return;
@@ -316,20 +334,18 @@ export default function DriverEditProfileScreen() {
 
           {showBiometricFirst ? (
             <>
-              <TouchableOpacity
-                style={[s.gateBtn, { backgroundColor: colors.primary }, verifying && { opacity: 0.85 }]}
+              <EditProfileBiometricVerifyButton
                 onPress={handleBiometricVerify}
+                verifying={verifying}
                 disabled={verifying}
-              >
-                {verifying ? (
-                  <ActivityIndicator color="#fff" />
-                ) : (
-                  <Text style={s.gateBtnText}>{biometricPrimaryLabel}</Text>
-                )}
-              </TouchableOpacity>
-              <TouchableOpacity style={s.gateLinkBtn} onPress={() => setPreferPassword(true)} disabled={verifying}>
-                <Text style={[s.gateLinkText, { color: colors.primary }]}>Use password instead</Text>
-              </TouchableOpacity>
+                colors={colors}
+                label={biometricPrimaryLabel}
+              />
+              {showBiometricPasswordFallback ? (
+                <TouchableOpacity style={s.gateLinkBtn} onPress={() => setPreferPassword(true)} disabled={verifying}>
+                  <Text style={[s.gateLinkText, { color: colors.primary }]}>Use password instead</Text>
+                </TouchableOpacity>
+              ) : null}
             </>
           ) : (
             <>
