@@ -29,6 +29,12 @@ import {
   toE164Phone,
   type PhoneCountry,
 } from '../../services/phone-countries';
+import {
+  clearLoginFailures,
+  getLoginLockStatus,
+  recordLoginFailure,
+} from '../../services/login-attempt-lockout';
+import { formatMsAsMmSs } from '../../utils/format-mm-ss';
 
 /** Backend routes use global prefix `/api`. Env may already include `/api`. */
 const RAW_API = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
@@ -63,6 +69,17 @@ function getDriverLoginErrorMessage(error: unknown): string {
   return 'Phone number or password is incorrect';
 }
 
+function shouldRecordDriverLoginFailure(error: unknown): boolean {
+  if (!axios.isAxiosError(error)) return false;
+  const status = error.response?.status;
+  if (status !== 400 && status !== 401) return false;
+  const raw = (error.response?.data as { message?: string | string[] } | undefined)?.message;
+  const serverMsg = Array.isArray(raw) ? raw.join(' ') : typeof raw === 'string' ? raw : '';
+  if (serverMsg.includes('Google OAuth') || serverMsg.includes('Google sign-in')) return false;
+  if (serverMsg.toLowerCase().includes('suspend')) return false;
+  return true;
+}
+
 export default function DriverLogin() {
   const router = useRouter();
   const { colors, isDark } = useTheme();
@@ -76,6 +93,8 @@ export default function DriverLogin() {
   const [phoneCountrySearch, setPhoneCountrySearch] = useState('');
   const [resolvingPhoneCountry, setResolvingPhoneCountry] = useState(true);
   const [loginError, setLoginError] = useState<string | null>(null);
+  const [loginLockUntil, setLoginLockUntil] = useState(0);
+  const [, bumpLockCountdown] = useState(0);
 
   const filteredPhoneCountries = useMemo(() => {
     const q = phoneCountrySearch.trim().toLowerCase();
@@ -109,6 +128,15 @@ export default function DriverLogin() {
     void bootstrapPhoneCountry();
   }, []);
 
+  useEffect(() => {
+    if (!loginLockUntil || loginLockUntil <= Date.now()) return;
+    const id = setInterval(() => {
+      bumpLockCountdown((x) => x + 1);
+      if (Date.now() >= loginLockUntil) setLoginLockUntil(0);
+    }, 1000);
+    return () => clearInterval(id);
+  }, [loginLockUntil]);
+
   const handleLogin = async () => {
     // Validation
     if (!phone || !password) {
@@ -120,12 +148,20 @@ export default function DriverLogin() {
       return;
     }
 
+    const e164 = toE164Phone(selectedPhoneCountry.dialCode, phone);
+    const lock = await getLoginLockStatus('driver', e164);
+    if (lock.locked) {
+      setLoginLockUntil(lock.lockedUntil);
+      setLoginError('Too many failed login attempts. Please wait before trying again.');
+      return;
+    }
+
     setLoginError(null);
     setLoading(true);
 
     try {
       const response = await axios.post(`${API_URL}/auth/driver/login`, {
-        phone: toE164Phone(selectedPhoneCountry.dialCode, phone),
+        phone: e164,
         password,
       });
 
@@ -149,11 +185,17 @@ export default function DriverLogin() {
       await registerForPushNotifications();
       await restoreOrderTrackingForDriver();
 
+      await clearLoginFailures('driver', e164);
+      setLoginLockUntil(0);
+
       // Navigate to driver home
       router.replace('/(driver)/home');
     } catch (error: unknown) {
       if (__DEV__) {
         console.error('Login error:', error);
+      }
+      if (shouldRecordDriverLoginFailure(error)) {
+        await recordLoginFailure('driver', e164);
       }
       setLoginError(getDriverLoginErrorMessage(error));
     } finally {
@@ -163,6 +205,7 @@ export default function DriverLogin() {
 
   const handleGoogleLogin = async () => {
     setLoginError(null);
+    setLoginLockUntil(0);
     setLoading(true);
     try {
       await GoogleSignin.hasPlayServices();
@@ -248,6 +291,7 @@ export default function DriverLogin() {
             style={[styles.countryCodeBtn, { borderRightColor: colors.inputBorder }]}
             onPress={() => {
               setLoginError(null);
+              setLoginLockUntil(0);
               setShowPhoneCountryModal(true);
             }}
             activeOpacity={0.7}
@@ -271,6 +315,7 @@ export default function DriverLogin() {
             value={phone}
             onChangeText={(text) => {
               setLoginError(null);
+              setLoginLockUntil(0);
               setPhone(text.replace(/[^\d\s]/g, ''));
             }}
             keyboardType="phone-pad"
@@ -290,6 +335,7 @@ export default function DriverLogin() {
             value={password}
             onChangeText={(text) => {
               setLoginError(null);
+              setLoginLockUntil(0);
               setPassword(text);
             }}
             secureTextEntry={!showPassword}
@@ -310,8 +356,30 @@ export default function DriverLogin() {
           <View style={styles.loginErrorBlock} accessibilityLiveRegion="polite">
             <Text style={[styles.loginErrorTitle, { color: colors.danger }]}>Login failed</Text>
             <Text style={[styles.loginErrorBody, { color: colors.danger }]}>{loginError}</Text>
+            {loginLockUntil > Date.now() ? (
+              <Text style={[styles.loginErrorBody, { color: colors.textSecondary, marginTop: 4 }]}>
+                Remaining wait: {'\u2212'}
+                {formatMsAsMmSs(loginLockUntil - Date.now())}
+              </Text>
+            ) : null}
           </View>
         ) : null}
+        <TouchableOpacity
+          style={styles.forgotPassword}
+          onPress={() =>
+            router.push({
+              pathname: '/(auth)/driver-forgot-password',
+              params: {
+                prefillPhone: phone.trim(),
+                prefillDialCode: selectedPhoneCountry?.dialCode ?? '',
+                prefillIso: selectedPhoneCountry?.isoCode ?? '',
+              },
+            })
+          }
+          disabled={loading}
+        >
+          <Text style={[styles.forgotPasswordText, { color: colors.primary }]}>Forgot Password?</Text>
+        </TouchableOpacity>
       </View>
 
       {/* Login Button */}
@@ -353,23 +421,6 @@ export default function DriverLogin() {
         </Text>
       </TouchableOpacity>
 
-      {/* Forgot Password */}
-      <TouchableOpacity
-        style={styles.forgotPassword}
-        onPress={() =>
-          router.push({
-            pathname: '/(auth)/driver-forgot-password',
-            params: {
-              prefillPhone: phone.trim(),
-              prefillDialCode: selectedPhoneCountry?.dialCode ?? '',
-              prefillIso: selectedPhoneCountry?.isoCode ?? '',
-            },
-          })
-        }
-        disabled={loading}
-      >
-        <Text style={[styles.forgotPasswordText, { color: colors.primary }]}>Forgot Password?</Text>
-      </TouchableOpacity>
       <Modal
         visible={showPhoneCountryModal}
         transparent
@@ -407,6 +458,7 @@ export default function DriverLogin() {
                   style={[styles.pickerItem, { borderBottomColor: colors.border }]}
                   onPress={() => {
                     setLoginError(null);
+                    setLoginLockUntil(0);
                     setSelectedPhoneCountry(country);
                     setShowPhoneCountryModal(false);
                     setPhoneCountrySearch('');
@@ -582,12 +634,12 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   forgotPassword: {
-    marginTop: 16,
-    marginBottom: 40,
-    alignItems: 'center',
+    marginTop: 12,
+    alignSelf: 'flex-end',
   },
   forgotPasswordText: {
-    fontSize: 16,
+    fontSize: 15,
+    fontWeight: '600',
   },
   pickerOverlay: {
     flex: 1,

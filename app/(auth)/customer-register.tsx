@@ -13,6 +13,7 @@ import {
   cachePhoneCountries,
   getCachedPreferredPhoneCountryIso,
   detectAndCachePreferredPhoneCountryIso,
+  validateNationalPhoneForCountry,
   type PhoneCountry,
 } from '../../services/phone-countries';
 
@@ -190,8 +191,13 @@ export default function CustomerRegisterScreen() {
       setSubmitError('Please select a country for the phone number');
       return;
     }
-    if (formData.phone.replace(/\D/g, '').length < 6) {
-      setSubmitError('Please enter a valid phone number');
+    const phoneCheck = validateNationalPhoneForCountry(
+      selectedPhoneCountry.isoCode,
+      selectedPhoneCountry.dialCode,
+      formData.phone,
+    );
+    if (!phoneCheck.ok) {
+      setSubmitError(phoneCheck.message);
       return;
     }
 

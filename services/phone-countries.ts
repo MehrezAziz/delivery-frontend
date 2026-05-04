@@ -47,6 +47,43 @@ function normalizeCountries(rawCountries: { id: string; name: string; isoCode: s
   });
 }
 
+/**
+ * Validates the national number for the selected ISO region using libphonenumber
+ * (length and format, e.g. TN 8 digits after +216, US 10 after +1).
+ */
+export function validateNationalPhoneForCountry(
+  isoCode: string,
+  dialCode: string,
+  localPhoneRaw: string,
+): { ok: true } | { ok: false; message: string } {
+  const digits = localPhoneRaw.replace(/\D/g, '');
+  const noTrunk = digits.replace(/^0+/, '');
+  const national = noTrunk.length > 0 ? noTrunk : digits;
+  if (!national) {
+    return { ok: false, message: 'Enter your phone number' };
+  }
+  const region = (isoCode || '').trim().toUpperCase();
+  if (region.length !== 2) {
+    return { ok: false, message: 'Select a country' };
+  }
+  try {
+    const e164 = `+${dialCode}${national}`;
+    const num = phoneUtil.parse(e164, region);
+    if (!phoneUtil.isValidNumberForRegion(num, region)) {
+      return {
+        ok: false,
+        message: `Enter a valid phone number for ${region} (check length and digits).`,
+      };
+    }
+    return { ok: true };
+  } catch {
+    return {
+      ok: false,
+      message: 'This phone number does not match the selected country.',
+    };
+  }
+}
+
 export function toE164Phone(dialCode: string, localPhoneRaw: string): string {
   const localDigits = localPhoneRaw.replace(/\D/g, '');
   const noTrunkPrefix = localDigits.replace(/^0+/, '');

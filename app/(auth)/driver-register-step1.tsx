@@ -18,6 +18,7 @@ import {
   setCachedPreferredPhoneCountryIso,
   resolvePreferredPhoneCountry,
   toE164Phone,
+  validateNationalPhoneForCountry,
   type PhoneCountry,
 } from '../../services/phone-countries';
 
@@ -128,6 +129,15 @@ export default function DriverRegisterStep1() {
     }
     if (!selectedPhoneCountry) {
       Alert.alert('Error', 'Please select a country for the phone number'); return;
+    }
+    const phoneCheck = validateNationalPhoneForCountry(
+      selectedPhoneCountry.isoCode,
+      selectedPhoneCountry.dialCode,
+      formData.phone,
+    );
+    if (!phoneCheck.ok) {
+      Alert.alert('Invalid phone', phoneCheck.message);
+      return;
     }
     if (formData.password.length < 8) {
       Alert.alert('Error', 'Password must be at least 8 characters'); return;

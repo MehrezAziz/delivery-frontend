@@ -17,6 +17,7 @@ import {
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Clipboard from 'expo-clipboard';
@@ -30,6 +31,12 @@ import {
   toE164Phone,
   type PhoneCountry,
 } from '../../services/phone-countries';
+import { formatMsAsMmSs } from '../../utils/format-mm-ss';
+import {
+  clearCustomerSmsForgotCooldown,
+  getCustomerSmsForgotCooldownUntil,
+  setCustomerSmsForgotCooldownUntil,
+} from '../../services/customer-forgot-sms-cooldown';
 
 const RAW_API =
   process.env.EXPO_PUBLIC_API_URL ||
@@ -39,6 +46,12 @@ const API_BASE_URL = RAW_API.replace(/\/$/, '').endsWith('/api')
   : `${RAW_API.replace(/\/$/, '')}/api`;
 
 const FORGOT_PW_ROLE = 'CUSTOMER' as const;
+
+/** Must match backend `forgotPwMaxAttempts` in auth.service.ts */
+const FORGOT_MAX_VERIFY_ATTEMPTS = 3;
+const FIREBASE_OTP_TTL_MS = 10 * 60 * 1000;
+/** After max wrong OTP attempts, user cannot type digits until this cooldown (matches product rule). */
+const OTP_ENTRY_LOCK_AFTER_MAX_MS = 5 * 60 * 1000;
 
 type Step = 'method' | 'identifier' | 'emailConfirm' | 'otp' | 'newPassword';
 
@@ -75,8 +88,19 @@ export default function CustomerForgotPasswordScreen() {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [resendAvailableAt, setResendAvailableAt] = useState<number | null>(null);
   const [, bumpResendUi] = useState(0);
+  const [otpExpiresAt, setOtpExpiresAt] = useState<number | null>(null);
+  const [, bumpOtpExpiryUi] = useState(0);
+  const [otpAttemptsUsed, setOtpAttemptsUsed] = useState(0);
+  const [otpMaxAttempts, setOtpMaxAttempts] = useState(FORGOT_MAX_VERIFY_ATTEMPTS);
+  const [otpEntryLockedUntil, setOtpEntryLockedUntil] = useState<number | null>(null);
+  const [, bumpOtpLockUi] = useState(0);
+  /** True after max wrong attempts (session removed or Firebase cleared); cleared on Back / new send / successful resend. */
+  const [otpChannelDead, setOtpChannelDead] = useState(false);
+  /** How the user entered the OTP step (drives SMS vs email rules). */
+  const [recoveryChannel, setRecoveryChannel] = useState<'email' | 'whatsapp' | 'sms' | null>(null);
 
   const firebaseConfirmationRef = useRef<FirebaseAuthTypes.ConfirmationResult | null>(null);
+  const smsOtpPhoneE164Ref = useRef<string | null>(null);
   const resetTokenRef = useRef<string | null>(null);
 
   const [otpDigits, setOtpDigits] = useState(['', '', '', '', '', '']);
@@ -88,6 +112,8 @@ export default function CustomerForgotPasswordScreen() {
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /** Shown after successful email resend (e.g. after max OTP attempts). */
+  const [otpSuccessMessage, setOtpSuccessMessage] = useState<string | null>(null);
 
   const submittingOtpRef = useRef(false);
   const loginPrefillAppliedRef = useRef(false);
@@ -168,10 +194,60 @@ export default function CustomerForgotPasswordScreen() {
   ]);
 
   const otpComplete = otpDigits.every((d) => d.length === 1 && /\d/.test(d));
+  const codeValidityExpired = !!(otpExpiresAt && Date.now() >= otpExpiresAt);
+  const otpLockedByMax = !!(otpEntryLockedUntil && Date.now() < otpEntryLockedUntil);
+  const otpAttemptsCapReached = otpAttemptsUsed >= FORGOT_MAX_VERIFY_ATTEMPTS;
+  const otpInputsBlocked =
+    otpLockedByMax ||
+    codeValidityExpired ||
+    (recoveryChannel === 'sms' && otpChannelDead) ||
+    otpAttemptsCapReached;
+
+  const registerFirebaseSmsWrongAttempt = useCallback(() => {
+    setOtpAttemptsUsed((n) => {
+      const next = Math.min(n + 1, FORGOT_MAX_VERIFY_ATTEMPTS);
+      if (next >= FORGOT_MAX_VERIFY_ATTEMPTS && smsOtpPhoneE164Ref.current) {
+        void setCustomerSmsForgotCooldownUntil(
+          smsOtpPhoneE164Ref.current,
+          Date.now() + 5 * 60 * 1000,
+        );
+        setOtpEntryLockedUntil(Date.now() + OTP_ENTRY_LOCK_AFTER_MAX_MS);
+        setOtpChannelDead(true);
+        firebaseConfirmationRef.current = null;
+        setOtpExpiresAt(null);
+      }
+      return next;
+    });
+  }, []);
 
   const verifyOtpWithCode = useCallback(
     async (code: string) => {
       if (submittingOtpRef.current) return;
+      setOtpSuccessMessage(null);
+      if (otpEntryLockedUntil && Date.now() < otpEntryLockedUntil) {
+        setError('Too many incorrect attempts. Wait for the lock to end, then request a new code.');
+        return;
+      }
+      if (otpExpiresAt && Date.now() >= otpExpiresAt) {
+        setError('This code has expired. Use Resend or go back to get a new code.');
+        return;
+      }
+      if (otpChannelDead && recoveryChannel === 'sms') {
+        setError('Use “Resend code” when the wait ends, or go back.');
+        return;
+      }
+      if (otpChannelDead) {
+        setError('Request a new verification code (use Back, then send again).');
+        return;
+      }
+      if (sessionId && otpAttemptsUsed >= FORGOT_MAX_VERIFY_ATTEMPTS) {
+        setError('You have reached the maximum number of attempts.');
+        return;
+      }
+      if (!sessionId && recoveryChannel === 'sms' && otpAttemptsUsed >= FORGOT_MAX_VERIFY_ATTEMPTS) {
+        setError('You have reached the maximum number of attempts.');
+        return;
+      }
       submittingOtpRef.current = true;
       setLoading(true);
       setError(null);
@@ -184,19 +260,63 @@ export default function CustomerForgotPasswordScreen() {
           });
           const data = await res.json().catch(() => ({}));
           if (!res.ok) {
+            const msg =
+              typeof data.message === 'string'
+                ? data.message
+                : Array.isArray(data.message)
+                  ? data.message.join(' ')
+                  : 'Invalid code';
+            const msgLower = msg.toLowerCase();
+            const hardCap =
+              msgLower.includes('too many attempts') || msgLower.includes('maximum verification');
+            const attemptsAtOrOverCap =
+              typeof data.attempts === 'number' &&
+              typeof data.maxAttempts === 'number' &&
+              data.attempts >= data.maxAttempts;
+            if (typeof data.attempts === 'number') setOtpAttemptsUsed(data.attempts);
+            if (typeof data.maxAttempts === 'number') setOtpMaxAttempts(data.maxAttempts);
+
+            if (hardCap) {
+              setOtpChannelDead(true);
+              setSessionId(null);
+              setOtpExpiresAt(null);
+              setResendAvailableAt(null);
+              if (recoveryChannel === 'sms') {
+                setOtpEntryLockedUntil(Date.now() + OTP_ENTRY_LOCK_AFTER_MAX_MS);
+              }
+              setOtpError(true);
+              setOtpDigits(['', '', '', '', '', '']);
+              setError(msg);
+              return;
+            }
+            if (attemptsAtOrOverCap && !hardCap) {
+              setOtpError(true);
+              setOtpDigits(['', '', '', '', '', '']);
+              setError('You have reached the maximum number of attempts.');
+              return;
+            }
             setOtpError(true);
             setOtpDigits(['', '', '', '', '', '']);
             otpRefs.current[0]?.focus();
-            throw new Error(data.message || 'Invalid code');
+            throw new Error(msg);
           }
           resetTokenRef.current = data.resetToken;
+          if (smsOtpPhoneE164Ref.current) void clearCustomerSmsForgotCooldown(smsOtpPhoneE164Ref.current);
           setStep('newPassword');
           return;
         }
 
         const conf = firebaseConfirmationRef.current;
         if (!conf) throw new Error('Session expired. Go back and request again.');
-        await conf.confirm(code);
+        try {
+          await conf.confirm(code);
+        } catch {
+          setOtpError(true);
+          setOtpDigits(['', '', '', '', '', '']);
+          registerFirebaseSmsWrongAttempt();
+          setTimeout(() => otpRefs.current[0]?.focus(), 0);
+          throw new Error('Invalid code');
+        }
         const user = auth().currentUser;
         if (!user) throw new Error('Verification incomplete');
         const idToken = await user.getIdToken(true);
@@ -211,9 +331,17 @@ export default function CustomerForgotPasswordScreen() {
           setOtpError(true);
           setOtpDigits(['', '', '', '', '', '']);
           otpRefs.current[0]?.focus();
-          throw new Error(data.message || 'Verification failed');
+          registerFirebaseSmsWrongAttempt();
+          throw new Error(
+            typeof data.message === 'string'
+              ? data.message
+              : Array.isArray(data.message)
+                ? data.message.join(' ')
+                : 'Verification failed',
+          );
         }
         resetTokenRef.current = data.resetToken;
+        if (smsOtpPhoneE164Ref.current) void clearCustomerSmsForgotCooldown(smsOtpPhoneE164Ref.current);
         setStep('newPassword');
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : 'Something went wrong';
@@ -223,11 +351,21 @@ export default function CustomerForgotPasswordScreen() {
         submittingOtpRef.current = false;
       }
     },
-    [sessionId],
+    [
+      sessionId,
+      otpExpiresAt,
+      otpEntryLockedUntil,
+      otpChannelDead,
+      recoveryChannel,
+      otpAttemptsUsed,
+      registerFirebaseSmsWrongAttempt,
+    ],
   );
 
   const applyPasteSix = useCallback(
     async (raw: string, autoSubmit: boolean) => {
+      if (otpInputsBlocked) return false;
+      setOtpSuccessMessage(null);
       const six = extractSixDigits(raw);
       if (!six) return false;
       setOtpError(false);
@@ -237,7 +375,7 @@ export default function CustomerForgotPasswordScreen() {
       }
       return true;
     },
-    [verifyOtpWithCode],
+    [verifyOtpWithCode, otpInputsBlocked],
   );
 
   useEffect(() => {
@@ -251,7 +389,7 @@ export default function CustomerForgotPasswordScreen() {
       }
     };
 
-    if (step !== 'otp') return;
+    if (step !== 'otp' || otpInputsBlocked) return;
 
     const sub = Clipboard.addClipboardListener(() => {
       void Clipboard.getStringAsync().then((t) => {
@@ -270,13 +408,40 @@ export default function CustomerForgotPasswordScreen() {
       sub.remove();
       appSub.remove();
     };
-  }, [step, applyPasteSix]);
+  }, [step, applyPasteSix, otpInputsBlocked]);
 
   useEffect(() => {
     if (!resendAvailableAt || resendAvailableAt <= Date.now()) return;
     const id = setInterval(() => bumpResendUi((x) => x + 1), 1000);
     return () => clearInterval(id);
   }, [resendAvailableAt]);
+
+  useEffect(() => {
+    if (step !== 'otp' || !otpExpiresAt) return;
+    const id = setInterval(() => bumpOtpExpiryUi((x) => x + 1), 1000);
+    return () => clearInterval(id);
+  }, [step, otpExpiresAt]);
+
+  useEffect(() => {
+    if (!otpEntryLockedUntil) return;
+    if (otpEntryLockedUntil <= Date.now()) {
+      setOtpEntryLockedUntil(null);
+      return;
+    }
+    const id = setInterval(() => {
+      bumpOtpLockUi((x) => x + 1);
+      if (Date.now() >= otpEntryLockedUntil) setOtpEntryLockedUntil(null);
+    }, 1000);
+    return () => clearInterval(id);
+  }, [otpEntryLockedUntil]);
+
+  useEffect(() => {
+    if (step !== 'otp') return;
+    const expired = !!(otpExpiresAt && Date.now() >= otpExpiresAt);
+    if (!expired) return;
+    setOtpDigits(['', '', '', '', '', '']);
+    setOtpError(false);
+  }, [step, otpExpiresAt, bumpOtpExpiryUi]);
 
   const resendWaitSeconds =
     resendAvailableAt && resendAvailableAt > Date.now()
@@ -345,6 +510,13 @@ export default function CustomerForgotPasswordScreen() {
       if (data.mode !== 'SESSION') throw new Error('Unexpected response');
       setSessionId(data.sessionId);
       setResendAvailableAt(Date.now() + (data.resendAfterSeconds ?? 300) * 1000);
+      setOtpExpiresAt(Date.now() + (data.expiresInSeconds ?? 600) * 1000);
+      setOtpAttemptsUsed(0);
+      setOtpMaxAttempts(FORGOT_MAX_VERIFY_ATTEMPTS);
+      setOtpEntryLockedUntil(null);
+      setOtpChannelDead(false);
+      setRecoveryChannel('email');
+      smsOtpPhoneE164Ref.current = null;
       setStep('otp');
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Request failed');
@@ -375,6 +547,13 @@ export default function CustomerForgotPasswordScreen() {
         if (data.mode !== 'SESSION') throw new Error('Unexpected response');
         setSessionId(data.sessionId);
         setResendAvailableAt(Date.now() + (data.resendAfterSeconds ?? 300) * 1000);
+        setOtpExpiresAt(Date.now() + (data.expiresInSeconds ?? 600) * 1000);
+        setOtpAttemptsUsed(0);
+        setOtpMaxAttempts(FORGOT_MAX_VERIFY_ATTEMPTS);
+        setOtpEntryLockedUntil(null);
+        setOtpChannelDead(false);
+        setRecoveryChannel('whatsapp');
+        smsOtpPhoneE164Ref.current = null;
         setStep('otp');
       } catch (e: unknown) {
         setError(e instanceof Error ? e.message : 'Request failed');
@@ -385,6 +564,13 @@ export default function CustomerForgotPasswordScreen() {
     }
 
     if (phoneChannel === 'sms') {
+      const smsCooldownUntil = await getCustomerSmsForgotCooldownUntil(e164);
+      if (smsCooldownUntil > Date.now()) {
+        setError(
+          `Please wait ${formatMsAsMmSs(smsCooldownUntil - Date.now())} before requesting another SMS for this number.`,
+        );
+        return;
+      }
       setLoading(true);
       try {
         const res = await fetch(`${API_BASE_URL}/auth/user/forgot-password/request`, {
@@ -398,6 +584,12 @@ export default function CustomerForgotPasswordScreen() {
         const confirmation = await auth().signInWithPhoneNumber(data.phoneE164);
         firebaseConfirmationRef.current = confirmation;
         setSessionId(null);
+        setOtpExpiresAt(Date.now() + FIREBASE_OTP_TTL_MS);
+        setOtpAttemptsUsed(0);
+        setOtpEntryLockedUntil(null);
+        setOtpChannelDead(false);
+        setRecoveryChannel('sms');
+        smsOtpPhoneE164Ref.current = e164;
         setStep('otp');
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : 'SMS failed';
@@ -409,8 +601,11 @@ export default function CustomerForgotPasswordScreen() {
   };
 
   const handleResend = async () => {
-    if (!sessionId || !resendAvailableAt || resendAvailableAt > Date.now()) return;
+    if (!sessionId || !resendAvailableAt) return;
+    const codeStale = !!(otpExpiresAt && Date.now() >= otpExpiresAt);
+    if (!codeStale && resendAvailableAt > Date.now() && recoveryChannel !== 'email') return;
     setError(null);
+    setOtpSuccessMessage(null);
     setLoading(true);
     try {
       const res = await fetch(`${API_BASE_URL}/auth/user/forgot-password/resend`, {
@@ -421,10 +616,59 @@ export default function CustomerForgotPasswordScreen() {
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.message || 'Resend failed');
       setResendAvailableAt(Date.now() + (data.resendAfterSeconds ?? 300) * 1000);
+      setOtpExpiresAt(Date.now() + (data.expiresInSeconds ?? 600) * 1000);
+      setOtpAttemptsUsed(0);
+      setOtpMaxAttempts(FORGOT_MAX_VERIFY_ATTEMPTS);
+      setOtpEntryLockedUntil(null);
+      setOtpChannelDead(false);
       setOtpDigits(['', '', '', '', '', '']);
       setOtpError(false);
+      if (recoveryChannel === 'email') {
+        setOtpSuccessMessage('A new verification code has been sent to your email.');
+      }
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Resend failed');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const retryCustomerForgotSms = async () => {
+    if (!selectedPhoneCountry || !phoneLocal.trim()) {
+      setError('Enter your phone number');
+      return;
+    }
+    const e164 = toE164Phone(selectedPhoneCountry.dialCode, phoneLocal);
+    const until = await getCustomerSmsForgotCooldownUntil(e164);
+    if (until > Date.now()) {
+      setError(`Please wait ${formatMsAsMmSs(until - Date.now())} before requesting another SMS.`);
+      return;
+    }
+    setError(null);
+    setLoading(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/auth/user/forgot-password/request`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ channel: 'SMS', phone: e164, role: FORGOT_PW_ROLE }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.message || 'Request failed');
+      if (data.mode !== 'FIREBASE_SMS') throw new Error('SMS setup error');
+      const confirmation = await auth().signInWithPhoneNumber(data.phoneE164);
+      firebaseConfirmationRef.current = confirmation;
+      setSessionId(null);
+      setOtpExpiresAt(Date.now() + FIREBASE_OTP_TTL_MS);
+      setOtpAttemptsUsed(0);
+      setOtpMaxAttempts(FORGOT_MAX_VERIFY_ATTEMPTS);
+      setOtpEntryLockedUntil(null);
+      setOtpChannelDead(false);
+      setOtpDigits(['', '', '', '', '', '']);
+      setOtpError(false);
+      smsOtpPhoneE164Ref.current = e164;
+      setRecoveryChannel('sms');
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'SMS failed');
     } finally {
       setLoading(false);
     }
@@ -467,6 +711,8 @@ export default function CustomerForgotPasswordScreen() {
   };
 
   const updateOtpCell = (index: number, char: string) => {
+    if (otpInputsBlocked) return;
+    setOtpSuccessMessage(null);
     const c = char.replace(/\D/g, '').slice(-1);
     const next = [...otpDigits];
     next[index] = c;
@@ -481,6 +727,7 @@ export default function CustomerForgotPasswordScreen() {
   };
 
   const onOtpKeyPress = (index: number, e: NativeSyntheticEvent<TextInputKeyPressEventData>) => {
+    if (otpInputsBlocked) return;
     if (e.nativeEvent.key === 'Backspace' && !otpDigits[index] && index > 0) {
       otpRefs.current[index - 1]?.focus();
     }
@@ -493,7 +740,37 @@ export default function CustomerForgotPasswordScreen() {
   };
 
   const continueDisabled =
-    step === 'otp' ? !otpComplete || loading : step === 'newPassword' ? loading : false;
+    step === 'otp'
+      ? !otpComplete ||
+        loading ||
+        codeValidityExpired ||
+        otpLockedByMax ||
+        (recoveryChannel !== 'sms' && otpChannelDead) ||
+        otpAttemptsCapReached
+      : step === 'newPassword'
+        ? loading
+        : false;
+
+  const renderForgotBackButton = (onPress: () => void, marginTop = 12) => (
+    <TouchableOpacity
+      onPress={() => {
+        setOtpSuccessMessage(null);
+        onPress();
+      }}
+      activeOpacity={0.75}
+      style={[
+        styles.navBackButton,
+        {
+          borderColor: colors.border,
+          backgroundColor: colors.surfaceVariant,
+          marginTop,
+        },
+      ]}
+    >
+      <Ionicons name="chevron-back" size={22} color={colors.primary} />
+      <Text style={[styles.navBackButtonText, { color: colors.text }]}>Back</Text>
+    </TouchableOpacity>
+  );
 
   return (
     <KeyboardAvoidingView
@@ -581,9 +858,7 @@ export default function CustomerForgotPasswordScreen() {
                   WhatsApp Business recovery is not available yet
                 </Text>
               </View>
-              <TouchableOpacity onPress={() => setStep('method')}>
-                <Text style={{ color: colors.primary, textAlign: 'center', marginTop: 8 }}>Back</Text>
-              </TouchableOpacity>
+              {renderForgotBackButton(() => setStep('method'), 8)}
             </View>
           )}
 
@@ -627,9 +902,7 @@ export default function CustomerForgotPasswordScreen() {
                   <Text style={styles.primaryBtnText}>Check email</Text>
                 )}
               </TouchableOpacity>
-              <TouchableOpacity onPress={() => setStep('method')}>
-                <Text style={{ color: colors.primary, textAlign: 'center' }}>Back</Text>
-              </TouchableOpacity>
+              {renderForgotBackButton(() => setStep('method'))}
             </View>
           )}
 
@@ -653,15 +926,11 @@ export default function CustomerForgotPasswordScreen() {
               >
                 {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryBtnText}>Send code</Text>}
               </TouchableOpacity>
-              <TouchableOpacity
-                onPress={() => {
-                  setStep('identifier');
-                  setMaskedEmail(null);
-                  setEmailRecoveryE164(null);
-                }}
-              >
-                <Text style={{ color: colors.primary, textAlign: 'center' }}>Back</Text>
-              </TouchableOpacity>
+              {renderForgotBackButton(() => {
+                setStep('identifier');
+                setMaskedEmail(null);
+                setEmailRecoveryE164(null);
+              })}
             </View>
           )}
 
@@ -705,19 +974,43 @@ export default function CustomerForgotPasswordScreen() {
                   <Text style={styles.primaryBtnText}>Send code</Text>
                 )}
               </TouchableOpacity>
-              <TouchableOpacity
-                onPress={() => {
-                  setPhoneChannel(null);
-                  firebaseConfirmationRef.current = null;
-                }}
-              >
-                <Text style={{ color: colors.primary, textAlign: 'center' }}>Back</Text>
-              </TouchableOpacity>
+              {renderForgotBackButton(() => {
+                setPhoneChannel(null);
+                firebaseConfirmationRef.current = null;
+              })}
             </View>
           )}
 
           {step === 'otp' && (
             <View style={styles.form}>
+              {otpExpiresAt ? (
+                Math.max(0, otpExpiresAt - Date.now()) > 0 ? (
+                  <Text style={[styles.otpMetaLine, { color: colors.textSecondary }]}>
+                    Code valid for {'\u2212'}
+                    {formatMsAsMmSs(Math.max(0, otpExpiresAt - Date.now()))}
+                  </Text>
+                ) : (
+                  <Text style={[styles.otpMetaLine, { color: colors.danger }]}>
+                    This code is no longer valid — tap Resend for a new one or go back.
+                  </Text>
+                )
+              ) : null}
+              {otpLockedByMax && otpEntryLockedUntil ? (
+                <Text style={[styles.otpMetaLine, { color: colors.textSecondary }]}>
+                  Too many incorrect attempts. Digit entry is locked for {'\u2212'}
+                  {formatMsAsMmSs(Math.max(0, otpEntryLockedUntil - Date.now()))}
+                </Text>
+              ) : null}
+              {otpChannelDead && !otpLockedByMax && recoveryChannel !== 'sms' ? (
+                <Text style={[styles.otpMetaLine, { color: colors.textSecondary }]}>
+                  Request a new verification code using Back, then send a code again.
+                </Text>
+              ) : null}
+              {sessionId || recoveryChannel === 'sms' ? (
+                <Text style={[styles.otpMetaLine, { color: colors.textSecondary, marginBottom: 10 }]}>
+                  {otpAttemptsUsed}/{otpMaxAttempts} attempts
+                </Text>
+              ) : null}
               <View style={styles.otpRow}>
                 {otpDigits.map((d, i) => (
                   <TextInput
@@ -731,15 +1024,19 @@ export default function CustomerForgotPasswordScreen() {
                         backgroundColor: colors.inputBg,
                         borderColor: otpError ? '#ef4444' : colors.inputBorder,
                         color: colors.text,
+                        opacity: otpInputsBlocked ? 0.45 : 1,
                       },
                     ]}
                     keyboardType="number-pad"
                     maxLength={1}
+                    editable={!otpInputsBlocked}
                     value={d}
                     onChangeText={(t) => {
+                      if (otpInputsBlocked) return;
                       if (t.length > 1) {
                         const pasted = extractSixDigits(t);
                         if (pasted) {
+                          setOtpSuccessMessage(null);
                           setOtpDigits(pasted.split(''));
                           setOtpError(false);
                           void verifyOtpWithCode(pasted);
@@ -771,39 +1068,78 @@ export default function CustomerForgotPasswordScreen() {
               {sessionId ? (
                 <TouchableOpacity
                   onPress={handleResend}
-                  disabled={!!resendWaitSeconds || loading}
+                  disabled={
+                    loading ||
+                    (!!resendWaitSeconds && !codeValidityExpired && recoveryChannel !== 'email')
+                  }
                   style={{ alignSelf: 'center', marginTop: 12 }}
                 >
                   <Text
                     style={{
-                      color: resendWaitSeconds ? colors.textTertiary : colors.primary,
+                      color:
+                        resendWaitSeconds && !codeValidityExpired && recoveryChannel !== 'email'
+                          ? colors.textTertiary
+                          : colors.primary,
                       fontWeight: '600',
                     }}
                   >
-                    {resendWaitSeconds ? `Resend in ${resendWaitSeconds}s` : 'Resend code'}
+                    {resendWaitSeconds && !codeValidityExpired && recoveryChannel !== 'email'
+                      ? `Resend in ${resendWaitSeconds}s`
+                      : 'Resend code'}
                   </Text>
                 </TouchableOpacity>
+              ) : recoveryChannel === 'sms' ? (
+                <View style={{ marginTop: 12, alignItems: 'center', gap: 10 }}>
+                  {otpAttemptsCapReached || otpChannelDead || codeValidityExpired ? (
+                    <TouchableOpacity
+                      onPress={() => void retryCustomerForgotSms()}
+                      disabled={loading}
+                      style={{ alignSelf: 'center' }}
+                    >
+                      <Text style={{ color: colors.primary, fontWeight: '700', fontSize: 16 }}>
+                        Resend code
+                      </Text>
+                    </TouchableOpacity>
+                  ) : (
+                    <Text style={[styles.hint, { color: colors.textTertiary, textAlign: 'center' }]}>
+                      Paste works automatically when the clipboard has exactly 6 digits.
+                    </Text>
+                  )}
+                </View>
               ) : (
                 <Text style={[styles.hint, { color: colors.textTertiary }]}>
                   Paste works automatically when the clipboard has exactly 6 digits.
                 </Text>
               )}
 
-              <TouchableOpacity
-                onPress={() => {
-                  setOtpDigits(['', '', '', '', '', '']);
-                  setOtpError(false);
-                  firebaseConfirmationRef.current = null;
-                  setSessionId(null);
-                  if (contactKind === 'email' && emailRecoveryE164 && maskedEmail) {
-                    setStep('emailConfirm');
-                  } else {
-                    setStep('identifier');
-                  }
-                }}
-              >
-                <Text style={{ color: colors.primary, textAlign: 'center', marginTop: 16 }}>Back</Text>
-              </TouchableOpacity>
+              {otpSuccessMessage ? (
+                <View
+                  style={[
+                    styles.successBanner,
+                    { backgroundColor: colors.successBg, borderColor: colors.success },
+                  ]}
+                >
+                  <Ionicons name="checkmark-circle" size={20} color={colors.success} style={{ marginRight: 8 }} />
+                  <Text style={[styles.successBannerText, { color: colors.success }]}>{otpSuccessMessage}</Text>
+                </View>
+              ) : null}
+
+              {renderForgotBackButton(() => {
+                setOtpDigits(['', '', '', '', '', '']);
+                setOtpError(false);
+                setOtpExpiresAt(null);
+                setOtpEntryLockedUntil(null);
+                setOtpChannelDead(false);
+                setRecoveryChannel(null);
+                smsOtpPhoneE164Ref.current = null;
+                firebaseConfirmationRef.current = null;
+                setSessionId(null);
+                if (contactKind === 'email' && emailRecoveryE164 && maskedEmail) {
+                  setStep('emailConfirm');
+                } else {
+                  setStep('identifier');
+                }
+              }, 16)}
             </View>
           )}
 
@@ -938,6 +1274,11 @@ const styles = StyleSheet.create({
   countryMeta: { fontSize: 13, fontWeight: '700', flexShrink: 1 },
   countryArrow: { fontSize: 13 },
   phoneInput: { flex: 1, fontSize: 16, paddingHorizontal: 12, paddingVertical: 14 },
+  otpMetaLine: {
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 6,
+  },
   otpRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -973,6 +1314,27 @@ const styles = StyleSheet.create({
     borderColor: '#fecaca',
   },
   errorText: { color: '#991b1b', fontSize: 14 },
+  navBackButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 18,
+    borderRadius: 14,
+    borderWidth: 1,
+    gap: 2,
+  },
+  navBackButtonText: { fontSize: 15, fontWeight: '600' },
+  successBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 14,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  successBannerText: { flex: 1, fontSize: 14, fontWeight: '600', lineHeight: 20 },
   pickerOverlay: {
     flex: 1,
     backgroundColor: 'rgba(2, 6, 23, 0.5)',

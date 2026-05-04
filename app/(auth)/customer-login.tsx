@@ -17,6 +17,12 @@ import {
   toE164Phone,
   type PhoneCountry,
 } from '../../services/phone-countries';
+import {
+  clearLoginFailures,
+  getLoginLockStatus,
+  recordLoginFailure,
+} from '../../services/login-attempt-lockout';
+import { formatMsAsMmSs } from '../../utils/format-mm-ss';
 
 // For Android emulator, use 10.0.2.2 instead of localhost
 // For physical device with USB + ADB reverse, use localhost
@@ -39,6 +45,8 @@ export default function CustomerLoginScreen() {
   const [password, setPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [loginLockUntil, setLoginLockUntil] = useState(0);
+  const [, bumpLockCountdown] = useState(0);
 
   // Google Auth - pass isLogin: true to prevent auto-registration
   const { handleGoogleSignIn, isLoading: isGoogleLoading, error: googleError } = useGoogleAuth('CUSTOMER', undefined, true);
@@ -75,6 +83,15 @@ export default function CustomerLoginScreen() {
     void bootstrapPhoneCountry();
   }, []);
 
+  useEffect(() => {
+    if (!loginLockUntil || loginLockUntil <= Date.now()) return;
+    const id = setInterval(() => {
+      bumpLockCountdown((x) => x + 1);
+      if (Date.now() >= loginLockUntil) setLoginLockUntil(0);
+    }, 1000);
+    return () => clearInterval(id);
+  }, [loginLockUntil]);
+
   const handleLogin = async () => {
     // Reset error
     setError(null);
@@ -94,8 +111,18 @@ export default function CustomerLoginScreen() {
       return;
     }
 
+    const e164 = toE164Phone(selectedPhoneCountry.dialCode, phone);
+    const lock = await getLoginLockStatus('customer', e164);
+    if (lock.locked) {
+      setLoginLockUntil(lock.lockedUntil);
+      setError('Too many failed login attempts. Please wait before trying again.');
+      return;
+    }
+
     // Start submission
     setIsSubmitting(true);
+
+    let loginHttpStatus: number | undefined;
 
     try {
       console.log('API_BASE_URL:', API_BASE_URL);
@@ -108,7 +135,7 @@ export default function CustomerLoginScreen() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          phone: toE164Phone(selectedPhoneCountry.dialCode, phone),
+          phone: e164,
           password,
           role: 'CUSTOMER',
         }),
@@ -117,6 +144,7 @@ export default function CustomerLoginScreen() {
       const data = await response.json();
 
       if (!response.ok) {
+        loginHttpStatus = response.status;
         // Handle specific error cases
         if (response.status === 404 || data.message?.includes('not found') || data.message?.includes('does not exist')) {
           throw new Error('Account not found. Please register first.');
@@ -127,6 +155,9 @@ export default function CustomerLoginScreen() {
         // Handle error response
         throw new Error(data.message || 'Login failed. Please check your credentials.');
       }
+
+      await clearLoginFailures('customer', e164);
+      setLoginLockUntil(0);
 
       // Store JWT token in AsyncStorage
       await AsyncStorage.setItem('accessToken', data.accessToken);
@@ -183,6 +214,9 @@ export default function CustomerLoginScreen() {
       router.replace('/(customer)/home');
     } catch (error: any) {
       console.error('Login error:', error);
+      if (loginHttpStatus === 400 || loginHttpStatus === 401) {
+        await recordLoginFailure('customer', e164);
+      }
       setError(error.message || 'Login failed. Please try again.');
     } finally {
       setIsSubmitting(false);
@@ -243,7 +277,11 @@ export default function CustomerLoginScreen() {
                   placeholderTextColor={colors.textTertiary}
                   keyboardType="phone-pad"
                   value={phone}
-                  onChangeText={(text) => setPhone(text.replace(/[^\d\s]/g, ''))}
+                  onChangeText={(text) => {
+                    setError(null);
+                    setLoginLockUntil(0);
+                    setPhone(text.replace(/[^\d\s]/g, ''));
+                  }}
                   editable={!isSubmitting}
                 />
               </View>
@@ -258,7 +296,11 @@ export default function CustomerLoginScreen() {
                 placeholderTextColor={colors.textTertiary}
                 secureTextEntry
                 value={password}
-                onChangeText={setPassword}
+                onChangeText={(t) => {
+                  setError(null);
+                  setLoginLockUntil(0);
+                  setPassword(t);
+                }}
                 editable={!isSubmitting}
               />
             </View>
@@ -284,7 +326,15 @@ export default function CustomerLoginScreen() {
             {error && (
               <View style={styles.errorContainer}>
                 <Text style={styles.errorIcon}>⚠</Text>
-                <Text style={styles.errorText}>{error}</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.errorText}>{error}</Text>
+                  {loginLockUntil > Date.now() ? (
+                    <Text style={[styles.errorText, { marginTop: 6, opacity: 0.9 }]}>
+                      Remaining wait: {'\u2212'}
+                      {formatMsAsMmSs(loginLockUntil - Date.now())}
+                    </Text>
+                  ) : null}
+                </View>
               </View>
             )}
 
