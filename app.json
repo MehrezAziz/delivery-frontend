@@ -42,12 +42,22 @@
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.delivery.app"
+      "bundleIdentifier": "com.delivery.app",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Camera access is required for identity verification and liveness."
+      }
     },
     "android": {
       "softwareKeyboardLayoutMode": "resize",
       "permissions": [
-        "POST_NOTIFICATIONS"
+        "POST_NOTIFICATIONS",
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK",
+        "android.permission.USE_BIOMETRIC",
+        "android.permission.USE_FINGERPRINT"
       ],
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
@@ -66,7 +76,12 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "d90667e9-926a-4112-91f5-fe6ada8c0716"
+      }
+    },
+    "owner": "azizmehrez"
   }
 }
-
