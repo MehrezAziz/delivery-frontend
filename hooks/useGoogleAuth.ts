@@ -17,6 +17,8 @@ const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL ||
   (Platform.OS === 'android' ? 'http://localhost:3000/api' : 'http://localhost:3000/api');
 
 // Google OAuth Client IDs
+// Web client: use for webClientId + backend GOOGLE_CLIENT_ID (token audience).
+// Android OAuth client (registered in Google Cloud only, not here): 295733709390-ksq2ukvkeo9vb6a656gie0e9qvj5e8f8.apps.googleusercontent.com
 const GOOGLE_WEB_CLIENT_ID = '295733709390-cmkprqadbcrannp1l4gl3drlab8b37r9.apps.googleusercontent.com';
 const GOOGLE_IOS_CLIENT_ID = '295733709390-cmkprqadbcrannp1l4gl3drlab8b37r9.apps.googleusercontent.com';
 
