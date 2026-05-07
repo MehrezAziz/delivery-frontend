@@ -17,13 +17,9 @@ import {
   type PhoneCountry,
 } from '../../services/phone-countries';
 
-// For Android emulator, use 10.0.2.2 instead of localhost
-// For physical device with USB + ADB reverse, use localhost
-// For physical device on WiFi, use your computer's IP address (e.g., 192.168.1.x)
-// For iOS simulator, localhost works fine
-const API_BASE_URL = Platform.OS === 'android' 
-  ? 'http://localhost:3000/api'  // USB with ADB reverse
-  : 'http://localhost:3000/api'; // iOS simulator or web
+// Must match services/api/client.ts — use EXPO_PUBLIC_API_URL in dev/prod; localhost only as fallback.
+const API_BASE_URL =
+  process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api';
 
 function toE164(dialCode: string, localPhoneRaw: string): string {
   const localDigits = localPhoneRaw.replace(/\D/g, '');

@@ -48,7 +48,9 @@
       }
     },
     "android": {
+      "versionCode": 2,
       "softwareKeyboardLayoutMode": "resize",
+      "blockedPermissions": ["com.google.android.gms.permission.AD_ID"],
       "permissions": [
         "POST_NOTIFICATIONS",
         "android.permission.CAMERA",
@@ -66,7 +68,7 @@
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "com.delivery.app",
+      "package": "com.localsmartdelivery.app",
       "googleServicesFile": "./google-services.json",
       "config": {
         "googleMaps": {
