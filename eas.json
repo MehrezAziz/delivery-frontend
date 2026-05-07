@@ -11,6 +11,9 @@
       }
     },
     "production": {
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://api.localsmartdelivery.com/api"
+      },
       "android": {
         "buildType": "app-bundle"
       }
