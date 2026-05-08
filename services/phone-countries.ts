@@ -146,7 +146,15 @@ export async function cachePhoneCountries(countries: PhoneCountry[]): Promise<vo
 
 export async function ensurePhoneCountriesLoaded(): Promise<PhoneCountry[]> {
   const cached = await getCachedPhoneCountries();
-  if (cached && cached.length > 0) return cached;
+  if (cached && cached.length > 0) {
+    // Older builds could cache a Tunisia-only fallback entry like "fallback-tn".
+    // Avoid reusing that stale data forever, otherwise geography pickers break.
+    const hasFallbackIds = cached.some((c) => (c.id || '').startsWith('fallback-'));
+    const suspiciouslySmall = cached.length < 10;
+    if (!hasFallbackIds && !suspiciouslySmall) {
+      return cached;
+    }
+  }
 
   if (phoneCountriesLoadPromise) return phoneCountriesLoadPromise;
 

@@ -106,7 +106,6 @@ export default function CustomerRegisterScreen() {
           flag: '🇹🇳',
         };
         setPhoneCountries([fallbackTunisia]);
-        await cachePhoneCountries([fallbackTunisia]);
         setSelectedPhoneCountry(fallbackTunisia);
       } finally {
         setResolvingPhoneCountry(false);
