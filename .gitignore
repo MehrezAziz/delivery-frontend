@@ -30,7 +30,9 @@ yarn-error.*
 .DS_Store
 *.pem
 
-# local env files
+# Environment — copy .env.example to .env locally (never commit secrets)
+.env
+!.env.example
 .env*.local
 
 # typescript
