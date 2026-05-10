@@ -87,13 +87,6 @@ export default function CustomerRestrictionsScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <View style={[styles.header, { backgroundColor: colors.card }]}>
-        <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace('/(customer)/home')} style={styles.backBtn}>
-          <Ionicons name="arrow-back" size={24} color={colors.primary} />
-        </TouchableOpacity>
-        <Text style={[styles.title, { color: colors.text }]}>My Restrictions</Text>
-      </View>
-
       <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent}>
         {error && (
           <View style={[styles.errorBox, { backgroundColor: colors.dangerBg }]}>
@@ -139,9 +132,6 @@ export default function CustomerRestrictionsScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f9fafb' },
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingTop: 56, paddingBottom: 16, backgroundColor: '#fff', gap: 12 },
-  backBtn: { padding: 4 },
-  title: { fontSize: 22, fontWeight: 'bold', color: '#111827' },
   scroll: { flex: 1 },
   scrollContent: { padding: 16, paddingBottom: 32 },
   errorBox: { backgroundColor: '#fef2f2', padding: 16, borderRadius: 12, alignItems: 'center', marginBottom: 16 },

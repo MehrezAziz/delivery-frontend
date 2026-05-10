@@ -111,12 +111,28 @@ export default function CustomerSettingsScreen() {
     }
   };
 
-  const actionItems: { label: string; onPress: () => void; right?: string }[] = [
-    { label: 'Edit profile', onPress: () => router.push('/(customer)/edit-profile') },
+  /** Route params + query (below) so the header can return here — tab siblings have no stack to pop. */
+  const goEditProfile = () =>
+    router.push({
+      pathname: '/(customer)/edit-profile',
+      params: { returnTo: 'settings' },
+    } as never);
+  const goAddresses = () =>
+    router.push({
+      pathname: '/(customer)/addresses',
+      params: { returnTo: 'settings' },
+    } as never);
+  const goRestrictions = () =>
+    router.push({
+      pathname: '/(customer)/restrictions',
+      params: { returnTo: 'settings' },
+    } as never);
+
+  const actionItems: { label: string; onPress: () => void }[] = [
+    { label: 'Edit profile', onPress: goEditProfile },
     { label: 'Add address', onPress: () => router.push('/(auth)/customer-setup') },
-    { label: 'My addresses', onPress: () => router.push('/(customer)/addresses') },
-    { label: 'My restrictions', onPress: () => router.push('/(customer)/restrictions') },
-    { label: 'Appearance', onPress: toggleTheme, right: isDark ? 'Dark' : 'Light' },
+    { label: 'My addresses', onPress: goAddresses },
+    { label: 'My restrictions', onPress: goRestrictions },
   ];
 
   return (
@@ -136,25 +152,29 @@ export default function CustomerSettingsScreen() {
       }
     >
       <View style={[styles.group, { backgroundColor: colors.card, borderColor: colors.border }]}>
-        {actionItems.map((item, i) => (
+        {actionItems.map((item) => (
           <TouchableOpacity
             key={item.label}
-            style={[
-              styles.linkRow,
-              { borderBottomColor: colors.border },
-              i === actionItems.length - 1 && styles.linkRowLast,
-            ]}
+            style={[styles.linkRow, { borderBottomColor: colors.border }]}
             onPress={item.onPress}
             activeOpacity={0.7}
           >
             <Text style={[styles.linkLabel, { color: colors.text }]}>{item.label}</Text>
-            {item.right != null ? (
-              <Text style={[styles.linkRight, { color: colors.textSecondary }]}>{item.right}</Text>
-            ) : (
-              <Text style={[styles.chevron, { color: colors.textTertiary }]}>›</Text>
-            )}
+            <Text style={[styles.chevron, { color: colors.textTertiary }]}>›</Text>
           </TouchableOpacity>
         ))}
+        <View style={[styles.linkRow, styles.linkRowLast, { borderBottomColor: colors.border }]}>
+          <Text style={[styles.linkLabel, { color: colors.text }]}>Appearance</Text>
+          <TouchableOpacity
+            onPress={toggleTheme}
+            activeOpacity={0.7}
+            hitSlop={{ top: 12, bottom: 12, left: 10, right: 8 }}
+            accessibilityRole="button"
+            accessibilityLabel={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+          >
+            <Text style={[styles.linkRight, { color: colors.textSecondary }]}>{isDark ? 'Dark' : 'Light'}</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>Referral</Text>

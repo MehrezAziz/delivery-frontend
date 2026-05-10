@@ -139,11 +139,11 @@ export default function CustomerHomeScreen() {
               </View>
               <Text style={[s.actionLabel, { color: colors.text }]}>Wallet</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={[s.actionCard, { backgroundColor: colors.card }]} onPress={() => router.push('/(customer)/support')}>
-              <View style={[s.actionIconWrap, { backgroundColor: isDark ? '#2e1065' : '#ede9fe' }]}>
-                <Ionicons name="headset-outline" size={22} color="#7c3aed" />
+            <TouchableOpacity style={[s.actionCard, { backgroundColor: colors.card }]} onPress={() => router.push('/(customer)/settings')}>
+              <View style={[s.actionIconWrap, { backgroundColor: isDark ? '#1e293b' : '#f1f5f9' }]}>
+                <Ionicons name="settings-outline" size={22} color={colors.primary} />
               </View>
-              <Text style={[s.actionLabel, { color: colors.text }]}>Support</Text>
+              <Text style={[s.actionLabel, { color: colors.text }]}>Settings</Text>
             </TouchableOpacity>
           </View>
         </View>

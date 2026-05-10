@@ -1,8 +1,14 @@
 import { useCallback, useMemo, useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Image } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useRouter, usePathname, useSegments } from 'expo-router';
-import { useFocusEffect } from '@react-navigation/native';
+import {
+  useRouter,
+  usePathname,
+  useSegments,
+  useGlobalSearchParams,
+  useUnstableGlobalHref,
+} from 'expo-router';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '../contexts/ThemeContext';
@@ -69,8 +75,11 @@ export function AppChromeHeader({
 }) {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const navigation = useNavigation();
   const { push } = useAppNavigation();
   const pathname = usePathname();
+  const globalSearchParams = useGlobalSearchParams();
+  const unstableGlobalHref = useUnstableGlobalHref();
   const segments = useSegments() as string[];
   const { colors, isDark } = useTheme();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -187,13 +196,49 @@ export function AppChromeHeader({
   const resolvedShowTheme =
     showThemeToggle !== undefined ? showThemeToggle : role !== 'guest' && isMainHome;
 
+  const resolveCustomerReturnTo = (): string | undefined => {
+    const returnToRaw = globalSearchParams.returnTo;
+    let r =
+      typeof returnToRaw === 'string' ? returnToRaw : Array.isArray(returnToRaw) ? returnToRaw[0] : undefined;
+    const tryParse = (s: string) => {
+      if (!s.includes('?')) return undefined;
+      try {
+        return new URLSearchParams(s.slice(s.indexOf('?') + 1)).get('returnTo') ?? undefined;
+      } catch {
+        return undefined;
+      }
+    };
+    if (!r) r = tryParse(unstableGlobalHref);
+    if (!r) r = tryParse(pathname);
+    return r;
+  };
+
   const onBack = () => {
     if (role === 'guest' && guestLoginBackToWelcome) {
       router.replace('/');
       return;
     }
-    if (router.canGoBack()) router.back();
-    else if (role === 'guest') router.replace('/');
+    // Must run before any goBack(): a parent stack often reports canGoBack() and pops to Home,
+    // even though the user arrived from Settings via sibling tab routes.
+    if (role === 'customer' && resolveCustomerReturnTo() === 'settings') {
+      router.replace('/(customer)/settings' as never);
+      return;
+    }
+    // Walk up navigators: the nearest one is often the tab bar (`canGoBack` false) while the
+    // parent stack still has entries.
+    let nav: ReturnType<typeof useNavigation> | undefined = navigation;
+    for (let depth = 0; depth < 8 && nav != null; depth++) {
+      if (nav.canGoBack()) {
+        nav.goBack();
+        return;
+      }
+      nav = nav.getParent();
+    }
+    if (router.canGoBack()) {
+      router.back();
+      return;
+    }
+    if (role === 'guest') router.replace('/');
     else if (role === 'customer') router.replace('/(customer)/home');
     else router.replace('/(driver)/home');
   };

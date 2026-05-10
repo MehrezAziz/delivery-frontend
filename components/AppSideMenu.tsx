@@ -30,6 +30,7 @@ const CUSTOMER_LINKS: LinkItem[] = [
   { label: 'Addresses', icon: 'location-outline', href: '/(customer)/addresses' },
   { label: 'Notifications', icon: 'notifications-outline', href: '/(customer)/notifications' },
   { label: 'Support', icon: 'headset-outline', href: '/(customer)/support' },
+  { label: 'Settings', icon: 'settings-outline', href: '/(customer)/settings' },
 ];
 
 const DRIVER_LINKS: LinkItem[] = [
