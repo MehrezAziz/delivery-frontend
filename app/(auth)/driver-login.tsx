@@ -19,6 +19,7 @@ import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import { saveLoginTimestamp } from '../../services/auth-session';
 import { registerForPushNotifications, restoreOrderTrackingForDriver } from '../../services/notifications';
 import { useTheme } from '../../contexts/ThemeContext';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { persistDriverIdentityFromMe } from '../../utils/persistDriverIdentity';
 import {
   ensurePhoneCountriesLoaded,
@@ -77,6 +78,7 @@ function shouldRecordDriverLoginFailure(error: unknown): boolean {
 export default function DriverLogin() {
   const router = useRouter();
   const { colors, isDark } = useTheme();
+  const insets = useSafeAreaInsets();
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -269,7 +271,10 @@ export default function DriverLogin() {
   return (
     <ScrollView
       style={[styles.container, { backgroundColor: colors.background }]}
-      contentContainerStyle={styles.scrollInner}
+      contentContainerStyle={[
+        styles.scrollInner,
+        { paddingBottom: Math.max(40, insets.bottom + 24) },
+      ]}
       keyboardShouldPersistTaps="handled"
     >
       <View style={[styles.heroCard, { backgroundColor: colors.surfaceVariant, borderColor: colors.border }]}>
@@ -483,7 +488,6 @@ const styles = StyleSheet.create({
   scrollInner: {
     paddingHorizontal: 22,
     paddingTop: 8,
-    paddingBottom: 40,
   },
   heroCard: {
     borderRadius: 20,

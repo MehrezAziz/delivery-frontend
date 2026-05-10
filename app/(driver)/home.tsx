@@ -140,31 +140,53 @@ export default function DriverHome() {
           </TouchableOpacity>
         )}
 
-        {/* Main Actions */}
+        {/* Available + My orders (verified) */}
         {isVerified && (
           <View style={s.section}>
-            <View style={s.mainActionsRow}>
-              <TouchableOpacity style={[s.mainAction, { backgroundColor: '#0284c7' }]}
-                onPress={() => push('/(driver)/available-orders')} activeOpacity={0.85}>
-                <View style={s.mainActionIcon}>
-                  <Ionicons name="list" size={26} color="#fff" />
+            <View style={s.mainActionsColumn}>
+              <TouchableOpacity
+                style={[s.heroTile, { backgroundColor: colors.card, borderColor: colors.border }]}
+                onPress={() => push('/(driver)/available-orders')}
+                activeOpacity={0.85}
+              >
+                <View style={[s.heroTileIcon, { backgroundColor: isDark ? 'rgba(14,165,233,0.22)' : '#e0f2fe' }]}>
+                  <Ionicons name="list-outline" size={24} color="#0284c7" />
                 </View>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                  <Text style={s.mainActionTitle}>Available</Text>
-                  <View style={{
-                    width: 10, height: 10, borderRadius: 5,
-                    backgroundColor: hasAvailableOrders ? '#22c55e' : '#9ca3af',
-                  }} />
+                <View style={s.heroTileBody}>
+                  <View style={s.heroTileTitleRow}>
+                    <Text style={[s.heroTileTitle, { color: colors.text }]} numberOfLines={1}>
+                      Available
+                    </Text>
+                    <View
+                      style={[
+                        s.availabilityDot,
+                        { backgroundColor: hasAvailableOrders ? '#22c55e' : '#9ca3af' },
+                      ]}
+                    />
+                  </View>
+                  <Text style={[s.heroTileSub, { color: colors.textSecondary }]} numberOfLines={1}>
+                    Find orders
+                  </Text>
                 </View>
-                <Text style={s.mainActionSub}>Find orders</Text>
+                <Ionicons name="chevron-forward" size={20} color={colors.textTertiary} />
               </TouchableOpacity>
-              <TouchableOpacity style={[s.mainAction, { backgroundColor: '#16a34a' }]}
-                onPress={() => push('/(driver)/my-orders')} activeOpacity={0.85}>
-                <View style={s.mainActionIcon}>
-                  <Ionicons name="cube" size={26} color="#fff" />
+              <TouchableOpacity
+                style={[s.heroTile, { backgroundColor: colors.card, borderColor: colors.border }]}
+                onPress={() => push('/(driver)/my-orders')}
+                activeOpacity={0.85}
+              >
+                <View style={[s.heroTileIcon, { backgroundColor: isDark ? 'rgba(22,163,74,0.22)' : '#dcfce7' }]}>
+                  <Ionicons name="cube-outline" size={24} color="#16a34a" />
                 </View>
-                <Text style={s.mainActionTitle}>My Orders</Text>
-                <Text style={s.mainActionSub}>Track deliveries</Text>
+                <View style={s.heroTileBody}>
+                  <Text style={[s.heroTileTitle, { color: colors.text }]} numberOfLines={1}>
+                    My Orders
+                  </Text>
+                  <Text style={[s.heroTileSub, { color: colors.textSecondary }]} numberOfLines={1}>
+                    Track deliveries
+                  </Text>
+                </View>
+                <Ionicons name="chevron-forward" size={20} color={colors.textTertiary} />
               </TouchableOpacity>
             </View>
           </View>
@@ -212,28 +234,50 @@ export default function DriverHome() {
           </View>
         )}
 
-        {/* Quick Menu */}
+        {/* Quick Actions — same 2×2 pattern as customer home */}
         <View style={s.section}>
-          <Text style={[s.sectionTitle, { color: colors.text }]}>Quick Menu</Text>
-          <View style={[s.menuCard, { backgroundColor: colors.card }]}>
-            {[
-              { icon: 'calendar-outline', label: 'Availability', route: '/(driver)/availability', color: '#7c3aed' },
-              { icon: 'person-outline', label: 'Profile', route: '/(driver)/profile', color: '#0284c7' },
-              { icon: 'document-text-outline', label: 'Documents', route: '/(driver)/documents', color: '#2563eb' },
-              { icon: 'location-outline', label: 'Addresses', route: '/(driver)/addresses', color: '#16a34a' },
-              { icon: 'warning-outline', label: 'Restrictions', route: '/(driver)/restrictions', color: '#ea580c' },
-              { icon: 'headset-outline', label: 'Support', route: '/(driver)/support', color: '#0284c7' },
-            ].map((item, i, arr) => (
-              <TouchableOpacity key={item.label}
-                style={[s.menuItem, i < arr.length - 1 && [s.menuItemBorder, { borderBottomColor: colors.border }]]}
-                onPress={() => push(item.route)} activeOpacity={0.7}>
-                <View style={[s.menuIconWrap, { backgroundColor: item.color + '15' }]}>
-                  <Ionicons name={item.icon as any} size={20} color={item.color} />
-                </View>
-                <Text style={[s.menuLabel, { color: colors.text }]}>{item.label}</Text>
-                <Ionicons name="chevron-forward" size={18} color={colors.textTertiary} />
-              </TouchableOpacity>
-            ))}
+          <Text style={[s.sectionTitle, { color: colors.text }]}>Quick Actions</Text>
+          <View style={s.actionsGrid}>
+            <TouchableOpacity
+              style={[s.actionCard, { backgroundColor: colors.card }]}
+              onPress={() => push('/(driver)/availability')}
+              activeOpacity={0.85}
+            >
+              <View style={[s.actionIconWrap, { backgroundColor: isDark ? '#3b1f5c' : '#ede9fe' }]}>
+                <Ionicons name="calendar-outline" size={22} color="#7c3aed" />
+              </View>
+              <Text style={[s.actionLabel, { color: colors.text }]}>Availability</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[s.actionCard, { backgroundColor: colors.card }]}
+              onPress={() => push('/(driver)/addresses')}
+              activeOpacity={0.85}
+            >
+              <View style={[s.actionIconWrap, { backgroundColor: isDark ? '#052e16' : '#dcfce7' }]}>
+                <Ionicons name="location-outline" size={22} color="#16a34a" />
+              </View>
+              <Text style={[s.actionLabel, { color: colors.text }]}>Addresses</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[s.actionCard, { backgroundColor: colors.card }]}
+              onPress={() => push('/(driver)/earnings')}
+              activeOpacity={0.85}
+            >
+              <View style={[s.actionIconWrap, { backgroundColor: isDark ? '#422006' : '#fef9c3' }]}>
+                <Ionicons name="cash-outline" size={22} color="#ca8a04" />
+              </View>
+              <Text style={[s.actionLabel, { color: colors.text }]}>Earnings</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[s.actionCard, { backgroundColor: colors.card }]}
+              onPress={() => push('/(driver)/settings')}
+              activeOpacity={0.85}
+            >
+              <View style={[s.actionIconWrap, { backgroundColor: isDark ? '#1e293b' : '#f1f5f9' }]}>
+                <Ionicons name="settings-outline" size={22} color={colors.primary} />
+              </View>
+              <Text style={[s.actionLabel, { color: colors.text }]}>Settings</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </ScrollView>
@@ -263,18 +307,62 @@ const s = StyleSheet.create({
   alertTitle: { fontSize: 15, fontWeight: '700', color: '#111827' },
   alertSub: { fontSize: 12, color: '#6b7280', marginTop: 2 },
 
-  // Main actions
-  mainActionsRow: { flexDirection: 'row', gap: 12 },
-  mainAction: {
-    flex: 1, borderRadius: 18, padding: 20, alignItems: 'center', gap: 8,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.15, shadowRadius: 8, elevation: 5,
+  // Available + My orders tiles (stacked full-width rows)
+  mainActionsColumn: { gap: 12, alignSelf: 'stretch' },
+  heroTile: {
+    alignSelf: 'stretch',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 12,
+    borderRadius: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 3,
   },
-  mainActionIcon: {
-    width: 52, height: 52, borderRadius: 26, backgroundColor: 'rgba(255,255,255,0.2)',
-    alignItems: 'center', justifyContent: 'center',
+  heroTileIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  mainActionTitle: { fontSize: 16, fontWeight: '700', color: '#fff' },
-  mainActionSub: { fontSize: 12, color: 'rgba(255,255,255,0.7)' },
+  heroTileBody: { flex: 1, minWidth: 0 },
+  heroTileTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  heroTileTitle: { fontSize: 15, fontWeight: '700' },
+  heroTileSub: { fontSize: 12, marginTop: 2 },
+  availabilityDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+  },
+
+  // Quick actions grid (customer home parity)
+  actionsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
+  actionCard: {
+    width: '47%' as any,
+    borderRadius: 16,
+    padding: 18,
+    alignItems: 'center',
+    gap: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  actionIconWrap: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  actionLabel: { fontSize: 14, fontWeight: '600' },
 
   // Order cards
   orderCard: {
@@ -293,16 +381,4 @@ const s = StyleSheet.create({
   dot: { width: 8, height: 8, borderRadius: 4 },
   line: { width: 2, height: 16, backgroundColor: '#e5e7eb', borderRadius: 1 },
   routeAddr: { fontSize: 13, color: '#6b7280', lineHeight: 20 },
-
-  // Menu
-  menuCard: {
-    backgroundColor: '#fff', borderRadius: 18, overflow: 'hidden',
-    shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 6, elevation: 2,
-  },
-  menuItem: { flexDirection: 'row', alignItems: 'center', padding: 16, gap: 14 },
-  menuItemBorder: { borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
-  menuIconWrap: {
-    width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center',
-  },
-  menuLabel: { flex: 1, fontSize: 15, fontWeight: '600', color: '#374151' },
 });

@@ -100,6 +100,7 @@ export default function DriverLayout() {
       <Tabs.Screen name="verification" options={{ href: null }} />
       <Tabs.Screen name="notifications" options={{ href: null }} />
       <Tabs.Screen name="my-ratings" options={{ href: null }} />
+      <Tabs.Screen name="settings" options={{ href: null }} />
     </Tabs>
   );
 }

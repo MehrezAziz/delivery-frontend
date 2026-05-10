@@ -50,6 +50,7 @@ export const DRIVER_ROUTE_TITLES: Record<string, string> = {
   earnings: 'Earnings',
   transactions: 'Transactions',
   profile: 'Profile',
+  settings: 'Settings',
   'edit-profile': 'Edit profile',
   restrictions: 'Restrictions',
   verification: 'Verification',

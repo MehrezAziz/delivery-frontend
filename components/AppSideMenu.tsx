@@ -33,15 +33,14 @@ const CUSTOMER_LINKS: LinkItem[] = [
   { label: 'Settings', icon: 'settings-outline', href: '/(customer)/settings' },
 ];
 
+/** Driver: Settings / documents / addresses / earnings / ratings / transactions live on Settings, Home, or Profile — keep menu lean. */
 const DRIVER_LINKS: LinkItem[] = [
   { label: 'Home', icon: 'home-outline', href: '/(driver)/home' },
   { label: 'My deliveries', icon: 'list-outline', href: '/(driver)/my-orders' },
   { label: 'Available orders', icon: 'cube-outline', href: '/(driver)/available-orders' },
-  { label: 'Earnings', icon: 'cash-outline', href: '/(driver)/earnings' },
   { label: 'Profile', icon: 'person-outline', href: '/(driver)/profile' },
   { label: 'Notifications', icon: 'notifications-outline', href: '/(driver)/notifications' },
   { label: 'Support', icon: 'headset-outline', href: '/(driver)/support' },
-  { label: 'Documents', icon: 'folder-outline', href: '/(driver)/documents' },
 ];
 
 export function AppSideMenu({

@@ -220,8 +220,13 @@ export function AppChromeHeader({
     }
     // Must run before any goBack(): a parent stack often reports canGoBack() and pops to Home,
     // even though the user arrived from Settings via sibling tab routes.
-    if (role === 'customer' && resolveCustomerReturnTo() === 'settings') {
+    const returnToSettings = resolveCustomerReturnTo() === 'settings';
+    if (role === 'customer' && returnToSettings) {
       router.replace('/(customer)/settings' as never);
+      return;
+    }
+    if (role === 'driver' && returnToSettings) {
+      router.replace('/(driver)/settings' as never);
       return;
     }
     // Walk up navigators: the nearest one is often the tab bar (`canGoBack` false) while the
@@ -263,6 +268,9 @@ export function AppChromeHeader({
   const showCustomerProfileSettings =
     role === 'customer' &&
     (normalizedPath === '/(customer)/profile' || normalizedPath.endsWith('/profile'));
+  const showDriverProfileSettings =
+    role === 'driver' &&
+    (normalizedPath === '/(driver)/profile' || normalizedPath.endsWith('/profile'));
 
   const headerBg = role === 'guest' ? colors.card : colors.headerBg;
   const textColor = role === 'guest' ? colors.text : '#fff';
@@ -391,6 +399,16 @@ export function AppChromeHeader({
                     <Ionicons name="settings-outline" size={22} color={textColor} />
                   </TouchableOpacity>
                 ) : null}
+                {showDriverProfileSettings ? (
+                  <TouchableOpacity
+                    onPress={() => push('/(driver)/settings')}
+                    style={[styles.iconBtn, { backgroundColor: iconBtnBg }]}
+                    activeOpacity={0.75}
+                    accessibilityLabel="Settings"
+                  >
+                    <Ionicons name="settings-outline" size={22} color={textColor} />
+                  </TouchableOpacity>
+                ) : null}
                 {resolvedShowNotifications ? (
                   <TouchableOpacity
                     onPress={() => setNotifPreviewOpen(true)}
@@ -471,6 +489,16 @@ export function AppChromeHeader({
                 {showCustomerProfileSettings ? (
                   <TouchableOpacity
                     onPress={() => push('/(customer)/settings')}
+                    style={[styles.iconBtn, { backgroundColor: iconBtnBg }]}
+                    activeOpacity={0.75}
+                    accessibilityLabel="Settings"
+                  >
+                    <Ionicons name="settings-outline" size={22} color={textColor} />
+                  </TouchableOpacity>
+                ) : null}
+                {showDriverProfileSettings ? (
+                  <TouchableOpacity
+                    onPress={() => push('/(driver)/settings')}
                     style={[styles.iconBtn, { backgroundColor: iconBtnBg }]}
                     activeOpacity={0.75}
                     accessibilityLabel="Settings"
