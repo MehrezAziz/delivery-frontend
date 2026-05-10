@@ -1,4 +1,14 @@
-import { Modal, View, Text, TouchableOpacity, ScrollView, Pressable, StyleSheet, Alert } from 'react-native';
+import { useState } from 'react';
+import {
+  Modal,
+  View,
+  Text,
+  TouchableOpacity,
+  ScrollView,
+  Pressable,
+  StyleSheet,
+  ActivityIndicator,
+} from 'react-native';
 import { useRouter, usePathname } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../contexts/ThemeContext';
@@ -7,6 +17,7 @@ import { clearSession } from '../services/auth-session';
 import { clearPushToken } from '../services/api/notification.service';
 import { stopOrderTrackingSilently } from '../services/notifications';
 import { isSameAppRoute } from '../utils/appRoutes';
+import { resetOrderConfirmIdentitySession } from '../utils/createOrderStepUpSession';
 
 /** @deprecated Use `isSameAppRoute` from `utils/appRoutes`. */
 export const isSideMenuRouteActive = isSameAppRoute;
@@ -56,6 +67,8 @@ export function AppSideMenu({
   const pathname = usePathname();
   const { push } = useAppNavigation();
   const { colors, isDark } = useTheme();
+  const [signOutVisible, setSignOutVisible] = useState(false);
+  const [signOutBusy, setSignOutBusy] = useState(false);
 
   const links = role === 'guest' ? GUEST_LINKS : role === 'customer' ? CUSTOMER_LINKS : DRIVER_LINKS;
 
@@ -68,31 +81,40 @@ export function AppSideMenu({
     setTimeout(() => push(href), 0);
   };
 
-  const onLogout = () => {
-    Alert.alert('Sign out', 'Are you sure you want to sign out?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Sign out',
-        style: 'destructive',
-          onPress: async () => {
-          onClose();
-          try {
-            // Same cleanup as profile logout: drop persistent order-tracking notification + FCM before clearing storage.
-            await stopOrderTrackingSilently();
-            await clearPushToken();
-            await clearSession();
-          } catch {
-            await clearSession();
-          }
-          if (role === 'customer') router.replace('/(auth)/customer-login');
-          else if (role === 'driver') router.replace('/(auth)/driver-login');
-          else router.replace('/');
-        },
-      },
-    ]);
+  const signOutOverlayTint = isDark ? 'rgba(0,0,0,0.72)' : 'rgba(15,23,42,0.48)';
+
+  const signOutBody =
+    role === 'driver'
+      ? 'You will be signed out on this device. Sign in again to accept deliveries and manage your account.'
+      : 'You will be signed out on this device. Sign in again to place orders and manage your account.';
+
+  const performSignOut = async () => {
+    setSignOutBusy(true);
+    try {
+      await stopOrderTrackingSilently();
+      await clearPushToken();
+      await clearSession();
+      if (role === 'customer') resetOrderConfirmIdentitySession();
+    } catch (e) {
+      console.error('Sign out cleanup failed:', e);
+      try {
+        await clearSession();
+        if (role === 'customer') resetOrderConfirmIdentitySession();
+      } catch {
+        /* ignore */
+      }
+    } finally {
+      setSignOutVisible(false);
+      onClose();
+      if (role === 'customer') router.replace('/(auth)/customer-login');
+      else if (role === 'driver') router.replace('/(auth)/driver-login');
+      else router.replace('/');
+      setSignOutBusy(false);
+    }
   };
 
   return (
+    <>
     <Modal visible={visible} animationType="fade" transparent onRequestClose={onClose}>
       <Pressable style={styles.overlay} onPress={onClose}>
         <Pressable
@@ -150,7 +172,7 @@ export function AppSideMenu({
             {role !== 'guest' && (
               <TouchableOpacity
                 style={[styles.logoutRow, { borderColor: colors.border }]}
-                onPress={onLogout}
+                onPress={() => setSignOutVisible(true)}
                 activeOpacity={0.75}
               >
                 <Ionicons name="log-out-outline" size={22} color={colors.danger} />
@@ -161,6 +183,60 @@ export function AppSideMenu({
         </Pressable>
       </Pressable>
     </Modal>
+
+    {role !== 'guest' && (
+      <Modal
+        visible={signOutVisible}
+        transparent
+        animationType="fade"
+        statusBarTranslucent
+        onRequestClose={() => !signOutBusy && setSignOutVisible(false)}
+      >
+        <View style={styles.signOutModalRoot}>
+          <Pressable
+            style={[StyleSheet.absoluteFillObject, { backgroundColor: signOutOverlayTint }]}
+            onPress={() => !signOutBusy && setSignOutVisible(false)}
+            accessibilityRole="button"
+            accessibilityLabel="Dismiss"
+          />
+          <View style={styles.signOutModalAlign} pointerEvents="box-none">
+            <View
+              style={[styles.signOutDialog, { backgroundColor: colors.card, borderColor: colors.border }]}
+              accessibilityViewIsModal
+            >
+              <Text style={[styles.signOutDialogTitle, { color: colors.text }]}>Sign out</Text>
+              <Text style={[styles.signOutDialogBody, { color: colors.textSecondary }]}>{signOutBody}</Text>
+              <View style={styles.signOutDialogActions}>
+                <TouchableOpacity
+                  style={[
+                    styles.signOutBtnSecondary,
+                    { backgroundColor: colors.surfaceVariant, borderColor: colors.border },
+                  ]}
+                  onPress={() => setSignOutVisible(false)}
+                  disabled={signOutBusy}
+                  activeOpacity={0.8}
+                >
+                  <Text style={[styles.signOutBtnSecondaryText, { color: colors.text }]}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.signOutBtnPrimary, { backgroundColor: colors.danger }]}
+                  onPress={() => void performSignOut()}
+                  disabled={signOutBusy}
+                  activeOpacity={0.85}
+                >
+                  {signOutBusy ? (
+                    <ActivityIndicator size="small" color="#fff" />
+                  ) : (
+                    <Text style={styles.signOutBtnPrimaryText}>Sign out</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </View>
+      </Modal>
+    )}
+    </>
   );
 }
 
@@ -233,4 +309,53 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
   },
   logoutText: { fontSize: 15, fontWeight: '700' },
+
+  signOutModalRoot: { flex: 1 },
+  signOutModalAlign: {
+    flex: 1,
+    justifyContent: 'center',
+    paddingHorizontal: 28,
+    paddingVertical: 32,
+  },
+  signOutDialog: {
+    width: '100%',
+    maxWidth: 400,
+    alignSelf: 'center',
+    borderRadius: 18,
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 22,
+    paddingTop: 22,
+    paddingBottom: 18,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.18,
+    shadowRadius: 24,
+    elevation: 12,
+  },
+  signOutDialogTitle: {
+    fontSize: 19,
+    fontWeight: '700',
+    letterSpacing: -0.3,
+    marginBottom: 10,
+  },
+  signOutDialogBody: { fontSize: 15, lineHeight: 22, marginBottom: 22 },
+  signOutDialogActions: { flexDirection: 'row', gap: 12 },
+  signOutBtnSecondary: {
+    flex: 1,
+    paddingVertical: 13,
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  signOutBtnSecondaryText: { fontSize: 15, fontWeight: '600' },
+  signOutBtnPrimary: {
+    flex: 1,
+    paddingVertical: 13,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 48,
+  },
+  signOutBtnPrimaryText: { color: '#ffffff', fontSize: 15, fontWeight: '700' },
 });
