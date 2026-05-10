@@ -2,6 +2,7 @@ import notifee, {
   AndroidCategory,
   AndroidImportance,
   AndroidStyle,
+  AndroidVisibility,
   EventType,
 } from '@notifee/react-native';
 import {
@@ -111,6 +112,21 @@ const ORDER_ACTIVE_STATUSES = [
 
 /** Driver foreground tracking includes return flow before return deposit is recorded. */
 const DRIVER_ORDER_TRACKING_STATUSES = [...ORDER_ACTIVE_STATUSES, 'RETURNED'];
+
+/**
+ * After create/accept we show a tray notification immediately; `getMyOrders` / `getDriverMyOrders`
+ * can briefly omit that order. Without this, restore clears the notification and stops the FGS.
+ */
+function shouldPreserveTrackedOrderDespiteMissingFromApi(
+  role: 'CUSTOMER' | 'DRIVER',
+  statusInMap: string | undefined,
+): boolean {
+  const st = statusInMap || 'UNKNOWN';
+  if (st === 'UNKNOWN') return true;
+  const allowed =
+    role === 'DRIVER' ? DRIVER_ORDER_TRACKING_STATUSES : ORDER_ACTIVE_STATUSES;
+  return allowed.includes(st);
+}
 
 const STATUS_BY_NOTIFICATION_TYPE: Record<string, string> = {
   ORDER_CREATED: 'SEARCHING_DRIVER',
@@ -506,6 +522,12 @@ async function setTrackedOrderStatus(orderId: string, status?: string) {
   await setTrackingStatusMap(map);
 }
 
+/** Android: only one `asForegroundService` tray slot — extras stack as separate ongoing notifications so later accepts/creates still appear. */
+async function shouldUseAndroidTrackingForegroundService(): Promise<boolean> {
+  const map = await getTrackingStatusMap();
+  return Object.keys(map).length <= 1;
+}
+
 async function clearTrackedOrder(orderId: string) {
   const map = await getTrackingStatusMap();
   delete map[orderId];
@@ -751,13 +773,15 @@ export async function startOrderTracking(orderId: string, title: string, body: s
 
   if (Platform.OS !== 'android') return;
 
+  const attachForegroundService = await shouldUseAndroidTrackingForegroundService();
+
   await notifee.displayNotification({
     id: getOrderNotificationId(orderId),
     title,
     body,
     android: {
       channelId: CHANNEL_ORDER,
-      asForegroundService: true,
+      asForegroundService: attachForegroundService,
       ongoing: true,
       autoCancel: false,
       importance: AndroidImportance.HIGH,
@@ -797,13 +821,15 @@ export async function updateOrderTracking(title: string, body: string, data?: Re
       ? '📋 View order'
       : '📍 View Order';
 
+  const attachForegroundService = await shouldUseAndroidTrackingForegroundService();
+
   await notifee.displayNotification({
     id: getOrderNotificationId(orderId),
     title,
     body,
     android: {
       channelId: CHANNEL_ORDER,
-      asForegroundService: true,
+      asForegroundService: attachForegroundService,
       ongoing: true,
       autoCancel: false,
       importance: AndroidImportance.HIGH,
@@ -922,17 +948,27 @@ export async function restoreOrderTrackingForCustomer() {
       ),
     );
 
+    const map = await getTrackingStatusMap();
+
     if (!activeOrders.length) {
+      const keepForListLag = Object.values(map).some((st) =>
+        shouldPreserveTrackedOrderDespiteMissingFromApi('CUSTOMER', st),
+      );
+      if (keepForListLag) return;
       await stopOrderTrackingSilently();
       return;
     }
-    const map = await getTrackingStatusMap();
     const displayedOrderIds = await getDisplayedTrackingOrderIds();
     const activeIdSet = new Set(activeOrders.map((o) => o.id));
-    await cancelDisplayedTrackingNotifications((orderId) => !activeIdSet.has(orderId));
+    await cancelDisplayedTrackingNotifications((orderId) => {
+      if (activeIdSet.has(orderId)) return false;
+      if (shouldPreserveTrackedOrderDespiteMissingFromApi('CUSTOMER', map[orderId])) return false;
+      return true;
+    });
 
     for (const trackedOrderId of Object.keys(map)) {
       if (!activeIdSet.has(trackedOrderId)) {
+        if (shouldPreserveTrackedOrderDespiteMissingFromApi('CUSTOMER', map[trackedOrderId])) continue;
         await notifee.cancelNotification(getOrderNotificationId(trackedOrderId)).catch(() => {});
         delete map[trackedOrderId];
       }
@@ -1014,18 +1050,28 @@ export async function restoreOrderTrackingForDriver() {
       ),
     );
 
+    const map = await getTrackingStatusMap();
+
     if (!activeOrders.length) {
+      const keepForListLag = Object.values(map).some((st) =>
+        shouldPreserveTrackedOrderDespiteMissingFromApi('DRIVER', st),
+      );
+      if (keepForListLag) return;
       await stopOrderTrackingSilently();
       return;
     }
 
-    const map = await getTrackingStatusMap();
     const displayedOrderIds = await getDisplayedTrackingOrderIds();
     const activeIdSet = new Set(activeOrders.map((o) => o.id));
-    await cancelDisplayedTrackingNotifications((orderId) => !activeIdSet.has(orderId));
+    await cancelDisplayedTrackingNotifications((orderId) => {
+      if (activeIdSet.has(orderId)) return false;
+      if (shouldPreserveTrackedOrderDespiteMissingFromApi('DRIVER', map[orderId])) return false;
+      return true;
+    });
 
     for (const trackedOrderId of Object.keys(map)) {
       if (!activeIdSet.has(trackedOrderId)) {
+        if (shouldPreserveTrackedOrderDespiteMissingFromApi('DRIVER', map[trackedOrderId])) continue;
         await notifee.cancelNotification(getOrderNotificationId(trackedOrderId)).catch(() => {});
         delete map[trackedOrderId];
       }
@@ -1778,6 +1824,9 @@ async function handleOrderFCMData(rawData: Record<string, unknown>) {
 }
 
 function isOrderTrackingPayload(data: Record<string, string>): boolean {
+  const gk = (data.groupKey || '').toLowerCase();
+  /** Chat/support threads must never be routed through order-tracking (some payloads still carry orderStatus/progressStep). */
+  if (gk.startsWith('chat:') || gk.startsWith('support:')) return false;
   if (data.groupKey?.startsWith('order:')) return true;
   if (Boolean(data.orderStatus)) return true;
   if (Boolean(data.type) && Boolean(STATUS_BY_NOTIFICATION_TYPE[data.type])) return true;
@@ -1840,6 +1889,7 @@ async function displayGroupedChatNotification(data: Record<string, string>, line
         importance: AndroidImportance.HIGH,
         category: AndroidCategory.MESSAGE,
         color: CHAT_NOTIFICATION_ACCENT,
+        visibility: AndroidVisibility.PUBLIC,
         pressAction: { id: 'default', launchActivity: 'default' },
         /** Matches backend FCM `chat_thread_${orderId}` so merged Notifee replaces the system chat banner. */
         tag: `chat_thread_${orderId}`.slice(0, 64),
@@ -2013,11 +2063,8 @@ export function setupBackgroundHandler() {
     }
 
     const { groupKey } = data;
-    if (isOrderTrackingPayload(data)) {
-      await handleOrderFCMData(raw);
-      return;
-    }
 
+    /** Chat before order-tracking routing — avoids swallowing chat when payload also has orderStatus/type heuristics. */
     if (groupKey?.startsWith('chat:')) {
       const oid =
         (data.orderId || '').trim() ||
@@ -2027,6 +2074,11 @@ export function setupBackgroundHandler() {
       if (shouldSuppressChatNotification(data)) return;
       const lines = await mergeIncomingChatLine(oid, data);
       await displayGroupedChatNotification(data, lines);
+      return;
+    }
+
+    if (isOrderTrackingPayload(data)) {
+      await handleOrderFCMData(raw);
       return;
     }
 

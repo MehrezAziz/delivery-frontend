@@ -539,21 +539,11 @@ export default function CreateOrderScreen() {
       setPublishAt(new Date(Date.now() + 15 * 60 * 1000));
       setPreview(null);
       setStep('form');
-      // Refresh active orders
       try {
         const all = await orderService.getMyOrders();
         setActiveOrders(all.filter(o => ACTIVE_STATUSES.includes(o.status)));
       } catch {}
-      appAlert(
-        scheduled ? 'Order scheduled' : 'Order Created!',
-        scheduled
-          ? 'Drivers will be notified at the time you chose.'
-          : 'We are searching for a driver near you.',
-        [
-          { text: 'View Order', onPress: () => router.push(`/(customer)/order-detail?orderId=${order.id}`) },
-          { text: 'New Order', style: 'cancel' },
-        ],
-      );
+      router.replace(`/(customer)/order-detail?orderId=${order.id}`);
     } catch (e: any) {
       appAlert('Error', e.message || 'Failed to create order');
     } finally {

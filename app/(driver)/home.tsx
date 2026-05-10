@@ -21,6 +21,7 @@ import { ActiveOrderChatUnreadBadge } from '../../components/ActiveOrderChatUnre
 const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
 
 const ACTIVE_STATUSES = [
+  'PENDING_CUSTOMER_APPROVAL',
   'DRIVER_ASSIGNED', 'DRIVER_ARRIVED', 'PICKED_UP', 'DELIVERING',
 ];
 
@@ -30,6 +31,7 @@ function safePrice(v: unknown): string {
 }
 
 const STATUS_META: Record<string, { icon: string; color: string; bg: string; label: string }> = {
+  PENDING_CUSTOMER_APPROVAL: { icon: 'hourglass-outline', color: '#ea580c', bg: '#ffedd5', label: 'Awaiting customer' },
   DRIVER_ASSIGNED: { icon: 'person-outline', color: '#2563eb', bg: '#dbeafe', label: 'Assigned' },
   DRIVER_ARRIVED:  { icon: 'flag-outline',   color: '#7c3aed', bg: '#ede9fe', label: 'Arrived' },
   PICKED_UP:       { icon: 'cube-outline',   color: '#ea580c', bg: '#ffedd5', label: 'Picked Up' },

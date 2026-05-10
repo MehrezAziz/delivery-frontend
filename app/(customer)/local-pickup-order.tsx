@@ -2,7 +2,7 @@
  * Local pickup: driver brings goods to customer (medicine, food, etc.).
  * Single address only; priced as ≤2 km within delegation (backend).
  */
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -16,6 +16,7 @@ import {
   Modal,
   FlatList,
   Switch,
+  Alert,
 } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useRouter } from 'expo-router';
@@ -29,6 +30,13 @@ import { requestNotificationBadgeRefresh, startOrderTracking } from '../../servi
 import { useTheme } from '../../contexts/ThemeContext';
 import { appAlert } from '../../utils/appAlert';
 import { clampMinSchedule, mergePublishDatePart, mergePublishTimePart } from '../../utils/schedPublishHelpers';
+import { getLocalAuthentication } from '../../utils/editProfileBiometricGate';
+import {
+  isOrderConfirmIdentityVerified,
+  setOrderConfirmIdentityVerified,
+} from '../../utils/createOrderStepUpSession';
+import { EditProfileBiometricVerifyButton } from '../../components/EditProfileBiometricVerifyButton';
+import { PasswordTextField } from '../../components/PasswordTextField';
 
 interface SavedAddress {
   addressId: string;
@@ -59,6 +67,9 @@ const RECENT_LOCAL_ADDR_KEY = 'recent_local_pickup_addresses';
 const MAX_CUSTOMER_EXTRA = 10000;
 const LOCAL_PICKUP_MIN_CANCEL_MINUTES = 5;
 const LOCAL_PICKUP_MAX_CANCEL_MINUTES = 240;
+const ORDER_BIO_ROUND_LIMIT = 5;
+
+type OrderIdentityGateUi = 'hidden' | 'bio_retry_hint' | 'choice_panel' | 'password_mode';
 
 function PriceRow({
   label,
@@ -116,6 +127,13 @@ export default function LocalPickupOrderScreen() {
   const [publishAt, setPublishAt] = useState(() => new Date(Date.now() + 15 * 60 * 1000));
   const [androidPublishStep, setAndroidPublishStep] = useState<'idle' | 'date' | 'time'>('idle');
   const [preview, setPreview] = useState<PricePreview | null>(null);
+  const [customerStatus, setCustomerStatus] = useState<string>('ACTIVE');
+  const [orderBiometricAvailable, setOrderBiometricAvailable] = useState(false);
+  const [userHasPassword, setUserHasPassword] = useState(true);
+  const [orderGateUi, setOrderGateUi] = useState<OrderIdentityGateUi>('hidden');
+  const [orderVerifyPassword, setOrderVerifyPassword] = useState('');
+  const [orderVerifyBusy, setOrderVerifyBusy] = useState(false);
+  const orderBioFailsRoundRef = useRef(0);
 
   const fetchWallet = useCallback(async () => {
     try {
@@ -131,8 +149,38 @@ export default function LocalPickupOrderScreen() {
   useFocusEffect(
     useCallback(() => {
       fetchWallet();
+      void (async () => {
+        try {
+          const me = await api.get<{ customerStatus?: string; user?: { hasPassword?: boolean } }>('/customers/me');
+          setCustomerStatus(me?.customerStatus || 'ACTIVE');
+          setUserHasPassword(!!me?.user?.hasPassword);
+        } catch {
+          /* ignore */
+        }
+      })();
     }, [fetchWallet]),
   );
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const LA = await getLocalAuthentication();
+      if (!LA) {
+        if (!cancelled) setOrderBiometricAvailable(false);
+        return;
+      }
+      try {
+        const hw = await LA.hasHardwareAsync();
+        const enrolled = await LA.isEnrolledAsync();
+        if (!cancelled) setOrderBiometricAvailable(!!(hw && enrolled));
+      } catch {
+        if (!cancelled) setOrderBiometricAvailable(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     if (!scheduleLater) setAndroidPublishStep('idle');
@@ -426,6 +474,120 @@ export default function LocalPickupOrderScreen() {
     }
   };
 
+  const recordBiometricFailure = () => {
+    orderBioFailsRoundRef.current += 1;
+    if (orderBioFailsRoundRef.current >= ORDER_BIO_ROUND_LIMIT) {
+      setOrderGateUi('choice_panel');
+      orderBioFailsRoundRef.current = 0;
+    } else {
+      setOrderGateUi('bio_retry_hint');
+    }
+  };
+
+  const attemptBiometricForOrder = async () => {
+    setOrderVerifyBusy(true);
+    try {
+      const LA = await getLocalAuthentication();
+      if (!LA) {
+        appAlert('Unavailable', 'Biometric verification is not available. Rebuild the app or use password.');
+        setOrderGateUi('bio_retry_hint');
+        return;
+      }
+      const hw = await LA.hasHardwareAsync();
+      const enrolled = await LA.isEnrolledAsync();
+      if (!hw || !enrolled) {
+        appAlert('Biometrics', 'Set up Face ID or fingerprint on your device first.');
+        setOrderGateUi('bio_retry_hint');
+        return;
+      }
+      const auth = await LA.authenticateAsync({
+        promptMessage: 'Confirm to place this order',
+        cancelLabel: 'Cancel',
+        disableDeviceFallback: true,
+      });
+      if (auth.success) {
+        setOrderConfirmIdentityVerified(true);
+        orderBioFailsRoundRef.current = 0;
+        setOrderGateUi('hidden');
+        setOrderVerifyPassword('');
+        await runCreateOrder();
+        return;
+      }
+      if (auth.error === 'user_cancel' || auth.error === 'system_cancel') {
+        setOrderGateUi('bio_retry_hint');
+        return;
+      }
+      recordBiometricFailure();
+    } catch (e: any) {
+      appAlert('Error', e?.message || 'Verification failed.');
+      recordBiometricFailure();
+    } finally {
+      setOrderVerifyBusy(false);
+    }
+  };
+
+  const handleOrderVerifyPassword = async () => {
+    if (!orderVerifyPassword.trim()) return;
+    setOrderVerifyBusy(true);
+    try {
+      await api.post('/auth/verify-password', { password: orderVerifyPassword.trim() });
+      setOrderConfirmIdentityVerified(true);
+      orderBioFailsRoundRef.current = 0;
+      setOrderGateUi('hidden');
+      setOrderVerifyPassword('');
+      await runCreateOrder();
+    } catch (e: any) {
+      appAlert('Verification failed', e?.message || 'Invalid password.');
+    } finally {
+      setOrderVerifyBusy(false);
+    }
+  };
+
+  const handleConfirmLocalOrder = async () => {
+    if (!source || !preview) return;
+    const ex = parseFloat((customerExtraAmount || '0').replace(',', '.'));
+    if (Number.isNaN(ex) || ex < 0 || ex > MAX_CUSTOMER_EXTRA) {
+      appAlert('Amount', `Enter a valid optional extra (0–${MAX_CUSTOMER_EXTRA}).`);
+      return;
+    }
+
+    if (customerStatus === 'CREATED') {
+      Alert.alert(
+        'Sorry',
+        'Only ACTIVE customers can create orders.\n\nAdd an address to become ACTIVE.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Add address to become ACTIVE',
+            onPress: () => {
+              router.push(`/(customer)/addresses?add=${Date.now()}` as never);
+            },
+          },
+        ],
+      );
+      return;
+    }
+
+    const needsBiometricGate = orderBiometricAvailable;
+    const sessionOk = isOrderConfirmIdentityVerified();
+
+    if (!needsBiometricGate || sessionOk) {
+      await runCreateOrder();
+      return;
+    }
+
+    if (orderGateUi === 'choice_panel') {
+      appAlert('Choose an option', 'Use Face ID — Fingerprint or your password above.');
+      return;
+    }
+    if (orderGateUi === 'password_mode') {
+      appAlert('Password', 'Enter your password and tap Verify password.');
+      return;
+    }
+
+    await attemptBiometricForOrder();
+  };
+
   const filteredSaved = savedList.filter((a) => {
     const q = savedSearch.trim().toLowerCase();
     if (!q) return true;
@@ -457,6 +619,9 @@ export default function LocalPickupOrderScreen() {
           <TouchableOpacity
             style={[ps.previewEditRow, { backgroundColor: colors.card, borderColor: colors.border }]}
             onPress={() => {
+              orderBioFailsRoundRef.current = 0;
+              setOrderGateUi('hidden');
+              setOrderVerifyPassword('');
               setStep('form');
             }}
             activeOpacity={0.75}
@@ -614,12 +779,119 @@ export default function LocalPickupOrderScreen() {
             </View>
           )}
 
+          {orderGateUi === 'bio_retry_hint' && orderBiometricAvailable && !isOrderConfirmIdentityVerified() && (
+            <View
+              style={[
+                s.orderBioHintBanner,
+                { backgroundColor: colors.surfaceVariant, borderColor: colors.border },
+              ]}
+            >
+              <Text style={{ color: colors.textSecondary, fontSize: 14, lineHeight: 20 }}>
+                Biometric verification did not complete. Tap Create order to try again
+                {userHasPassword ? ', or use your password below.' : '.'}
+              </Text>
+              {userHasPassword ? (
+                <TouchableOpacity
+                  onPress={() => setOrderGateUi('password_mode')}
+                  disabled={orderVerifyBusy}
+                  style={s.orderVerifyHintWrap}
+                >
+                  <Text style={[s.orderVerifyHint, { color: colors.primary }]}>Use password instead</Text>
+                </TouchableOpacity>
+              ) : null}
+            </View>
+          )}
+
+          {orderGateUi === 'choice_panel' && orderBiometricAvailable && !isOrderConfirmIdentityVerified() && (
+            <View
+              style={[
+                s.orderVerifyCard,
+                { backgroundColor: colors.card, borderColor: colors.border },
+              ]}
+            >
+              <Text style={[s.orderVerifyTitle, { color: colors.text }]}>How would you like to confirm?</Text>
+              <Text style={[s.orderVerifySub, { color: colors.textSecondary }]}>
+                Choose Face ID / fingerprint or your account password.
+              </Text>
+              <EditProfileBiometricVerifyButton
+                onPress={() => {
+                  orderBioFailsRoundRef.current = 0;
+                  void attemptBiometricForOrder();
+                }}
+                verifying={orderVerifyBusy}
+                disabled={orderVerifyBusy}
+                colors={colors}
+              />
+              {userHasPassword ? (
+                <TouchableOpacity
+                  onPress={() => setOrderGateUi('password_mode')}
+                  disabled={orderVerifyBusy}
+                  style={s.orderVerifyHintWrap}
+                >
+                  <Text style={[s.orderVerifyHint, { color: colors.primary }]}>Use password instead</Text>
+                </TouchableOpacity>
+              ) : null}
+            </View>
+          )}
+
+          {orderGateUi === 'password_mode' && orderBiometricAvailable && !isOrderConfirmIdentityVerified() && userHasPassword && (
+            <View
+              style={[
+                s.orderVerifyCard,
+                { backgroundColor: colors.card, borderColor: colors.border },
+              ]}
+            >
+              <Text style={[s.orderVerifyTitle, { color: colors.text }]}>Password</Text>
+              <PasswordTextField
+                value={orderVerifyPassword}
+                onChangeText={setOrderVerifyPassword}
+                colors={colors}
+                placeholder="Account password"
+                editable={!orderVerifyBusy}
+                containerStyle={{ marginBottom: 12 }}
+              />
+              <TouchableOpacity
+                style={[
+                  s.secondaryVerifyBtn,
+                  { backgroundColor: colors.primary },
+                  (!orderVerifyPassword.trim() || orderVerifyBusy) && { opacity: 0.5 },
+                ]}
+                onPress={handleOrderVerifyPassword}
+                disabled={!orderVerifyPassword.trim() || orderVerifyBusy}
+                activeOpacity={0.85}
+              >
+                {orderVerifyBusy ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text style={s.secondaryVerifyBtnText}>Verify password</Text>
+                )}
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => {
+                  orderBioFailsRoundRef.current = 0;
+                  setOrderGateUi('hidden');
+                  setOrderVerifyPassword('');
+                }}
+                disabled={orderVerifyBusy}
+                style={s.orderVerifyHintWrap}
+              >
+                <Text style={[s.orderVerifyHint, { color: colors.primary }]}>
+                  Use Face ID / fingerprint
+                </Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
           <TouchableOpacity
-            style={[s.cta, { backgroundColor: colors.success }, (loading || submitting || insufficientWallet) && { opacity: 0.6 }]}
-            onPress={runCreateOrder}
+            style={[
+              s.primaryBtn,
+              { backgroundColor: colors.success },
+              (loading || submitting || insufficientWallet) && s.primaryBtnDisabled,
+            ]}
+            onPress={handleConfirmLocalOrder}
             disabled={loading || submitting || insufficientWallet}
           >
-            {submitting ? <ActivityIndicator color="#fff" /> : <Text style={s.ctaText}>Create order</Text>}
+            {submitting ? <ActivityIndicator color="#fff" /> : <Text style={s.primaryBtnText}>Create order</Text>}
           </TouchableOpacity>
         </ScrollView>
       </View>
@@ -973,6 +1245,46 @@ const s = StyleSheet.create({
   inp: { borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 8, padding: 10, fontSize: 16 },
   cta: { backgroundColor: '#16a34a', padding: 16, borderRadius: 12, alignItems: 'center' },
   ctaText: { color: '#fff', fontWeight: '700', fontSize: 16 },
+  orderBioHintBanner: {
+    borderRadius: 16,
+    borderWidth: 1,
+    padding: 14,
+    marginBottom: 16,
+  },
+  orderVerifyCard: {
+    borderRadius: 16,
+    borderWidth: 1,
+    padding: 16,
+    marginBottom: 16,
+  },
+  orderVerifyTitle: { fontSize: 17, fontWeight: '800', marginBottom: 4 },
+  orderVerifySub: { fontSize: 12, fontWeight: '500', marginBottom: 14 },
+  orderVerifyHintWrap: { marginTop: 12, alignItems: 'center' },
+  orderVerifyHint: { fontSize: 12, fontWeight: '600' },
+  secondaryVerifyBtn: {
+    width: '100%',
+    borderRadius: 14,
+    paddingVertical: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 48,
+  },
+  secondaryVerifyBtnText: { color: '#fff', fontSize: 16, fontWeight: '700' },
+  primaryBtn: {
+    flexDirection: 'row',
+    height: 56,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 4,
+    shadowColor: '#16a34a',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  primaryBtnDisabled: { opacity: 0.55 },
+  primaryBtnText: { color: '#fff', fontSize: 17, fontWeight: '700' },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
   modalCard: { borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: 16, paddingBottom: 20 },
   modalHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },
