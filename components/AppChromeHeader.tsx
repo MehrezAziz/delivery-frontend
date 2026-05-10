@@ -215,6 +215,9 @@ export function AppChromeHeader({
   const showCustomerOrdersAdd =
     role === 'customer' &&
     (normalizedPath === '/(customer)/orders' || normalizedPath.endsWith('/orders'));
+  const showCustomerProfileSettings =
+    role === 'customer' &&
+    (normalizedPath === '/(customer)/profile' || normalizedPath.endsWith('/profile'));
 
   const headerBg = role === 'guest' ? colors.card : colors.headerBg;
   const textColor = role === 'guest' ? colors.text : '#fff';
@@ -333,6 +336,16 @@ export function AppChromeHeader({
                     <Ionicons name="add" size={22} color={textColor} />
                   </TouchableOpacity>
                 ) : null}
+                {showCustomerProfileSettings ? (
+                  <TouchableOpacity
+                    onPress={() => push('/(customer)/settings')}
+                    style={[styles.iconBtn, { backgroundColor: iconBtnBg }]}
+                    activeOpacity={0.75}
+                    accessibilityLabel="Settings"
+                  >
+                    <Ionicons name="settings-outline" size={22} color={textColor} />
+                  </TouchableOpacity>
+                ) : null}
                 {resolvedShowNotifications ? (
                   <TouchableOpacity
                     onPress={() => setNotifPreviewOpen(true)}
@@ -408,6 +421,16 @@ export function AppChromeHeader({
                     activeOpacity={0.75}
                   >
                     <Ionicons name="add" size={22} color={textColor} />
+                  </TouchableOpacity>
+                ) : null}
+                {showCustomerProfileSettings ? (
+                  <TouchableOpacity
+                    onPress={() => push('/(customer)/settings')}
+                    style={[styles.iconBtn, { backgroundColor: iconBtnBg }]}
+                    activeOpacity={0.75}
+                    accessibilityLabel="Settings"
+                  >
+                    <Ionicons name="settings-outline" size={22} color={textColor} />
                   </TouchableOpacity>
                 ) : null}
                 {resolvedShowNotifications && role !== 'guest' ? (

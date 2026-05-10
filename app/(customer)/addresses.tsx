@@ -10,7 +10,9 @@ import {
   Alert,
   Modal,
   FlatList,
+  Pressable,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
@@ -44,6 +46,8 @@ export default function CustomerAddressesScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ add?: string }>();
   const { colors, isDark } = useTheme();
+  const insets = useSafeAreaInsets();
+  const pickerSheetBottomPad = Math.max(insets.bottom, 12) + 56;
   const [addresses, setAddresses] = useState<Address[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -456,14 +460,15 @@ export default function CustomerAddressesScreen() {
       </ScrollView>
 
       {/* Picker Modal */}
-      <Modal visible={pickerVisible} transparent animationType="slide">
-        <View style={s.modalOverlay}>
-          <View style={[s.modalContent, { backgroundColor: colors.card }]}>
+      <Modal visible={pickerVisible} transparent animationType="slide" onRequestClose={() => setPickerVisible(false)}>
+        <View style={s.modalRoot}>
+          <Pressable style={s.modalBackdrop} onPress={() => setPickerVisible(false)} accessibilityRole="button" accessibilityLabel="Close picker" />
+          <View style={[s.modalContent, { backgroundColor: colors.card, paddingBottom: pickerSheetBottomPad }]}>
             <View style={[s.modalHeader, { borderBottomColor: colors.border }]}>
               <Text style={[s.modalTitle, { color: colors.text }]}>
                 {pickerType === 'country' ? 'Select Country' : pickerType === 'governorate' ? 'Select Governorate' : 'Select Delegation'}
               </Text>
-              <TouchableOpacity onPress={() => setPickerVisible(false)}>
+              <TouchableOpacity onPress={() => setPickerVisible(false)} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
                 <Ionicons name="close" size={24} color={colors.textSecondary} />
               </TouchableOpacity>
             </View>
@@ -485,6 +490,8 @@ export default function CustomerAddressesScreen() {
               <FlatList
                 data={filteredPickerData}
                 keyExtractor={(item) => item.id}
+                keyboardShouldPersistTaps="handled"
+                contentContainerStyle={s.modalListContent}
                 renderItem={({ item }) => (
                   <TouchableOpacity style={[s.modalItem, { borderBottomColor: colors.border }]} onPress={() => onPickerSelect(item.id)}>
                     <Text style={[s.modalItemText, { color: colors.text }]}>{item.label}</Text>
@@ -540,8 +547,13 @@ const s = StyleSheet.create({
   saveBtn: { flex: 1, backgroundColor: '#0284c7', paddingVertical: 10, borderRadius: 8, alignItems: 'center' },
   saveBtnText: { color: '#fff', fontWeight: '600' },
   // Modal styles
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
-  modalContent: { backgroundColor: '#fff', borderTopLeftRadius: 16, borderTopRightRadius: 16, maxHeight: '60%', paddingBottom: 32 },
+  modalRoot: { flex: 1, justifyContent: 'flex-end' },
+  modalBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+  },
+  modalContent: { backgroundColor: '#fff', borderTopLeftRadius: 16, borderTopRightRadius: 16, maxHeight: '72%' },
+  modalListContent: { paddingBottom: 12, flexGrow: 1 },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
   modalTitle: { fontSize: 17, fontWeight: '600', color: '#111827' },
   modalEmpty: { padding: 32, alignItems: 'center' },

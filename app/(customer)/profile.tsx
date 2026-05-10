@@ -1,9 +1,19 @@
-import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Share, ActivityIndicator, TextInput, Alert, RefreshControl } from 'react-native';
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  ScrollView,
+  StyleSheet,
+  ActivityIndicator,
+  TextInput,
+  RefreshControl,
+  Modal,
+  Pressable,
+} from 'react-native';
 import { useRouter } from 'expo-router';
 import { useState, useCallback, useEffect } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as Clipboard from 'expo-clipboard';
 import { clearPushToken } from '../../services/api/notification.service';
 import { stopOrderTrackingSilently } from '../../services/notifications';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -16,13 +26,11 @@ const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/a
 
 export default function CustomerProfileScreen() {
   const router = useRouter();
-  const { colors, isDark, toggleTheme } = useTheme();
+  const { colors, isDark } = useTheme();
   
   // State for user data
   const [user, setUser] = useState<any | null>(null);
   const [customer, setCustomer] = useState<any | null>(null);
-  const [referralCode, setReferralCode] = useState<any | null>(null);
-  const [referralStats, setReferralStats] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -31,6 +39,8 @@ export default function CustomerProfileScreen() {
   const [editingField, setEditingField] = useState<string | null>(null);
   const [editValue, setEditValue] = useState<string>('');
   const [isSaving, setIsSaving] = useState(false);
+  const [signOutModalVisible, setSignOutModalVisible] = useState(false);
+  const [signOutBusy, setSignOutBusy] = useState(false);
 
   useEffect(() => {
     void loadUserData('initial');
@@ -95,8 +105,6 @@ export default function CustomerProfileScreen() {
         referredByCodeId: profileData.referredByCodeId,
       });
 
-      // Fetch referral code and statistics from API
-      await loadReferralData();
     } catch (err) {
       console.error('Error loading user data:', err);
       if (kind !== 'silent') setError('Failed to load profile data');
@@ -106,94 +114,79 @@ export default function CustomerProfileScreen() {
     }
   };
 
-  const loadReferralData = async () => {
+  const performSignOut = async () => {
+    setSignOutBusy(true);
     try {
-      // Get auth token
-      const token = await AsyncStorage.getItem('accessToken');
-      
-      if (!token) {
-        console.error('No auth token found');
-        return;
-      }
-
-      // Fetch referral code and statistics in parallel
-      const [codeResponse, statsResponse] = await Promise.all([
-        fetch(`${API_BASE_URL}/referral/my-code`, {
-          method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`,
-          },
-        }),
-        fetch(`${API_BASE_URL}/referral/statistics`, {
-          method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`,
-          },
-        }),
-      ]);
-
-      if (codeResponse.ok) {
-        const codeData = await codeResponse.json();
-        setReferralCode(codeData);
-      }
-
-      if (statsResponse.ok) {
-        const statsData = await statsResponse.json();
-        setReferralStats(statsData);
-      }
-    } catch (err) {
-      console.error('Error loading referral data:', err);
-      // Don't set error state here - profile can still show without referral data
-    }
-  };
-
-  const handleLogout = async () => {
-    try {
-      // Ensure persistent order tracking notification is removed on logout
       await stopOrderTrackingSilently();
-      // Clear FCM token on backend before logout
       await clearPushToken();
-      // Clear all stored data
       await AsyncStorage.removeItem('accessToken');
       await AsyncStorage.removeItem('user');
       await AsyncStorage.removeItem('customer');
       resetOrderConfirmIdentitySession();
-      // Navigate to customer login screen
+      setSignOutModalVisible(false);
       router.replace('/(auth)/customer-login');
     } catch (err) {
       console.error('Error during logout:', err);
+    } finally {
+      setSignOutBusy(false);
     }
   };
 
-  const handleShareReferralCode = async () => {
-    if (!referralCode) return;
+  const handleLogout = () => setSignOutModalVisible(true);
 
-    try {
-      const discountText = referralCode.type === 'PERCENTAGE' 
-        ? `${referralCode.value}% discount`
-        : `${referralCode.value} TND discount`;
+  const signOutOverlayTint = isDark ? 'rgba(0,0,0,0.72)' : 'rgba(15,23,42,0.48)';
 
-      await Share.share({
-        message: `Join Fast Delivery using my referral code: ${referralCode.code} and get ${discountText} on your first order!`,
-      });
-    } catch (error) {
-      console.error('Error sharing referral code:', error);
-    }
-  };
-
-  const handleCopyReferralCode = async () => {
-    if (!referralCode) return;
-
-    try {
-      await Clipboard.setStringAsync(referralCode.code);
-      Alert.alert('Copied!', 'Referral code copied to clipboard');
-    } catch (error) {
-      console.error('Error copying referral code:', error);
-      Alert.alert('Error', 'Failed to copy referral code');
-    }
-  };
+  const renderSignOutModal = () => (
+    <Modal
+      visible={signOutModalVisible}
+      transparent
+      animationType="fade"
+      statusBarTranslucent
+      onRequestClose={() => !signOutBusy && setSignOutModalVisible(false)}
+    >
+      <View style={styles.signOutModalRoot}>
+        <Pressable
+          style={[StyleSheet.absoluteFillObject, { backgroundColor: signOutOverlayTint }]}
+          onPress={() => !signOutBusy && setSignOutModalVisible(false)}
+          accessibilityRole="button"
+          accessibilityLabel="Dismiss"
+        />
+        <View style={styles.signOutModalAlign} pointerEvents="box-none">
+        <View
+          style={[styles.signOutDialog, { backgroundColor: colors.card, borderColor: colors.border }]}
+          accessibilityViewIsModal
+        >
+          <Text style={[styles.signOutDialogTitle, { color: colors.text }]}>Sign out</Text>
+          <Text style={[styles.signOutDialogBody, { color: colors.textSecondary }]}>
+            You will be signed out on this device. Sign in again to place orders and manage your account.
+          </Text>
+          <View style={styles.signOutDialogActions}>
+            <TouchableOpacity
+              style={[styles.signOutBtnSecondary, { backgroundColor: colors.surfaceVariant, borderColor: colors.border }]}
+              onPress={() => setSignOutModalVisible(false)}
+              disabled={signOutBusy}
+              activeOpacity={0.8}
+            >
+              <Text style={[styles.signOutBtnSecondaryText, { color: colors.text }]}>Cancel</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.signOutBtnPrimary, { backgroundColor: colors.danger }]}
+              onPress={() => void performSignOut()}
+              disabled={signOutBusy}
+              activeOpacity={0.85}
+            >
+              {signOutBusy ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <Text style={styles.signOutBtnPrimaryText}>Sign out</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
+        </View>
+      </View>
+    </Modal>
+  );
 
   const handleEditField = (field: string, currentValue: string = '') => {
     setEditingField(field);
@@ -316,11 +309,11 @@ export default function CustomerProfileScreen() {
           <Text style={[styles.loadingText, { color: colors.textSecondary }]}>Loading profile...</Text>
         </View>
         <View style={{ paddingHorizontal: 24, paddingBottom: 40 }}>
-          <TouchableOpacity style={[styles.logoutButton, { backgroundColor: colors.dangerBg }]} onPress={handleLogout}>
-            <Text style={styles.menuIcon}>🚪</Text>
-            <Text style={[styles.logoutText, { color: colors.danger }]}>Logout</Text>
+          <TouchableOpacity style={[styles.signOutCompact, { borderColor: colors.border }]} onPress={handleLogout}>
+            <Text style={[styles.signOutCompactText, { color: colors.danger }]}>Sign out</Text>
           </TouchableOpacity>
         </View>
+        {renderSignOutModal()}
       </View>
     );
   }
@@ -334,17 +327,18 @@ export default function CustomerProfileScreen() {
           <TouchableOpacity style={[styles.retryButton, { backgroundColor: colors.primary }]} onPress={() => void loadUserData('initial')}>
             <Text style={styles.retryButtonText}>Retry</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={[styles.logoutButton, { marginTop: 24, width: '100%', backgroundColor: colors.dangerBg }]} onPress={handleLogout}>
-            <Text style={styles.menuIcon}>🚪</Text>
-            <Text style={[styles.logoutText, { color: colors.danger }]}>Logout</Text>
+          <TouchableOpacity style={[styles.signOutCompact, { marginTop: 24, borderColor: colors.border }]} onPress={handleLogout}>
+            <Text style={[styles.signOutCompactText, { color: colors.danger }]}>Sign out</Text>
           </TouchableOpacity>
         </View>
+        {renderSignOutModal()}
       </View>
     );
   }
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
+      {renderSignOutModal()}
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
@@ -430,7 +424,7 @@ export default function CustomerProfileScreen() {
                   style={[styles.addButton, { borderColor: colors.primary }]}
                   onPress={() => handleEditField('userGender')}
                 >
-                  <Text style={[styles.addButtonText, { color: colors.primary }]}>+ Add Gender {user.userGender}</Text>
+                  <Text style={[styles.addButtonText, { color: colors.primary }]}>Add gender</Text>
                 </TouchableOpacity>
               </View>
             )}
@@ -576,10 +570,6 @@ export default function CustomerProfileScreen() {
             )}
             
             <View style={styles.detailRow}>
-              <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>User ID</Text>
-              <Text style={[styles.detailValue, { color: colors.text }]}>{user.id.substring(0, 8)}...</Text>
-            </View>
-            <View style={styles.detailRow}>
               <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>Role</Text>
               <Text style={[styles.detailValue, { color: colors.text }]}>{user.role}</Text>
             </View>
@@ -607,146 +597,22 @@ export default function CustomerProfileScreen() {
           </View>
         </View>
 
-        {/* Referral Code Card */}
-        {referralCode && referralStats && (
-          <View style={[styles.referralCard, { backgroundColor: colors.card }]}>
-            <View style={styles.referralHeader}>
-              <Text style={styles.referralIcon}>🎁</Text>
-              <Text style={[styles.referralTitle, { color: colors.text }]}>My Referral Code</Text>
-            </View>
-            
-            <View style={[styles.referralCodeContainer, { borderColor: colors.primary }]}>
-              <View style={styles.referralCodeRow}>
-                <View style={styles.referralCodeTextContainer}>
-                  <Text style={[styles.referralCode, { color: colors.primary }]}>{referralCode.code}</Text>
-                  <Text style={[styles.referralBenefit, { color: colors.primary }]}>
-                    {referralCode.type === 'PERCENTAGE' 
-                      ? `${referralCode.value}% discount`
-                      : `${referralCode.value} TND discount`}
-                  </Text>
-                </View>
-                <TouchableOpacity 
-                  style={[styles.copyButton, { backgroundColor: colors.primary }]}
-                  onPress={handleCopyReferralCode}
-                  activeOpacity={0.7}
-                >
-                  <Text style={styles.copyIcon}>📋</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-
-            <TouchableOpacity 
-              style={[styles.shareButton, { backgroundColor: colors.primary }]}
-              onPress={handleShareReferralCode}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.shareButtonText}>Share Code</Text>
-            </TouchableOpacity>
-
-            <View style={[styles.referralStats, { backgroundColor: colors.surfaceVariant }]}>
-              <View style={styles.statItem}>
-                <Text style={[styles.statValue, { color: colors.text }]}>{referralStats.totalReferrals}</Text>
-                <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Referrals</Text>
-              </View>
-              <View style={[styles.statDivider, { backgroundColor: colors.border }]} />
-              <View style={styles.statItem}>
-                <Text style={[styles.statValue, { color: colors.text }]}>{referralStats.totalCommission.toFixed(2)} TND</Text>
-                <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Total Earned</Text>
-              </View>
-            </View>
-
-            <View style={styles.commissionDetails}>
-              <View style={styles.commissionRow}>
-                <Text style={[styles.commissionLabel, { color: colors.textSecondary }]}>Pending</Text>
-                <Text style={styles.commissionPending}>{referralStats.pendingCommission.toFixed(2)} TND</Text>
-              </View>
-              <View style={styles.commissionRow}>
-                <Text style={[styles.commissionLabel, { color: colors.textSecondary }]}>Paid</Text>
-                <Text style={styles.commissionPaid}>{referralStats.paidCommission.toFixed(2)} TND</Text>
-              </View>
-            </View>
-
-            <TouchableOpacity 
-              style={[styles.refreshButton, { borderColor: colors.primary }]}
-              onPress={loadReferralData}
-              activeOpacity={0.7}
-            >
-              <Text style={[styles.refreshButtonText, { color: colors.primary }]}>🔄 Refresh Statistics</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-
-        {/* Menu Items */}
         <View style={styles.menuContainer}>
           <TouchableOpacity
-            style={[styles.menuItem, { backgroundColor: colors.card }]}
-            onPress={() => router.push('/(customer)/edit-profile')}
-          >
-            <Text style={styles.menuIcon}>✏️</Text>
-            <Text style={[styles.menuText, { color: colors.text }]}>Edit Profile</Text>
-            <Text style={[styles.menuArrow, { color: colors.textTertiary }]}>→</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.menuItem, { backgroundColor: colors.card }]}
-            onPress={() => router.push('/(auth)/customer-setup')}
-          >
-            <Text style={styles.menuIcon}>🌍</Text>
-            <Text style={[styles.menuText, { color: colors.text }]}>Add address</Text>
-            <Text style={[styles.menuArrow, { color: colors.textTertiary }]}>→</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.menuItem, { backgroundColor: colors.card }]}
-            onPress={() => router.push('/(customer)/addresses')}
-          >
-            <Text style={styles.menuIcon}>📍</Text>
-            <Text style={[styles.menuText, { color: colors.text }]}>My Addresses</Text>
-            <Text style={[styles.menuArrow, { color: colors.textTertiary }]}>→</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.menuItem, { backgroundColor: colors.card }]}
-            onPress={() => router.push('/(customer)/restrictions')}
-          >
-            <Text style={styles.menuIcon}>⚠️</Text>
-            <Text style={[styles.menuText, { color: colors.text }]}>My Restrictions</Text>
-            <Text style={[styles.menuArrow, { color: colors.textTertiary }]}>→</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={[styles.menuItem, { backgroundColor: colors.card }]}>
-            <Text style={styles.menuIcon}>💳</Text>
-            <Text style={[styles.menuText, { color: colors.text }]}>Wallet</Text>
-            <Text style={[styles.menuArrow, { color: colors.textTertiary }]}>→</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={[styles.menuItem, { backgroundColor: colors.card }]}>
-            <Text style={styles.menuIcon}>⚙️</Text>
-            <Text style={[styles.menuText, { color: colors.text }]}>Settings</Text>
-            <Text style={[styles.menuArrow, { color: colors.textTertiary }]}>→</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.menuItem, { backgroundColor: colors.card }]}
+            style={[styles.textLinkRow, { backgroundColor: colors.card, borderColor: colors.border }]}
             onPress={() => router.push('/(customer)/support')}
+            activeOpacity={0.75}
           >
-            <Text style={styles.menuIcon}>❓</Text>
-            <Text style={[styles.menuText, { color: colors.text }]}>Help & Support</Text>
-            <Text style={[styles.menuArrow, { color: colors.textTertiary }]}>→</Text>
+            <Text style={[styles.textLinkLabel, { color: colors.text }]}>Help & support</Text>
+            <Text style={[styles.textLinkChevron, { color: colors.textTertiary }]}>›</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={[styles.menuItem, { backgroundColor: colors.card }]} onPress={toggleTheme}>
-            <Text style={styles.menuIcon}>{isDark ? '☀️' : '🌙'}</Text>
-            <Text style={[styles.menuText, { color: colors.text }]}>{isDark ? 'Light Mode' : 'Dark Mode'}</Text>
-            <Text style={[styles.menuArrow, { color: colors.textTertiary }]}>→</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity 
-            style={[styles.logoutButton, { backgroundColor: colors.dangerBg }]}
+          <TouchableOpacity
+            style={[styles.signOutCompact, { borderColor: colors.border, marginTop: 20 }]}
             onPress={handleLogout}
+            activeOpacity={0.75}
           >
-            <Text style={styles.menuIcon}>🚪</Text>
-            <Text style={[styles.logoutText, { color: colors.danger }]}>Logout</Text>
+            <Text style={[styles.signOutCompactText, { color: colors.danger }]}>Sign out</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -954,204 +820,106 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '600',
   },
-  referralCard: {
-    backgroundColor: '#ffffff',
-    marginHorizontal: 24,
-    marginTop: 16,
-    padding: 24,
-    borderRadius: 16,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  referralHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  referralIcon: {
-    fontSize: 24,
-    marginRight: 8,
-  },
-  referralTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#111827',
-  },
-  referralCodeContainer: {
-    backgroundColor: '#f0f9ff',
-    borderWidth: 2,
-    borderColor: '#0284c7',
-    borderStyle: 'dashed',
-    borderRadius: 12,
-    paddingVertical: 16,
-    paddingHorizontal: 16,
-    marginBottom: 16,
-  },
-  referralCodeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  referralCodeTextContainer: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  referralCode: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#0284c7',
-    letterSpacing: 2,
-  },
-  referralBenefit: {
-    fontSize: 14,
-    color: '#0284c7',
-    marginTop: 4,
-    fontWeight: '600',
-  },
-  copyButton: {
-    backgroundColor: '#0284c7',
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginLeft: 12,
-  },
-  copyIcon: {
-    fontSize: 24,
-  },
-  shareButton: {
-    backgroundColor: '#0284c7',
-    paddingVertical: 12,
-    borderRadius: 8,
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  shareButtonText: {
-    color: '#ffffff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  referralStats: {
-    flexDirection: 'row',
-    backgroundColor: '#f9fafb',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
-  },
-  statItem: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  statDivider: {
-    width: 1,
-    backgroundColor: '#e5e7eb',
-    marginHorizontal: 16,
-  },
-  statValue: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#111827',
-    marginBottom: 4,
-  },
-  statLabel: {
-    fontSize: 14,
-    color: '#6b7280',
-  },
-  commissionDetails: {
-    gap: 8,
-    marginBottom: 16,
-  },
-  commissionRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  commissionLabel: {
-    fontSize: 15,
-    color: '#6b7280',
-  },
-  commissionPending: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#f59e0b',
-  },
-  commissionPaid: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#10b981',
-  },
-  refreshButton: {
-    backgroundColor: '#f0f9ff',
-    paddingVertical: 10,
-    borderRadius: 8,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#0284c7',
-  },
-  refreshButtonText: {
-    color: '#0284c7',
-    fontSize: 14,
-    fontWeight: '600',
-  },
   menuContainer: {
     paddingHorizontal: 24,
     paddingTop: 16,
+    paddingBottom: 28,
   },
-  menuItem: {
-    backgroundColor: '#ffffff',
-    padding: 16,
-    borderRadius: 12,
+  textLinkRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 12,
+    justifyContent: 'space-between',
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    marginBottom: 10,
+  },
+  textLinkLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  textLinkChevron: {
+    fontSize: 22,
+    fontWeight: '300',
+  },
+  signOutCompact: {
+    alignSelf: 'center',
+    minWidth: 160,
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 10,
+    borderWidth: StyleSheet.hairlineWidth,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  signOutCompactText: {
+    fontSize: 14,
+    fontWeight: '600',
+    letterSpacing: 0.2,
+  },
+  signOutModalRoot: {
+    flex: 1,
+  },
+  signOutModalAlign: {
+    flex: 1,
+    justifyContent: 'center',
+    paddingHorizontal: 28,
+    paddingVertical: 32,
+  },
+  signOutDialog: {
+    width: '100%',
+    maxWidth: 400,
+    alignSelf: 'center',
+    borderRadius: 18,
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 22,
+    paddingTop: 22,
+    paddingBottom: 18,
     shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 1,
-    },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 1,
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.18,
+    shadowRadius: 24,
+    elevation: 12,
   },
-  menuIcon: {
-    fontSize: 24,
-    marginRight: 16,
+  signOutDialogTitle: {
+    fontSize: 19,
+    fontWeight: '700',
+    letterSpacing: -0.3,
+    marginBottom: 10,
   },
-  menuText: {
-    flex: 1,
-    fontSize: 18,
-    color: '#111827',
-    fontWeight: '600',
+  signOutDialogBody: {
+    fontSize: 15,
+    lineHeight: 22,
+    marginBottom: 22,
   },
-  menuSubText: {
-    fontSize: 13,
-    color: '#f59e0b',
-    fontWeight: '500',
-    marginTop: 2,
-  },
-  menuArrow: {
-    fontSize: 20,
-    color: '#9ca3af',
-  },
-  logoutButton: {
-    backgroundColor: '#fef2f2',
-    padding: 16,
-    borderRadius: 12,
+  signOutDialogActions: {
     flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 16,
+    gap: 12,
   },
-  logoutText: {
+  signOutBtnSecondary: {
     flex: 1,
-    fontSize: 18,
-    color: '#dc2626',
+    paddingVertical: 13,
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  signOutBtnSecondaryText: {
+    fontSize: 15,
     fontWeight: '600',
+  },
+  signOutBtnPrimary: {
+    flex: 1,
+    paddingVertical: 13,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 48,
+  },
+  signOutBtnPrimaryText: {
+    color: '#ffffff',
+    fontSize: 15,
+    fontWeight: '700',
   },
 });

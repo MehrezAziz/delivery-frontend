@@ -19,6 +19,7 @@ export const CUSTOMER_ROUTE_TITLES: Record<string, string> = {
   orders: 'My orders',
   wallet: 'Wallet',
   profile: 'Profile',
+  settings: 'Settings',
   addresses: 'Addresses',
   restrictions: 'Restrictions',
   support: 'Support',
