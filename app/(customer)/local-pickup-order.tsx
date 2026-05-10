@@ -25,7 +25,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
 import { api } from '../../services/api/client';
 import { orderService } from '../../services/api/order.service';
-import { startOrderTracking } from '../../services/notifications';
+import { requestNotificationBadgeRefresh, startOrderTracking } from '../../services/notifications';
 import { useTheme } from '../../contexts/ThemeContext';
 import { appAlert } from '../../utils/appAlert';
 import { clampMinSchedule, mergePublishDatePart, mergePublishTimePart } from '../../utils/schedPublishHelpers';
@@ -390,19 +390,24 @@ export default function LocalPickupOrderScreen() {
         scheduledPublishAt: scheduleLater ? publishAt.toISOString() : undefined,
       });
       const scheduled = order.status === 'PENDING_PUBLISH';
-      startOrderTracking(
-        order.id,
-        scheduled ? '📅 Local pickup — scheduled' : '📦 Local pickup — searching for a driver...',
-        scheduled ? '◉———⌖———⌖———⌖———⌖———⌖———⌖' : '⛟———⌖———⌖———⌖———⌖———⌖———⌖',
-        {
-          orderId: order.id,
-          orderStatus: scheduled ? 'PENDING_PUBLISH' : 'SEARCHING_DRIVER',
-          groupKey: `order:${order.id}`,
-          relatedEntityType: 'Order',
-          relatedEntityId: order.id,
-          ongoing: 'true',
-        },
-      );
+      try {
+        await startOrderTracking(
+          order.id,
+          scheduled ? '📅 Local pickup — scheduled' : '📦 Local pickup — searching for a driver...',
+          scheduled ? '◉———⌖———⌖———⌖———⌖———⌖———⌖' : '⛟———⌖———⌖———⌖———⌖———⌖———⌖',
+          {
+            orderId: order.id,
+            orderStatus: scheduled ? 'PENDING_PUBLISH' : 'SEARCHING_DRIVER',
+            groupKey: `order:${order.id}`,
+            relatedEntityType: 'Order',
+            relatedEntityId: order.id,
+            ongoing: 'true',
+          },
+        );
+      } catch (e) {
+        console.warn('startOrderTracking after local pickup create:', e);
+      }
+      requestNotificationBadgeRefresh();
       setSource(null);
       setPaymentType('COD');
       setWeight('1');

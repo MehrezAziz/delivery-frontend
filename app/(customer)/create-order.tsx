@@ -11,7 +11,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
 import { api } from '../../services/api/client';
 import { orderService, Order } from '../../services/api/order.service';
-import { startOrderTracking } from '../../services/notifications';
+import { requestNotificationBadgeRefresh, startOrderTracking } from '../../services/notifications';
 import { useTheme } from '../../contexts/ThemeContext';
 import { appAlert } from '../../utils/appAlert';
 import { clampMinSchedule, mergePublishDatePart, mergePublishTimePart } from '../../utils/schedPublishHelpers';
@@ -503,6 +503,28 @@ export default function CreateOrderScreen() {
       orderBioFailsRoundRef.current = 0;
       setOrderGateUi('hidden');
       setOrderVerifyPassword('');
+      const scheduled = order.status === 'PENDING_PUBLISH';
+      try {
+        await startOrderTracking(
+          order.id,
+          scheduled
+            ? '📅 Order scheduled — waiting to go live'
+            : '📦 Order Confirmed — Searching for a driver...',
+          scheduled ? '◉———⌖———⌖———⌖———⌖———⌖———⌖' : '⛟———⌖———⌖———⌖———⌖———⌖———⌖',
+          {
+            orderId: order.id,
+            orderStatus: scheduled ? 'PENDING_PUBLISH' : 'SEARCHING_DRIVER',
+            groupKey: `order:${order.id}`,
+            relatedEntityType: 'Order',
+            relatedEntityId: order.id,
+            ongoing: 'true',
+          },
+        );
+      } catch (e) {
+        console.warn('startOrderTracking after create:', e);
+      }
+      requestNotificationBadgeRefresh();
+
       // Reset form for next order
       setPickupAddress(null);
       setDropoffAddress(null);
@@ -522,7 +544,6 @@ export default function CreateOrderScreen() {
         const all = await orderService.getMyOrders();
         setActiveOrders(all.filter(o => ACTIVE_STATUSES.includes(o.status)));
       } catch {}
-      const scheduled = order.status === 'PENDING_PUBLISH';
       appAlert(
         scheduled ? 'Order scheduled' : 'Order Created!',
         scheduled
@@ -532,22 +553,6 @@ export default function CreateOrderScreen() {
           { text: 'View Order', onPress: () => router.push(`/(customer)/order-detail?orderId=${order.id}`) },
           { text: 'New Order', style: 'cancel' },
         ],
-      );
-
-      startOrderTracking(
-        order.id,
-        scheduled
-          ? '📅 Order scheduled — waiting to go live'
-          : '📦 Order Confirmed — Searching for a driver...',
-        scheduled ? '◉———⌖———⌖———⌖———⌖———⌖———⌖' : '⛟———⌖———⌖———⌖———⌖———⌖———⌖',
-        {
-          orderId: order.id,
-          orderStatus: scheduled ? 'PENDING_PUBLISH' : 'SEARCHING_DRIVER',
-          groupKey: `order:${order.id}`,
-          relatedEntityType: 'Order',
-          relatedEntityId: order.id,
-          ongoing: 'true',
-        },
       );
     } catch (e: any) {
       appAlert('Error', e.message || 'Failed to create order');

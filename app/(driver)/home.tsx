@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity,
   ActivityIndicator, ScrollView, RefreshControl,
@@ -15,6 +15,8 @@ import { useAppNavigation } from '../../contexts/AppNavigationContext';
 import { restoreOrderTrackingForDriver, stopOrderTrackingSilently } from '../../services/notifications';
 import { syncDriverLocationTracking } from '../../services/driverLocationTracking';
 import { persistDriverIdentityFromMe } from '../../utils/persistDriverIdentity';
+import { useActiveOrdersChatUnreadMap } from '../../hooks/useOrderChatUnread';
+import { ActiveOrderChatUnreadBadge } from '../../components/ActiveOrderChatUnreadBadge';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
 
@@ -43,6 +45,10 @@ export default function DriverHome() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [hasAvailableOrders, setHasAvailableOrders] = useState(false);
+
+  const activeOrderIds = useMemo(() => activeOrders.map((o) => o.id), [activeOrders]);
+  const chatUnreadByOrder = useActiveOrdersChatUnreadMap(activeOrderIds);
+
   const loadData = useCallback(async () => {
     try {
       const token = await AsyncStorage.getItem('accessToken');
@@ -206,6 +212,11 @@ export default function DriverHome() {
               return (
                 <TouchableOpacity key={order.id} style={[s.orderCard, { backgroundColor: colors.card }]}
                   onPress={() => push(`/(driver)/my-orders`)} activeOpacity={0.8}>
+                  <ActiveOrderChatUnreadBadge
+                    count={chatUnreadByOrder[order.id] ?? 0}
+                    iconColor={colors.primary}
+                    iconBg={isDark ? `${colors.primary}28` : colors.primaryLight}
+                  />
                   <View style={s.orderTop}>
                     <View style={[s.orderBadge, { backgroundColor: meta.bg }]}>
                       <Ionicons name={meta.icon as any} size={14} color={meta.color} />
@@ -366,8 +377,16 @@ const s = StyleSheet.create({
 
   // Order cards
   orderCard: {
-    backgroundColor: '#fff', borderRadius: 16, padding: 16, marginBottom: 12,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 6, elevation: 2,
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 12,
+    overflow: 'visible',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+    elevation: 2,
   },
   orderTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
   orderBadge: {

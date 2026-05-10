@@ -9,6 +9,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { orderService, AvailableOrders, FilteredOrders, Order, computeOrderCancelRemainingSec } from '../../services/api/order.service';
 import { startDriverLocationTracking } from '../../services/driverLocationTracking';
 import { ensureDriverPushNotificationSetup } from '../../services/driverPushSetup';
+import { presentDriverTrackingAfterAccept } from '../../services/notifications';
 import { api } from '../../services/api/client';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useAppNavigation } from '../../contexts/AppNavigationContext';
@@ -430,6 +431,7 @@ export default function AvailableOrdersScreen() {
         setAccepting(orderId);
         try {
           await orderService.acceptOrder(orderId);
+          await presentDriverTrackingAfterAccept(orderId);
           router.replace(`/(driver)/order-detail?orderId=${orderId}`);
           void startDriverLocationTracking(orderId).then((locOk) => {
             if (!locOk) {

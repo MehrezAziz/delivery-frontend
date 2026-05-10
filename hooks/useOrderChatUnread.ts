@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import { notificationService } from '../services/api/notification.service';
+import { subscribeUnreadBadgeRefresh } from '../services/notifications';
 
 function chatGroupKey(orderId: string) {
   return `chat:${orderId}`;
@@ -55,4 +56,33 @@ export async function fetchChatUnreadMapForOrders(orderIds: string[]): Promise<R
   } catch {
     return {};
   }
+}
+
+/** Unread chat message counts per order (`chat:<orderId>` inbox rows) for home “Active orders” cards. */
+export function useActiveOrdersChatUnreadMap(orderIds: string[]) {
+  const [map, setMap] = useState<Record<string, number>>({});
+  const idsKey = orderIds.join('\x1e');
+
+  const refresh = useCallback(async () => {
+    const ids = [...new Set(idsKey.split('\x1e').filter(Boolean))].sort((a, b) => a.localeCompare(b));
+    setMap(ids.length === 0 ? {} : await fetchChatUnreadMapForOrders(ids));
+  }, [idsKey]);
+
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
+
+  useFocusEffect(
+    useCallback(() => {
+      void refresh();
+    }, [refresh]),
+  );
+
+  useEffect(() => {
+    return subscribeUnreadBadgeRefresh(() => {
+      void refresh();
+    });
+  }, [refresh]);
+
+  return map;
 }

@@ -80,6 +80,11 @@ export function subscribeUnreadBadgeRefresh(listener: () => void): () => void {
   };
 }
 
+/** Bell badge / unread inbox — call after local actions that create notification rows without waiting for FCM (e.g. order created). */
+export function requestNotificationBadgeRefresh() {
+  emitUnreadBadgeRefreshDebounced();
+}
+
 function emitUnreadBadgeRefreshDebounced() {
   if (unreadBadgeDebounce) clearTimeout(unreadBadgeDebounce);
   unreadBadgeDebounce = setTimeout(() => {
@@ -699,10 +704,10 @@ function isDriverTrackingData(data?: Record<string, string>) {
 }
 
 /**
- * Start the order tracking foreground service.
+ * Start the order tracking notification (Android: ongoing foreground service tray; iOS: local notification so it appears immediately without relying on push timing).
  */
 export async function startOrderTracking(orderId: string, title: string, body: string, data?: Record<string, string>) {
-  if (Platform.OS !== 'android') return;
+  await createNotificationChannels();
 
   await setTrackedOrderStatus(orderId, data?.orderStatus);
 
@@ -717,6 +722,34 @@ export async function startOrderTracking(orderId: string, title: string, body: s
     : isDriverTrackingData(data)
       ? '📋 View order'
       : '📍 View Order';
+
+  const payloadData: Record<string, string> = {
+    orderId,
+    relatedEntityType: 'Order',
+    relatedEntityId: orderId,
+    ...(data || {}),
+  };
+
+  if (Platform.OS === 'ios') {
+    await notifee.displayNotification({
+      id: getOrderNotificationId(orderId),
+      title,
+      body,
+      data: payloadData,
+      ios: {
+        sound: 'default',
+        foregroundPresentationOptions: {
+          banner: true,
+          list: true,
+          sound: true,
+          badge: true,
+        },
+      },
+    });
+    return;
+  }
+
+  if (Platform.OS !== 'android') return;
 
   await notifee.displayNotification({
     id: getOrderNotificationId(orderId),
@@ -733,7 +766,7 @@ export async function startOrderTracking(orderId: string, title: string, body: s
         { title: mainTitle, pressAction: { id: mainPressId, launchActivity: 'default' } },
       ],
     },
-    data: { orderId, relatedEntityType: 'Order', relatedEntityId: orderId, ...(data || {}) },
+    data: payloadData,
   });
 }
 
@@ -1020,6 +1053,31 @@ export async function restoreOrderTrackingForDriver() {
   } catch (error) {
     console.error('Failed to restore driver order tracking notification:', error);
   }
+}
+
+/**
+ * Show/update driver order-tracking tray immediately after accepting an order (status becomes `PENDING_CUSTOMER_APPROVAL`),
+ * without relying on order-detail mount or FCM timing.
+ */
+export async function presentDriverTrackingAfterAccept(orderId: string) {
+  const pendingOrder = { status: 'PENDING_CUSTOMER_APPROVAL' } as Order;
+  const { title, body } = getDriverTrackingNotificationFromOrder(pendingOrder);
+  const actionButtons = getDriverActionButtonsForStatus('PENDING_CUSTOMER_APPROVAL');
+  try {
+    await startOrderTracking(orderId, title, body, {
+      orderId,
+      groupKey: `order:${orderId}`,
+      relatedEntityType: 'Order',
+      relatedEntityId: orderId,
+      ongoing: 'true',
+      orderStatus: 'PENDING_CUSTOMER_APPROVAL',
+      trackingAudience: 'DRIVER',
+      ...(actionButtons?.length ? { actionButtons: JSON.stringify(actionButtons) } : {}),
+    });
+  } catch (e) {
+    console.warn('presentDriverTrackingAfterAccept:', e);
+  }
+  requestNotificationBadgeRefresh();
 }
 
 
