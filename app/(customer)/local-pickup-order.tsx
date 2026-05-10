@@ -127,6 +127,8 @@ export default function LocalPickupOrderScreen() {
   const [publishAt, setPublishAt] = useState(() => new Date(Date.now() + 15 * 60 * 1000));
   const [androidPublishStep, setAndroidPublishStep] = useState<'idle' | 'date' | 'time'>('idle');
   const [preview, setPreview] = useState<PricePreview | null>(null);
+  /** Shown when user taps Calculate price without address or description — drives red frames + copy. */
+  const [priceGateHighlight, setPriceGateHighlight] = useState<'none' | 'address' | 'description'>('none');
   const [customerStatus, setCustomerStatus] = useState<string>('ACTIVE');
   const [orderBiometricAvailable, setOrderBiometricAvailable] = useState(false);
   const [userHasPassword, setUserHasPassword] = useState(true);
@@ -185,6 +187,12 @@ export default function LocalPickupOrderScreen() {
   useEffect(() => {
     if (!scheduleLater) setAndroidPublishStep('idle');
   }, [scheduleLater]);
+
+  useEffect(() => {
+    if (source && priceGateHighlight === 'address') setPriceGateHighlight('none');
+  }, [source, priceGateHighlight]);
+
+  const priceFormReady = Boolean(source) && description.trim().length > 0;
 
   const loadSaved = useCallback(async () => {
     try {
@@ -347,6 +355,28 @@ export default function LocalPickupOrderScreen() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const tryCalculatePrice = () => {
+    if (loading) return;
+    if (!source) {
+      setPriceGateHighlight('address');
+      appAlert(
+        'Select an address first',
+        'Choose where the driver should meet you: use your current position, pick on the map, or select a saved address.',
+      );
+      return;
+    }
+    if (!description.trim()) {
+      setPriceGateHighlight('description');
+      appAlert(
+        'Add a description first',
+        'Describe what you need (e.g. medicine from a pharmacy) so we can price your local pickup correctly.',
+      );
+      return;
+    }
+    setPriceGateHighlight('none');
+    void handleCalculatePrice();
   };
 
   const handleUpdatePreviewExtra = async (overrideExtraAmount?: number) => {
@@ -916,7 +946,17 @@ export default function LocalPickupOrderScreen() {
             Driver brings items to you (within your delegation). No separate delivery address.
           </Text>
 
-          <View style={[s.card, { backgroundColor: colors.card }]}>
+          <View
+            style={[
+              s.card,
+              { backgroundColor: colors.card },
+              priceGateHighlight === 'address' && {
+                borderWidth: 2,
+                borderColor: colors.danger,
+                backgroundColor: isDark ? 'rgba(239,68,68,0.12)' : '#fef2f2',
+              },
+            ]}
+          >
             <Text style={[s.cardTitle, { color: colors.text }]}>Your location</Text>
             <TouchableOpacity style={[s.row, { borderBottomColor: colors.border }]} onPress={useCurrent} disabled={resolving}>
               <Ionicons name="navigate" size={20} color="#2563eb" />
@@ -983,14 +1023,40 @@ export default function LocalPickupOrderScreen() {
               onChangeText={setWeight}
               keyboardType="numeric"
             />
-            <Text style={[s.lab, { marginTop: 12, color: colors.textSecondary }]}>What you need *</Text>
+            <Text
+              style={[
+                s.lab,
+                {
+                  marginTop: 12,
+                  color: priceGateHighlight === 'description' ? colors.danger : colors.textSecondary,
+                  fontWeight: priceGateHighlight === 'description' ? '700' : '400',
+                },
+              ]}
+            >
+              What you need *
+            </Text>
             <TextInput
               style={[
                 s.inp,
-                { minHeight: 72, textAlignVertical: 'top', color: colors.text, borderColor: borderSoft, backgroundColor: surfaceSoft },
+                {
+                  minHeight: 72,
+                  textAlignVertical: 'top',
+                  color: colors.text,
+                  borderWidth: priceGateHighlight === 'description' ? 2 : 1,
+                  borderColor: priceGateHighlight === 'description' ? colors.danger : borderSoft,
+                  backgroundColor:
+                    priceGateHighlight === 'description'
+                      ? isDark
+                        ? 'rgba(239,68,68,0.14)'
+                        : '#fff1f2'
+                      : surfaceSoft,
+                },
               ]}
               value={description}
-              onChangeText={setDescription}
+              onChangeText={(t) => {
+                setDescription(t);
+                if (priceGateHighlight === 'description' && t.trim()) setPriceGateHighlight('none');
+              }}
               multiline
               placeholder="e.g. fever medicine from pharmacy"
               placeholderTextColor={colors.textTertiary}
@@ -1109,9 +1175,15 @@ export default function LocalPickupOrderScreen() {
           </View>
 
           <TouchableOpacity
-            style={[s.cta, { backgroundColor: colors.primary }, loading && { opacity: 0.6 }]}
-            onPress={handleCalculatePrice}
+            style={[
+              s.cta,
+              { backgroundColor: colors.primary },
+              loading && { opacity: 0.6 },
+              !loading && !priceFormReady && { opacity: 0.45 },
+            ]}
+            onPress={tryCalculatePrice}
             disabled={loading}
+            activeOpacity={0.85}
           >
             {loading ? <ActivityIndicator color="#fff" /> : <Text style={s.ctaText}>Calculate price</Text>}
           </TouchableOpacity>
