@@ -16,6 +16,7 @@ import {
   type Notification,
   type NotificationPreviewGroup,
 } from '../services/api/notification.service';
+import { syncNativeChatPreviewAfterThreadRead } from '../services/notifications';
 import {
   routeWhenDriverCannotOpenOrderDetail,
   shouldSuppressDriverOrderDetailNavigation,
@@ -125,7 +126,10 @@ export function NotificationPreviewModal({ visible, onClose, variant, onOpenFull
             : row,
         ),
       );
-      notificationService.markThreadAsRead(g.groupKey).catch(() => {});
+      notificationService
+        .markThreadAsRead(g.groupKey)
+        .then(() => syncNativeChatPreviewAfterThreadRead(g.groupKey))
+        .catch(() => {});
     }
     onClose();
     navigateFromNotification(router, item, variant);

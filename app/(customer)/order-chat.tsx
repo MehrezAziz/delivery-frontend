@@ -9,6 +9,7 @@ import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { orderService, ChatMessage, ChatRoom } from '../../services/api/order.service';
 import { notificationService } from '../../services/api/notification.service';
+import { syncNativeChatPreviewAfterThreadRead } from '../../services/notifications';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useActiveChatForNotifications } from '../../hooks/useActiveChatForNotifications';
 
@@ -37,7 +38,10 @@ export default function OrderChatScreen() {
 
   const markChatThreadRead = useCallback(() => {
     if (!orderId) return;
-    void notificationService.markThreadAsRead(`chat:${orderId}`).catch(() => {});
+    void notificationService
+      .markThreadAsRead(`chat:${orderId}`)
+      .then(() => syncNativeChatPreviewAfterThreadRead(`chat:${orderId}`))
+      .catch(() => {});
   }, [orderId]);
 
   useEffect(() => {
@@ -46,7 +50,11 @@ export default function OrderChatScreen() {
 
   useEffect(() => {
     return () => {
-      if (orderId) void notificationService.markThreadAsRead(`chat:${orderId}`).catch(() => {});
+      if (!orderId) return;
+      void notificationService
+        .markThreadAsRead(`chat:${orderId}`)
+        .then(() => syncNativeChatPreviewAfterThreadRead(`chat:${orderId}`))
+        .catch(() => {});
     };
   }, [orderId]);
 

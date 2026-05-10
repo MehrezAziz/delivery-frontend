@@ -1,4 +1,5 @@
 import notifee, {
+  AndroidCategory,
   AndroidImportance,
   AndroidStyle,
   EventType,
@@ -29,12 +30,24 @@ const CHANNEL_DEFAULT = 'default';
 const CHANNEL_CHAT = 'chat-messages';
 /** Stable Notifee id + Android tray grouping per order chat thread */
 const CHAT_THREAD_STORAGE_KEY = 'nativeChatThreadLines:v1';
+/** Last FCM payload fields per order — used to redraw the tray after inline reply without losing peer names. */
+const CHAT_THREAD_META_KEY = 'nativeChatThreadMeta:v1';
 const MAX_CHAT_THREAD_LINES = 25;
 const ORDER_CHAT_REPLY_ACTION = 'chat_reply';
 const IOS_CHAT_REPLY_CATEGORY = 'ORDER_CHAT_REPLY';
 const CHAT_NOTIF_ID_PREFIX = 'chat-thread-';
+/** Matches `ThemeContext` light `primary` (#0284c7) — Android tints icons, title accent, reply/send controls. */
+const CHAT_NOTIFICATION_ACCENT = '#0284c7';
 
-type ChatQueuedLine = { messageId: string; text: string; timestamp: number };
+/** Inline reply row: incoming (FCM) vs outgoing (quick reply). */
+type ChatQueuedLine = {
+  messageId: string;
+  text: string;
+  timestamp: number;
+  direction: 'incoming' | 'outgoing';
+  /** Display name for incoming bubble (driver/customer). */
+  peerLabel?: string;
+};
 
 let iosChatCategoriesRegistered = false;
 
@@ -321,7 +334,7 @@ export async function createNotificationChannels() {
           actions: [
             {
               id: ORDER_CHAT_REPLY_ACTION,
-              title: 'Send',
+              title: 'Reply',
               input: { placeholderText: 'Message', buttonText: 'Send' },
               foreground: false,
             },
@@ -1205,7 +1218,16 @@ async function readChatThreadMap(): Promise<Record<string, ChatQueuedLine[]>> {
     const raw = await AsyncStorage.getItem(CHAT_THREAD_STORAGE_KEY);
     if (!raw) return {};
     const p = JSON.parse(raw);
-    return typeof p === 'object' && p && !Array.isArray(p) ? p : {};
+    if (typeof p !== 'object' || !p || Array.isArray(p)) return {};
+    const out: Record<string, ChatQueuedLine[]> = {};
+    for (const [orderId, arr] of Object.entries(p)) {
+      if (!Array.isArray(arr)) continue;
+      const normalized = arr
+        .map((line) => normalizeQueuedLine(line))
+        .filter((x): x is ChatQueuedLine => x != null);
+      if (normalized.length > 0) out[orderId] = normalized;
+    }
+    return out;
   } catch {
     return {};
   }
@@ -1213,6 +1235,111 @@ async function readChatThreadMap(): Promise<Record<string, ChatQueuedLine[]>> {
 
 async function writeChatThreadMap(map: Record<string, ChatQueuedLine[]>) {
   await AsyncStorage.setItem(CHAT_THREAD_STORAGE_KEY, JSON.stringify(map));
+}
+
+function normalizeQueuedLine(raw: unknown): ChatQueuedLine | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const o = raw as Record<string, unknown>;
+  const messageId = String(o.messageId ?? '');
+  const text = String(o.text ?? '');
+  if (!messageId || !text) return null;
+  const timestamp =
+    typeof o.timestamp === 'number' && Number.isFinite(o.timestamp) ? o.timestamp : Date.now();
+  const direction = o.direction === 'outgoing' ? 'outgoing' : 'incoming';
+  const peerLabel = typeof o.peerLabel === 'string' ? o.peerLabel : undefined;
+  return { messageId, text, timestamp, direction, peerLabel };
+}
+
+async function readChatThreadMeta(): Promise<Record<string, Record<string, string>>> {
+  try {
+    const raw = await AsyncStorage.getItem(CHAT_THREAD_META_KEY);
+    if (!raw) return {};
+    const p = JSON.parse(raw);
+    return typeof p === 'object' && p && !Array.isArray(p) ? p : {};
+  } catch {
+    return {};
+  }
+}
+
+async function writeChatThreadMeta(meta: Record<string, Record<string, string>>) {
+  await AsyncStorage.setItem(CHAT_THREAD_META_KEY, JSON.stringify(meta));
+}
+
+function pickChatMetaFields(data: Record<string, string>): Record<string, string> {
+  const keys = [
+    'title',
+    'body',
+    'type',
+    'driverName',
+    'customerName',
+    'messagePreview',
+    'sentAt',
+    'messageId',
+    'notificationId',
+    'relatedEntityType',
+    'relatedEntityId',
+    'groupKey',
+    'orderId',
+  ];
+  const out: Record<string, string> = {};
+  for (const k of keys) {
+    const v = data[k];
+    if (v != null && String(v).length > 0) out[k] = String(v);
+  }
+  return out;
+}
+
+async function upsertChatThreadMetaFromPayload(orderId: string, data: Record<string, string>) {
+  const meta = await readChatThreadMeta();
+  const prev = meta[orderId] || {};
+  meta[orderId] = { ...prev, ...pickChatMetaFields(data) };
+  await writeChatThreadMeta(meta);
+}
+
+async function getMergedPayloadForOrder(orderId: string): Promise<Record<string, string>> {
+  const meta = await readChatThreadMeta();
+  const m = meta[orderId] || {};
+  return {
+    orderId,
+    relatedEntityId: orderId,
+    relatedEntityType: 'ChatRoom',
+    groupKey: `chat:${orderId}`,
+    ...m,
+  };
+}
+
+/**
+ * After inbox marks `chat:<orderId>` read — drop cached bubbles + cancel tray so read messages do not reappear.
+ */
+export async function syncNativeChatPreviewAfterThreadRead(groupKey: string): Promise<void> {
+  const raw = (groupKey || '').trim();
+  if (!raw.toLowerCase().startsWith('chat:')) return;
+  const orderId = raw.slice(5).trim();
+  if (!orderId) return;
+  await clearNativeChatThreadForOrder(orderId);
+}
+
+async function clearNativeChatThreadForOrder(orderId: string): Promise<void> {
+  const map = await readChatThreadMap();
+  delete map[orderId];
+  await writeChatThreadMap(map);
+  const meta = await readChatThreadMeta();
+  delete meta[orderId];
+  await writeChatThreadMeta(meta);
+  try {
+    await notifee.cancelNotification(stableChatNotificationId(orderId));
+  } catch {
+    /* ignore */
+  }
+}
+
+function senderLabelFromChatData(data: Record<string, string>): string {
+  const t = (data.title || '').trim();
+  if (t) return t;
+  if (data.type === 'NEW_MESSAGE_FROM_DRIVER') {
+    return (data.driverName || '').trim() || 'Driver';
+  }
+  return (data.customerName || '').trim() || 'Customer';
 }
 
 /**
@@ -1230,11 +1357,39 @@ async function mergeIncomingChatLine(orderId: string, data: Record<string, strin
   let ts = parseSentAtMs(data.sentAt);
   if (!Number.isFinite(ts)) ts = Date.now();
 
+  const peerLabel = senderLabelFromChatData(data);
+
   const map = await readChatThreadMap();
   let lines = map[orderId] ? [...map[orderId]] : [];
   if (!lines.some((l) => l.messageId === rawId)) {
-    lines.push({ messageId: rawId, text: preview, timestamp: ts });
+    lines.push({
+      messageId: rawId,
+      text: preview,
+      timestamp: ts,
+      direction: 'incoming',
+      peerLabel,
+    });
   }
+  lines.sort((a, b) => a.timestamp - b.timestamp);
+  if (lines.length > MAX_CHAT_THREAD_LINES) {
+    lines = lines.slice(-MAX_CHAT_THREAD_LINES);
+  }
+  map[orderId] = lines;
+  await writeChatThreadMap(map);
+  await upsertChatThreadMetaFromPayload(orderId, data);
+  return lines;
+}
+
+async function mergeOutgoingChatLine(orderId: string, text: string): Promise<ChatQueuedLine[]> {
+  const map = await readChatThreadMap();
+  let lines = map[orderId] ? [...map[orderId]] : [];
+  const messageId = `local_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+  lines.push({
+    messageId,
+    text,
+    timestamp: Date.now(),
+    direction: 'outgoing',
+  });
   lines.sort((a, b) => a.timestamp - b.timestamp);
   if (lines.length > MAX_CHAT_THREAD_LINES) {
     lines = lines.slice(-MAX_CHAT_THREAD_LINES);
@@ -1244,27 +1399,21 @@ async function mergeIncomingChatLine(orderId: string, data: Record<string, strin
   return lines;
 }
 
-function senderLabelFromChatData(data: Record<string, string>): string {
-  const t = (data.title || '').trim();
-  if (t) return t;
-  if (data.type === 'NEW_MESSAGE_FROM_DRIVER') {
-    return (data.driverName || '').trim() || 'Driver';
-  }
-  return (data.customerName || '').trim() || 'Customer';
-}
-
 async function handleChatQuickReply(orderId: string, input: string | undefined) {
   const text = (input || '').trim();
   if (!text || !orderId) return;
   try {
-    await orderService.sendChatMessage(orderId, text);
+    const role = await getStoredUserRole();
+    if (role === 'DRIVER') {
+      await orderService.driverSendChatMessage(orderId, text);
+    } else {
+      await orderService.sendChatMessage(orderId, text);
+    }
     emitOrderDetailRefresh(orderId);
     emitUnreadBadgeRefreshDebounced();
-    try {
-      await notifee.cancelNotification(stableChatNotificationId(orderId));
-    } catch {
-      /* ignore */
-    }
+    const lines = await mergeOutgoingChatLine(orderId, text);
+    const payload = await getMergedPayloadForOrder(orderId);
+    await displayGroupedChatNotification(payload, lines);
   } catch (e) {
     console.error('Chat quick reply failed:', e);
   }
@@ -1275,6 +1424,21 @@ export async function notificationDataToRoute(
   data: Record<string, string> | undefined,
 ): Promise<string | null> {
   if (!data) return null;
+
+  /** Order chat: always route from `groupKey` / `orderId` (Notifee on Android may omit `relatedEntityType` in `data`). */
+  const gk = (data.groupKey || '').trim();
+  if (gk.toLowerCase().startsWith('chat:')) {
+    const oid =
+      (data.orderId || '').trim() ||
+      (data.relatedEntityId || '').trim() ||
+      gk.replace(/^chat:/i, '').trim();
+    if (oid) {
+      const role = await getStoredUserRole();
+      if (role === 'DRIVER') return `/(driver)/order-chat?orderId=${oid}`;
+      return `/(customer)/order-chat?orderId=${oid}`;
+    }
+  }
+
   const { relatedEntityType, relatedEntityId, type } = data;
   if (!relatedEntityType || !relatedEntityId) return null;
 
@@ -1412,6 +1576,18 @@ async function routeFromNotifeeInitialForNavigation(initial: NotifeeInitial): Pr
     ['driver_mark_arrived', 'driver_mark_picked_up', 'driver_mark_delivering'].includes(actionId)
   ) {
     return null;
+  }
+
+  if ((data.groupKey || '').toLowerCase().startsWith('chat:')) {
+    const oid =
+      (data.orderId || '').trim() ||
+      (data.relatedEntityId || '').trim() ||
+      String(data.groupKey || '')
+        .replace(/^chat:/i, '')
+        .trim();
+    if (oid) {
+      return role === 'DRIVER' ? `/(driver)/order-chat?orderId=${oid}` : `/(customer)/order-chat?orderId=${oid}`;
+    }
   }
 
   if (data.relatedEntityType && data.relatedEntityId) {
@@ -1559,7 +1735,6 @@ async function displayGroupedChatNotification(data: Record<string, string>, line
   if (shouldSuppressChatNotification(data)) return;
 
   const convTitle = senderLabelFromChatData(data);
-  const senderName = convTitle;
   const lastText = lines[lines.length - 1]?.text || '';
 
   try {
@@ -1568,20 +1743,34 @@ async function displayGroupedChatNotification(data: Record<string, string>, line
     /* ignore */
   }
 
-  const baseData = { ...data, orderId };
+  const baseData = {
+    ...data,
+    orderId,
+    relatedEntityType: data.relatedEntityType || 'ChatRoom',
+    relatedEntityId: data.relatedEntityId || orderId,
+    groupKey: data.groupKey || `chat:${orderId}`,
+  };
 
+  /** Visible label so OEMs show the RemoteInput row (ZWSP titles are often hidden). */
   const replyAction = {
-    title: 'Send',
+    title: 'Reply',
     pressAction: { id: ORDER_CHAT_REPLY_ACTION, launchActivity: 'none' as const },
-    input: { placeholder: 'Message' as const },
+    input: { placeholder: 'Message', allowFreeFormInput: true },
   };
 
   if (Platform.OS === 'android') {
-    const messagingMessages = lines.map((ln) => ({
-      text: ln.text,
-      timestamp: ln.timestamp,
-      person: { name: senderName, id: `sender_${orderId}` },
-    }));
+    const localSelf = { name: 'You', id: `local_self_${orderId}` };
+    const messagingMessages = lines.map((ln) => {
+      const incomingPeer = ((ln.peerLabel || '').trim() || convTitle).slice(0, 64);
+      return {
+        text: ln.text,
+        timestamp: ln.timestamp,
+        person:
+          ln.direction === 'outgoing'
+            ? localSelf
+            : { name: incomingPeer || convTitle, id: `peer_${orderId}` },
+      };
+    });
 
     await notifee.displayNotification({
       id: stableChatNotificationId(orderId),
@@ -1591,12 +1780,14 @@ async function displayGroupedChatNotification(data: Record<string, string>, line
       android: {
         channelId: CHANNEL_CHAT,
         importance: AndroidImportance.HIGH,
+        category: AndroidCategory.MESSAGE,
+        color: CHAT_NOTIFICATION_ACCENT,
         pressAction: { id: 'default', launchActivity: 'default' },
         /** Matches backend FCM `chat_thread_${orderId}` so merged Notifee replaces the system chat banner. */
         tag: `chat_thread_${orderId}`.slice(0, 64),
         style: {
           type: AndroidStyle.MESSAGING,
-          person: { name: 'You', id: 'local' },
+          person: localSelf,
           title: convTitle,
           messages: messagingMessages,
         },

@@ -7,6 +7,7 @@ import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { notificationService, Notification } from '../../services/api/notification.service';
+import { syncNativeChatPreviewAfterThreadRead } from '../../services/notifications';
 import { useTheme } from '../../contexts/ThemeContext';
 import {
   groupNotificationsByThread,
@@ -89,7 +90,10 @@ export default function CustomerNotifications() {
       setNotifications((prev) =>
         prev.map((n) => (inboxGroupKey(n) === g.groupKey && !n.readAt ? { ...n, readAt: now } : n)),
       );
-      notificationService.markThreadAsRead(g.groupKey).catch(() => {});
+      notificationService
+        .markThreadAsRead(g.groupKey)
+        .then(() => syncNativeChatPreviewAfterThreadRead(g.groupKey))
+        .catch(() => {});
     }
     if (item.relatedEntityType === 'Order' && item.relatedEntityId) {
       router.push(`/(customer)/order-detail?orderId=${item.relatedEntityId}`);
