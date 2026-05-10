@@ -4,6 +4,7 @@ import {
   KeyboardAvoidingView, Platform, ActivityIndicator, StyleSheet, Keyboard, Dimensions,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useIsFocused } from '@react-navigation/native';
 import { useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -20,6 +21,7 @@ export default function DriverOrderChatScreen() {
   const orderId = typeof orderIdParam === 'string' ? orderIdParam : orderIdParam?.[0] ?? '';
   const { colors, isDark } = useTheme();
   const insets = useSafeAreaInsets();
+  const isFocused = useIsFocused();
   const [chatRoom, setChatRoom] = useState<ChatRoom | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
@@ -50,8 +52,9 @@ export default function DriverOrderChatScreen() {
   }, [orderId]);
 
   useEffect(() => {
+    if (!isFocused || !orderId) return;
     markChatThreadRead();
-  }, [orderId, messages.length, markChatThreadRead]);
+  }, [orderId, messages.length, markChatThreadRead, isFocused]);
 
   useEffect(() => {
     return () => {

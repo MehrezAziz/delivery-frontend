@@ -45,6 +45,19 @@ function isMainHomeScreen(role: AppChromeRole, segments: string[], pathname: str
   return false;
 }
 
+/** Bottom tab surfaces (Home, Orders, …) — bell + unread badge + preview modal. Nested routes (order-chat, …) omit. */
+function isPrimaryTabsNotificationSurface(role: AppChromeRole, segments: string[]): boolean {
+  const routeOnly = segments.filter((s) => !s.startsWith('('));
+  const leaf = routeOnly[routeOnly.length - 1] || '';
+  if (role === 'customer' && segments.includes('(customer)')) {
+    return ['home', 'orders', 'wallet', 'profile'].includes(leaf);
+  }
+  if (role === 'driver' && segments.includes('(driver)')) {
+    return ['home', 'my-orders', 'available-orders', 'profile'].includes(leaf);
+  }
+  return false;
+}
+
 export type AppChromeRole = 'guest' | 'customer' | 'driver';
 
 export function AppChromeHeader({
@@ -65,7 +78,7 @@ export function AppChromeHeader({
   showMenu?: boolean;
   /** When omitted: only on main Home tab (customer/driver). Replaced by notification icon on home. */
   showProfile?: boolean;
-  /** Main home: show bell → notifications (default true when showProfile would have been true). */
+  /** Main tab shell: bell → preview (default when showProfile omitted). */
   showNotifications?: boolean;
   /** When omitted: only on main Home tab (customer/driver); guest screens set explicitly. */
   showThemeToggle?: boolean;
@@ -92,6 +105,10 @@ export function AppChromeHeader({
   const [unreadCount, setUnreadCount] = useState(0);
 
   const isMainHome = useMemo(() => isMainHomeScreen(role, segments, pathname), [role, segments, pathname]);
+  const showTabsNotifications = useMemo(
+    () => isPrimaryTabsNotificationSurface(role, segments),
+    [role, segments],
+  );
 
   const loadHomeIdentity = useCallback(async () => {
     if (role === 'guest' || !isMainHome) {
@@ -149,7 +166,7 @@ export function AppChromeHeader({
       ? showNotifications
       : showProfile !== undefined
         ? showProfile
-        : role !== 'guest' && isMainHome;
+        : role !== 'guest' && showTabsNotifications;
 
   const loadUnread = useCallback(async () => {
     if (role === 'guest') return;
@@ -538,7 +555,7 @@ export function AppChromeHeader({
           )}
         </View>
       </View>
-      {role !== 'guest' && isMainHome ? (
+      {role !== 'guest' && showTabsNotifications ? (
         <NotificationPreviewModal
           visible={notifPreviewOpen}
           onClose={() => {
