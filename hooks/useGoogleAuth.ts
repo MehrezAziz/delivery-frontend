@@ -10,24 +10,14 @@ import {
   restoreOrderTrackingForDriver,
 } from '../services/notifications';
 import { persistDriverIdentityFromMe } from '../utils/persistDriverIdentity';
+import {
+  describeGoogleSignInSetupError,
+} from '../config/googleSignIn';
 
 // Use environment variable for API URL
 // For physical device with USB + ADB reverse, use localhost
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 
   (Platform.OS === 'android' ? 'http://localhost:3000/api' : 'http://localhost:3000/api');
-
-// Google OAuth Client IDs
-// Web client: use for webClientId + backend GOOGLE_CLIENT_ID (token audience).
-// Android OAuth client (registered in Google Cloud only, not here): 295733709390-ksq2ukvkeo9vb6a656gie0e9qvj5e8f8.apps.googleusercontent.com
-const GOOGLE_WEB_CLIENT_ID = '295733709390-cmkprqadbcrannp1l4gl3drlab8b37r9.apps.googleusercontent.com';
-const GOOGLE_IOS_CLIENT_ID = '295733709390-cmkprqadbcrannp1l4gl3drlab8b37r9.apps.googleusercontent.com';
-
-// Configure Google Sign-In
-GoogleSignin.configure({
-  webClientId: GOOGLE_WEB_CLIENT_ID, // Used for Android and backend verification
-  iosClientId: GOOGLE_IOS_CLIENT_ID, // Used for iOS
-  offlineAccess: true, // If you need to access Google API on behalf of the user FROM YOUR SERVER
-});
 
 export const useGoogleAuth = (
   role: 'CUSTOMER' | 'DRIVER',
@@ -171,8 +161,11 @@ export const useGoogleAuth = (
       
       // Handle specific error codes
       let errorMessage = 'Failed to sign in with Google';
-      
-      if (err.code === 'SIGN_IN_CANCELLED') {
+
+      const setupHint = describeGoogleSignInSetupError(err);
+      if (setupHint) {
+        errorMessage = setupHint;
+      } else if (err.code === 'SIGN_IN_CANCELLED') {
         errorMessage = 'Sign-in was cancelled';
       } else if (err.code === 'IN_PROGRESS') {
         errorMessage = 'Sign-in is already in progress';

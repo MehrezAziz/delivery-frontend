@@ -35,19 +35,13 @@ import {
   recordLoginFailure,
 } from '../../services/login-attempt-lockout';
 import { formatMsAsMmSs } from '../../utils/format-mm-ss';
+import { describeGoogleSignInSetupError } from '../../config/googleSignIn';
 
 /** Backend routes use global prefix `/api`. Env may already include `/api`. */
 const RAW_API = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
 const API_URL = RAW_API.replace(/\/$/, '').endsWith('/api')
   ? RAW_API.replace(/\/$/, '')
   : `${RAW_API.replace(/\/$/, '')}/api`;
-
-// Configure Google Sign-In
-GoogleSignin.configure({
-  webClientId: '295733709390-cmkprqadbcrannp1l4gl3drlab8b37r9.apps.googleusercontent.com',
-  iosClientId: '295733709390-cmkprqadbcrannp1l4gl3drlab8b37r9.apps.googleusercontent.com',
-  offlineAccess: true,
-});
 
 function getDriverLoginErrorMessage(error: unknown): string {
   if (!axios.isAxiosError(error)) {
@@ -253,9 +247,12 @@ export default function DriverLogin() {
       router.replace('/(driver)/home');
     } catch (error: any) {
       console.error('Google Sign-In error:', error);
-      
+
       let errorMessage = 'Failed to sign in with Google';
-      if (error.code === 'SIGN_IN_CANCELLED') {
+      const setupHint = describeGoogleSignInSetupError(error);
+      if (setupHint) {
+        errorMessage = setupHint;
+      } else if (error.code === 'SIGN_IN_CANCELLED') {
         errorMessage = 'Sign-in was cancelled';
       } else if (error.response?.data?.message) {
         errorMessage = error.response.data.message;

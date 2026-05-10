@@ -12,7 +12,9 @@
     },
     "production": {
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://api.localsmartdelivery.com/api"
+        "EXPO_PUBLIC_API_URL": "https://api.localsmartdelivery.com/api",
+        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "899728652084-do58mlm951h1miqque2eh9l8bt3p2nug.apps.googleusercontent.com",
+        "EXPO_PUBLIC_GOOGLE_MAPS_API_KEY": "AIzaSyCxI8rf9D9Idd-gGL6GEED0WFLnWHyN8To"
       },
       "android": {
         "buildType": "app-bundle"

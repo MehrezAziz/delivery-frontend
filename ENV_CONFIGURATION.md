@@ -112,3 +112,29 @@ If you switch from emulator to physical device:
 - Restart Expo with clear cache: `npx expo start -c`
 - Make sure you saved the `.env` file
 - Check the variable name starts with `EXPO_PUBLIC_`
+
+### Google Sign-In on Android (`DEVELOPER_ERROR`, code 10)
+
+**What are SHA-1 / SHA-256 here?**  
+They are short **fingerprints** (hashes) of your **signing certificate** — the key pair used to sign your APK. Google Sign-In checks: “Does this fingerprint belong to an app we registered for this Firebase project?” It is **not** your API URL or localhost; it only depends on **which keystore** signed the binary.
+
+| Mode | What signs the app | What to register in Firebase |
+|------|-------------------|-------------------------------|
+| **Dev** (`expo run:android`, USB) | **Debug keystore** on your PC (`~/.android/debug.keystore`) | **SHA-1** (and optionally SHA-256) from **Variant: debug** in `signingReport` |
+| **Production** (Play Store install) | **Google Play App Signing** uses Google’s key for users (your upload key uploads the bundle) | Add **App signing key certificate** SHA-1 from Play Console → **App integrity** (not only your debug SHA) |
+
+Firebase’s “Add fingerprint” accepts **SHA-1** and **SHA-256**; either works for registration — use what Google Cloud shows for each certificate.
+
+Play Store / EAS release builds use **release/upload** keys; `npx expo run:android` uses the **debug** keystore. Google only allows Sign-In if fingerprints for **each** signing path you use are registered for **`com.localsmartdelivery.app`** in **Firebase** (same project as `google-services.json`).
+
+1. From `delivery-frontend`, run `npm run android:signing-report` (Windows), or:
+   ```bash
+   cd android
+   ./gradlew signingReport
+   ```
+   (Windows: `gradlew.bat signingReport`.)
+2. Under **Variant: debug** for the **app** module, copy the **SHA1** line (you can also add **SHA-256** if Firebase offers both fields).
+3. Firebase Console → **Project settings** → **Your apps** → Android app with package **`com.localsmartdelivery.app`** → **Add fingerprint** → paste SHA-1.
+4. Wait a few minutes. Optionally download **`google-services.json`** again and replace `delivery-frontend/google-services.json`, then rebuild (`npx expo run:android --device`).
+
+For **Play releases**, also add the **App signing certificate SHA-1** from Play Console (App integrity) if Google Sign-In fails only on store installs — debug SHA alone does not cover Play App Signing.

@@ -8,6 +8,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 import axios from 'axios';
+import { describeGoogleSignInSetupError } from '../../config/googleSignIn';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import { useTheme } from '../../contexts/ThemeContext';
 import {
@@ -23,14 +24,6 @@ import {
 } from '../../services/phone-countries';
 
 const API_BASE = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api';
-
-try {
-  GoogleSignin.configure({
-    webClientId: '295733709390-cmkprqadbcrannp1l4gl3drlab8b37r9.apps.googleusercontent.com',
-    iosClientId: '295733709390-cmkprqadbcrannp1l4gl3drlab8b37r9.apps.googleusercontent.com',
-    offlineAccess: true,
-  });
-} catch {}
 
 export default function DriverRegisterStep1() {
   const router = useRouter();
@@ -116,7 +109,9 @@ export default function DriverRegisterStep1() {
       router.push('/(auth)/driver-register-step2');
     } catch (error: any) {
       let msg = 'Failed to sign in with Google';
-      if (error.code === 'SIGN_IN_CANCELLED') msg = 'Sign-in was cancelled';
+      const setupHint = describeGoogleSignInSetupError(error);
+      if (setupHint) msg = setupHint;
+      else if (error.code === 'SIGN_IN_CANCELLED') msg = 'Sign-in was cancelled';
       else if (error.response?.data?.message) msg = Array.isArray(error.response.data.message) ? error.response.data.message.join('\n') : error.response.data.message;
       else if (error.message) msg = error.message;
       Alert.alert('Google Sign-In Failed', msg);
