@@ -3,7 +3,7 @@ import {
   View, Text, FlatList, TextInput, TouchableOpacity,
   KeyboardAvoidingView, Platform, ActivityIndicator, StyleSheet, Keyboard, Dimensions,
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -110,9 +110,11 @@ export default function OrderChatScreen() {
 
   if (loading) {
     return (
-      <View style={[s.loadingContainer, { backgroundColor: colors.background }]}>
-        <ActivityIndicator size="large" color={colors.primary} />
-      </View>
+      <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }} edges={['bottom']}>
+        <View style={[s.loadingContainer, { backgroundColor: colors.background }]}>
+          <ActivityIndicator size="large" color={colors.primary} />
+        </View>
+      </SafeAreaView>
     );
   }
 
@@ -133,11 +135,12 @@ export default function OrderChatScreen() {
   };
 
   return (
-    <KeyboardAvoidingView
-      style={[s.container, { backgroundColor: colors.background }]}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top + 4 : 0}
-    >
+    <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }} edges={['bottom']}>
+      <KeyboardAvoidingView
+        style={[s.container, { backgroundColor: colors.background }]}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top + 4 : 0}
+      >
       <View style={[s.chatToolbar, { backgroundColor: colors.card, borderColor: colors.border }]}>
         <View style={{ flex: 1, minWidth: 0 }}>
           <Text style={[s.toolbarMeta, { color: colors.textTertiary }]}>Order</Text>
@@ -203,7 +206,8 @@ export default function OrderChatScreen() {
           </TouchableOpacity>
         </View>
       )}
-    </KeyboardAvoidingView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 
