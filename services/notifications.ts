@@ -881,6 +881,8 @@ async function stopOrderTrackingWithOptions(title: string, body: string, showFin
     body,
     android: {
       channelId: CHANNEL_ORDER,
+      /** Must detach from foreground service or OEMs keep it non-dismissible like live tracking. */
+      asForegroundService: false,
       ongoing: false,
       importance: AndroidImportance.HIGH,
       autoCancel: true,

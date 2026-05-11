@@ -1,10 +1,9 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import {
   View, Text, TouchableOpacity, Alert, Image,
   ActivityIndicator, StyleSheet, ScrollView,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { CameraView, useCameraPermissions } from 'expo-camera';
@@ -12,10 +11,22 @@ import { orderService } from '../../services/api/order.service';
 import { useTheme } from '../../contexts/ThemeContext';
 import { restoreOrderTrackingForDriver } from '../../services/notifications';
 
+function normalizeParam(v: string | string[] | undefined): string {
+  if (v == null) return '';
+  const s = Array.isArray(v) ? v[0] : v;
+  return typeof s === 'string' ? s : '';
+}
+
 export default function UploadProofsScreen() {
   const router = useRouter();
-  const { orderId, afterProof: afterProofParam } = useLocalSearchParams<{ orderId: string; afterProof?: string | string[] }>();
-  const afterProofRaw = typeof afterProofParam === 'string' ? afterProofParam : Array.isArray(afterProofParam) ? afterProofParam[0] : undefined;
+  const params = useLocalSearchParams<{ orderId?: string | string[]; afterProof?: string | string[] }>();
+  const orderId = useMemo(() => normalizeParam(params.orderId), [params.orderId]);
+  const afterProofRaw = useMemo(() => {
+    const raw = params.afterProof;
+    if (raw == null) return undefined;
+    const s = Array.isArray(raw) ? raw[0] : raw;
+    return typeof s === 'string' ? s : undefined;
+  }, [params.afterProof]);
   const markMode = afterProofRaw === 'delivered' || afterProofRaw === 'returned' ? afterProofRaw : undefined;
   const { colors, isDark } = useTheme();
   const [image1, setImage1] = useState<string | null>(null);
@@ -29,38 +40,49 @@ export default function UploadProofsScreen() {
   const [permission, requestPermission] = useCameraPermissions();
   const cameraRef = useRef<any>(null);
 
-  const loadOrderProofs = useCallback(async () => {
+  /** Each order has its own proofs — reset local state whenever route `orderId` changes (stack can reuse this screen). */
+  useEffect(() => {
+    setImage1(null);
+    setImage2(null);
+    setExistingImage1(false);
+    setExistingImage2(false);
+    setCameraOpen(false);
+    setSubmitting(false);
+
     if (!orderId) {
       setLoadingOrder(false);
       return;
     }
-    setLoadingOrder(true);
-    try {
-      const order = await orderService.getOrder(orderId);
-      if (order.status === 'DELIVERED') {
-        router.replace(`/(driver)/order-detail?orderId=${orderId}` as any);
-        return;
-      }
-      if (order.driverAssignment?.image1Proof) {
-        setImage1(order.driverAssignment.image1Proof);
-        setExistingImage1(true);
-      }
-      if (order.driverAssignment?.image2Proof) {
-        setImage2(order.driverAssignment.image2Proof);
-        setExistingImage2(true);
-      }
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setLoadingOrder(false);
-    }
-  }, [orderId, router]);
 
-  useFocusEffect(
-    useCallback(() => {
-      void loadOrderProofs();
-    }, [loadOrderProofs]),
-  );
+    let cancelled = false;
+    setLoadingOrder(true);
+    void (async () => {
+      try {
+        const order = await orderService.getOrder(orderId);
+        if (cancelled) return;
+        if (order.status === 'DELIVERED') {
+          router.replace(`/(driver)/order-detail?orderId=${orderId}` as any);
+          return;
+        }
+        if (order.driverAssignment?.image1Proof) {
+          setImage1(order.driverAssignment.image1Proof);
+          setExistingImage1(true);
+        }
+        if (order.driverAssignment?.image2Proof) {
+          setImage2(order.driverAssignment.image2Proof);
+          setExistingImage2(true);
+        }
+      } catch (e) {
+        console.error(e);
+      } finally {
+        if (!cancelled) setLoadingOrder(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [orderId, router]);
 
   const pickFromGallery = async (target: 1 | 2) => {
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -265,6 +287,8 @@ export default function UploadProofsScreen() {
             <Ionicons name="shield-checkmark" size={24} color="#0284c7" />
           </View>
           <Text style={s.infoText}>
+            <Text style={{ fontWeight: '800', color: colors.primary }}>Order #{orderId.slice(0, 8)}</Text>
+            {'\n'}
             {markMode === 'delivered'
               ? 'Add at least the first proof image. You can upload only, or upload and mark the order as delivered in one step.'
               : markMode === 'returned'
