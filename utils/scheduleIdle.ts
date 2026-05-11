@@ -23,3 +23,16 @@ export function scheduleWhenIdle(callback: () => void, options?: { timeout?: num
   const t = setTimeout(callback, 0);
   return { cancel: () => clearTimeout(t) };
 }
+
+/**
+ * Runs after the next paint (double rAF + microtask delay). Use for navigation right after
+ * cold start / notification tap so the native activity is stable — without deprecated
+ * `InteractionManager.runAfterInteractions`.
+ */
+export function runAfterNextPaint(callback: () => void): void {
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      setTimeout(callback, 0);
+    });
+  });
+}

@@ -114,6 +114,13 @@ function RootContent() {
       const role = await getStoredUserRole();
       if (role === 'CUSTOMER') await restoreOrderTrackingForCustomer();
       if (role === 'DRIVER') await restoreOrderTrackingForDriver();
+      /** Cold start: session + navigator can settle late — second register avoids empty `fcm_token` on server. */
+      setTimeout(() => {
+        void (async () => {
+          const t2 = await AsyncStorage.getItem('accessToken');
+          if (t2) await registerForPushNotifications();
+        })();
+      }, 2000);
     })();
 
     // Set up foreground notification listeners

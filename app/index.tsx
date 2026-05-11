@@ -17,6 +17,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import { AppChromeHeader } from '../components/AppChromeHeader';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { warmupPhoneCountriesData } from '../services/phone-countries';
+import { runAfterNextPaint } from '../utils/scheduleIdle';
 
 /** How long the text is visible alone before animation appears (ms) */
 const HERO_TEXT_ONLY_MS   = 6000;
@@ -26,6 +27,16 @@ const HERO_ANIM_VISIBLE_MS = 5000;
 const HERO_FADE_MS         = 400;
 
 const BUSINESSMAN_LOTTIE = require('../assets/lottie/businessman-rocket.json');
+
+/** Avoid navigating while the native activity is still swapping (reduces ExpoKeepAwake / tray open glitches). */
+function replaceRouteWhenReady(
+  r: { replace: (path: string) => void },
+  path: string,
+) {
+  runAfterNextPaint(() => {
+    r.replace(path as any);
+  });
+}
 
 export default function RoleSelectionScreen() {
   const router = useRouter();
@@ -113,7 +124,7 @@ export default function RoleSelectionScreen() {
       if (valid) {
         const launchRoute = await resolveLaunchRouteAfterLogin();
         if (launchRoute) {
-          router.replace(launchRoute as any);
+          replaceRouteWhenReady(router, launchRoute);
           return;
         }
 
@@ -123,11 +134,11 @@ export default function RoleSelectionScreen() {
         const driver = await AsyncStorage.getItem('driver');
 
         if (userRole === 'DRIVER' || driver) {
-          router.replace('/(driver)/home');
+          replaceRouteWhenReady(router, '/(driver)/home');
           return;
         }
         if (userRole === 'CUSTOMER' || customer) {
-          router.replace('/(customer)/home');
+          replaceRouteWhenReady(router, '/(customer)/home');
           return;
         }
       } else {

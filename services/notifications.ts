@@ -21,6 +21,7 @@ import { AppState, Platform } from 'react-native';
 import { router } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ExpoNotifications from 'expo-notifications';
+import { runAfterNextPaint } from '../utils/scheduleIdle';
 import { notificationService } from './api/notification.service';
 import { api } from './api/client';
 import { orderService, Order } from './api/order.service';
@@ -368,6 +369,28 @@ export async function createNotificationChannels() {
   }
 }
 
+async function postFcmTokenToBackendWithRetry(
+  token: string,
+  platform: 'android' | 'ios',
+  attempts = 4,
+): Promise<boolean> {
+  let delayMs = 400;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      await notificationService.registerToken(token, platform);
+      await AsyncStorage.setItem('pushToken', token);
+      return true;
+    } catch (error) {
+      console.warn(`register-token attempt ${i + 1}/${attempts} failed`, error);
+      if (i === attempts - 1) break;
+      await new Promise<void>((r) => setTimeout(r, delayMs));
+      delayMs = Math.min(delayMs * 2, 4000);
+    }
+  }
+  console.error('Failed to register push token with backend after retries');
+  return false;
+}
+
 /**
  * Register for push notifications and send FCM token to backend
  */
@@ -377,7 +400,12 @@ export async function registerForPushNotifications(): Promise<string | null> {
       const current = await ExpoNotifications.getPermissionsAsync();
       if (!current.granted) {
         const requested = await ExpoNotifications.requestPermissionsAsync();
-        if (!requested.granted) return null;
+        /** Tray permission is separate from FCM: still register token so data pushes (order updates) work. */
+        if (!requested.granted) {
+          console.warn(
+            'Notification display permission denied; still registering FCM token for server pushes if possible.',
+          );
+        }
       }
     }
 
@@ -386,26 +414,21 @@ export async function registerForPushNotifications(): Promise<string | null> {
     const enabled =
       authStatus === AuthorizationStatus.AUTHORIZED ||
       authStatus === AuthorizationStatus.PROVISIONAL;
-    if (!enabled) return null;
+    /** iOS needs explicit messaging permission for a useful token; Android can still obtain FCM token for data messages. */
+    if (Platform.OS === 'ios' && !enabled) return null;
 
     const token = await getToken(firebaseMessaging);
     if (!token) return null;
 
     const platform = Platform.OS as 'android' | 'ios';
-    try {
-      await notificationService.registerToken(token, platform);
-      await AsyncStorage.setItem('pushToken', token);
-    } catch (error) {
-      console.error('Failed to register push token with backend:', error);
-    }
+    await postFcmTokenToBackendWithRetry(token, platform);
 
     if (!fcmTokenRefreshRegistered) {
       fcmTokenRefreshRegistered = true;
       onTokenRefresh(firebaseMessaging, async (newToken) => {
         try {
           const p = Platform.OS as 'android' | 'ios';
-          await notificationService.registerToken(newToken, p);
-          await AsyncStorage.setItem('pushToken', newToken);
+          await postFcmTokenToBackendWithRetry(newToken, p);
         } catch {}
       });
     }
@@ -1300,11 +1323,6 @@ export async function consumePendingLaunchRoute(): Promise<string | null> {
   }
 }
 
-async function flushPendingNotificationRoute() {
-  const route = await consumePendingLaunchRoute();
-  if (route) router.push(route as any);
-}
-
 /** Resolve order id from FCM data (payloads differ: ChatRoom uses relatedEntityId; some builds only send groupKey chat:<id>). */
 function effectiveOrderIdFromChatPayload(data: Record<string, string>): string {
   const rel = (data.relatedEntityId || '').trim();
@@ -1582,6 +1600,28 @@ export async function notificationDataToRoute(
     }
   }
 
+  /** Support ticket thread (CS / bot) — same screen as tapping the ticket in Support list. */
+  if (gk.toLowerCase().startsWith('support:')) {
+    const ticketId =
+      (data.relatedEntityId || '').trim() ||
+      gk.replace(/^support:/i, '').trim();
+    if (ticketId) {
+      const role = await getStoredUserRole();
+      const q = encodeURIComponent(ticketId);
+      if (role === 'DRIVER') return `/(driver)/support-chat?ticketId=${q}`;
+      return `/(customer)/support-chat?ticketId=${q}`;
+    }
+  }
+  if ((data.type || '') === 'SUPPORT_TICKET_REPLY') {
+    const ticketId = (data.relatedEntityId || '').trim();
+    if (ticketId) {
+      const role = await getStoredUserRole();
+      const q = encodeURIComponent(ticketId);
+      if (role === 'DRIVER') return `/(driver)/support-chat?ticketId=${q}`;
+      return `/(customer)/support-chat?ticketId=${q}`;
+    }
+  }
+
   const { relatedEntityType, relatedEntityId, type } = data;
   if (!relatedEntityType || !relatedEntityId) return null;
 
@@ -1731,6 +1771,27 @@ async function routeFromNotifeeInitialForNavigation(initial: NotifeeInitial): Pr
     if (oid) {
       return role === 'DRIVER' ? `/(driver)/order-chat?orderId=${oid}` : `/(customer)/order-chat?orderId=${oid}`;
     }
+  }
+
+  if ((data.groupKey || '').toLowerCase().startsWith('support:')) {
+    const ticketId =
+      (data.relatedEntityId || '').trim() ||
+      String(data.groupKey || '')
+        .replace(/^support:/i, '')
+        .trim();
+    if (ticketId) {
+      const q = encodeURIComponent(ticketId);
+      return role === 'DRIVER'
+        ? `/(driver)/support-chat?ticketId=${q}`
+        : `/(customer)/support-chat?ticketId=${q}`;
+    }
+  }
+  if ((data.type || '') === 'SUPPORT_TICKET_REPLY' && (data.relatedEntityId || '').trim()) {
+    const ticketId = (data.relatedEntityId || '').trim();
+    const q = encodeURIComponent(ticketId);
+    return role === 'DRIVER'
+      ? `/(driver)/support-chat?ticketId=${q}`
+      : `/(customer)/support-chat?ticketId=${q}`;
   }
 
   if (data.relatedEntityType && data.relatedEntityId) {
@@ -1961,10 +2022,20 @@ async function displayGroupedChatNotification(data: Record<string, string>, line
   });
 }
 
+function stableSupportTicketNotificationId(ticketId: string): string {
+  const safe = ticketId.replace(/[^a-zA-Z0-9_-]/g, '_');
+  return `support_ntf_${safe}`.slice(0, 64);
+}
+
 async function displayRegularNotification(data: Record<string, string>, androidId?: string) {
   const { title, body } = data;
   if (!title || !body) return;
   if (shouldSuppressChatNotification(data)) return;
+
+  const isSupportReply = data.type === 'SUPPORT_TICKET_REPLY' && Boolean((data.relatedEntityId || '').trim());
+  const resolvedAndroidId =
+    androidId ||
+    (isSupportReply ? stableSupportTicketNotificationId(String(data.relatedEntityId || '').trim()) : undefined);
 
   if (Platform.OS === 'android') {
     try {
@@ -1974,16 +2045,29 @@ async function displayRegularNotification(data: Record<string, string>, androidI
     }
   }
 
+  const threadIdIos = (data.groupKey || '').trim() || (isSupportReply ? `support:${data.relatedEntityId}`.trim() : '');
+
   await notifee.displayNotification({
-    ...(androidId ? { id: androidId } : {}),
+    ...(resolvedAndroidId ? { id: resolvedAndroidId } : {}),
     title,
     body,
     android: {
       channelId: CHANNEL_DEFAULT,
       importance: AndroidImportance.DEFAULT,
-      pressAction: { id: 'default' },
+      /** `launchActivity` helps cold-start: open app then deep-link to support ticket chat. */
+      pressAction:
+        isSupportReply && Platform.OS === 'android'
+          ? { id: 'default', launchActivity: 'default' }
+          : { id: 'default' },
+      /** One tray slot per ticket; no Messaging-style UI or inline reply (unlike order chat). */
+      ...(isSupportReply && resolvedAndroidId
+        ? { tag: resolvedAndroidId, category: AndroidCategory.STATUS }
+        : {}),
     },
-    ios: { sound: 'default' },
+    ios: {
+      sound: 'default',
+      ...(threadIdIos ? { threadId: threadIdIos } : {}),
+    },
     data,
   });
 }
@@ -1993,9 +2077,8 @@ async function displayRegularNotification(data: Record<string, string>, androidI
 // ============================================================
 
 export function setupNotificationListeners() {
-  // Cold-start deep links are handled in app/index.tsx via resolveLaunchRouteAfterLogin()
-  // so the default home redirect does not win over notification targets.
-  flushPendingNotificationRoute();
+  // Do not flush pending routes here: RootContent mounts before/with index.tsx; consuming
+  // AsyncStorage too early races resolveLaunchRouteAfterLogin() and home replace wins.
 
   const unsubOpened = onNotificationOpenedApp(firebaseMessaging, async (remoteMessage) => {
     const raw = remoteMessage?.data as Record<string, unknown> | undefined;
@@ -2004,7 +2087,9 @@ export function setupNotificationListeners() {
       coerceFcmData(raw && typeof raw === 'object' ? raw : undefined),
     );
     const route = await notificationDataToRoute(data);
-    if (route) router.push(route as any);
+    if (route) {
+      runAfterNextPaint(() => router.push(route as any));
+    }
   });
 
   // Foreground FCM is registered in setupBackgroundHandler() as soon as the
@@ -2064,11 +2149,18 @@ export function setupNotificationListeners() {
         })();
         return;
       }
+      /** Android often reports a body tap as ACTION_PRESS with id `default` (not EventType.PRESS). */
+      if (actionId === 'default' && data) {
+        void notificationDataToRoute(coerceFcmData(data as Record<string, unknown>)).then((route) => {
+          if (route) runAfterNextPaint(() => router.push(route as any));
+        });
+        return;
+      }
     }
     if (type === EventType.PRESS) {
       const data = detail.notification?.data as Record<string, string> | undefined;
       void notificationDataToRoute(coerceFcmData(data as Record<string, unknown>)).then((route) => {
-        if (route) router.push(route as any);
+        if (route) runAfterNextPaint(() => router.push(route as any));
       });
     }
   });
@@ -2186,6 +2278,12 @@ export function setupBackgroundHandler() {
         await savePendingNotificationRoute(
           role === 'DRIVER' ? getDriverOrderRoute(orderId) : getOrderRoute(orderId),
         );
+        return;
+      }
+      if (actionId === 'default' && data) {
+        const merged = coerceFcmData(data as Record<string, unknown>);
+        const route = await notificationDataToRoute(merged);
+        if (route) await savePendingNotificationRoute(route);
         return;
       }
     }
