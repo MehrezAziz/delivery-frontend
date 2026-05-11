@@ -200,54 +200,7 @@ export default function DriverHome() {
           </View>
         )}
 
-        {/* Active Orders */}
-        {activeOrders.length > 0 && (
-          <View style={s.section}>
-            <View style={s.sectionHeader}>
-              <Text style={[s.sectionTitle, { color: colors.text }]}>Active Deliveries</Text>
-              <TouchableOpacity onPress={() => push('/(driver)/my-orders')}>
-                <Text style={[s.seeAll, { color: colors.primary }]}>See All</Text>
-              </TouchableOpacity>
-            </View>
-            {activeOrders.slice(0, 3).map(order => {
-              const meta = STATUS_META[order.status] || STATUS_META.DRIVER_ASSIGNED;
-              return (
-                <TouchableOpacity key={order.id} style={[s.orderCard, { backgroundColor: colors.card }]}
-                  onPress={() => push(`/(driver)/my-orders`)} activeOpacity={0.8}>
-                  <ActiveOrderChatUnreadBadge
-                    count={chatUnreadByOrder[order.id] ?? 0}
-                    iconColor={colors.primary}
-                    iconBg={isDark ? `${colors.primary}28` : colors.primaryLight}
-                  />
-                  <View style={s.orderTop}>
-                    <View style={[s.orderBadge, { backgroundColor: meta.bg }]}>
-                      <Ionicons name={meta.icon as any} size={14} color={meta.color} />
-                      <Text style={[s.orderBadgeText, { color: meta.color }]}>{meta.label}</Text>
-                    </View>
-                    <Text style={[s.orderPrice, { color: colors.text }]}>{safePrice(order.price)} TND</Text>
-                  </View>
-                  <View style={s.orderRoute}>
-                    <View style={s.routeIcons}>
-                      <View style={[s.dot, { backgroundColor: '#22c55e' }]} />
-                      <View style={[s.line, { backgroundColor: colors.border }]} />
-                      <View style={[s.dot, { backgroundColor: '#ef4444' }]} />
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={[s.routeAddr, { color: colors.textSecondary }]} numberOfLines={1}>
-                        {order.pickupAddress?.street || order.pickupAddress?.delegation?.nameDelegation || 'Pickup'}
-                      </Text>
-                      <Text style={[s.routeAddr, { color: colors.textSecondary }]} numberOfLines={1}>
-                        {order.dropoffAddress?.street || order.dropoffAddress?.delegation?.nameDelegation || 'Delivery'}
-                      </Text>
-                    </View>
-                  </View>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-        )}
-
-        {/* Quick Actions — same 2×2 pattern as customer home */}
+        {/* Quick Actions — same 2×2 pattern as customer home (above Active Deliveries) */}
         <View style={s.section}>
           <Text style={[s.sectionTitle, { color: colors.text }]}>Quick Actions</Text>
           <View style={s.actionsGrid}>
@@ -292,6 +245,62 @@ export default function DriverHome() {
               <Text style={[s.actionLabel, { color: colors.text }]}>Settings</Text>
             </TouchableOpacity>
           </View>
+        </View>
+
+        {/* Active Deliveries — after Quick Actions; empty state matches customer home */}
+        <View style={s.section}>
+          <View style={s.sectionHeader}>
+            <Text style={[s.sectionTitle, { color: colors.text }]}>Active Deliveries</Text>
+            {activeOrders.length > 0 && (
+              <TouchableOpacity onPress={() => push('/(driver)/my-orders')}>
+                <Text style={[s.seeAll, { color: colors.primary }]}>See All</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+
+          {activeOrders.length === 0 ? (
+            <View style={[s.emptyCard, { backgroundColor: colors.card }]}>
+              <Ionicons name="cube-outline" size={40} color={colors.textTertiary} />
+              <Text style={[s.emptyText, { color: colors.textSecondary }]}>No active orders</Text>
+              <Text style={[s.emptySub, { color: colors.textTertiary }]}>Create an order to get started</Text>
+            </View>
+          ) : (
+            activeOrders.slice(0, 3).map((order) => {
+              const meta = STATUS_META[order.status] || STATUS_META.DRIVER_ASSIGNED;
+              return (
+                <TouchableOpacity key={order.id} style={[s.orderCard, { backgroundColor: colors.card }]}
+                  onPress={() => push(`/(driver)/my-orders`)} activeOpacity={0.8}>
+                  <ActiveOrderChatUnreadBadge
+                    count={chatUnreadByOrder[order.id] ?? 0}
+                    iconColor={colors.primary}
+                    iconBg={isDark ? `${colors.primary}28` : colors.primaryLight}
+                  />
+                  <View style={s.orderTop}>
+                    <View style={[s.orderBadge, { backgroundColor: meta.bg }]}>
+                      <Ionicons name={meta.icon as any} size={14} color={meta.color} />
+                      <Text style={[s.orderBadgeText, { color: meta.color }]}>{meta.label}</Text>
+                    </View>
+                    <Text style={[s.orderPrice, { color: colors.text }]}>{safePrice(order.price)} TND</Text>
+                  </View>
+                  <View style={s.orderRoute}>
+                    <View style={s.routeIcons}>
+                      <View style={[s.dot, { backgroundColor: '#22c55e' }]} />
+                      <View style={[s.line, { backgroundColor: colors.border }]} />
+                      <View style={[s.dot, { backgroundColor: '#ef4444' }]} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[s.routeAddr, { color: colors.textSecondary }]} numberOfLines={1}>
+                        {order.pickupAddress?.street || order.pickupAddress?.delegation?.nameDelegation || 'Pickup'}
+                      </Text>
+                      <Text style={[s.routeAddr, { color: colors.textSecondary }]} numberOfLines={1}>
+                        {order.dropoffAddress?.street || order.dropoffAddress?.delegation?.nameDelegation || 'Delivery'}
+                      </Text>
+                    </View>
+                  </View>
+                </TouchableOpacity>
+              );
+            })
+          )}
         </View>
       </ScrollView>
     </View>
@@ -376,6 +385,21 @@ const s = StyleSheet.create({
     justifyContent: 'center',
   },
   actionLabel: { fontSize: 14, fontWeight: '600' },
+
+  // Empty (parity with customer home Active Orders)
+  emptyCard: {
+    borderRadius: 16,
+    padding: 32,
+    alignItems: 'center',
+    gap: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  emptyText: { fontSize: 16, fontWeight: '600' },
+  emptySub: { fontSize: 13 },
 
   // Order cards
   orderCard: {

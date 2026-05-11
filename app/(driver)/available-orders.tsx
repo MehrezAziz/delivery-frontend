@@ -25,18 +25,32 @@ const ZONE_META: Record<string, { icon: string; color: string; bg: string }> = {
 
 type QuickFilterLevel = 'delegation' | 'governorate' | 'country' | null;
 
-/** Driver-facing address line: street/plus-code + area (nickname excluded — never shown to drivers). */
+/** Driver-facing address: same idea as customer (street + delegation), no long country tail. */
 function formatDriverAddressLine(addr: Order['pickupAddress'] | Order['dropoffAddress'] | null | undefined): string {
   if (!addr) return '';
   let street = (addr.street || '').trim();
   const nick = (addr.nickname || '').trim();
   if (nick && street === nick) street = '';
-  const del = addr.delegation?.nameDelegation || '';
-  const gov = addr.delegation?.governorate?.nameGovernorate || '';
-  const country = addr.delegation?.governorate?.country?.name || '';
-  const tail = [del, gov, country].filter(Boolean).join(', ');
-  if (street && tail) return `${street}, ${tail}`;
-  return tail || street || 'Address';
+  const del = (addr.delegation?.nameDelegation || '').trim();
+
+  const parts = street.split(',').map((s) => s.trim()).filter(Boolean);
+  /** Long geocoder lines (many commas): keep first two segments — e.g. plus code + locality like customer sees. */
+  const displayStreet =
+    parts.length >= 4 ? parts.slice(0, 2).join(', ') : street;
+
+  if (displayStreet && del) {
+    const head = displayStreet.trim();
+    const headLower = head.toLowerCase();
+    const delLower = del.toLowerCase();
+    if (headLower === delLower || headLower.endsWith(`, ${delLower}`) || headLower.endsWith(`,${delLower}`)) {
+      return head;
+    }
+    if (headLower.includes(delLower)) {
+      return head;
+    }
+    return `${head}, ${del}`;
+  }
+  return displayStreet || del || 'Address';
 }
 
 const STORAGE_KEY_FILTER_LEVEL = 'avail_quick_filter_level';
@@ -526,12 +540,8 @@ export default function AvailableOrdersScreen() {
       dropLng != null &&
       Number.isFinite(dropLat) &&
       Number.isFinite(dropLng);
-    const pickupMapTitle =
-      [order.pickupAddress?.street, order.pickupAddress?.delegation?.nameDelegation].filter(Boolean).join(', ') ||
-      'Pickup';
-    const dropoffMapTitle =
-      [order.dropoffAddress?.street, order.dropoffAddress?.delegation?.nameDelegation].filter(Boolean).join(', ') ||
-      'Delivery';
+    const pickupMapTitle = formatDriverAddressLine(order.pickupAddress) || 'Pickup';
+    const dropoffMapTitle = formatDriverAddressLine(order.dropoffAddress) || 'Delivery';
     const pickupLine = formatDriverAddressLine(order.pickupAddress);
     const dropoffLine = formatDriverAddressLine(order.dropoffAddress);
     return (
@@ -549,25 +559,27 @@ export default function AvailableOrdersScreen() {
           </View>
         )}
         <View style={s.cardTop}>
-          <Text style={[s.orderId, { color: colors.text }]} numberOfLines={1}>
-            #{order.id.slice(0, 8)}
-            {order.sourceType === 'DELIVERY_COMPANY' && order.deliveryCompanyName
-              ? ` (${order.deliveryCompanyName})`
-              : ''}
-          </Text>
+          <View style={s.cardTopCustomer}>
+            <View style={s.customerAvatarCircle}>
+              <Text style={s.customerAvatarText}>{customerInitials}</Text>
+            </View>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text style={[s.customerName, { color: colors.text }]} numberOfLines={1}>
+                {customerName}
+              </Text>
+              {order.sourceType === 'DELIVERY_COMPANY' && order.deliveryCompanyName ? (
+                <Text style={[s.companyNameSub, { color: colors.textSecondary }]} numberOfLines={1}>
+                  {order.deliveryCompanyName}
+                </Text>
+              ) : null}
+            </View>
+          </View>
           <View style={s.priceTag}>
             <Text style={[s.priceText, { color: colors.primary }]}>{order.price.toFixed(2)}</Text>
             <Text style={[s.priceCurrency, { color: colors.textSecondary }]}>TND</Text>
           </View>
         </View>
-        <View style={s.customerRow}>
-          <View style={s.customerAvatarCircle}>
-            <Text style={s.customerAvatarText}>{customerInitials}</Text>
-          </View>
-          <Text style={[s.customerName, { color: colors.text }]} numberOfLines={1}>
-            {customerName}
-          </Text>
-        </View>
+
         <View style={s.routeSection}>
           <View style={s.routeIconCol}>
             <View style={{ marginBottom: 8, alignSelf: 'flex-start' }}>
@@ -614,16 +626,24 @@ export default function AvailableOrdersScreen() {
                 </Text>
               )}
             {distanceToPickup !== null && (
+              
+              <Text style={[s.distanceToYouHint, { color: colors.textTertiary }]} numberOfLines={1}>
+                <Text style={{ color: colors.textTertiary }}>Distance to pickup position:  </Text>
+                {distanceToPickup < 1
+                  ? `${Math.round(distanceToPickup * 1000)} m`
+                  : `${distanceToPickup.toFixed(1)} km`}
+              </Text>
+            )}
+            {!order.localPickupOnly && Number.isFinite(order.distanceKm) && (
               <View style={[s.distanceToPickupCard, { borderColor: colors.border, backgroundColor: colors.surfaceVariant }]}>
                 <View style={[s.distanceToPickupIconWrap, { backgroundColor: isDark ? '#0c4a6e' : '#e0f2fe' }]}>
                   <Ionicons name="navigate" size={16} color={isDark ? '#7dd3fc' : '#0369a1'} />
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={[s.distanceToPickupLabel, { color: colors.textSecondary }]}>Distance to pickup</Text>
+                  <Text style={[s.distanceToPickupLabel, { color: colors.textSecondary }]}>Distance </Text>
                   <Text style={[s.distanceToPickupValue, { color: colors.text }]}>
-                    {distanceToPickup < 1
-                      ? `${Math.round(distanceToPickup * 1000)} m`
-                      : `${distanceToPickup.toFixed(1)} km`}
+                    <Text style={{ color: colors.textTertiary }}>~</Text>
+                    {order.distanceKm.toFixed(1)} km
                   </Text>
                 </View>
               </View>
@@ -661,10 +681,7 @@ export default function AvailableOrdersScreen() {
         </View>
         <OrderDescriptionCard description={order.description} />
         <View style={s.chipsRow}>
-          <View style={[s.chip, { backgroundColor: colors.surfaceVariant }]}>
-            <Ionicons name="resize-outline" size={12} color={colors.textSecondary} />
-            <Text style={[s.chipText, { color: colors.textSecondary }]}>{order.distanceKm.toFixed(1)} km</Text>
-          </View>
+          
           {countdownLabel && (
             <View style={[s.chip, { backgroundColor: countdownSec === 0 ? '#fee2e2' : '#fef9c3' }]}>
               <Ionicons name="time-outline" size={12} color={countdownSec === 0 ? '#b91c1c' : '#92400e'} />
@@ -858,7 +875,7 @@ export default function AvailableOrdersScreen() {
 
       {/* Orders list */}
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 40 }}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); getCurrentDriverPosition(); load(); }} />}>
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); void getCurrentDriverPosition(); load(); }} />}>
         {totalOrders === 0 ? (
           <View style={s.empty}>
             <Ionicons name="cube-outline" size={56} color={colors.textTertiary} />
@@ -930,12 +947,8 @@ export default function AvailableOrdersScreen() {
                 rDropLng != null &&
                 Number.isFinite(rDropLat) &&
                 Number.isFinite(rDropLng);
-              const rPickupTitle =
-                [ro.pickupAddress?.street, ro.pickupAddress?.delegation?.nameDelegation].filter(Boolean).join(', ') ||
-                'Pickup';
-              const rDropTitle =
-                [ro.dropoffAddress?.street, ro.dropoffAddress?.delegation?.nameDelegation].filter(Boolean).join(', ') ||
-                'Delivery';
+              const rPickupTitle = formatDriverAddressLine(ro.pickupAddress) || 'Pickup';
+              const rDropTitle = formatDriverAddressLine(ro.dropoffAddress) || 'Delivery';
               return (
               <View key={r.rejectionId} style={[s.card, { borderLeftWidth: 4, borderLeftColor: '#dc2626', opacity: 0.7 }]}>
                 <View style={s.cardTop}>
@@ -967,7 +980,7 @@ export default function AvailableOrdersScreen() {
                         ]}
                         numberOfLines={1}
                       >
-                        {ro.pickupAddress?.street || ro.pickupAddress?.delegation?.nameDelegation || 'Pickup'}
+                        {formatDriverAddressLine(ro.pickupAddress) || 'Pickup'}
                       </Text>
                       {rPickupHas ? <Ionicons name="map-outline" size={20} color={colors.primary} /> : null}
                     </TouchableOpacity>
@@ -993,7 +1006,7 @@ export default function AvailableOrdersScreen() {
                           ]}
                           numberOfLines={1}
                         >
-                          {ro.dropoffAddress?.street || ro.dropoffAddress?.delegation?.nameDelegation || 'Dropoff'}
+                          {formatDriverAddressLine(ro.dropoffAddress) || 'Dropoff'}
                         </Text>
                         {rDropHas ? <Ionicons name="map-outline" size={20} color={colors.primary} /> : null}
                       </TouchableOpacity>
@@ -1265,11 +1278,20 @@ const s = StyleSheet.create({
     shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 6, elevation: 2,
   },
   cardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 },
+  cardTopCustomer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    flex: 1,
+    minWidth: 0,
+    marginRight: 8,
+  },
+  companyNameSub: { fontSize: 12, fontWeight: '600' },
+  /** Rejected-order cards only */
   orderId: { fontSize: 15, fontWeight: '700', color: '#111827' },
   priceTag: { flexDirection: 'row', alignItems: 'baseline', gap: 3 },
   priceText: { fontSize: 20, fontWeight: '800', color: '#0284c7' },
   priceCurrency: { fontSize: 12, fontWeight: '600', color: '#6b7280' },
-  customerRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 10, gap: 10 },
   customerAvatarCircle: {
     width: 30,
     height: 30,
@@ -1286,6 +1308,8 @@ const s = StyleSheet.create({
   routeLine: { width: 2, flex: 1, backgroundColor: '#e5e7eb', marginVertical: 3 },
   routeText: { fontSize: 14, color: '#374151', fontWeight: '500' },
   addressTapRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
+  /** Driver → pickup (under pickup row; keeps route dots aligned with addresses) */
+  distanceToYouHint: { fontSize: 11, fontWeight: '500', marginTop: 5 },
   distanceToPickupCard: {
     flexDirection: 'row',
     alignItems: 'center',
