@@ -27,10 +27,21 @@ export interface WithdrawalRequest {
   walletId: string;
   amount: number;
   status: string;
+  payoutMethod?: string | null;
+  payoutBankHolderName?: string | null;
+  payoutBankName?: string | null;
+  payoutBankAccountRef?: string | null;
   descriptionOfCustomer?: string | null;
   descriptionOfAdmin?: string | null;
   requestedAt: string;
   processedAt?: string | null;
+}
+
+export interface PayoutBankDetails {
+  accountHolderName: string;
+  bankName: string;
+  accountReference: string;
+  updatedAt: string;
 }
 
 export interface PaginatedResponse<T> {
@@ -50,11 +61,34 @@ export const walletService = {
   getWithdrawals: (page = 1, limit = 20) =>
     api.get<PaginatedResponse<WithdrawalRequest>>(`/wallet/me/withdrawals?page=${page}&limit=${limit}`),
 
-  createWithdrawal: (amount: number, description?: string) =>
-    api.post<WithdrawalRequest>('/wallet/me/withdrawals', {
+  getPayoutBankDetails: () =>
+    api.get<PayoutBankDetails | null>('/wallet/me/payout-bank-details'),
+
+  createWithdrawal: (
+    amount: number,
+    opts?: {
+      description?: string;
+      payoutMethod?: 'CASH' | 'BANK_TRANSFER';
+      payoutBankHolderName?: string;
+      payoutBankName?: string;
+      payoutBankAccountRef?: string;
+      saveBankDetailsToProfile?: boolean;
+    },
+  ) => {
+    const payoutMethod = opts?.payoutMethod ?? 'BANK_TRANSFER';
+    const body: Record<string, unknown> = {
       amount,
-      descriptionOfCustomer: description,
-    }),
+      descriptionOfCustomer: opts?.description,
+      payoutMethod,
+    };
+    if (payoutMethod === 'BANK_TRANSFER') {
+      body.payoutBankHolderName = opts?.payoutBankHolderName?.trim();
+      body.payoutBankName = opts?.payoutBankName?.trim();
+      body.payoutBankAccountRef = opts?.payoutBankAccountRef?.trim();
+      body.saveBankDetailsToProfile = !!opts?.saveBankDetailsToProfile;
+    }
+    return api.post<WithdrawalRequest>('/wallet/me/withdrawals', body);
+  },
 
   setupCustomer: (countryId: string, address?: {
     delegationId: string;
