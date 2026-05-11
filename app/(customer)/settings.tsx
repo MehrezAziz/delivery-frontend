@@ -127,12 +127,18 @@ export default function CustomerSettingsScreen() {
       pathname: '/(customer)/restrictions',
       params: { returnTo: 'settings' },
     } as never);
+  const goBankDetails = () =>
+    router.push({
+      pathname: '/(customer)/bank-details',
+      params: { returnTo: 'settings' },
+    } as never);
 
   const actionItems: { label: string; onPress: () => void }[] = [
     { label: 'Edit profile', onPress: goEditProfile },
     { label: 'Add address', onPress: () => router.push('/(auth)/customer-setup') },
     { label: 'My addresses', onPress: goAddresses },
     { label: 'My restrictions', onPress: goRestrictions },
+    { label: 'Payout bank details', onPress: goBankDetails },
   ];
 
   return (

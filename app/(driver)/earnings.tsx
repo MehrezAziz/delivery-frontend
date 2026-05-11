@@ -21,8 +21,14 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useAppNavigation } from '../../contexts/AppNavigationContext';
+import { driverPayoutService } from '../../services/api/driver-payout.service';
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
+function resolveApiBase(): string {
+  const raw = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
+  const trimmed = raw.replace(/\/$/, '');
+  return trimmed.endsWith('/api') ? trimmed : `${trimmed}/api`;
+}
+const API_BASE = resolveApiBase();
 
 type Channel = 'all' | 'wallet' | 'cash';
 type Preset = 'today' | 'week' | 'month' | 'all_time' | 'custom';
@@ -90,25 +96,19 @@ export default function DriverEarningsScreen() {
   const [wdBankRef, setWdBankRef] = useState('');
   const [wdSaveBank, setWdSaveBank] = useState(false);
   const [wdBusy, setWdBusy] = useState(false);
+  const [wdStep, setWdStep] = useState<'form' | 'preview'>('form');
+  const [wdCancelling, setWdCancelling] = useState<string | null>(null);
 
   useEffect(() => {
     if (!wdModal || wdPayout !== 'BANK_TRANSFER') return;
     let cancelled = false;
     void (async () => {
       try {
-        const token = await AsyncStorage.getItem('accessToken');
-        if (!token) return;
-        const res = await axios.get<{
-          accountHolderName: string;
-          bankName: string;
-          accountReference: string;
-        } | null>(`${API_URL}/drivers/me/payout-bank-details`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (cancelled || !res.data) return;
-        setWdBankHolder(res.data.accountHolderName);
-        setWdBankName(res.data.bankName);
-        setWdBankRef(res.data.accountReference);
+        const row = await driverPayoutService.getPayoutBankDetails();
+        if (cancelled || !row) return;
+        setWdBankHolder(row.accountHolderName);
+        setWdBankName(row.bankName);
+        setWdBankRef(row.accountReference);
       } catch {
         /* ignore */
       }
@@ -125,7 +125,7 @@ export default function DriverEarningsScreen() {
         router.replace('/(auth)/driver-login');
         return;
       }
-      const res = await axios.get<DriverMe>(`${API_URL}/drivers/me`, {
+      const res = await axios.get<DriverMe>(`${API_BASE}/drivers/me`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       setDriver(res.data);
@@ -150,7 +150,7 @@ export default function DriverEarningsScreen() {
       } else {
         params.set('preset', preset === 'custom' ? 'all_time' : preset);
       }
-      const res = await axios.get<EarningsPayload>(`${API_URL}/drivers/me/earnings?${params.toString()}`, {
+      const res = await axios.get<EarningsPayload>(`${API_BASE}/drivers/me/earnings?${params.toString()}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       setEarnings(res.data);
@@ -165,7 +165,7 @@ export default function DriverEarningsScreen() {
     const token = await AsyncStorage.getItem('accessToken');
     if (!token) return;
     try {
-      const res = await axios.get<WithdrawRow[]>(`${API_URL}/drivers/me/withdrawal-requests`, {
+      const res = await axios.get<WithdrawRow[]>(`${API_BASE}/drivers/me/withdrawal-requests`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       setWithdrawals(Array.isArray(res.data) ? res.data : []);
@@ -201,22 +201,34 @@ export default function DriverEarningsScreen() {
     else setShowCustom(true);
   };
 
-  const submitWithdraw = async () => {
+  const validateWdForm = (): number | null => {
     const amt = parseFloat((wdAmount || '').replace(',', '.'));
     if (!Number.isFinite(amt) || amt <= 0) {
       Alert.alert('Amount', 'Enter a valid positive amount.');
-      return;
+      return null;
     }
     if (amt > balance) {
       Alert.alert('Balance', 'Amount cannot exceed your available account balance.');
-      return;
+      return null;
     }
     if (wdPayout === 'BANK_TRANSFER') {
       if (!wdBankHolder.trim() || !wdBankName.trim() || !wdBankRef.trim()) {
         Alert.alert('Bank details', 'Please enter account holder, bank name, and IBAN/RIB/account number.');
-        return;
+        return null;
       }
     }
+    return amt;
+  };
+
+  const goWdPreview = () => {
+    const amt = validateWdForm();
+    if (amt == null) return;
+    setWdStep('preview');
+  };
+
+  const submitWithdraw = async () => {
+    const amt = validateWdForm();
+    if (amt == null) return;
     const token = await AsyncStorage.getItem('accessToken');
     if (!token) return;
     setWdBusy(true);
@@ -232,10 +244,11 @@ export default function DriverEarningsScreen() {
         body.payoutBankAccountRef = wdBankRef.trim();
         body.saveBankDetailsToProfile = wdSaveBank;
       }
-      await axios.post(`${API_URL}/drivers/me/withdrawal-requests`, body, {
+      await axios.post(`${API_BASE}/drivers/me/withdrawal-requests`, body, {
         headers: { Authorization: `Bearer ${token}` },
       });
       setWdModal(false);
+      setWdStep('form');
       setWdAmount('');
       setWdNote('');
       setWdBankHolder('');
@@ -245,11 +258,46 @@ export default function DriverEarningsScreen() {
       Alert.alert('Submitted', 'Your payout request was sent to support. You will be notified when it is processed.');
       void loadProfile();
       void loadWithdrawals();
-    } catch (e: any) {
-      Alert.alert('Error', e?.response?.data?.message || e?.message || 'Failed');
+    } catch (e: unknown) {
+      const msg =
+        typeof e === 'object' &&
+        e !== null &&
+        'response' in e &&
+        typeof (e as { response?: { data?: { message?: string } } }).response?.data?.message === 'string'
+          ? (e as { response: { data: { message: string } } }).response.data.message
+          : e instanceof Error
+            ? e.message
+            : 'Failed';
+      Alert.alert('Error', msg);
     } finally {
       setWdBusy(false);
     }
+  };
+
+  const cancelWithdrawalRequest = (requestId: string) => {
+    Alert.alert(
+      'Cancel withdrawal?',
+      'This will cancel your pending payout request.',
+      [
+        { text: 'Keep', style: 'cancel' },
+        {
+          text: 'Cancel request',
+          style: 'destructive',
+          onPress: async () => {
+            setWdCancelling(requestId);
+            try {
+              await driverPayoutService.cancelWithdrawal(requestId);
+              void loadProfile();
+              void loadWithdrawals();
+            } catch (e: unknown) {
+              Alert.alert('Error', e instanceof Error ? e.message : 'Could not cancel');
+            } finally {
+              setWdCancelling(null);
+            }
+          },
+        },
+      ],
+    );
   };
 
   if (loading) {
@@ -425,7 +473,10 @@ export default function DriverEarningsScreen() {
           <TouchableOpacity
             style={[styles.primaryBtn, { backgroundColor: colors.primary }, balance <= 0 && { opacity: 0.45 }]}
             disabled={balance <= 0}
-            onPress={() => setWdModal(true)}
+            onPress={() => {
+              setWdStep('form');
+              setWdModal(true);
+            }}
           >
             <Text style={styles.primaryBtnText}>New withdrawal request</Text>
           </TouchableOpacity>
@@ -434,14 +485,32 @@ export default function DriverEarningsScreen() {
               <Text style={{ color: colors.text, fontWeight: '700', marginBottom: 8 }}>Your requests</Text>
               {withdrawals.map((w) => (
                 <View key={w.id} style={[styles.wdRow, { borderColor: colors.border }]}>
-                  <Text style={{ color: colors.text, fontWeight: '600' }}>{w.amount.toFixed(2)} · {w.payoutMethod}</Text>
-                  {w.payoutMethod === 'BANK_TRANSFER' && (w.payoutBankName || w.payoutBankAccountRef) ? (
-                    <Text style={{ color: colors.textTertiary, fontSize: 11, marginTop: 4 }}>
-                      {w.payoutBankName ? `${w.payoutBankName} · ` : ''}
-                      {w.payoutBankAccountRef || ''}
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ color: colors.text, fontWeight: '800', fontSize: 18 }}>
+                      {w.amount.toFixed(2)} <Text style={{ fontSize: 14, fontWeight: '600', color: colors.textSecondary }}>{currency}</Text>
                     </Text>
-                  ) : null}
-                  <Text style={{ color: colors.textSecondary, fontSize: 12, marginTop: 4 }}>{w.status}</Text>
+                    <Text style={{ color: colors.textSecondary, fontSize: 12, marginTop: 4 }}>
+                      {w.payoutMethod}
+                    </Text>
+                    {w.payoutMethod === 'BANK_TRANSFER' && (w.payoutBankName || w.payoutBankAccountRef) ? (
+                      <Text style={{ color: colors.textTertiary, fontSize: 11, marginTop: 4 }}>
+                        {w.payoutBankName ? `${w.payoutBankName} · ` : ''}
+                        {w.payoutBankAccountRef || ''}
+                      </Text>
+                    ) : null}
+                  </View>
+                  <View style={{ alignItems: 'flex-end', gap: 6 }}>
+                    <Text style={{ color: colors.textSecondary, fontSize: 12 }}>{w.status}</Text>
+                    {w.status === 'PENDING' ? (
+                      wdCancelling === w.id ? (
+                        <ActivityIndicator color={colors.primary} />
+                      ) : (
+                        <TouchableOpacity onPress={() => cancelWithdrawalRequest(w.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                          <Text style={{ color: '#b91c1c', fontWeight: '700', fontSize: 13 }}>Cancel</Text>
+                        </TouchableOpacity>
+                      )
+                    ) : null}
+                  </View>
                 </View>
               ))}
             </View>
@@ -471,96 +540,139 @@ export default function DriverEarningsScreen() {
             showsVerticalScrollIndicator={false}
           >
             <View style={[styles.modalCard, { backgroundColor: colors.card }]}>
-              <Text style={[styles.modalTitle, { color: colors.text }]}>Withdrawal request</Text>
-              <Text style={{ color: colors.textSecondary, marginBottom: 10 }}>Balance: {balance.toFixed(2)} {currency}</Text>
-              <Text style={{ color: colors.text, fontWeight: '600' }}>Amount</Text>
-              <TextInput
-                style={[styles.dateInp, { color: colors.text, borderColor: colors.border }]}
-                keyboardType="decimal-pad"
-                value={wdAmount}
-                onChangeText={setWdAmount}
-                placeholder="0.00"
-                placeholderTextColor={colors.textTertiary}
-              />
-              <Text style={{ color: colors.text, fontWeight: '600', marginTop: 10 }}>Receive as</Text>
-              <View style={styles.chipRow}>
-                <TouchableOpacity
-                  style={[styles.chip, wdPayout === 'BANK_TRANSFER' && { backgroundColor: colors.primary }]}
-                  onPress={() => setWdPayout('BANK_TRANSFER')}
-                >
-                  <Text style={{ color: wdPayout === 'BANK_TRANSFER' ? '#fff' : colors.text, fontWeight: '700' }}>Bank</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.chip, wdPayout === 'CASH' && { backgroundColor: colors.primary }]}
-                  onPress={() => setWdPayout('CASH')}
-                >
-                  <Text style={{ color: wdPayout === 'CASH' ? '#fff' : colors.text, fontWeight: '700' }}>Cash</Text>
-                </TouchableOpacity>
-              </View>
-              {wdPayout === 'BANK_TRANSFER' && (
+              {wdStep === 'form' ? (
                 <>
-                  <Text style={{ color: colors.textSecondary, fontSize: 12, marginTop: 8, marginBottom: 6 }}>
-                    Bank transfers may take a few business days after we send the payment.
+                  <Text style={[styles.modalTitle, { color: colors.text }]}>Withdrawal request</Text>
+                  <Text style={{ color: colors.textTertiary, marginBottom: 10, fontSize: 13 }}>
+                    Account balance {balance.toFixed(2)} {currency}
                   </Text>
-                  <Text style={{ color: colors.text, fontWeight: '600', marginTop: 6 }}>Account holder name</Text>
+                  <Text style={{ color: colors.text, fontWeight: '600' }}>Amount</Text>
                   <TextInput
                     style={[styles.dateInp, { color: colors.text, borderColor: colors.border }]}
-                    value={wdBankHolder}
-                    onChangeText={setWdBankHolder}
-                    placeholder="Full name"
+                    keyboardType="decimal-pad"
+                    value={wdAmount}
+                    onChangeText={setWdAmount}
+                    placeholder="0.00"
                     placeholderTextColor={colors.textTertiary}
                   />
-                  <Text style={{ color: colors.text, fontWeight: '600', marginTop: 8 }}>Bank name</Text>
+                  <Text style={{ color: colors.text, fontWeight: '600', marginTop: 10 }}>Receive as</Text>
+                  <View style={styles.chipRow}>
+                    <TouchableOpacity
+                      style={[styles.chip, wdPayout === 'BANK_TRANSFER' && { backgroundColor: colors.primary }]}
+                      onPress={() => setWdPayout('BANK_TRANSFER')}
+                    >
+                      <Text style={{ color: wdPayout === 'BANK_TRANSFER' ? '#fff' : colors.text, fontWeight: '700' }}>Bank</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.chip, wdPayout === 'CASH' && { backgroundColor: colors.primary }]}
+                      onPress={() => setWdPayout('CASH')}
+                    >
+                      <Text style={{ color: wdPayout === 'CASH' ? '#fff' : colors.text, fontWeight: '700' }}>Cash</Text>
+                    </TouchableOpacity>
+                  </View>
+                  {wdPayout === 'BANK_TRANSFER' && (
+                    <>
+                      <Text style={{ color: colors.textSecondary, fontSize: 12, marginTop: 8, marginBottom: 6 }}>
+                        Bank transfers may take a few business days after we send the payment.
+                      </Text>
+                      <Text style={{ color: colors.text, fontWeight: '600', marginTop: 6 }}>Account holder name</Text>
+                      <TextInput
+                        style={[styles.dateInp, { color: colors.text, borderColor: colors.border }]}
+                        value={wdBankHolder}
+                        onChangeText={setWdBankHolder}
+                        placeholder="Full name"
+                        placeholderTextColor={colors.textTertiary}
+                      />
+                      <Text style={{ color: colors.text, fontWeight: '600', marginTop: 8 }}>Bank name</Text>
+                      <TextInput
+                        style={[styles.dateInp, { color: colors.text, borderColor: colors.border }]}
+                        value={wdBankName}
+                        onChangeText={setWdBankName}
+                        placeholder="Bank"
+                        placeholderTextColor={colors.textTertiary}
+                      />
+                      <Text style={{ color: colors.text, fontWeight: '600', marginTop: 8 }}>IBAN / RIB / account number</Text>
+                      <TextInput
+                        style={[styles.dateInp, { color: colors.text, borderColor: colors.border }]}
+                        value={wdBankRef}
+                        onChangeText={setWdBankRef}
+                        placeholder="Payout reference"
+                        placeholderTextColor={colors.textTertiary}
+                        autoCapitalize="characters"
+                      />
+                      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 10 }}>
+                        <Text style={{ color: colors.text, fontWeight: '600', flex: 1 }}>Save bank details for next time</Text>
+                        <Switch value={wdSaveBank} onValueChange={setWdSaveBank} />
+                      </View>
+                    </>
+                  )}
+                  <Text style={{ color: colors.text, fontWeight: '600', marginTop: 10 }}>Note (optional)</Text>
                   <TextInput
-                    style={[styles.dateInp, { color: colors.text, borderColor: colors.border }]}
-                    value={wdBankName}
-                    onChangeText={setWdBankName}
-                    placeholder="Bank"
-                    placeholderTextColor={colors.textTertiary}
+                    style={[styles.dateInp, { height: 72, textAlignVertical: 'top', color: colors.text, borderColor: colors.border }]}
+                    multiline
+                    value={wdNote}
+                    onChangeText={setWdNote}
                   />
-                  <Text style={{ color: colors.text, fontWeight: '600', marginTop: 8 }}>IBAN / RIB / account number</Text>
-                  <TextInput
-                    style={[styles.dateInp, { color: colors.text, borderColor: colors.border }]}
-                    value={wdBankRef}
-                    onChangeText={setWdBankRef}
-                    placeholder="Payout reference"
-                    placeholderTextColor={colors.textTertiary}
-                    autoCapitalize="characters"
-                  />
-                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 10 }}>
-                    <Text style={{ color: colors.text, fontWeight: '600', flex: 1 }}>Save bank details for next time</Text>
-                    <Switch value={wdSaveBank} onValueChange={setWdSaveBank} />
+                  <View style={{ flexDirection: 'row', gap: 10, marginTop: 16 }}>
+                    <TouchableOpacity
+                      style={[styles.chip, { flex: 1, justifyContent: 'center' }]}
+                      onPress={() => {
+                        setWdModal(false);
+                        setWdStep('form');
+                        setWdAmount('');
+                        setWdNote('');
+                        setWdBankHolder('');
+                        setWdBankName('');
+                        setWdBankRef('');
+                        setWdSaveBank(false);
+                      }}
+                    >
+                      <Text style={{ color: colors.text, fontWeight: '700' }}>Cancel</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.primaryBtn, { flex: 1, marginTop: 0 }]}
+                      onPress={goWdPreview}
+                    >
+                      <Text style={styles.primaryBtnText}>Review request</Text>
+                    </TouchableOpacity>
+                  </View>
+                </>
+              ) : (
+                <>
+                  <Text style={[styles.modalTitle, { color: colors.text }]}>Confirm withdrawal</Text>
+                  <Text style={{ color: colors.textSecondary, fontSize: 13, marginTop: 4 }}>You are requesting</Text>
+                  <Text style={{ color: colors.text, fontSize: 32, fontWeight: '800', marginTop: 6 }}>
+                    {parseFloat((wdAmount || '').replace(',', '.') || '0').toFixed(2)}{' '}
+                    <Text style={{ fontSize: 18, fontWeight: '600', color: colors.textSecondary }}>{currency}</Text>
+                  </Text>
+                  <Text style={{ color: colors.textTertiary, fontSize: 13, marginTop: 10 }}>
+                    Account balance {balance.toFixed(2)} {currency}
+                  </Text>
+                  <Text style={{ color: colors.textSecondary, fontSize: 13, marginTop: 8 }}>
+                    {wdPayout === 'CASH' ? 'Cash pickup' : 'Bank transfer'}
+                    {wdPayout === 'BANK_TRANSFER' && wdBankName.trim() ? ` · ${wdBankName.trim()}` : ''}
+                  </Text>
+                  {wdNote.trim() ? (
+                    <Text style={{ color: colors.textTertiary, fontSize: 13, marginTop: 6 }}>Note: {wdNote.trim()}</Text>
+                  ) : null}
+                  <View style={{ flexDirection: 'row', gap: 10, marginTop: 18 }}>
+                    <TouchableOpacity
+                      style={[styles.chip, { flex: 1, justifyContent: 'center' }]}
+                      onPress={() => setWdStep('form')}
+                      disabled={wdBusy}
+                    >
+                      <Text style={{ color: colors.text, fontWeight: '700' }}>Back</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.primaryBtn, { flex: 1, marginTop: 0 }, wdBusy && { opacity: 0.6 }]}
+                      onPress={submitWithdraw}
+                      disabled={wdBusy}
+                    >
+                      {wdBusy ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryBtnText}>Confirm request</Text>}
+                    </TouchableOpacity>
                   </View>
                 </>
               )}
-              <Text style={{ color: colors.text, fontWeight: '600', marginTop: 10 }}>Note (optional)</Text>
-              <TextInput
-                style={[styles.dateInp, { height: 72, textAlignVertical: 'top', color: colors.text, borderColor: colors.border }]}
-                multiline
-                value={wdNote}
-                onChangeText={setWdNote}
-              />
-              <View style={{ flexDirection: 'row', gap: 10, marginTop: 16 }}>
-                <TouchableOpacity
-                  style={[styles.chip, { flex: 1, justifyContent: 'center' }]}
-                  onPress={() => {
-                    setWdModal(false);
-                    setWdBankHolder('');
-                    setWdBankName('');
-                    setWdBankRef('');
-                    setWdSaveBank(false);
-                  }}
-                >
-                  <Text style={{ color: colors.text, fontWeight: '700' }}>Cancel</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.primaryBtn, { flex: 1, marginTop: 0 }, wdBusy && { opacity: 0.6 }]}
-                  onPress={submitWithdraw}
-                  disabled={wdBusy}
-                >
-                  {wdBusy ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryBtnText}>Submit</Text>}
-                </TouchableOpacity>
-              </View>
             </View>
           </ScrollView>
         </View>
@@ -589,9 +701,9 @@ const styles = StyleSheet.create({
     borderRadius: 999,
   },
   heroBadgeText: { color: '#fff', fontSize: 12, fontWeight: '700' },
-  heroLabel: { color: 'rgba(255,255,255,0.85)', fontSize: 13, fontWeight: '600', marginBottom: 6 },
-  heroAmount: { color: '#fff', fontSize: 34, fontWeight: '800' },
-  heroCurrency: { fontSize: 18, fontWeight: '700', color: 'rgba(255,255,255,0.9)' },
+  heroLabel: { color: 'rgba(255,255,255,0.52)', fontSize: 12, fontWeight: '600', marginBottom: 6 },
+  heroAmount: { color: 'rgba(255,255,255,0.95)', fontSize: 36, fontWeight: '800' },
+  heroCurrency: { fontSize: 17, fontWeight: '600', color: 'rgba(255,255,255,0.58)' },
   heroHint: { color: 'rgba(255,255,255,0.78)', fontSize: 13, marginTop: 10 },
   panel: {
     borderRadius: 18,
@@ -610,7 +722,16 @@ const styles = StyleSheet.create({
   primaryBtnText: { color: '#fff', fontWeight: '800', fontSize: 16 },
   actionRow: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 12, borderRadius: 14 },
   actionTitle: { fontSize: 15, fontWeight: '700' },
-  wdRow: { padding: 10, borderWidth: StyleSheet.hairlineWidth, borderRadius: 10, marginBottom: 8 },
+  wdRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 12,
+    padding: 10,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 10,
+    marginBottom: 8,
+  },
   dateInp: { borderWidth: 1, borderRadius: 10, padding: 10, marginTop: 6 },
   applyBtn: { marginTop: 8, padding: 12, borderRadius: 10, alignItems: 'center' },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'center', paddingVertical: 24 },

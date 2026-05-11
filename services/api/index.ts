@@ -14,3 +14,4 @@ export { geographyService } from './geography.service';
 export type { Country, Governorate, Delegation } from './geography.service';
 export { walletService } from './wallet.service';
 export type { Wallet, WalletTransaction, WithdrawalRequest } from './wallet.service';
+export { driverPayoutService } from './driver-payout.service';

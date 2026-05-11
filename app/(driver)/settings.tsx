@@ -43,12 +43,18 @@ export default function DriverSettingsScreen() {
       pathname: '/(driver)/restrictions',
       params: { returnTo: 'settings' },
     } as never);
+  const goBankDetails = () =>
+    router.push({
+      pathname: '/(driver)/bank-details',
+      params: { returnTo: 'settings' },
+    } as never);
 
   const actionItems: { label: string; onPress: () => void }[] = [
     { label: 'Edit profile', onPress: goEditProfile },
     { label: 'My documents', onPress: goDocuments },
     { label: 'My addresses', onPress: goAddresses },
     { label: 'Restrictions', onPress: goRestrictions },
+    { label: 'Payout bank details', onPress: goBankDetails },
   ];
 
   return (

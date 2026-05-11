@@ -64,6 +64,17 @@ export const walletService = {
   getPayoutBankDetails: () =>
     api.get<PayoutBankDetails | null>('/wallet/me/payout-bank-details'),
 
+  cancelWithdrawal: (requestId: string) =>
+    api.post<{ ok: boolean }>(`/wallet/me/withdrawals/${requestId}/cancel`, {}),
+
+  updatePayoutBankDetails: (body: {
+    accountHolderName: string;
+    bankName: string;
+    accountReference: string;
+  }) => api.put<PayoutBankDetails>('/wallet/me/payout-bank-details', body),
+
+  deletePayoutBankDetails: () => api.delete<{ ok: boolean }>('/wallet/me/payout-bank-details'),
+
   createWithdrawal: (
     amount: number,
     opts?: {

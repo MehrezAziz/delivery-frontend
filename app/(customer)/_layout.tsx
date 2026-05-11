@@ -97,6 +97,7 @@ export default function CustomerLayout() {
       <Tabs.Screen name="track-driver" options={{ href: null, headerShown: false }} />
       <Tabs.Screen name="edit-profile" options={{ href: null }} />
       <Tabs.Screen name="settings" options={{ href: null }} />
+      <Tabs.Screen name="bank-details" options={{ href: null }} />
       <Tabs.Screen name="notifications" options={{ href: null }} />
     </Tabs>
   );

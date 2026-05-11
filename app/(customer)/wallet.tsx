@@ -53,6 +53,8 @@ export default function WalletScreen() {
   const [bankRef, setBankRef] = useState('');
   const [saveBankProfile, setSaveBankProfile] = useState(false);
   const [withdrawing, setWithdrawing] = useState(false);
+  const [withdrawStep, setWithdrawStep] = useState<'edit' | 'preview'>('edit');
+  const [cancellingId, setCancellingId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!showWithdrawModal || withdrawPayout !== 'BANK_TRANSFER') return;
@@ -116,22 +118,34 @@ export default function WalletScreen() {
   useEffect(() => { if (activeTab === 'transactions') loadTransactions(); }, [activeTab]);
   useEffect(() => { if (activeTab === 'withdrawals') loadWithdrawals(); }, [activeTab]);
 
-  const handleWithdraw = async () => {
+  const validateWithdrawForm = (): number | null => {
     const amount = parseFloat(withdrawAmount);
     if (!amount || amount <= 0) {
       Alert.alert('Invalid amount', 'Please enter a valid amount.');
-      return;
+      return null;
     }
     if (wallet && amount > wallet.balance) {
       Alert.alert('Insufficient balance', 'Amount exceeds your wallet balance.');
-      return;
+      return null;
     }
     if (withdrawPayout === 'BANK_TRANSFER') {
       if (!bankHolder.trim() || !bankName.trim() || !bankRef.trim()) {
         Alert.alert('Bank details', 'Please enter account holder, bank name, and IBAN/RIB/account number.');
-        return;
+        return null;
       }
     }
+    return amount;
+  };
+
+  const goWithdrawPreview = () => {
+    const amount = validateWithdrawForm();
+    if (amount == null) return;
+    setWithdrawStep('preview');
+  };
+
+  const handleWithdraw = async () => {
+    const amount = validateWithdrawForm();
+    if (amount == null) return;
     setWithdrawing(true);
     try {
       await walletService.createWithdrawal(amount, {
@@ -143,6 +157,7 @@ export default function WalletScreen() {
         saveBankDetailsToProfile: saveBankProfile,
       });
       setShowWithdrawModal(false);
+      setWithdrawStep('edit');
       setWithdrawAmount('');
       setWithdrawNote('');
       setWithdrawPayout('BANK_TRANSFER');
@@ -157,6 +172,32 @@ export default function WalletScreen() {
     } finally {
       setWithdrawing(false);
     }
+  };
+
+  const cancelWithdrawalRequest = (requestId: string) => {
+    Alert.alert(
+      'Cancel withdrawal?',
+      'This will cancel your pending request. You can submit a new one later.',
+      [
+        { text: 'Keep', style: 'cancel' },
+        {
+          text: 'Cancel request',
+          style: 'destructive',
+          onPress: async () => {
+            setCancellingId(requestId);
+            try {
+              await walletService.cancelWithdrawal(requestId);
+              await loadWithdrawals();
+              await loadWallet();
+            } catch (e: unknown) {
+              Alert.alert('Error', e instanceof Error ? e.message : 'Could not cancel');
+            } finally {
+              setCancellingId(null);
+            }
+          },
+        },
+      ],
+    );
   };
 
   const formatDate = (iso: string) =>
@@ -192,7 +233,7 @@ export default function WalletScreen() {
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       {/* Balance card */}
       <View style={[styles.balanceCard, { backgroundColor: colors.primary }]}>
-        <Text style={styles.balanceLabel}>Available Balance</Text>
+        <Text style={styles.balanceLabel}>Available balance</Text>
         <Text style={styles.balanceAmount}>
           {wallet.balance.toFixed(2)} <Text style={styles.currency}>{wallet.currency}</Text>
         </Text>
@@ -201,7 +242,10 @@ export default function WalletScreen() {
         )}
         <TouchableOpacity
           style={styles.withdrawBtn}
-          onPress={() => setShowWithdrawModal(true)}
+          onPress={() => {
+            setWithdrawStep('edit');
+            setShowWithdrawModal(true);
+          }}
           activeOpacity={0.8}
         >
           <Text style={styles.withdrawBtnText}>Request Withdrawal</Text>
@@ -298,7 +342,10 @@ export default function WalletScreen() {
               <Text style={[styles.emptyText, { color: colors.textTertiary }]}>No withdrawal requests yet</Text>
               <TouchableOpacity
                 style={styles.newWithdrawBtn}
-                onPress={() => setShowWithdrawModal(true)}
+                onPress={() => {
+                  setWithdrawStep('edit');
+                  setShowWithdrawModal(true);
+                }}
               >
                 <Text style={styles.newWithdrawBtnText}>Request Withdrawal</Text>
               </TouchableOpacity>
@@ -308,7 +355,9 @@ export default function WalletScreen() {
               {withdrawals.map((wd) => (
                 <View key={wd.id} style={[styles.txCard, { backgroundColor: colors.card }]}>
                   <View style={styles.txLeft}>
-                    <Text style={[styles.txType, { color: colors.text }]}>{wd.amount.toFixed(2)} {wallet.currency}</Text>
+                    <Text style={[styles.wdAmountLine, { color: colors.text }]}>
+                      {wd.amount.toFixed(2)} <Text style={styles.wdAmountCurrency}>{wallet.currency}</Text>
+                    </Text>
                     <Text style={[styles.txDate, { color: colors.textTertiary }]}>{formatDate(wd.requestedAt)}</Text>
                     {wd.payoutMethod && (
                       <Text style={[styles.txDate, { color: colors.textSecondary }]}>
@@ -328,14 +377,32 @@ export default function WalletScreen() {
                       <Text style={styles.txAdminNote}>Admin: {wd.descriptionOfAdmin}</Text>
                     )}
                   </View>
-                  <View style={[styles.statusBadge, { backgroundColor: STATUS_COLORS[wd.status] + '22' }]}>
-                    <Text style={[styles.statusText, { color: STATUS_COLORS[wd.status] }]}>{wd.status}</Text>
+                  <View style={styles.wdRightCol}>
+                    <View style={[styles.statusBadge, { backgroundColor: STATUS_COLORS[wd.status] + '22' }]}>
+                      <Text style={[styles.statusText, { color: STATUS_COLORS[wd.status] }]}>{wd.status}</Text>
+                    </View>
+                    {wd.status === 'PENDING' ? (
+                      cancellingId === wd.id ? (
+                        <ActivityIndicator style={{ marginTop: 8 }} color={colors.primary} />
+                      ) : (
+                        <TouchableOpacity
+                          onPress={() => cancelWithdrawalRequest(wd.id)}
+                          style={styles.cancelWdBtn}
+                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                        >
+                          <Text style={styles.cancelWdText}>Cancel</Text>
+                        </TouchableOpacity>
+                      )
+                    ) : null}
                   </View>
                 </View>
               ))}
               <TouchableOpacity
                 style={styles.newWithdrawBtn}
-                onPress={() => setShowWithdrawModal(true)}
+                onPress={() => {
+                  setWithdrawStep('edit');
+                  setShowWithdrawModal(true);
+                }}
               >
                 <Text style={styles.newWithdrawBtnText}>+ New Request</Text>
               </TouchableOpacity>
@@ -353,110 +420,145 @@ export default function WalletScreen() {
             showsVerticalScrollIndicator={false}
           >
             <View style={[styles.modalCard, { backgroundColor: colors.card }]}>
-              <Text style={[styles.modalTitle, { color: colors.text }]}>Request Withdrawal</Text>
-              <Text style={[styles.modalBalance, { color: colors.textSecondary }]}>
-                Balance: {wallet.balance.toFixed(2)} {wallet.currency}
-              </Text>
-
-              <Text style={[styles.modalLabel, { color: colors.text }]}>Amount ({wallet.currency})</Text>
-              <TextInput
-                style={[styles.modalInput, { backgroundColor: colors.inputBg, borderColor: colors.inputBorder, color: colors.text }]}
-                placeholder="0.00"
-                placeholderTextColor={colors.textTertiary}
-                keyboardType="decimal-pad"
-                value={withdrawAmount}
-                onChangeText={setWithdrawAmount}
-              />
-
-              <Text style={[styles.modalLabel, { color: colors.text }]}>Receive as</Text>
-              <View style={styles.payoutRow}>
-                <TouchableOpacity
-                  style={[styles.chip, { borderColor: colors.border }, withdrawPayout === 'BANK_TRANSFER' && { backgroundColor: colors.primary, borderColor: colors.primary }]}
-                  onPress={() => setWithdrawPayout('BANK_TRANSFER')}
-                >
-                  <Text style={{ color: withdrawPayout === 'BANK_TRANSFER' ? '#fff' : colors.text, fontWeight: '700' }}>Bank</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.chip, { borderColor: colors.border }, withdrawPayout === 'CASH' && { backgroundColor: colors.primary, borderColor: colors.primary }]}
-                  onPress={() => setWithdrawPayout('CASH')}
-                >
-                  <Text style={{ color: withdrawPayout === 'CASH' ? '#fff' : colors.text, fontWeight: '700' }}>Cash</Text>
-                </TouchableOpacity>
-              </View>
-
-              {withdrawPayout === 'BANK_TRANSFER' && (
+              {withdrawStep === 'edit' ? (
                 <>
-                  <Text style={[styles.modalHint, { color: colors.textSecondary }]}>
-                    Bank transfers may take a few business days to reach your account after we send them.
+                  <Text style={[styles.modalTitle, { color: colors.text }]}>Request withdrawal</Text>
+                  <Text style={[styles.modalBalanceMuted, { color: colors.textTertiary }]}>
+                    Wallet balance {wallet.balance.toFixed(2)} {wallet.currency}
                   </Text>
-                  <Text style={[styles.modalLabel, { color: colors.text }]}>Account holder name</Text>
+
+                  <Text style={[styles.modalLabel, { color: colors.text }]}>Amount ({wallet.currency})</Text>
                   <TextInput
                     style={[styles.modalInput, { backgroundColor: colors.inputBg, borderColor: colors.inputBorder, color: colors.text }]}
-                    placeholder="Full name as on the account"
+                    placeholder="0.00"
                     placeholderTextColor={colors.textTertiary}
-                    value={bankHolder}
-                    onChangeText={setBankHolder}
+                    keyboardType="decimal-pad"
+                    value={withdrawAmount}
+                    onChangeText={setWithdrawAmount}
                   />
-                  <Text style={[styles.modalLabel, { color: colors.text }]}>Bank name</Text>
+
+                  <Text style={[styles.modalLabel, { color: colors.text }]}>Receive as</Text>
+                  <View style={styles.payoutRow}>
+                    <TouchableOpacity
+                      style={[styles.chip, { borderColor: colors.border }, withdrawPayout === 'BANK_TRANSFER' && { backgroundColor: colors.primary, borderColor: colors.primary }]}
+                      onPress={() => setWithdrawPayout('BANK_TRANSFER')}
+                    >
+                      <Text style={{ color: withdrawPayout === 'BANK_TRANSFER' ? '#fff' : colors.text, fontWeight: '700' }}>Bank</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.chip, { borderColor: colors.border }, withdrawPayout === 'CASH' && { backgroundColor: colors.primary, borderColor: colors.primary }]}
+                      onPress={() => setWithdrawPayout('CASH')}
+                    >
+                      <Text style={{ color: withdrawPayout === 'CASH' ? '#fff' : colors.text, fontWeight: '700' }}>Cash</Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  {withdrawPayout === 'BANK_TRANSFER' && (
+                    <>
+                      <Text style={[styles.modalHint, { color: colors.textSecondary }]}>
+                        Bank transfers may take a few business days to reach your account after we send them.
+                      </Text>
+                      <Text style={[styles.modalLabel, { color: colors.text }]}>Account holder name</Text>
+                      <TextInput
+                        style={[styles.modalInput, { backgroundColor: colors.inputBg, borderColor: colors.inputBorder, color: colors.text }]}
+                        placeholder="Full name as on the account"
+                        placeholderTextColor={colors.textTertiary}
+                        value={bankHolder}
+                        onChangeText={setBankHolder}
+                      />
+                      <Text style={[styles.modalLabel, { color: colors.text }]}>Bank name</Text>
+                      <TextInput
+                        style={[styles.modalInput, { backgroundColor: colors.inputBg, borderColor: colors.inputBorder, color: colors.text }]}
+                        placeholder="e.g. STB, BIAT"
+                        placeholderTextColor={colors.textTertiary}
+                        value={bankName}
+                        onChangeText={setBankName}
+                      />
+                      <Text style={[styles.modalLabel, { color: colors.text }]}>IBAN / RIB / account number</Text>
+                      <TextInput
+                        style={[styles.modalInput, { backgroundColor: colors.inputBg, borderColor: colors.inputBorder, color: colors.text }]}
+                        placeholder="Your payout reference"
+                        placeholderTextColor={colors.textTertiary}
+                        value={bankRef}
+                        onChangeText={setBankRef}
+                        autoCapitalize="characters"
+                      />
+                      <View style={styles.saveBankRow}>
+                        <Text style={[styles.modalLabel, { flex: 1, marginBottom: 0 }]}>Save bank details for next time</Text>
+                        <Switch value={saveBankProfile} onValueChange={setSaveBankProfile} />
+                      </View>
+                    </>
+                  )}
+
+                  <Text style={[styles.modalLabel, { color: colors.text }]}>Note (optional)</Text>
                   <TextInput
-                    style={[styles.modalInput, { backgroundColor: colors.inputBg, borderColor: colors.inputBorder, color: colors.text }]}
-                    placeholder="e.g. STB, BIAT"
+                    style={[styles.modalInput, { height: 80, textAlignVertical: 'top', backgroundColor: colors.inputBg, borderColor: colors.inputBorder, color: colors.text }]}
+                    placeholder="Reason for withdrawal..."
                     placeholderTextColor={colors.textTertiary}
-                    value={bankName}
-                    onChangeText={setBankName}
+                    multiline
+                    value={withdrawNote}
+                    onChangeText={setWithdrawNote}
                   />
-                  <Text style={[styles.modalLabel, { color: colors.text }]}>IBAN / RIB / account number</Text>
-                  <TextInput
-                    style={[styles.modalInput, { backgroundColor: colors.inputBg, borderColor: colors.inputBorder, color: colors.text }]}
-                    placeholder="Your payout reference"
-                    placeholderTextColor={colors.textTertiary}
-                    value={bankRef}
-                    onChangeText={setBankRef}
-                    autoCapitalize="characters"
-                  />
-                  <View style={styles.saveBankRow}>
-                    <Text style={[styles.modalLabel, { flex: 1, marginBottom: 0 }]}>Save bank details for next time</Text>
-                    <Switch value={saveBankProfile} onValueChange={setSaveBankProfile} />
+
+                  <View style={styles.modalButtons}>
+                    <TouchableOpacity
+                      style={styles.modalCancel}
+                      onPress={() => {
+                        setShowWithdrawModal(false);
+                        setWithdrawStep('edit');
+                        setWithdrawAmount('');
+                        setWithdrawNote('');
+                        setWithdrawPayout('BANK_TRANSFER');
+                        setBankHolder('');
+                        setBankName('');
+                        setBankRef('');
+                        setSaveBankProfile(false);
+                      }}
+                    >
+                      <Text style={styles.modalCancelText}>Cancel</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.modalSubmit} onPress={goWithdrawPreview}>
+                      <Text style={styles.modalSubmitText}>Review request</Text>
+                    </TouchableOpacity>
+                  </View>
+                </>
+              ) : (
+                <>
+                  <Text style={[styles.modalTitle, { color: colors.text }]}>Confirm withdrawal</Text>
+                  <Text style={[styles.previewHint, { color: colors.textSecondary }]}>You are requesting</Text>
+                  <Text style={[styles.previewAmount, { color: colors.text }]}>
+                    {parseFloat(withdrawAmount || '0').toFixed(2)}{' '}
+                    <Text style={[styles.previewCurrency, { color: colors.textSecondary }]}>{wallet.currency}</Text>
+                  </Text>
+                  <Text style={[styles.modalBalanceMuted, { color: colors.textTertiary }]}>
+                    Wallet balance {wallet.balance.toFixed(2)} {wallet.currency}
+                  </Text>
+                  <Text style={[styles.previewMeta, { color: colors.textSecondary }]}>
+                    {withdrawPayout === 'CASH' ? 'Cash pickup' : 'Bank transfer'}
+                    {withdrawPayout === 'BANK_TRANSFER' && bankName.trim()
+                      ? ` · ${bankName.trim()}`
+                      : ''}
+                  </Text>
+                  {withdrawNote.trim() ? (
+                    <Text style={[styles.previewMeta, { color: colors.textTertiary }]}>Note: {withdrawNote.trim()}</Text>
+                  ) : null}
+
+                  <View style={styles.modalButtons}>
+                    <TouchableOpacity style={styles.modalCancel} onPress={() => setWithdrawStep('edit')} disabled={withdrawing}>
+                      <Text style={styles.modalCancelText}>Back</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.modalSubmit, withdrawing && styles.btnDisabled]}
+                      onPress={handleWithdraw}
+                      disabled={withdrawing}
+                    >
+                      {withdrawing
+                        ? <ActivityIndicator color="#fff" />
+                        : <Text style={styles.modalSubmitText}>Confirm request</Text>}
+                    </TouchableOpacity>
                   </View>
                 </>
               )}
-
-              <Text style={[styles.modalLabel, { color: colors.text }]}>Note (optional)</Text>
-              <TextInput
-                style={[styles.modalInput, { height: 80, textAlignVertical: 'top', backgroundColor: colors.inputBg, borderColor: colors.inputBorder, color: colors.text }]}
-                placeholder="Reason for withdrawal..."
-                placeholderTextColor={colors.textTertiary}
-                multiline
-                value={withdrawNote}
-                onChangeText={setWithdrawNote}
-              />
-
-              <View style={styles.modalButtons}>
-                <TouchableOpacity
-                  style={styles.modalCancel}
-                  onPress={() => {
-                    setShowWithdrawModal(false);
-                    setWithdrawAmount('');
-                    setWithdrawNote('');
-                    setWithdrawPayout('BANK_TRANSFER');
-                    setBankHolder('');
-                    setBankName('');
-                    setBankRef('');
-                    setSaveBankProfile(false);
-                  }}
-                >
-                  <Text style={styles.modalCancelText}>Cancel</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.modalSubmit, withdrawing && styles.btnDisabled]}
-                  onPress={handleWithdraw}
-                  disabled={withdrawing}
-                >
-                  {withdrawing
-                    ? <ActivityIndicator color="#fff" />
-                    : <Text style={styles.modalSubmitText}>Submit</Text>}
-                </TouchableOpacity>
-              </View>
             </View>
           </ScrollView>
         </View>
@@ -482,9 +584,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
   },
-  balanceLabel: { color: 'rgba(255,255,255,0.8)', fontSize: 14 },
-  balanceAmount: { color: '#fff', fontSize: 42, fontWeight: 'bold' },
-  currency: { fontSize: 22, fontWeight: '400' },
+  balanceLabel: { color: 'rgba(255,255,255,0.55)', fontSize: 13, fontWeight: '600' },
+  balanceAmount: { color: 'rgba(255,255,255,0.92)', fontSize: 40, fontWeight: 'bold' },
+  currency: { fontSize: 20, fontWeight: '600', color: 'rgba(255,255,255,0.65)' },
   discountText: { color: 'rgba(255,255,255,0.9)', fontSize: 13 },
   withdrawBtn: {
     marginTop: 8,
@@ -543,6 +645,11 @@ const styles = StyleSheet.create({
   },
   txLeft: { flex: 1, gap: 4 },
   txRight: { alignItems: 'flex-end', gap: 6 },
+  wdRightCol: { alignItems: 'flex-end', gap: 8 },
+  wdAmountLine: { fontSize: 22, fontWeight: '800', letterSpacing: -0.5 },
+  wdAmountCurrency: { fontSize: 15, fontWeight: '600', opacity: 0.85 },
+  cancelWdBtn: { paddingVertical: 4 },
+  cancelWdText: { color: '#b91c1c', fontWeight: '700', fontSize: 13 },
   txType: { fontSize: 15, fontWeight: '600', color: '#111827' },
   txDate: { fontSize: 13, color: '#9ca3af' },
   txNote: { fontSize: 13, color: '#6b7280', fontStyle: 'italic' },
@@ -594,7 +701,11 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   modalTitle: { fontSize: 22, fontWeight: 'bold', color: '#111827' },
-  modalBalance: { fontSize: 14, color: '#6b7280' },
+  modalBalanceMuted: { fontSize: 13, color: '#9ca3af', marginBottom: 8 },
+  previewHint: { fontSize: 13, marginTop: 4 },
+  previewAmount: { fontSize: 36, fontWeight: '800', marginTop: 4, letterSpacing: -0.5 },
+  previewCurrency: { fontSize: 20, fontWeight: '600' },
+  previewMeta: { fontSize: 13, marginTop: 10, lineHeight: 18 },
   modalLabel: { fontSize: 14, fontWeight: '600', color: '#374151' },
   modalInput: {
     backgroundColor: '#f9fafb',
