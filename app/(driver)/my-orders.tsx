@@ -143,9 +143,15 @@ export default function DriverMyOrdersScreen() {
       }
     }
     setUpdatingStatus(orderId);
-    try { await orderService.updateOrderStatus(orderId, status); load(); }
-    catch (e: any) { appAlert('Error', e.message); }
-    finally { setUpdatingStatus(null); }
+    try {
+      await orderService.updateOrderStatus(orderId, status);
+      await load();
+      if (status === 'DELIVERED' || status === 'RETURNED') await restoreOrderTrackingForDriver();
+    } catch (e: any) {
+      appAlert('Error', e.message);
+    } finally {
+      setUpdatingStatus(null);
+    }
   };
 
   const handleRevertStatus = (orderId: string) => {

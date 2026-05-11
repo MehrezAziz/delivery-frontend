@@ -686,6 +686,11 @@ function getDriverTrackingNotificationFromOrder(order: Order): { title: string; 
         title: '🚚 Delivering — Add proof to finish',
         body: '◉———◉———◉———◉———◉———⛟———⌖',
       };
+    case 'DELIVERED':
+      return {
+        title: '✅ Delivered',
+        body: 'Order completed — great job!',
+      };
     case 'RETURNED':
       return {
         title: '📦 Returned — Confirm return deposit',
@@ -1031,6 +1036,19 @@ export async function syncCustomerOrderTrackingFromOrder(order: Order | null | u
 }
 
 /**
+ * Driver tray: assignment ended — cancel ongoing tracking (DELIVERED shows a short “done” notification).
+ */
+const DRIVER_TERMINAL_TRAY_STATUSES = new Set([
+  'DELIVERED',
+  'RETURN_DEPOSIT',
+  'CANCELLED',
+  'AUTO_CANCELLED',
+  'FAILED',
+  'REFUNDED',
+  'DISPUTED',
+]);
+
+/**
  * Restore driver order tracking (ongoing notification + status actions) after login/reopen.
  */
 export async function restoreOrderTrackingForDriver() {
@@ -1040,7 +1058,9 @@ export async function restoreOrderTrackingForDriver() {
     const role = await getStoredUserRole();
     if (role !== 'DRIVER') return;
 
-    const orders = await orderService.getDriverMyOrders();
+    const orders = dedupeOrdersByIdNewest(await orderService.getDriverMyOrders());
+    const orderById = new Map(orders.map((o) => [o.id, o]));
+
     const activeOrders = dedupeOrdersByIdNewest(
       orders
       .filter((order) => DRIVER_ORDER_TRACKING_STATUSES.includes(order.status))
@@ -1050,7 +1070,21 @@ export async function restoreOrderTrackingForDriver() {
       ),
     );
 
-    const map = await getTrackingStatusMap();
+    let map = await getTrackingStatusMap();
+
+    /** Map often still says DELIVERING while API is already terminal — reconcile before list-lag early exit. */
+    for (const trackedOrderId of [...Object.keys(map)]) {
+      const apiOrder = orderById.get(trackedOrderId);
+      if (!apiOrder || !DRIVER_TERMINAL_TRAY_STATUSES.has(apiOrder.status)) continue;
+      if (apiOrder.status === 'DELIVERED') {
+        const { title, body } = getDriverTrackingNotificationFromOrder(apiOrder);
+        await stopOrderTracking(title, body, trackedOrderId);
+      } else {
+        await notifee.cancelNotification(getOrderNotificationId(trackedOrderId)).catch(() => {});
+        await clearTrackedOrder(trackedOrderId);
+      }
+    }
+    map = await getTrackingStatusMap();
 
     if (!activeOrders.length) {
       const keepForListLag = Object.values(map).some((st) =>
@@ -1061,10 +1095,13 @@ export async function restoreOrderTrackingForDriver() {
       return;
     }
 
+    map = await getTrackingStatusMap();
     const displayedOrderIds = await getDisplayedTrackingOrderIds();
     const activeIdSet = new Set(activeOrders.map((o) => o.id));
     await cancelDisplayedTrackingNotifications((orderId) => {
       if (activeIdSet.has(orderId)) return false;
+      const apiOrder = orderById.get(orderId);
+      if (apiOrder && DRIVER_TERMINAL_TRAY_STATUSES.has(apiOrder.status)) return true;
       if (shouldPreserveTrackedOrderDespiteMissingFromApi('DRIVER', map[orderId])) return false;
       return true;
     });

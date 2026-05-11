@@ -1,14 +1,16 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import {
   View, Text, TouchableOpacity, Alert, Image,
   ActivityIndicator, StyleSheet, ScrollView,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { orderService } from '../../services/api/order.service';
 import { useTheme } from '../../contexts/ThemeContext';
+import { restoreOrderTrackingForDriver } from '../../services/notifications';
 
 export default function UploadProofsScreen() {
   const router = useRouter();
@@ -27,23 +29,38 @@ export default function UploadProofsScreen() {
   const [permission, requestPermission] = useCameraPermissions();
   const cameraRef = useRef<any>(null);
 
-  // Load existing proofs from order
-  useEffect(() => {
-    (async () => {
-      try {
-        const order = await orderService.getOrder(orderId);
-        if (order.driverAssignment?.image1Proof) {
-          setImage1(order.driverAssignment.image1Proof);
-          setExistingImage1(true);
-        }
-        if (order.driverAssignment?.image2Proof) {
-          setImage2(order.driverAssignment.image2Proof);
-          setExistingImage2(true);
-        }
-      } catch (e) { console.error(e); }
-      finally { setLoadingOrder(false); }
-    })();
-  }, [orderId]);
+  const loadOrderProofs = useCallback(async () => {
+    if (!orderId) {
+      setLoadingOrder(false);
+      return;
+    }
+    setLoadingOrder(true);
+    try {
+      const order = await orderService.getOrder(orderId);
+      if (order.status === 'DELIVERED') {
+        router.replace(`/(driver)/order-detail?orderId=${orderId}` as any);
+        return;
+      }
+      if (order.driverAssignment?.image1Proof) {
+        setImage1(order.driverAssignment.image1Proof);
+        setExistingImage1(true);
+      }
+      if (order.driverAssignment?.image2Proof) {
+        setImage2(order.driverAssignment.image2Proof);
+        setExistingImage2(true);
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoadingOrder(false);
+    }
+  }, [orderId, router]);
+
+  useFocusEffect(
+    useCallback(() => {
+      void loadOrderProofs();
+    }, [loadOrderProofs]),
+  );
 
   const pickFromGallery = async (target: 1 | 2) => {
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -157,6 +174,7 @@ export default function UploadProofsScreen() {
       } else if (markMode === 'returned') {
         await orderService.updateOrderStatus(orderId, 'RETURNED');
       }
+      await restoreOrderTrackingForDriver();
       goOrderDetail();
     } catch (e: any) {
       Alert.alert('Error', e?.message || 'Could not update order');

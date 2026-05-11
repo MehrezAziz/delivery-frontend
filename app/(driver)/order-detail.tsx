@@ -265,7 +265,8 @@ export default function DriverOrderDetailScreen() {
   const meta = STATUS_META[order.status] || STATUS_META.DELIVERED;
   const isCompanyOrder = order.sourceType === 'DELIVERY_COMPANY';
   const da = order.driverAssignment;
-  const showProofSection = ['DRIVER_ARRIVED', 'PICKED_UP', 'DELIVERING', 'RETURNED', 'RETURN_DEPOSIT', 'DELIVERED'].includes(order.status);
+  /** Hide proof upload UI once delivered — order is complete (proofs remain on the assignment server-side). */
+  const showProofSection = ['DRIVER_ARRIVED', 'PICKED_UP', 'DELIVERING', 'RETURNED', 'RETURN_DEPOSIT'].includes(order.status);
   const canRevert = ['DRIVER_ARRIVED', 'PICKED_UP', 'DELIVERING', 'RETURNED'].includes(order.status);
   const canCancelAssignment =
     order.status === 'PENDING_CUSTOMER_APPROVAL' || order.status === 'DRIVER_ASSIGNED';
