@@ -111,6 +111,33 @@ const ORDER_ACTIVE_STATUSES = [
   'DELIVERING',
 ];
 
+/** Customer tray must end when API shows terminal (stale map used to block cleanup). */
+const CUSTOMER_TERMINAL_TRAY_STATUSES = new Set([
+  'CANCELLED',
+  'AUTO_CANCELLED',
+  'DELIVERED',
+  'FAILED',
+  'REFUNDED',
+  'DISPUTED',
+]);
+
+/** Inferred / API `orderStatus` on shared order FCM path that must not keep `ongoing` tracking. */
+const ORDER_TRACKING_FCM_TERMINAL_STATUSES = new Set([
+  ...CUSTOMER_TERMINAL_TRAY_STATUSES,
+  'RETURN_DEPOSIT',
+]);
+
+/** `type` when `ongoing` is missing or wrong — still detach foreground / persistent tray. */
+const ORDER_FCM_TERMINAL_TYPES = new Set([
+  'ORDER_CANCELLED',
+  'ORDER_DELIVERED',
+  'NO_DRIVER_FOUND',
+  'DISPUTE_OPENED',
+  'REFUND_PROCESSED',
+  'DISPUTE_RESOLVED',
+  'ORDER_CANCELLED_BY_CUSTOMER',
+]);
+
 /** Driver foreground tracking includes return flow before return deposit is recorded. */
 const DRIVER_ORDER_TRACKING_STATUSES = [...ORDER_ACTIVE_STATUSES, 'RETURNED'];
 
@@ -139,8 +166,10 @@ const STATUS_BY_NOTIFICATION_TYPE: Record<string, string> = {
   ORDER_DELIVERED: 'DELIVERED',
   ORDER_CANCELLED: 'CANCELLED',
   ORDER_CANCELLED_BY_CUSTOMER: 'FAILED',
-  NO_DRIVER_FOUND: 'FAILED',
+  NO_DRIVER_FOUND: 'AUTO_CANCELLED',
   DISPUTE_OPENED: 'DISPUTED',
+  REFUND_PROCESSED: 'REFUNDED',
+  DISPUTE_RESOLVED: 'DISPUTED',
 };
 
 function statusLabelForTracking(status: string): string {
@@ -607,6 +636,31 @@ function buildNotifeeActions(data: Record<string, string>) {
 // Total steps in the order progress (0-6)
 const PROGRESS_TOTAL = 7;
 
+function getDismissCopyForTrackingStatus(status: string): { title: string; body: string } {
+  switch (status) {
+    case 'DELIVERED':
+      return { title: '✅ Delivered', body: 'Order completed — thank you!' };
+    case 'CANCELLED':
+      return { title: '⊘ Order cancelled', body: 'This order is no longer active.' };
+    case 'AUTO_CANCELLED':
+      return { title: '⊘ Order auto-cancelled', body: 'No driver was found in time.' };
+    case 'FAILED':
+      return { title: 'Order ended', body: 'This order is no longer active.' };
+    case 'REFUNDED':
+      return { title: 'Order refunded', body: 'This order is no longer active.' };
+    case 'DISPUTED':
+      return { title: 'Order update', body: 'This order was updated.' };
+    case 'RETURN_DEPOSIT':
+      return { title: 'Order update', body: 'This order is no longer active.' };
+    default:
+      return { title: 'Order update', body: 'This order is no longer active.' };
+  }
+}
+
+function getCustomerTerminalTrackingDismiss(order: Order): { title: string; body: string } {
+  return getDismissCopyForTrackingStatus(order.status);
+}
+
 function getTrackingNotificationFromOrder(order: Order): { title: string; body: string } {
   const driverName =
     order.driverAssignment?.driver?.user?.firstName ||
@@ -978,7 +1032,17 @@ export async function restoreOrderTrackingForCustomer() {
       ),
     );
 
-    const map = await getTrackingStatusMap();
+    const orderById = new Map(orders.map((o) => [o.id, o]));
+
+    let map = await getTrackingStatusMap();
+
+    for (const trackedOrderId of [...Object.keys(map)]) {
+      const apiOrder = orderById.get(trackedOrderId);
+      if (!apiOrder || !CUSTOMER_TERMINAL_TRAY_STATUSES.has(apiOrder.status)) continue;
+      const { title, body } = getCustomerTerminalTrackingDismiss(apiOrder);
+      await stopOrderTracking(title, body, trackedOrderId);
+    }
+    map = await getTrackingStatusMap();
 
     if (!activeOrders.length) {
       const keepForListLag = Object.values(map).some((st) =>
@@ -1037,7 +1101,13 @@ export async function syncCustomerOrderTrackingFromOrder(order: Order | null | u
   const role = await getStoredUserRole();
   if (role && role !== 'CUSTOMER') return;
 
-  if (!ORDER_ACTIVE_STATUSES.includes(order.status)) return;
+  if (!ORDER_ACTIVE_STATUSES.includes(order.status)) {
+    if (CUSTOMER_TERMINAL_TRAY_STATUSES.has(order.status)) {
+      const { title, body } = getCustomerTerminalTrackingDismiss(order);
+      await stopOrderTracking(title, body, order.id);
+    }
+    return;
+  }
 
   const map = await getTrackingStatusMap();
   const displayed = await getDisplayedTrackingOrderIds();
@@ -1880,20 +1950,37 @@ async function handleOrderFCMData(rawData: Record<string, unknown>) {
   const data = coerceFcmData(rawData);
   const { orderId, groupKey, ongoing } = data;
 
-  const isTerminal = ongoing === 'false';
-  const oid = extractOrderIdFromOrderGroupKey(groupKey) || orderId || '';
   const inferredOrderStatus =
     data.orderStatus ||
     (data.type ? STATUS_BY_NOTIFICATION_TYPE[data.type] : undefined);
 
-  const resolved = await resolveOrderTrackingText(data, oid);
+  const ongoingNorm = String(ongoing ?? '').toLowerCase();
+  const isTerminal =
+    ongoingNorm === 'false' ||
+    ongoingNorm === '0' ||
+    (Boolean(inferredOrderStatus) && ORDER_TRACKING_FCM_TERMINAL_STATUSES.has(String(inferredOrderStatus))) ||
+    (Boolean(data.orderStatus) && ORDER_TRACKING_FCM_TERMINAL_STATUSES.has(String(data.orderStatus))) ||
+    (Boolean(data.type) && ORDER_FCM_TERMINAL_TYPES.has(String(data.type)));
+
+  const oid = extractOrderIdFromOrderGroupKey(groupKey) || orderId || '';
+
+  let resolved = await resolveOrderTrackingText(data, oid);
+  if (!resolved && isTerminal) {
+    const st = inferredOrderStatus || data.orderStatus;
+    if (st && ORDER_TRACKING_FCM_TERMINAL_STATUSES.has(st)) {
+      resolved = getDismissCopyForTrackingStatus(st);
+    } else {
+      resolved = { title: 'Order update', body: 'This order is no longer active.' };
+    }
+  }
   if (!resolved) return;
 
   if (isTerminal) {
     const isCompanyDriverRemoval =
+      isDriverTrackingData(data) &&
       data.type === 'ORDER_CANCELLED_BY_CUSTOMER' &&
       data.orderStatus === 'FAILED';
-    if (isCompanyDriverRemoval) {
+    if (isCompanyDriverRemoval && oid) {
       if (Platform.OS === 'android') {
         await replaceOrderTrackingWithDismissibleFailed(oid, resolved.title, resolved.body, {
           type: data.type || '',
@@ -1908,8 +1995,10 @@ async function handleOrderFCMData(rawData: Record<string, unknown>) {
           type: data.type || '',
         });
       }
-    } else {
+    } else if (oid) {
       await stopOrderTracking(resolved.title, resolved.body, oid);
+    } else {
+      await stopOrderTrackingSilently();
     }
     emitOrderDetailAndDriverListRefresh(oid);
     return;
