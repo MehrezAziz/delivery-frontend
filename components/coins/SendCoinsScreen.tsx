@@ -43,6 +43,8 @@ function decodeURIComponentSafe(s: string): string {
   }
 }
 
+const E164_PHONE = /^\+[1-9]\d{7,14}$/;
+
 export default function SendCoinsScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{
@@ -52,7 +54,9 @@ export default function SendCoinsScreen() {
     sendsOnly?: string;
   }>();
   const { colors } = useTheme();
+  const [recipientMode, setRecipientMode] = useState<'id' | 'phone'>('id');
   const [recipientId, setRecipientId] = useState('');
+  const [recipientPhone, setRecipientPhone] = useState('');
   const [grossStr, setGrossStr] = useState('');
   const [gift, setGift] = useState('');
   const [scheduleOn, setScheduleOn] = useState(false);
@@ -66,6 +70,10 @@ export default function SendCoinsScreen() {
   const [pinModal, setPinModal] = useState(false);
   const [needsPinForSend, setNeedsPinForSend] = useState(false);
   const [pin, setPin] = useState('');
+  const [stepUpModalVisible, setStepUpModalVisible] = useState(false);
+  const [stepUpAuthMethod, setStepUpAuthMethod] = useState<'pin' | 'password'>('pin');
+  const [stepUpSummary, setStepUpSummary] = useState<{ hasPin: boolean; hasPassword: boolean } | null>(null);
+  const [accountPassword, setAccountPassword] = useState('');
   const [transfers, setTransfers] = useState<CoinTransferDto[]>([]);
   const [txLoading, setTxLoading] = useState(false);
   const [myUserId, setMyUserId] = useState<string | null>(null);
@@ -74,6 +82,11 @@ export default function SendCoinsScreen() {
   const [celebrateGift, setCelebrateGift] = useState('');
   const [celebrateAmount, setCelebrateAmount] = useState('');
   const celebrateHandledKeyRef = useRef<string | null>(null);
+  const [rescheduleTargetId, setRescheduleTargetId] = useState<string | null>(null);
+  const [rescheduleAt, setRescheduleAt] = useState(() => new Date(Date.now() + 3600_000));
+  const [rescheduleIosOpen, setRescheduleIosOpen] = useState(false);
+  const [rescheduleAndroidPhase, setRescheduleAndroidPhase] = useState<'idle' | 'date' | 'time'>('idle');
+  const [rescheduleSaving, setRescheduleSaving] = useState(false);
   const paramsRef = useRef(params);
   paramsRef.current = params;
   const routerRef = useRef(router);
@@ -134,9 +147,24 @@ export default function SendCoinsScreen() {
 
   const runPreview = async () => {
     const gross = parseFloat(grossStr.replace(',', '.'));
-    if (!recipientId.trim()) {
-      Alert.alert('Recipient', 'Enter the other user’s ID (from Settings).');
-      return;
+    if (recipientMode === 'id') {
+      if (!recipientId.trim()) {
+        Alert.alert('Recipient', 'Enter the other user’s ID (from Settings).');
+        return;
+      }
+    } else {
+      const ph = recipientPhone.trim();
+      if (!ph) {
+        Alert.alert('Recipient', 'Enter the recipient’s phone number with country code (e.g. +21655664488).');
+        return;
+      }
+      if (!E164_PHONE.test(ph)) {
+        Alert.alert(
+          'Phone format',
+          'Use international E.164 format: + then country code and number (8–15 digits after +), e.g. +21655664488.',
+        );
+        return;
+      }
     }
     if (!Number.isFinite(gross) || gross <= 0) {
       Alert.alert('Amount', 'Enter a valid gross amount.');
@@ -145,7 +173,11 @@ export default function SendCoinsScreen() {
     setPreviewLoading(true);
     setPreview(null);
     try {
-      const p = await coinsService.preview(recipientId.trim(), gross);
+      const previewBody =
+        recipientMode === 'id'
+          ? { recipientUserId: recipientId.trim(), grossCoins: gross }
+          : { recipientPhone: recipientPhone.trim(), grossCoins: gross };
+      const p = await coinsService.preview(previewBody);
       setPreview(p);
     } catch (e) {
       Alert.alert('Preview failed', errMsg(e));
@@ -154,30 +186,36 @@ export default function SendCoinsScreen() {
     }
   };
 
-  const executeTransferAfterChallenge = async (pinArg?: string) => {
+  const executeTransferAfterChallenge = async (opts?: { transferPin?: string; accountPassword?: string }) => {
     if (!preview) return;
     const gross = preview.grossCoins;
     setSending(true);
     try {
-      const { challengeToken } = pinArg
-        ? await coinsService.createChallenge(pinArg)
-        : await coinsService.createChallenge();
+      const challengeBody: { transferPin?: string; accountPassword?: string } = {};
+      if (opts?.transferPin) challengeBody.transferPin = opts.transferPin;
+      if (opts?.accountPassword) challengeBody.accountPassword = opts.accountPassword;
+      const { challengeToken } = await coinsService.createChallenge(
+        Object.keys(challengeBody).length ? challengeBody : undefined,
+      );
       const idempotencyKey = `${Date.now()}-${Math.random().toString(36).slice(2, 12)}`;
       const scheduledIso =
         scheduleOn && scheduleAt > new Date(Date.now() + 5000) ? scheduleAt.toISOString() : undefined;
-      await coinsService.createTransfer(
-        {
-          recipientUserId: recipientId.trim(),
-          grossCoins: gross,
-          challengeToken,
-          giftMessage: gift.trim() || undefined,
-          scheduledAt: scheduledIso,
-        },
-        { idempotencyKey },
-      );
+      const transferBody = {
+        grossCoins: gross,
+        challengeToken,
+        giftMessage: gift.trim() || undefined,
+        scheduledAt: scheduledIso,
+        ...(recipientMode === 'id'
+          ? { recipientUserId: recipientId.trim() }
+          : { recipientPhone: recipientPhone.trim() }),
+      };
+      await coinsService.createTransfer(transferBody, { idempotencyKey });
       setPinModal(false);
       setPin('');
       setNeedsPinForSend(false);
+      setStepUpModalVisible(false);
+      setStepUpSummary(null);
+      setAccountPassword('');
       Alert.alert(
         'Transfer started',
         scheduledIso ? 'Coins will move after the scheduled time.' : 'Coins are pending until the security delay completes.',
@@ -185,6 +223,8 @@ export default function SendCoinsScreen() {
       setPreview(null);
       setGrossStr('');
       setGift('');
+      setRecipientPhone('');
+      setRecipientId('');
       setScheduleOn(false);
       setAndroidPickPhase('idle');
       await loadTransfers();
@@ -199,34 +239,79 @@ export default function SendCoinsScreen() {
     if (!preview) return;
     const has = await LocalAuthentication.hasHardwareAsync();
     const enrolled = await LocalAuthentication.isEnrolledAsync();
-    if (!has || !enrolled) {
-      Alert.alert(
-        'Biometrics required',
-        'Set up Face ID, fingerprint, or device passcode on this phone to confirm sends.',
-      );
+    if (has && enrolled) {
+      const auth = await LocalAuthentication.authenticateAsync({
+        promptMessage: 'Confirm coin transfer',
+        cancelLabel: 'Cancel',
+        disableDeviceFallback: false,
+      });
+      if (!auth.success) return;
+      try {
+        const summary = await securityService.getSummary();
+        if (summary.hasTransferPin) {
+          setNeedsPinForSend(true);
+          setPin('');
+          setPinModal(true);
+        } else {
+          setNeedsPinForSend(false);
+          await executeTransferAfterChallenge();
+        }
+      } catch (e) {
+        Alert.alert('Error', errMsg(e));
+      }
       return;
     }
-    const auth = await LocalAuthentication.authenticateAsync({
-      promptMessage: 'Confirm coin transfer',
-      cancelLabel: 'Cancel',
-      disableDeviceFallback: false,
-    });
-    if (!auth.success) return;
+
     try {
       const summary = await securityService.getSummary();
-      if (summary.hasTransferPin) {
-        setNeedsPinForSend(true);
-        setPin('');
-        setPinModal(true);
-      } else {
-        setNeedsPinForSend(false);
-        await executeTransferAfterChallenge(undefined);
+      if (!summary.hasTransferPin && !summary.hasPassword) {
+        Alert.alert(
+          'Cannot confirm send',
+          'This device has no Face ID or fingerprint enrolled. Set an account password or an 8-digit transfer PIN in Settings → Security, then try again.',
+        );
+        return;
       }
+      setStepUpSummary({ hasPin: summary.hasTransferPin, hasPassword: summary.hasPassword });
+      if (summary.hasTransferPin && summary.hasPassword) {
+        setStepUpAuthMethod('pin');
+      } else if (summary.hasTransferPin) {
+        setStepUpAuthMethod('pin');
+      } else {
+        setStepUpAuthMethod('password');
+      }
+      setPin('');
+      setAccountPassword('');
+      setStepUpModalVisible(true);
     } catch (e) {
       Alert.alert('Error', errMsg(e));
     }
   };
 
+  const cancelStepUpModal = () => {
+    setStepUpModalVisible(false);
+    setStepUpSummary(null);
+    setAccountPassword('');
+    setPin('');
+  };
+
+  const submitStepUpModal = async () => {
+    if (!preview) return;
+    if (stepUpAuthMethod === 'pin') {
+      const pinTrim = pin.trim();
+      if (pinTrim.length !== 8 || !/^\d{8}$/.test(pinTrim)) {
+        Alert.alert('PIN', 'Enter your 8-digit transfer PIN (Settings → Security).');
+        return;
+      }
+      await executeTransferAfterChallenge({ transferPin: pinTrim });
+      return;
+    }
+    const pw = accountPassword.trim();
+    if (pw.length < 8) {
+      Alert.alert('Password', 'Enter your account password (at least 8 characters).');
+      return;
+    }
+    await executeTransferAfterChallenge({ accountPassword: pw });
+  };
   const submitWithPin = async () => {
     if (!preview) return;
     if (needsPinForSend) {
@@ -235,26 +320,97 @@ export default function SendCoinsScreen() {
         Alert.alert('PIN', 'Enter your 8-digit transfer PIN (set in Settings → Security).');
         return;
       }
-      await executeTransferAfterChallenge(pinTrim);
+      await executeTransferAfterChallenge({ transferPin: pinTrim });
     }
   };
 
-  const cancelTx = (id: string) => {
-    Alert.alert('Cancel transfer?', 'Reserved coins will be released if the transfer is still pending.', [
-      { text: 'No', style: 'cancel' },
-      {
-        text: 'Cancel transfer',
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            await coinsService.cancelTransfer(id);
-            await loadTransfers();
-          } catch (e) {
-            Alert.alert('Error', errMsg(e));
-          }
+  const cancelTx = (transfer: CoinTransferDto) => {
+    const isScheduled = transfer.status === 'SCHEDULED';
+    Alert.alert(
+      isScheduled ? 'Cancel scheduled send?' : 'Cancel transfer?',
+      isScheduled
+        ? 'This send will not happen. Coins are not locked until the scheduled time.'
+        : 'Reserved coins will be released if the transfer is still pending.',
+      [
+        { text: 'No', style: 'cancel' },
+        {
+          text: 'Cancel transfer',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await coinsService.cancelTransfer(transfer.id);
+              await loadTransfers();
+            } catch (e) {
+              Alert.alert('Error', errMsg(e));
+            }
+          },
         },
-      },
-    ]);
+      ],
+    );
+  };
+
+  const formatDateTimeLocal = (iso: string) => {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return iso;
+    return d.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+  };
+
+  const openRescheduleModal = (t: CoinTransferDto) => {
+    if (!t.scheduledAt) return;
+    const d = new Date(t.scheduledAt);
+    setRescheduleAt(Number.isNaN(d.getTime()) ? new Date(Date.now() + 3600_000) : d);
+    setRescheduleTargetId(t.id);
+    setRescheduleAndroidPhase('idle');
+    setRescheduleIosOpen(Platform.OS === 'ios');
+  };
+
+  const onRescheduleIosChange = (_: DateTimePickerEvent, d?: Date) => {
+    setRescheduleIosOpen(Platform.OS === 'ios');
+    if (d) setRescheduleAt(d);
+  };
+
+  const onRescheduleAndroidChange = (event: DateTimePickerEvent, d?: Date) => {
+    if (event?.type === 'dismissed') {
+      setRescheduleAndroidPhase('idle');
+      return;
+    }
+    if (!d) {
+      setRescheduleAndroidPhase('idle');
+      return;
+    }
+    if (rescheduleAndroidPhase === 'date') {
+      const next = new Date(rescheduleAt);
+      next.setFullYear(d.getFullYear(), d.getMonth(), d.getDate());
+      setRescheduleAt(next);
+      setRescheduleAndroidPhase('time');
+      return;
+    }
+    if (rescheduleAndroidPhase === 'time') {
+      const next = new Date(rescheduleAt);
+      next.setHours(d.getHours(), d.getMinutes(), 0, 0);
+      setRescheduleAt(next);
+      setRescheduleAndroidPhase('idle');
+    }
+  };
+
+  const submitReschedule = async () => {
+    if (!rescheduleTargetId) return;
+    const min = new Date(Date.now() + 60_000);
+    if (rescheduleAt.getTime() <= min.getTime()) {
+      Alert.alert('Invalid time', 'Choose a date and time at least one minute from now.');
+      return;
+    }
+    setRescheduleSaving(true);
+    try {
+      await coinsService.rescheduleTransfer(rescheduleTargetId, rescheduleAt.toISOString());
+      setRescheduleTargetId(null);
+      setRescheduleIosOpen(false);
+      await loadTransfers();
+    } catch (e: unknown) {
+      Alert.alert('Error', e instanceof Error ? e.message : 'Could not update schedule');
+    } finally {
+      setRescheduleSaving(false);
+    }
   };
 
   const openSchedulePicker = () => {
@@ -298,20 +454,85 @@ export default function SendCoinsScreen() {
     <View style={[styles.root, { backgroundColor: colors.background }]}>
       <ScrollView contentContainerStyle={styles.pad} keyboardShouldPersistTaps="handled">
         <Text style={[styles.hint, { color: colors.textSecondary }]}>
-          Recipient must use your user ID from Settings. You pay the gross amount; they receive the net after the
-          platform fee.
+          Send by the recipient’s user ID (Settings) or by the phone number on their account. Phone must be in
+          international format with + and country code (e.g. +21655664488). You pay the gross amount; they receive the net
+          after the platform fee. Sends to users in other countries are allowed when both sides support wallet coins.
         </Text>
 
-        <Text style={[styles.label, { color: colors.textSecondary }]}>Recipient user ID</Text>
-        <TextInput
-          style={[styles.input, { color: colors.text, borderColor: colors.border, backgroundColor: colors.card }]}
-          placeholder="UUID"
-          placeholderTextColor={colors.textTertiary}
-          value={recipientId}
-          onChangeText={setRecipientId}
-          autoCapitalize="none"
-          autoCorrect={false}
-        />
+        <Text style={[styles.label, { color: colors.textSecondary }]}>Find recipient by</Text>
+        <View style={styles.segmentRow}>
+          <TouchableOpacity
+            style={[
+              styles.segmentBtn,
+              { borderColor: colors.border, backgroundColor: colors.card },
+              recipientMode === 'id' && { backgroundColor: colors.primary, borderColor: colors.primary },
+            ]}
+            onPress={() => {
+              setRecipientMode('id');
+              setPreview(null);
+            }}
+          >
+            <Text
+              style={[
+                styles.segmentBtnText,
+                { color: colors.text },
+                recipientMode === 'id' && { color: '#fff', fontWeight: '800' },
+              ]}
+            >
+              User ID
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              styles.segmentBtn,
+              { borderColor: colors.border, backgroundColor: colors.card },
+              recipientMode === 'phone' && { backgroundColor: colors.primary, borderColor: colors.primary },
+            ]}
+            onPress={() => {
+              setRecipientMode('phone');
+              setPreview(null);
+            }}
+          >
+            <Text
+              style={[
+                styles.segmentBtnText,
+                { color: colors.text },
+                recipientMode === 'phone' && { color: '#fff', fontWeight: '800' },
+              ]}
+            >
+              Phone (E.164)
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        {recipientMode === 'id' ? (
+          <>
+            <Text style={[styles.label, { color: colors.textSecondary }]}>Recipient user ID</Text>
+            <TextInput
+              style={[styles.input, { color: colors.text, borderColor: colors.border, backgroundColor: colors.card }]}
+              placeholder="UUID"
+              placeholderTextColor={colors.textTertiary}
+              value={recipientId}
+              onChangeText={setRecipientId}
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+          </>
+        ) : (
+          <>
+            <Text style={[styles.label, { color: colors.textSecondary }]}>Recipient phone</Text>
+            <TextInput
+              style={[styles.input, { color: colors.text, borderColor: colors.border, backgroundColor: colors.card }]}
+              placeholder="+21655664488"
+              placeholderTextColor={colors.textTertiary}
+              value={recipientPhone}
+              onChangeText={setRecipientPhone}
+              autoCapitalize="none"
+              autoCorrect={false}
+              keyboardType="phone-pad"
+            />
+          </>
+        )}
 
         <Text style={[styles.label, { color: colors.textSecondary }]}>Gross coins (you pay)</Text>
         <TextInput
@@ -443,18 +664,30 @@ export default function SendCoinsScreen() {
               t.senderUserId === myUserId;
             return (
               <View key={t.id} style={[styles.txRow, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                <View style={{ flex: 1 }}>
+                <View style={{ flex: 1, paddingRight: 8 }}>
                   <Text style={{ color: colors.text, fontWeight: '600' }}>{t.status}</Text>
                   <Text style={{ color: colors.textTertiary, fontSize: 12 }}>
                     {new Date(t.createdAt).toLocaleString()}
                     {showFeeBreakdownRow ? ` · Gross ${t.grossCoins.toFixed(2)}` : ` · Received ${t.netCoins.toFixed(2)} coins`}
                   </Text>
+                  {t.status === 'SCHEDULED' && t.scheduledAt && myUserId && t.senderUserId === myUserId ? (
+                    <Text style={{ color: colors.primary, fontWeight: '700', fontSize: 12, marginTop: 4 }}>
+                      Sends at {formatDateTimeLocal(t.scheduledAt)}
+                    </Text>
+                  ) : null}
                 </View>
-                {canCancel ? (
-                  <TouchableOpacity onPress={() => cancelTx(t.id)} hitSlop={12}>
-                    <Text style={{ color: colors.danger, fontWeight: '700' }}>Cancel</Text>
-                  </TouchableOpacity>
-                ) : null}
+                <View style={{ alignItems: 'flex-end', gap: 10 }}>
+                  {t.status === 'SCHEDULED' && myUserId && t.senderUserId === myUserId ? (
+                    <TouchableOpacity onPress={() => openRescheduleModal(t)} disabled={rescheduleSaving} hitSlop={12}>
+                      <Text style={{ color: colors.primary, fontWeight: '700' }}>Edit time</Text>
+                    </TouchableOpacity>
+                  ) : null}
+                  {canCancel ? (
+                    <TouchableOpacity onPress={() => cancelTx(t)} hitSlop={12}>
+                      <Text style={{ color: colors.danger, fontWeight: '700' }}>Cancel</Text>
+                    </TouchableOpacity>
+                  ) : null}
+                </View>
               </View>
             );
           })
@@ -493,6 +726,172 @@ export default function SendCoinsScreen() {
                   <ActivityIndicator color="#fff" />
                 ) : (
                   <Text style={{ color: '#fff', fontWeight: '700' }}>Send</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={stepUpModalVisible} transparent animationType="fade" onRequestClose={cancelStepUpModal}>
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalBox, { backgroundColor: colors.card }]}>
+            <Text style={[styles.modalTitle, { color: colors.text }]}>Confirm send</Text>
+            <Text style={{ color: colors.textSecondary, marginBottom: 12 }}>
+              No Face ID or fingerprint on this device. Use your 8-digit transfer PIN or your account password.
+            </Text>
+            {stepUpSummary?.hasPin && stepUpSummary?.hasPassword ? (
+              <View style={[styles.segmentRow, { marginBottom: 14 }]}>
+                <TouchableOpacity
+                  style={[
+                    styles.segmentBtn,
+                    { borderColor: colors.border, backgroundColor: colors.card },
+                    stepUpAuthMethod === 'pin' && { backgroundColor: colors.primary, borderColor: colors.primary },
+                  ]}
+                  onPress={() => {
+                    setStepUpAuthMethod('pin');
+                    setAccountPassword('');
+                  }}
+                >
+                  <Text
+                    style={[
+                      styles.segmentBtnText,
+                      { color: colors.text },
+                      stepUpAuthMethod === 'pin' && { color: '#fff', fontWeight: '800' },
+                    ]}
+                  >
+                    Transfer PIN
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.segmentBtn,
+                    { borderColor: colors.border, backgroundColor: colors.card },
+                    stepUpAuthMethod === 'password' && { backgroundColor: colors.primary, borderColor: colors.primary },
+                  ]}
+                  onPress={() => {
+                    setStepUpAuthMethod('password');
+                    setPin('');
+                  }}
+                >
+                  <Text
+                    style={[
+                      styles.segmentBtnText,
+                      { color: colors.text },
+                      stepUpAuthMethod === 'password' && { color: '#fff', fontWeight: '800' },
+                    ]}
+                  >
+                    Password
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            ) : null}
+            {stepUpAuthMethod === 'pin' && stepUpSummary?.hasPin ? (
+              <EightDigitPinInput value={pin} onChange={setPin} colors={colors} disabled={sending} />
+            ) : null}
+            {stepUpAuthMethod === 'password' && stepUpSummary?.hasPassword ? (
+              <TextInput
+                style={[
+                  styles.input,
+                  { color: colors.text, borderColor: colors.border, backgroundColor: colors.inputBg ?? colors.card },
+                ]}
+                placeholder="Account password"
+                placeholderTextColor={colors.textTertiary}
+                value={accountPassword}
+                onChangeText={setAccountPassword}
+                secureTextEntry
+                autoCapitalize="none"
+                autoCorrect={false}
+                editable={!sending}
+              />
+            ) : null}
+            <View style={styles.modalActions}>
+              <TouchableOpacity onPress={cancelStepUpModal} style={styles.modalBtn} disabled={sending}>
+                <Text style={{ color: colors.textSecondary }}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => void submitStepUpModal()}
+                disabled={sending}
+                style={[styles.modalBtn, { backgroundColor: colors.primary, borderRadius: 10, paddingHorizontal: 16 }]}
+              >
+                {sending ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text style={{ color: '#fff', fontWeight: '700' }}>Send</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={!!rescheduleTargetId}
+        transparent
+        animationType="slide"
+        onRequestClose={() => {
+          setRescheduleTargetId(null);
+          setRescheduleIosOpen(false);
+          setRescheduleAndroidPhase('idle');
+        }}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.rescheduleModalCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <Text style={[styles.modalTitle, { color: colors.text }]}>Reschedule send</Text>
+            <Text style={{ color: colors.textSecondary, marginBottom: 14, fontSize: 14 }}>
+              Choose a new date and time. It must be at least one minute from now.
+            </Text>
+            <TouchableOpacity
+              style={[styles.reschedulePickRow, { borderColor: colors.border, backgroundColor: colors.inputBg }]}
+              onPress={() => {
+                if (Platform.OS === 'android') setRescheduleAndroidPhase('date');
+                else setRescheduleIosOpen(true);
+              }}
+            >
+              <Ionicons name="calendar-outline" size={22} color={colors.primary} />
+              <Text style={{ color: colors.text, marginLeft: 12, flex: 1, fontWeight: '600' }}>
+                {rescheduleAt.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}
+              </Text>
+            </TouchableOpacity>
+            {Platform.OS === 'ios' && rescheduleIosOpen && rescheduleTargetId ? (
+              <DateTimePicker
+                value={rescheduleAt}
+                mode="datetime"
+                display="spinner"
+                minimumDate={new Date(Date.now() + 60_000)}
+                onChange={onRescheduleIosChange}
+              />
+            ) : null}
+            {Platform.OS === 'android' && rescheduleAndroidPhase !== 'idle' && rescheduleTargetId ? (
+              <DateTimePicker
+                value={rescheduleAt}
+                mode={rescheduleAndroidPhase === 'date' ? 'date' : 'time'}
+                display="default"
+                minimumDate={rescheduleAndroidPhase === 'date' ? new Date(Date.now() + 60_000) : undefined}
+                onChange={onRescheduleAndroidChange}
+              />
+            ) : null}
+            <View style={[styles.modalActions, { marginTop: 20, justifyContent: 'space-between', width: '100%' }]}>
+              <TouchableOpacity
+                onPress={() => {
+                  setRescheduleTargetId(null);
+                  setRescheduleIosOpen(false);
+                  setRescheduleAndroidPhase('idle');
+                }}
+                style={styles.modalBtn}
+                disabled={rescheduleSaving}
+              >
+                <Text style={{ color: colors.textSecondary }}>Close</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => void submitReschedule()}
+                disabled={rescheduleSaving}
+                style={[styles.modalBtn, { backgroundColor: colors.primary, borderRadius: 10, paddingHorizontal: 16 }]}
+              >
+                {rescheduleSaving ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text style={{ color: '#fff', fontWeight: '700' }}>Save</Text>
                 )}
               </TouchableOpacity>
             </View>
@@ -539,6 +938,20 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   multiline: { minHeight: 72, textAlignVertical: 'top' },
+  segmentRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 4,
+  },
+  segmentBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    alignItems: 'center',
+  },
+  segmentBtnText: { fontSize: 14, fontWeight: '600' },
   row: { flexDirection: 'row', alignItems: 'center', marginTop: 12 },
   scheduleBtn: {
     flexDirection: 'row',
@@ -565,7 +978,7 @@ const styles = StyleSheet.create({
   sectionTitle: { fontSize: 17, fontWeight: '800', marginTop: 28, marginBottom: 10 },
   txRow: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     padding: 14,
     borderRadius: 12,
     borderWidth: 1,
@@ -619,4 +1032,21 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   celebrateBtnText: { color: '#fff', fontWeight: '800', fontSize: 16 },
+
+  rescheduleModalCard: {
+    marginHorizontal: 20,
+    borderRadius: 18,
+    padding: 22,
+    borderWidth: 1,
+    maxWidth: 420,
+    alignSelf: 'center',
+    width: '100%',
+  },
+  reschedulePickRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 14,
+  },
 });

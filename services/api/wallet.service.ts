@@ -7,7 +7,9 @@ export interface Wallet {
   /** Available for orders & withdrawals (balance minus pending P2P locks) */
   spendable?: number;
   lockedForTransfers?: number;
+  /** Legacy: country fiat code; primary balance is shown as Coins in the app. */
   currency: string;
+  balanceUnit?: 'COINS';
   discount: number;
   updatedAt: string;
 }

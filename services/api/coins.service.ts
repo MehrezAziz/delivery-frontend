@@ -60,19 +60,30 @@ export const coinsService = {
       oldTransferPin && /^\d{8}$/.test(oldTransferPin) ? { oldTransferPin } : {},
     ),
 
-  /** Omit `transferPin` when the user has not configured a transfer PIN. */
-  createChallenge: (transferPin?: string) =>
-    api.post<{ challengeToken: string; expiresAt: string }>(
+  /**
+   * Optional `transferPin` and/or `accountPassword` for step-up (required by API when a transfer PIN is set, or when
+   * confirming with password on devices without biometrics).
+   */
+  createChallenge: (body?: { transferPin?: string; accountPassword?: string }) => {
+    const payload: { transferPin?: string; accountPassword?: string } = {};
+    if (body?.transferPin) payload.transferPin = body.transferPin;
+    if (body?.accountPassword) payload.accountPassword = body.accountPassword;
+    return api.post<{ challengeToken: string; expiresAt: string }>(
       '/coins/transfers/challenge',
-      transferPin ? { transferPin } : {},
-    ),
+      Object.keys(payload).length ? payload : {},
+    );
+  },
 
-  preview: (recipientUserId: string, grossCoins: number) =>
-    api.post<CoinTransferPreview>('/coins/transfers/preview', { recipientUserId, grossCoins }),
+  preview: (body: {
+    grossCoins: number;
+    recipientUserId?: string;
+    recipientPhone?: string;
+  }) => api.post<CoinTransferPreview>('/coins/transfers/preview', body),
 
   createTransfer: async (
     body: {
-      recipientUserId: string;
+      recipientUserId?: string;
+      recipientPhone?: string;
       grossCoins: number;
       challengeToken: string;
       giftMessage?: string;
@@ -95,6 +106,9 @@ export const coinsService = {
   getTransfer: (id: string) => api.get<CoinTransferDto>(`/coins/transfers/${id}`),
 
   cancelTransfer: (id: string) => api.post<{ ok: true }>(`/coins/transfers/${id}/cancel`, {}),
+
+  rescheduleTransfer: (id: string, scheduledAt: string) =>
+    api.patch<CoinTransferDto>(`/coins/transfers/${id}/schedule`, { scheduledAt }),
 
   reportTransfer: (id: string, body?: { note?: string }) =>
     api.post<{ ok: true }>(`/coins/transfers/${id}/report`, body ?? {}),

@@ -1,11 +1,12 @@
 import {
   View, Text, TouchableOpacity, ScrollView,
-  StyleSheet, ActivityIndicator, TextInput, Alert, Modal, Switch,
+  StyleSheet, ActivityIndicator, TextInput, Alert, Modal, Switch, Platform,
 } from 'react-native';
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { useFocusEffect, useRouter, useLocalSearchParams } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
+import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { walletService, coinsService } from '../../services/api';
 import type { Wallet, WalletTransaction, WithdrawalRequest, CoinTransferDto } from '../../services/api';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -76,6 +77,11 @@ export default function WalletScreen() {
   const [coinTransfers, setCoinTransfers] = useState<CoinTransferDto[]>([]);
   const [coinLoading, setCoinLoading] = useState(false);
   const [cancellingCoinId, setCancellingCoinId] = useState<string | null>(null);
+  const [rescheduleTargetId, setRescheduleTargetId] = useState<string | null>(null);
+  const [rescheduleAt, setRescheduleAt] = useState(() => new Date(Date.now() + 3600_000));
+  const [rescheduleIosOpen, setRescheduleIosOpen] = useState(false);
+  const [rescheduleAndroidPhase, setRescheduleAndroidPhase] = useState<'idle' | 'date' | 'time'>('idle');
+  const [rescheduleSaving, setRescheduleSaving] = useState(false);
   const [myUserId, setMyUserId] = useState<string | null>(null);
   const [walletQuickMore, setWalletQuickMore] = useState(false);
   const [sendsOnlyFilter, setSendsOnlyFilter] = useState(false);
@@ -306,6 +312,70 @@ export default function WalletScreen() {
   const formatDate = (iso: string) =>
     new Date(iso).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
 
+  const formatDateTimeLocal = (iso: string) => {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return iso;
+    return d.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+  };
+
+  const openRescheduleModal = (t: CoinTransferDto) => {
+    if (!t.scheduledAt) return;
+    const d = new Date(t.scheduledAt);
+    setRescheduleAt(Number.isNaN(d.getTime()) ? new Date(Date.now() + 3600_000) : d);
+    setRescheduleTargetId(t.id);
+    setRescheduleAndroidPhase('idle');
+    setRescheduleIosOpen(Platform.OS === 'ios');
+  };
+
+  const onRescheduleIosChange = (_: DateTimePickerEvent, d?: Date) => {
+    setRescheduleIosOpen(Platform.OS === 'ios');
+    if (d) setRescheduleAt(d);
+  };
+
+  const onRescheduleAndroidChange = (event: DateTimePickerEvent, d?: Date) => {
+    if (event?.type === 'dismissed') {
+      setRescheduleAndroidPhase('idle');
+      return;
+    }
+    if (!d) {
+      setRescheduleAndroidPhase('idle');
+      return;
+    }
+    if (rescheduleAndroidPhase === 'date') {
+      const next = new Date(rescheduleAt);
+      next.setFullYear(d.getFullYear(), d.getMonth(), d.getDate());
+      setRescheduleAt(next);
+      setRescheduleAndroidPhase('time');
+      return;
+    }
+    if (rescheduleAndroidPhase === 'time') {
+      const next = new Date(rescheduleAt);
+      next.setHours(d.getHours(), d.getMinutes(), 0, 0);
+      setRescheduleAt(next);
+      setRescheduleAndroidPhase('idle');
+    }
+  };
+
+  const submitReschedule = async () => {
+    if (!rescheduleTargetId) return;
+    const min = new Date(Date.now() + 60_000);
+    if (rescheduleAt.getTime() <= min.getTime()) {
+      Alert.alert('Invalid time', 'Choose a date and time at least one minute from now.');
+      return;
+    }
+    setRescheduleSaving(true);
+    try {
+      await coinsService.rescheduleTransfer(rescheduleTargetId, rescheduleAt.toISOString());
+      setRescheduleTargetId(null);
+      setRescheduleIosOpen(false);
+      await loadCoinTransfers();
+    } catch (e: unknown) {
+      Alert.alert('Error', e instanceof Error ? e.message : 'Could not update schedule');
+    } finally {
+      setRescheduleSaving(false);
+    }
+  };
+
   const formatAmount = (amount: number, type: string) => {
     const isCredit = [
       'TOP_UP',
@@ -351,15 +421,15 @@ export default function WalletScreen() {
         <Text style={styles.balanceLabel}>Available balance</Text>
         <Text style={styles.balanceAmount}>
           {(wallet.spendable ?? wallet.balance).toFixed(2)}{' '}
-          <Text style={styles.currency}>{wallet.currency}</Text>
+          <Text style={styles.currency}>Coins</Text>
         </Text>
         {(wallet.lockedForTransfers ?? 0) > 0 && (
           <Text style={[styles.lockedHint, { color: 'rgba(255,255,255,0.85)' }]}>
-            {wallet.lockedForTransfers!.toFixed(2)} reserved for pending sends
+            {wallet.lockedForTransfers!.toFixed(2)} Coins reserved for pending sends
           </Text>
         )}
         {wallet.discount > 0 && (
-          <Text style={styles.discountText}>🎁 {wallet.discount.toFixed(2)} {wallet.currency} discount available</Text>
+          <Text style={styles.discountText}>🎁 {wallet.discount.toFixed(2)} Coins discount available</Text>
         )}
         <View style={styles.walletQuickWrap}>
           <View style={styles.walletQuickRow}>
@@ -541,7 +611,7 @@ export default function WalletScreen() {
                     ['TOP_UP','REFUND','BONUS','REFERRAL_REWARD','WITHDRAWAL_APPROVED','COIN_TRANSFER_RECEIVED'].includes(tx.type)
                       ? styles.txCredit : styles.txDebit,
                   ]}>
-                    {formatAmount(tx.amount, tx.type)} {wallet.currency}
+                    {formatAmount(tx.amount, tx.type)} Coins
                   </Text>
                   <View style={[styles.statusBadge, { backgroundColor: STATUS_COLORS[tx.status] + '22' }]}>
                     <Text style={[styles.statusText, { color: STATUS_COLORS[tx.status] }]}>{tx.status}</Text>
@@ -576,7 +646,7 @@ export default function WalletScreen() {
                 <View key={wd.id} style={[styles.txCard, { backgroundColor: colors.card }]}>
                   <View style={styles.txLeft}>
                     <Text style={[styles.wdAmountLine, { color: colors.text }]}>
-                      {wd.amount.toFixed(2)} <Text style={styles.wdAmountCurrency}>{wallet.currency}</Text>
+                      {wd.amount.toFixed(2)} <Text style={styles.wdAmountCurrency}>Coins</Text>
                     </Text>
                     <Text style={[styles.txDate, { color: colors.textTertiary }]}>{formatDate(wd.requestedAt)}</Text>
                     {wd.payoutMethod && (
@@ -683,33 +753,54 @@ export default function WalletScreen() {
                         “{t.giftMessage}”
                       </Text>
                     ) : null}
+                    {t.status === 'SCHEDULED' && t.scheduledAt && t.senderUserId === myUserId ? (
+                      <Text style={[styles.txScheduled, { color: colors.primary }]}>
+                        Sends at {formatDateTimeLocal(t.scheduledAt)}
+                      </Text>
+                    ) : null}
                   </View>
-                  <View style={styles.txRight}>
+                  <View style={[styles.txRight, { gap: 10 }]}>
+                    {t.status === 'SCHEDULED' && t.senderUserId === myUserId ? (
+                      <TouchableOpacity
+                        onPress={() => openRescheduleModal(t)}
+                        disabled={cancellingCoinId === t.id || rescheduleSaving}
+                        hitSlop={{ top: 6, bottom: 6, left: 8, right: 8 }}
+                      >
+                        <Text style={{ color: colors.primary, fontWeight: '700' }}>Edit time</Text>
+                      </TouchableOpacity>
+                    ) : null}
                     {(t.status === 'PENDING' || t.status === 'SCHEDULED') && t.senderUserId === myUserId ? (
                       cancellingCoinId === t.id ? (
                         <ActivityIndicator color={colors.primary} />
                       ) : (
                         <TouchableOpacity
                           onPress={() => {
-                            Alert.alert('Cancel this send?', 'Reserved coins will be released.', [
-                              { text: 'No', style: 'cancel' },
-                              {
-                                text: 'Cancel send',
-                                style: 'destructive',
-                                onPress: async () => {
-                                  setCancellingCoinId(t.id);
-                                  try {
-                                    await coinsService.cancelTransfer(t.id);
-                                    await loadCoinTransfers();
-                                    await loadWallet();
-                                  } catch (e: unknown) {
-                                    Alert.alert('Error', e instanceof Error ? e.message : 'Failed');
-                                  } finally {
-                                    setCancellingCoinId(null);
-                                  }
+                            const isScheduled = t.status === 'SCHEDULED';
+                            Alert.alert(
+                              isScheduled ? 'Cancel scheduled send?' : 'Cancel this send?',
+                              isScheduled
+                                ? 'This send will not happen. Coins are not locked until the scheduled time.'
+                                : 'Reserved coins will be released.',
+                              [
+                                { text: 'No', style: 'cancel' },
+                                {
+                                  text: 'Cancel send',
+                                  style: 'destructive',
+                                  onPress: async () => {
+                                    setCancellingCoinId(t.id);
+                                    try {
+                                      await coinsService.cancelTransfer(t.id);
+                                      await loadCoinTransfers();
+                                      await loadWallet();
+                                    } catch (e: unknown) {
+                                      Alert.alert('Error', e instanceof Error ? e.message : 'Failed');
+                                    } finally {
+                                      setCancellingCoinId(null);
+                                    }
+                                  },
                                 },
-                              },
-                            ]);
+                              ],
+                            );
                           }}
                         >
                           <Text style={{ color: colors.danger, fontWeight: '700' }}>Cancel</Text>
@@ -741,13 +832,13 @@ export default function WalletScreen() {
                 <>
                   <Text style={[styles.modalTitle, { color: colors.text }]}>Request withdrawal</Text>
                   <Text style={[styles.modalBalanceMuted, { color: colors.textTertiary }]}>
-                    Available {(wallet.spendable ?? wallet.balance).toFixed(2)} {wallet.currency}
+                    Available {(wallet.spendable ?? wallet.balance).toFixed(2)} Coins
                     {(wallet.lockedForTransfers ?? 0) > 0
                       ? ` · ${wallet.lockedForTransfers!.toFixed(2)} reserved for sends`
                       : ''}
                   </Text>
 
-                  <Text style={[styles.modalLabel, { color: colors.text }]}>Amount ({wallet.currency})</Text>
+                  <Text style={[styles.modalLabel, { color: colors.text }]}>Amount (Coins)</Text>
                   <TextInput
                     style={[styles.modalInput, { backgroundColor: colors.inputBg, borderColor: colors.inputBorder, color: colors.text }]}
                     placeholder="0.00"
@@ -848,10 +939,10 @@ export default function WalletScreen() {
                   <Text style={[styles.previewHint, { color: colors.textSecondary }]}>You are requesting</Text>
                   <Text style={[styles.previewAmount, { color: colors.text }]}>
                     {parseFloat(withdrawAmount || '0').toFixed(2)}{' '}
-                    <Text style={[styles.previewCurrency, { color: colors.textSecondary }]}>{wallet.currency}</Text>
+                    <Text style={[styles.previewCurrency, { color: colors.textSecondary }]}>Coins</Text>
                   </Text>
                   <Text style={[styles.modalBalanceMuted, { color: colors.textTertiary }]}>
-                    Available {(wallet.spendable ?? wallet.balance).toFixed(2)} {wallet.currency}
+                    Available {(wallet.spendable ?? wallet.balance).toFixed(2)} Coins
                     {(wallet.lockedForTransfers ?? 0) > 0
                       ? ` · ${wallet.lockedForTransfers!.toFixed(2)} reserved for sends`
                       : ''}
@@ -884,6 +975,80 @@ export default function WalletScreen() {
               )}
             </View>
           </ScrollView>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={!!rescheduleTargetId}
+        transparent
+        animationType="slide"
+        onRequestClose={() => {
+          setRescheduleTargetId(null);
+          setRescheduleIosOpen(false);
+          setRescheduleAndroidPhase('idle');
+        }}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.rescheduleModalCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <Text style={[styles.modalTitle, { color: colors.text }]}>Reschedule send</Text>
+            <Text style={{ color: colors.textSecondary, marginBottom: 14, fontSize: 14 }}>
+              Choose a new date and time. It must be at least one minute from now.
+            </Text>
+            <TouchableOpacity
+              style={[styles.reschedulePickRow, { borderColor: colors.border, backgroundColor: colors.inputBg }]}
+              onPress={() => {
+                if (Platform.OS === 'android') setRescheduleAndroidPhase('date');
+                else setRescheduleIosOpen(true);
+              }}
+            >
+              <Ionicons name="calendar-outline" size={22} color={colors.primary} />
+              <Text style={{ color: colors.text, marginLeft: 12, flex: 1, fontWeight: '600' }}>
+                {rescheduleAt.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}
+              </Text>
+            </TouchableOpacity>
+            {Platform.OS === 'ios' && rescheduleIosOpen && rescheduleTargetId ? (
+              <DateTimePicker
+                value={rescheduleAt}
+                mode="datetime"
+                display="spinner"
+                minimumDate={new Date(Date.now() + 60_000)}
+                onChange={onRescheduleIosChange}
+              />
+            ) : null}
+            {Platform.OS === 'android' && rescheduleAndroidPhase !== 'idle' && rescheduleTargetId ? (
+              <DateTimePicker
+                value={rescheduleAt}
+                mode={rescheduleAndroidPhase === 'date' ? 'date' : 'time'}
+                display="default"
+                minimumDate={rescheduleAndroidPhase === 'date' ? new Date(Date.now() + 60_000) : undefined}
+                onChange={onRescheduleAndroidChange}
+              />
+            ) : null}
+            <View style={[styles.modalButtons, { marginTop: 20 }]}>
+              <TouchableOpacity
+                style={styles.modalCancel}
+                onPress={() => {
+                  setRescheduleTargetId(null);
+                  setRescheduleIosOpen(false);
+                  setRescheduleAndroidPhase('idle');
+                }}
+                disabled={rescheduleSaving}
+              >
+                <Text style={styles.modalCancelText}>Close</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalSubmit, rescheduleSaving && styles.btnDisabled]}
+                onPress={() => void submitReschedule()}
+                disabled={rescheduleSaving}
+              >
+                {rescheduleSaving ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text style={styles.modalSubmitText}>Save</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
         </View>
       </Modal>
 
@@ -1028,6 +1193,7 @@ const styles = StyleSheet.create({
   txType: { fontSize: 15, fontWeight: '600', color: '#111827' },
   txDate: { fontSize: 13, color: '#9ca3af' },
   txNote: { fontSize: 13, color: '#6b7280', fontStyle: 'italic' },
+  txScheduled: { fontSize: 13, fontWeight: '700', marginTop: 4 },
   txAdminNote: { fontSize: 13, color: '#0284c7' },
   txAmount: { fontSize: 16, fontWeight: '700' },
   txCredit: { color: '#10b981' },
@@ -1160,4 +1326,21 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   celebrateBtnText: { color: '#fff', fontWeight: '800', fontSize: 16 },
+
+  rescheduleModalCard: {
+    marginHorizontal: 20,
+    borderRadius: 18,
+    padding: 22,
+    borderWidth: 1,
+    maxWidth: 420,
+    alignSelf: 'center',
+    width: '100%',
+  },
+  reschedulePickRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 14,
+  },
 });
