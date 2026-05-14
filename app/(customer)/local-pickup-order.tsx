@@ -139,8 +139,8 @@ export default function LocalPickupOrderScreen() {
 
   const fetchWallet = useCallback(async () => {
     try {
-      const w = await api.get<{ balance: number }>('/wallet/me');
-      setWalletBalance(w.balance ?? 0);
+      const w = await api.get<{ balance: number; spendable?: number }>('/wallet/me');
+      setWalletBalance(w.spendable ?? w.balance ?? 0);
     } catch {
       setWalletBalance(0);
     }

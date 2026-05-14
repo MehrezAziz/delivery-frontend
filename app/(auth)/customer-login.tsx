@@ -5,7 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useGoogleAuth } from '../../hooks/useGoogleAuth';
 import { saveLoginTimestamp } from '../../services/auth-session';
-import { registerForPushNotifications, restoreOrderTrackingForCustomer } from '../../services/notifications';
+import { restoreOrderTrackingForCustomer } from '../../services/notifications';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
@@ -202,8 +202,7 @@ export default function CustomerLoginScreen() {
         console.error('Failed to fetch profile:', await profileResponse.text());
       }
 
-      // Register for push notifications after successful login
-      await registerForPushNotifications();
+      // Push token: (customer)/_layout registers once after navigation (avoids double getToken on Android).
       await restoreOrderTrackingForCustomer();
 
       // Navigate to customer home screen

@@ -366,6 +366,15 @@ export default function DriverProfileScreen() {
                 accent: '#ca8a04',
               },
               {
+                icon: 'swap-horizontal-outline' as const,
+                title: 'Send coins',
+                subtitle: 'P2P transfers to other users',
+                route: '/(driver)/send-coins',
+                tintLight: '#ccfbf1',
+                tintDark: '#134e4a',
+                accent: '#0d9488',
+              },
+              {
                 icon: 'receipt-outline' as const,
                 title: 'Transaction history',
                 subtitle: 'Payments, fees, and top-ups',

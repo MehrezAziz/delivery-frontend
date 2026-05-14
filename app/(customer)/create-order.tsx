@@ -156,8 +156,14 @@ export default function CreateOrderScreen() {
   // Fetch wallet balance
   const fetchWalletBalance = useCallback(async () => {
     try {
-      const wallet = await api.get<{ id: string; balance: number; currency: string; discount: number }>('/wallet/me');
-      setWalletBalance(wallet.balance ?? 0);
+      const wallet = await api.get<{
+        id: string;
+        balance: number;
+        spendable?: number;
+        currency: string;
+        discount: number;
+      }>('/wallet/me');
+      setWalletBalance(wallet.spendable ?? wallet.balance ?? 0);
     } catch {
       setWalletBalance(0);
     }

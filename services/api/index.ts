@@ -14,4 +14,8 @@ export { geographyService } from './geography.service';
 export type { Country, Governorate, Delegation } from './geography.service';
 export { walletService } from './wallet.service';
 export type { Wallet, WalletTransaction, WithdrawalRequest } from './wallet.service';
+export { coinsService, getCoinTransferDeviceId } from './coins.service';
+export type { CoinTransferDto, CoinTransferPreview } from './coins.service';
+export { securityService } from './security.service';
+export type { SecuritySummary, SecurityTier } from './security.service';
 export { driverPayoutService } from './driver-payout.service';

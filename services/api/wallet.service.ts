@@ -4,6 +4,9 @@ export interface Wallet {
   id: string;
   customerId: string;
   balance: number;
+  /** Available for orders & withdrawals (balance minus pending P2P locks) */
+  spendable?: number;
+  lockedForTransfers?: number;
   currency: string;
   discount: number;
   updatedAt: string;

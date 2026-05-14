@@ -2,13 +2,15 @@ import {
   View, Text, TouchableOpacity, ScrollView,
   StyleSheet, ActivityIndicator, TextInput, Alert, Modal, Switch,
 } from 'react-native';
-import { useState, useCallback, useEffect } from 'react';
-import { useFocusEffect, useRouter } from 'expo-router';
-import { walletService } from '../../services/api';
-import type { Wallet, WalletTransaction, WithdrawalRequest } from '../../services/api';
+import { useState, useCallback, useEffect, useRef } from 'react';
+import { useFocusEffect, useRouter, useLocalSearchParams } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Ionicons } from '@expo/vector-icons';
+import { walletService, coinsService } from '../../services/api';
+import type { Wallet, WalletTransaction, WithdrawalRequest, CoinTransferDto } from '../../services/api';
 import { useTheme } from '../../contexts/ThemeContext';
 
-type Tab = 'overview' | 'transactions' | 'withdrawals';
+type Tab = 'overview' | 'transactions' | 'withdrawals' | 'coin';
 
 const TRANSACTION_TYPE_LABELS: Record<string, string> = {
   TOP_UP: 'Top Up',
@@ -20,6 +22,8 @@ const TRANSACTION_TYPE_LABELS: Record<string, string> = {
   BONUS: 'Bonus',
   REFERRAL_REWARD: 'Referral Reward',
   ADJUSTMENT: 'Adjustment',
+  COIN_TRANSFER_SENT: 'Coin send',
+  COIN_TRANSFER_RECEIVED: 'Coin received',
 };
 
 const STATUS_COLORS: Record<string, string> = {
@@ -30,6 +34,20 @@ const STATUS_COLORS: Record<string, string> = {
   REJECTED: '#ef4444',
   ON_REVIEW: '#6366f1',
 };
+
+function walletParam(v: string | string[] | undefined): string {
+  if (v == null) return '';
+  return Array.isArray(v) ? (v[0] ?? '') : v;
+}
+
+function decodeURIComponentSafe(s: string): string {
+  if (!s) return '';
+  try {
+    return decodeURIComponent(s);
+  } catch {
+    return s;
+  }
+}
 
 export default function WalletScreen() {
   const router = useRouter();
@@ -55,6 +73,27 @@ export default function WalletScreen() {
   const [withdrawing, setWithdrawing] = useState(false);
   const [withdrawStep, setWithdrawStep] = useState<'edit' | 'preview'>('edit');
   const [cancellingId, setCancellingId] = useState<string | null>(null);
+  const [coinTransfers, setCoinTransfers] = useState<CoinTransferDto[]>([]);
+  const [coinLoading, setCoinLoading] = useState(false);
+  const [cancellingCoinId, setCancellingCoinId] = useState<string | null>(null);
+  const [myUserId, setMyUserId] = useState<string | null>(null);
+  const [walletQuickMore, setWalletQuickMore] = useState(false);
+  const [sendsOnlyFilter, setSendsOnlyFilter] = useState(false);
+  const [celebrateVisible, setCelebrateVisible] = useState(false);
+  const [celebrateGift, setCelebrateGift] = useState('');
+  const [celebrateAmount, setCelebrateAmount] = useState('');
+  const celebrateHandledKeyRef = useRef<string | null>(null);
+  const params = useLocalSearchParams<{
+    tab?: string;
+    celebrate?: string;
+    gift?: string;
+    amount?: string;
+    sendsOnly?: string;
+  }>();
+  const paramsRef = useRef(params);
+  paramsRef.current = params;
+  const routerRef = useRef(router);
+  routerRef.current = router;
 
   useEffect(() => {
     if (!showWithdrawModal || withdrawPayout !== 'BANK_TRANSFER') return;
@@ -112,11 +151,74 @@ export default function WalletScreen() {
     }
   }, []);
 
-  // Reload wallet every time this screen comes into focus (e.g. returning from setup)
-  useFocusEffect(useCallback(() => { loadWallet(); }, []));
+  const loadCoinTransfers = useCallback(async () => {
+    try {
+      setCoinLoading(true);
+      const res = await coinsService.listTransfers(1, 30);
+      setCoinTransfers(res.transfers ?? []);
+    } catch {
+      setCoinTransfers([]);
+    } finally {
+      setCoinLoading(false);
+    }
+  }, []);
+
+  // Reload wallet on focus. Do not depend on `params` here — useLocalSearchParams() returns a new object
+  // every render, which would recreate this callback and retrigger useFocusEffect in an infinite loop.
+  useFocusEffect(
+    useCallback(() => {
+      void loadWallet();
+      void loadCoinTransfers();
+
+      const p = paramsRef.current;
+      const tab = walletParam(p.tab);
+      if (tab === 'coin' || tab === 'overview' || tab === 'transactions' || tab === 'withdrawals') {
+        setActiveTab(tab as Tab);
+      }
+      if (walletParam(p.celebrate) === '1') {
+        const gift = decodeURIComponentSafe(walletParam(p.gift));
+        const amount = decodeURIComponentSafe(walletParam(p.amount));
+        const key = `${amount}|${gift}`;
+        if (celebrateHandledKeyRef.current !== key) {
+          celebrateHandledKeyRef.current = key;
+          setCelebrateGift(gift);
+          setCelebrateAmount(amount);
+          setCelebrateVisible(true);
+          setActiveTab('coin');
+        }
+        routerRef.current.setParams({ celebrate: undefined, gift: undefined, amount: undefined } as never);
+      }
+      if (walletParam(p.sendsOnly) === '1') {
+        setSendsOnlyFilter(true);
+        setActiveTab('coin');
+        routerRef.current.setParams({ sendsOnly: undefined, tab: 'coin' } as never);
+      }
+    }, [loadWallet, loadCoinTransfers]),
+  );
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const raw = await AsyncStorage.getItem('user');
+        if (!raw) return;
+        const u = JSON.parse(raw) as { id?: string };
+        setMyUserId(u?.id ?? null);
+      } catch {
+        setMyUserId(null);
+      }
+    })();
+  }, []);
 
   useEffect(() => { if (activeTab === 'transactions') loadTransactions(); }, [activeTab]);
   useEffect(() => { if (activeTab === 'withdrawals') loadWithdrawals(); }, [activeTab]);
+
+  useEffect(() => {
+    if (activeTab === 'coin') void loadCoinTransfers();
+  }, [activeTab, loadCoinTransfers]);
+
+  useEffect(() => {
+    if (activeTab !== 'coin') setSendsOnlyFilter(false);
+  }, [activeTab]);
 
   const validateWithdrawForm = (): number | null => {
     const amount = parseFloat(withdrawAmount);
@@ -124,8 +226,9 @@ export default function WalletScreen() {
       Alert.alert('Invalid amount', 'Please enter a valid amount.');
       return null;
     }
-    if (wallet && amount > wallet.balance) {
-      Alert.alert('Insufficient balance', 'Amount exceeds your wallet balance.');
+    const cap = wallet?.spendable ?? wallet?.balance ?? 0;
+    if (wallet && amount > cap) {
+      Alert.alert('Insufficient balance', 'Amount exceeds your available balance (coins reserved for pending sends are excluded).');
       return null;
     }
     if (withdrawPayout === 'BANK_TRANSFER') {
@@ -204,9 +307,21 @@ export default function WalletScreen() {
     new Date(iso).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
 
   const formatAmount = (amount: number, type: string) => {
-    const isCredit = ['TOP_UP', 'REFUND', 'BONUS', 'REFERRAL_REWARD', 'WITHDRAWAL_APPROVED'].includes(type);
+    const isCredit = [
+      'TOP_UP',
+      'REFUND',
+      'BONUS',
+      'REFERRAL_REWARD',
+      'WITHDRAWAL_APPROVED',
+      'COIN_TRANSFER_RECEIVED',
+    ].includes(type);
     return `${isCredit ? '+' : '-'}${Math.abs(amount).toFixed(2)}`;
   };
+
+  const coinListFiltered =
+    sendsOnlyFilter && myUserId
+      ? coinTransfers.filter((t) => t.senderUserId === myUserId)
+      : coinTransfers;
 
   if (loading) {
     return (
@@ -235,21 +350,106 @@ export default function WalletScreen() {
       <View style={[styles.balanceCard, { backgroundColor: colors.primary }]}>
         <Text style={styles.balanceLabel}>Available balance</Text>
         <Text style={styles.balanceAmount}>
-          {wallet.balance.toFixed(2)} <Text style={styles.currency}>{wallet.currency}</Text>
+          {(wallet.spendable ?? wallet.balance).toFixed(2)}{' '}
+          <Text style={styles.currency}>{wallet.currency}</Text>
         </Text>
+        {(wallet.lockedForTransfers ?? 0) > 0 && (
+          <Text style={[styles.lockedHint, { color: 'rgba(255,255,255,0.85)' }]}>
+            {wallet.lockedForTransfers!.toFixed(2)} reserved for pending sends
+          </Text>
+        )}
         {wallet.discount > 0 && (
           <Text style={styles.discountText}>🎁 {wallet.discount.toFixed(2)} {wallet.currency} discount available</Text>
         )}
-        <TouchableOpacity
-          style={styles.withdrawBtn}
-          onPress={() => {
-            setWithdrawStep('edit');
-            setShowWithdrawModal(true);
-          }}
-          activeOpacity={0.8}
-        >
-          <Text style={styles.withdrawBtnText}>Request Withdrawal</Text>
-        </TouchableOpacity>
+        <View style={styles.walletQuickWrap}>
+          <View style={styles.walletQuickRow}>
+            <TouchableOpacity
+              style={styles.walletQuickItem}
+              onPress={() => Alert.alert('Deposit', 'Coin top-up is coming soon.')}
+              activeOpacity={0.85}
+            >
+              <View style={styles.walletQuickCircle}>
+                <Text style={styles.walletQuickGlyph}>+</Text>
+              </View>
+              <Text style={styles.walletQuickLabel}>Deposit</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.walletQuickItem}
+              onPress={() => router.push('/(customer)/send-coins')}
+              activeOpacity={0.85}
+            >
+              <View style={styles.walletQuickCircle}>
+                <Ionicons name="arrow-forward" size={22} color="rgba(255,255,255,0.95)" />
+              </View>
+              <Text style={styles.walletQuickLabel}>Send</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.walletQuickItem}
+              onPress={() => Alert.alert('Scan', 'QR scanning is coming soon.')}
+              activeOpacity={0.85}
+            >
+              <View style={styles.walletQuickCircle}>
+                <Ionicons name="scan-outline" size={22} color="rgba(255,255,255,0.95)" />
+              </View>
+              <Text style={styles.walletQuickLabel}>Scan</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.walletQuickItem}
+              onPress={() => setWalletQuickMore((v) => !v)}
+              activeOpacity={0.85}
+            >
+              <View style={styles.walletQuickCircle}>
+                <Text style={styles.walletQuickGlyph}>···</Text>
+              </View>
+              <Text style={styles.walletQuickLabel}>More</Text>
+            </TouchableOpacity>
+          </View>
+          {walletQuickMore && (
+            <View style={[styles.walletQuickRow, styles.walletQuickMoreRow]}>
+              <TouchableOpacity
+                style={styles.walletQuickItem}
+                onPress={() => {
+                  setWalletQuickMore(false);
+                  setWithdrawStep('edit');
+                  setShowWithdrawModal(true);
+                }}
+                activeOpacity={0.85}
+              >
+                <View style={styles.walletQuickCircle}>
+                  <Text style={styles.walletQuickGlyph}>−</Text>
+                </View>
+                <Text style={styles.walletQuickLabel}>Withdraw</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.walletQuickItem}
+                onPress={() => {
+                  setWalletQuickMore(false);
+                  router.push('/(customer)/support');
+                }}
+                activeOpacity={0.85}
+              >
+                <View style={styles.walletQuickCircle}>
+                  <Text style={styles.walletQuickGlyph}>?</Text>
+                </View>
+                <Text style={styles.walletQuickLabel}>Help</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.walletQuickItem}
+                onPress={() => {
+                  setWalletQuickMore(false);
+                  Alert.alert('News', 'Updates and announcements are coming soon.');
+                }}
+                activeOpacity={0.85}
+              >
+                <View style={styles.walletQuickCircle}>
+                  <Ionicons name="newspaper-outline" size={20} color="rgba(255,255,255,0.95)" />
+                </View>
+                <Text style={styles.walletQuickLabel}>News</Text>
+              </TouchableOpacity>
+              <View style={styles.walletQuickItem} />
+            </View>
+          )}
+        </View>
       </View>
 
       <View style={[styles.comingSoonBanner, { backgroundColor: colors.card, borderColor: colors.border }]}>
@@ -261,18 +461,38 @@ export default function WalletScreen() {
 
       {/* Tabs */}
       <View style={[styles.tabs, { backgroundColor: colors.card }]}>
-        {(['overview', 'transactions', 'withdrawals'] as Tab[]).map((t) => (
+        {(['overview', 'transactions', 'withdrawals', 'coin'] as Tab[]).map((t) => (
           <TouchableOpacity
             key={t}
             style={[styles.tab, activeTab === t && [styles.tabActive, { backgroundColor: colors.primary }]]}
             onPress={() => setActiveTab(t)}
           >
             <Text style={[styles.tabText, { color: colors.textSecondary }, activeTab === t && styles.tabTextActive]}>
-              {t === 'overview' ? 'Overview' : t === 'transactions' ? 'Transactions' : 'Withdrawals'}
+              {t === 'overview'
+                ? 'Overview'
+                : t === 'transactions'
+                  ? 'Ledger'
+                  : t === 'withdrawals'
+                    ? 'Payouts'
+                    : 'Sends'}
             </Text>
           </TouchableOpacity>
         ))}
       </View>
+
+      {sendsOnlyFilter && activeTab === 'coin' && (
+        <View
+          style={[
+            styles.sendsOnlyBanner,
+            { backgroundColor: colors.card, borderColor: colors.border },
+          ]}
+        >
+          <Text style={[styles.sendsOnlyBannerText, { color: colors.text }]}>Showing your sends</Text>
+          <TouchableOpacity onPress={() => setSendsOnlyFilter(false)} hitSlop={12}>
+            <Text style={{ color: colors.primary, fontWeight: '800' }}>Show all</Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       {/* Tab content */}
       <ScrollView style={styles.content} contentContainerStyle={styles.contentPad}>
@@ -318,7 +538,7 @@ export default function WalletScreen() {
                 <View style={styles.txRight}>
                   <Text style={[
                     styles.txAmount,
-                    ['TOP_UP','REFUND','BONUS','REFERRAL_REWARD','WITHDRAWAL_APPROVED'].includes(tx.type)
+                    ['TOP_UP','REFUND','BONUS','REFERRAL_REWARD','WITHDRAWAL_APPROVED','COIN_TRANSFER_RECEIVED'].includes(tx.type)
                       ? styles.txCredit : styles.txDebit,
                   ]}>
                     {formatAmount(tx.amount, tx.type)} {wallet.currency}
@@ -409,6 +629,103 @@ export default function WalletScreen() {
             </>
           )
         )}
+
+        {activeTab === 'coin' && (
+          coinLoading ? (
+            <ActivityIndicator color="#0284c7" style={{ marginTop: 40 }} />
+          ) : coinListFiltered.length === 0 ? (
+            <View style={styles.empty}>
+              <Text style={styles.emptyIcon}>↗️</Text>
+              <Text style={[styles.emptyText, { color: colors.textTertiary }]}>
+                {sendsOnlyFilter ? 'No outgoing sends in recent history' : 'No coin sends yet'}
+              </Text>
+              {!sendsOnlyFilter ? (
+                <TouchableOpacity style={styles.newWithdrawBtn} onPress={() => router.push('/(customer)/send-coins')}>
+                  <Text style={styles.newWithdrawBtnText}>Send coins</Text>
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity style={styles.newWithdrawBtn} onPress={() => setSendsOnlyFilter(false)}>
+                  <Text style={styles.newWithdrawBtnText}>Show all transfers</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          ) : (
+            <>
+              {coinListFiltered.map((t) => {
+                const isRecipientRow = !!(
+                  myUserId &&
+                  t.recipientUserId === myUserId &&
+                  t.senderUserId !== myUserId
+                );
+                const showFeeBreakdownRow = !isRecipientRow || t.showFeeBreakdown === true;
+                return (
+                <View key={t.id} style={[styles.txCard, { backgroundColor: colors.card }]}>
+                  <View style={styles.txLeft}>
+                    <Text style={[styles.txType, { color: colors.text }]}>
+                      {t.status === 'COMPLETED'
+                        ? t.senderUserId === myUserId
+                          ? 'Sent'
+                          : 'Received'
+                        : t.status}
+                    </Text>
+                    <Text style={[styles.txDate, { color: colors.textTertiary }]}>{formatDate(t.createdAt)}</Text>
+                    {showFeeBreakdownRow ? (
+                      <Text style={[styles.txDate, { color: colors.textSecondary }]}>
+                        Gross {t.grossCoins.toFixed(2)} · Fee {t.feeCoins.toFixed(2)} · Net {t.netCoins.toFixed(2)}
+                      </Text>
+                    ) : (
+                      <Text style={[styles.txDate, { color: colors.textSecondary }]}>
+                        You received {t.netCoins.toFixed(2)} coins
+                      </Text>
+                    )}
+                    {t.giftMessage ? (
+                      <Text style={[styles.txNote, { color: colors.textSecondary }]} numberOfLines={2}>
+                        “{t.giftMessage}”
+                      </Text>
+                    ) : null}
+                  </View>
+                  <View style={styles.txRight}>
+                    {(t.status === 'PENDING' || t.status === 'SCHEDULED') && t.senderUserId === myUserId ? (
+                      cancellingCoinId === t.id ? (
+                        <ActivityIndicator color={colors.primary} />
+                      ) : (
+                        <TouchableOpacity
+                          onPress={() => {
+                            Alert.alert('Cancel this send?', 'Reserved coins will be released.', [
+                              { text: 'No', style: 'cancel' },
+                              {
+                                text: 'Cancel send',
+                                style: 'destructive',
+                                onPress: async () => {
+                                  setCancellingCoinId(t.id);
+                                  try {
+                                    await coinsService.cancelTransfer(t.id);
+                                    await loadCoinTransfers();
+                                    await loadWallet();
+                                  } catch (e: unknown) {
+                                    Alert.alert('Error', e instanceof Error ? e.message : 'Failed');
+                                  } finally {
+                                    setCancellingCoinId(null);
+                                  }
+                                },
+                              },
+                            ]);
+                          }}
+                        >
+                          <Text style={{ color: colors.danger, fontWeight: '700' }}>Cancel</Text>
+                        </TouchableOpacity>
+                      )
+                    ) : null}
+                  </View>
+                </View>
+              );
+              })}
+              <TouchableOpacity style={styles.newWithdrawBtn} onPress={() => router.push('/(customer)/send-coins')}>
+                <Text style={styles.newWithdrawBtnText}>+ New send</Text>
+              </TouchableOpacity>
+            </>
+          )
+        )}
       </ScrollView>
 
       {/* Withdrawal Modal */}
@@ -424,7 +741,10 @@ export default function WalletScreen() {
                 <>
                   <Text style={[styles.modalTitle, { color: colors.text }]}>Request withdrawal</Text>
                   <Text style={[styles.modalBalanceMuted, { color: colors.textTertiary }]}>
-                    Wallet balance {wallet.balance.toFixed(2)} {wallet.currency}
+                    Available {(wallet.spendable ?? wallet.balance).toFixed(2)} {wallet.currency}
+                    {(wallet.lockedForTransfers ?? 0) > 0
+                      ? ` · ${wallet.lockedForTransfers!.toFixed(2)} reserved for sends`
+                      : ''}
                   </Text>
 
                   <Text style={[styles.modalLabel, { color: colors.text }]}>Amount ({wallet.currency})</Text>
@@ -531,7 +851,10 @@ export default function WalletScreen() {
                     <Text style={[styles.previewCurrency, { color: colors.textSecondary }]}>{wallet.currency}</Text>
                   </Text>
                   <Text style={[styles.modalBalanceMuted, { color: colors.textTertiary }]}>
-                    Wallet balance {wallet.balance.toFixed(2)} {wallet.currency}
+                    Available {(wallet.spendable ?? wallet.balance).toFixed(2)} {wallet.currency}
+                    {(wallet.lockedForTransfers ?? 0) > 0
+                      ? ` · ${wallet.lockedForTransfers!.toFixed(2)} reserved for sends`
+                      : ''}
                   </Text>
                   <Text style={[styles.previewMeta, { color: colors.textSecondary }]}>
                     {withdrawPayout === 'CASH' ? 'Cash pickup' : 'Bank transfer'}
@@ -561,6 +884,29 @@ export default function WalletScreen() {
               )}
             </View>
           </ScrollView>
+        </View>
+      </Modal>
+
+      <Modal visible={celebrateVisible} transparent animationType="fade">
+        <View style={styles.celebrateOverlay}>
+          <View style={[styles.celebrateCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <Text style={styles.celebrateEmoji}>🎉</Text>
+            <Text style={[styles.celebrateTitle, { color: colors.text }]}>
+              {celebrateGift.trim() ? 'You received a gift!' : 'Coins received'}
+            </Text>
+            {celebrateAmount.trim() ? (
+              <Text style={[styles.celebrateAmount, { color: '#16a34a' }]}>+{celebrateAmount.trim()} coins</Text>
+            ) : null}
+            {celebrateGift.trim() ? (
+              <Text style={[styles.celebrateGift, { color: colors.textSecondary }]}>“{celebrateGift.trim()}”</Text>
+            ) : null}
+            <TouchableOpacity
+              style={[styles.celebrateBtn, { backgroundColor: colors.primary }]}
+              onPress={() => setCelebrateVisible(false)}
+            >
+              <Text style={styles.celebrateBtnText}>Awesome</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </Modal>
     </View>
@@ -598,6 +944,35 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.4)',
   },
   withdrawBtnText: { color: '#fff', fontWeight: '600', fontSize: 15 },
+  walletQuickWrap: { width: '100%', marginTop: 8, paddingHorizontal: 4 },
+  walletQuickRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    width: '100%',
+  },
+  walletQuickMoreRow: { marginTop: 14, paddingTop: 14, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: 'rgba(255,255,255,0.25)' },
+  walletQuickItem: { flex: 1, alignItems: 'center', maxWidth: '25%' },
+  walletQuickCircle: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: 'rgba(255,255,255,0.22)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.38)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  walletQuickGlyph: { color: 'rgba(255,255,255,0.95)', fontSize: 22, fontWeight: '700', marginTop: -2 },
+  walletQuickLabel: {
+    marginTop: 8,
+    color: 'rgba(255,255,255,0.92)',
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.2,
+    textAlign: 'center',
+  },
+  lockedHint: { fontSize: 12, textAlign: 'center', marginTop: 2 },
 
   tabs: {
     flexDirection: 'row',
@@ -746,4 +1121,43 @@ const styles = StyleSheet.create({
   },
   comingSoonTitle: { fontSize: 15, fontWeight: '700', marginBottom: 4 },
   comingSoonText: { fontSize: 13, lineHeight: 18 },
+
+  sendsOnlyBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginHorizontal: 20,
+    marginBottom: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  sendsOnlyBannerText: { fontSize: 14, fontWeight: '600', flex: 1, marginRight: 12 },
+
+  celebrateOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    padding: 24,
+  },
+  celebrateCard: {
+    borderRadius: 20,
+    padding: 28,
+    borderWidth: 1,
+    alignItems: 'center',
+  },
+  celebrateEmoji: { fontSize: 56, marginBottom: 8 },
+  celebrateTitle: { fontSize: 22, fontWeight: '800', textAlign: 'center' },
+  celebrateAmount: { fontSize: 30, fontWeight: '900', marginTop: 12, textAlign: 'center' },
+  celebrateGift: { fontSize: 16, marginTop: 16, textAlign: 'center', fontStyle: 'italic', lineHeight: 22 },
+  celebrateBtn: {
+    marginTop: 24,
+    paddingVertical: 14,
+    paddingHorizontal: 32,
+    borderRadius: 14,
+    alignItems: 'center',
+    width: '100%',
+  },
+  celebrateBtnText: { color: '#fff', fontWeight: '800', fontSize: 16 },
 });

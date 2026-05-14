@@ -5,7 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useGoogleAuth } from '../../hooks/useGoogleAuth';
 import { saveLoginTimestamp } from '../../services/auth-session';
-import { registerForPushNotifications, restoreOrderTrackingForCustomer } from '../../services/notifications';
+import { restoreOrderTrackingForCustomer } from '../../services/notifications';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
@@ -281,8 +281,7 @@ export default function CustomerRegisterScreen() {
       await AsyncStorage.setItem('userRole', 'CUSTOMER');
       await saveLoginTimestamp();
 
-      // Critical for closed-app order tracking/chat pushes: register token right after registration.
-      await registerForPushNotifications();
+      // Push token: (customer)/_layout registers after navigation (avoids double getToken on Android).
       await restoreOrderTrackingForCustomer();
 
       // Navigate to customer home (setup country/wallet is optional, done from profile)

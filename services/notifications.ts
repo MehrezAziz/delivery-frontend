@@ -420,10 +420,41 @@ async function postFcmTokenToBackendWithRetry(
   return false;
 }
 
+/** Coalesces overlapping callers (e.g. login + tabs layout mount) — avoids Android Play services races on getToken. */
+let registerForPushInFlight: Promise<string | null> | null = null;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
 /**
- * Register for push notifications and send FCM token to backend
+ * Android: `getToken` can throw SERVICE_NOT_AVAILABLE when invoked twice in quick succession
+ * or before Play services is ready — exponential backoff retries usually succeed.
  */
-export async function registerForPushNotifications(): Promise<string | null> {
+async function getFcmTokenResilient(): Promise<string | null> {
+  const maxAttempts = Platform.OS === 'android' ? 6 : 2;
+  let lastError: unknown;
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    try {
+      if (attempt > 0) {
+        await sleep(Math.min(400 * 2 ** (attempt - 1), 6000));
+      }
+      const token = await getToken(firebaseMessaging);
+      if (token) return token;
+    } catch (e) {
+      lastError = e;
+    }
+  }
+  if (lastError) {
+    console.warn(
+      'FCM getToken failed after retries (Google Play services busy or offline). Will retry on next foreground/register.',
+      lastError,
+    );
+  }
+  return null;
+}
+
+async function registerForPushNotificationsImpl(): Promise<string | null> {
   try {
     if (Platform.OS === 'android') {
       const current = await ExpoNotifications.getPermissionsAsync();
@@ -446,7 +477,7 @@ export async function registerForPushNotifications(): Promise<string | null> {
     /** iOS needs explicit messaging permission for a useful token; Android can still obtain FCM token for data messages. */
     if (Platform.OS === 'ios' && !enabled) return null;
 
-    const token = await getToken(firebaseMessaging);
+    const token = await getFcmTokenResilient();
     if (!token) return null;
 
     const platform = Platform.OS as 'android' | 'ios';
@@ -464,9 +495,21 @@ export async function registerForPushNotifications(): Promise<string | null> {
 
     return token;
   } catch (error) {
-    console.error('Error registering for push notifications:', error);
+    console.warn('Error registering for push notifications:', error);
     return null;
   }
+}
+
+/**
+ * Register for push notifications and send FCM token to backend.
+ * Concurrent calls share one in-flight attempt (prevents duplicate getToken right after phone login).
+ */
+export async function registerForPushNotifications(): Promise<string | null> {
+  if (registerForPushInFlight) return registerForPushInFlight;
+  registerForPushInFlight = registerForPushNotificationsImpl().finally(() => {
+    registerForPushInFlight = null;
+  });
+  return registerForPushInFlight;
 }
 
 
@@ -1786,6 +1829,24 @@ export async function notificationDataToRoute(
     }
     case 'Rating':
       return '/(driver)/my-ratings';
+    case 'CoinTransfer': {
+      if (type === 'COIN_TRANSFER_RECEIVED') {
+        const role = (await getStoredUserRole()) || 'CUSTOMER';
+        const amountEnc = encodeURIComponent((data.amount || '').trim());
+        const giftRaw = (data.giftMessage || '').trim();
+        const giftEnc = giftRaw ? `&gift=${encodeURIComponent(giftRaw)}` : '';
+        if (role === 'DRIVER') {
+          return `/(driver)/send-coins?celebrate=1&amount=${amountEnc}${giftEnc}`;
+        }
+        return `/(customer)/wallet?tab=coin&celebrate=1&amount=${amountEnc}${giftEnc}`;
+      }
+      if (type === 'COIN_TRANSFER_OUTBOUND_COMPLETED') {
+        const role = (await getStoredUserRole()) || 'CUSTOMER';
+        if (role === 'DRIVER') return `/(driver)/send-coins?sendsOnly=1`;
+        return `/(customer)/wallet?tab=coin&sendsOnly=1`;
+      }
+      return null;
+    }
     default:
       return null;
   }
@@ -2122,6 +2183,9 @@ async function displayRegularNotification(data: Record<string, string>, androidI
   if (shouldSuppressChatNotification(data)) return;
 
   const isSupportReply = data.type === 'SUPPORT_TICKET_REPLY' && Boolean((data.relatedEntityId || '').trim());
+  const isCoinTransferDeepLink =
+    data.relatedEntityType === 'CoinTransfer' &&
+    (data.type === 'COIN_TRANSFER_RECEIVED' || data.type === 'COIN_TRANSFER_OUTBOUND_COMPLETED');
   const resolvedAndroidId =
     androidId ||
     (isSupportReply ? stableSupportTicketNotificationId(String(data.relatedEntityId || '').trim()) : undefined);
@@ -2145,7 +2209,7 @@ async function displayRegularNotification(data: Record<string, string>, androidI
       importance: AndroidImportance.DEFAULT,
       /** `launchActivity` helps cold-start: open app then deep-link to support ticket chat. */
       pressAction:
-        isSupportReply && Platform.OS === 'android'
+        (isSupportReply || isCoinTransferDeepLink) && Platform.OS === 'android'
           ? { id: 'default', launchActivity: 'default' }
           : { id: 'default' },
       /** One tray slot per ticket; no Messaging-style UI or inline reply (unlike order chat). */

@@ -10,11 +10,14 @@ import {
   RefreshControl,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Clipboard from 'expo-clipboard';
+import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../contexts/ThemeContext';
+import { securityService, type SecurityTier } from '../../services/api/security.service';
+import { SecurityTierPoles } from '../../components/settings/SecurityTierPoles';
 
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api';
 
@@ -26,6 +29,15 @@ export default function CustomerSettingsScreen() {
   const [referralStats, setReferralStats] = useState<any | null>(null);
   const [loadingReferral, setLoadingReferral] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [securityTier, setSecurityTier] = useState<SecurityTier | null>(null);
+  const [showIdCopied, setShowIdCopied] = useState(false);
+  const idCopyHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (idCopyHideTimerRef.current) clearTimeout(idCopyHideTimerRef.current);
+    };
+  }, []);
 
   const loadReferralData = useCallback(async () => {
     try {
@@ -79,11 +91,21 @@ export default function CustomerSettingsScreen() {
     })();
   }, []);
 
+  const loadSecurityTier = useCallback(async () => {
+    try {
+      const s = await securityService.getSummary();
+      setSecurityTier(s.securityTier);
+    } catch {
+      setSecurityTier(null);
+    }
+  }, []);
+
   useFocusEffect(
     useCallback(() => {
       setLoadingReferral(true);
       void loadReferralData();
-    }, [loadReferralData]),
+      void loadSecurityTier();
+    }, [loadReferralData, loadSecurityTier]),
   );
 
   const handleShareReferralCode = async () => {
@@ -111,6 +133,21 @@ export default function CustomerSettingsScreen() {
     }
   };
 
+  const copyUserId = async () => {
+    if (!userId) return;
+    try {
+      await Clipboard.setStringAsync(userId);
+      if (idCopyHideTimerRef.current) clearTimeout(idCopyHideTimerRef.current);
+      setShowIdCopied(true);
+      idCopyHideTimerRef.current = setTimeout(() => {
+        setShowIdCopied(false);
+        idCopyHideTimerRef.current = null;
+      }, 3000);
+    } catch {
+      Alert.alert('Error', 'Failed to copy user ID');
+    }
+  };
+
   /** Route params + query (below) so the header can return here — tab siblings have no stack to pop. */
   const goEditProfile = () =>
     router.push({
@@ -132,9 +169,15 @@ export default function CustomerSettingsScreen() {
       pathname: '/(customer)/bank-details',
       params: { returnTo: 'settings' },
     } as never);
+  const goSecurity = () =>
+    router.push({
+      pathname: '/(customer)/security',
+      params: { returnTo: 'settings' },
+    } as never);
 
   const actionItems: { label: string; onPress: () => void }[] = [
     { label: 'Edit profile', onPress: goEditProfile },
+    { label: 'Security', onPress: goSecurity },
     { label: 'Add address', onPress: () => router.push('/(auth)/customer-setup') },
     { label: 'My addresses', onPress: goAddresses },
     { label: 'My restrictions', onPress: goRestrictions },
@@ -151,6 +194,7 @@ export default function CustomerSettingsScreen() {
           onRefresh={() => {
             setRefreshing(true);
             void loadReferralData();
+            void loadSecurityTier();
           }}
           tintColor={colors.primary}
           colors={[colors.primary]}
@@ -166,7 +210,12 @@ export default function CustomerSettingsScreen() {
             activeOpacity={0.7}
           >
             <Text style={[styles.linkLabel, { color: colors.text }]}>{item.label}</Text>
-            <Text style={[styles.chevron, { color: colors.textTertiary }]}>›</Text>
+            <View style={styles.linkRowRight}>
+              {item.label === 'Security' && securityTier != null ? (
+                <SecurityTierPoles tier={securityTier} colors={colors} compact />
+              ) : null}
+              <Text style={[styles.chevron, { color: colors.textTertiary }]}>›</Text>
+            </View>
           </TouchableOpacity>
         ))}
         <View style={[styles.linkRow, styles.linkRowLast, { borderBottomColor: colors.border }]}>
@@ -281,12 +330,25 @@ export default function CustomerSettingsScreen() {
 
       <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>Account</Text>
       <View style={[styles.group, { backgroundColor: colors.card, borderColor: colors.border }]}>
-        <View style={[styles.idRow, { borderBottomColor: colors.border }]}>
-          <Text style={[styles.linkLabel, { color: colors.text }]}>User ID</Text>
-          <Text style={[styles.idValue, { color: colors.textSecondary }]} selectable>
-            {userId ?? '—'}
-          </Text>
-        </View>
+        <TouchableOpacity
+          style={[styles.idRow, { borderBottomColor: colors.border }]}
+          onPress={() => void copyUserId()}
+          activeOpacity={userId ? 0.65 : 1}
+          disabled={!userId}
+          accessibilityRole="button"
+          accessibilityLabel="Copy ID"
+        >
+          <Text style={[styles.linkLabel, { color: colors.text }]}>ID</Text>
+          <View style={styles.idRowRight}>
+            <Text style={[styles.idValue, { color: colors.textSecondary }]} numberOfLines={1} selectable>
+              {userId ?? '—'}
+            </Text>
+            {userId ? <Ionicons name="copy-outline" size={20} color={colors.primary} /> : null}
+          </View>
+        </TouchableOpacity>
+        {showIdCopied ? (
+          <Text style={[styles.idCopiedHint, { color: colors.success }]}>ID copied</Text>
+        ) : null}
       </View>
     </ScrollView>
   );
@@ -317,6 +379,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
+  linkRowRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   linkRowLast: { borderBottomWidth: 0 },
   linkLabel: { fontSize: 16, fontWeight: '600' },
   linkRight: { fontSize: 15, fontWeight: '600' },
@@ -329,7 +392,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     borderBottomWidth: 0,
   },
-  idValue: { fontSize: 12, fontWeight: '600', maxWidth: '62%', textAlign: 'right' },
+  idRowRight: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 8, minWidth: 0 },
+  idValue: { fontSize: 12, fontWeight: '600', flexShrink: 1, textAlign: 'right' },
+  idCopiedHint: {
+    fontSize: 13,
+    fontWeight: '600',
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+    paddingTop: 0,
+  },
   referralWrap: {
     borderRadius: 12,
     borderWidth: StyleSheet.hairlineWidth,

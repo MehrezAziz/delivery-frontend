@@ -17,7 +17,7 @@ import { Ionicons } from '@expo/vector-icons';
 import axios from 'axios';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import { saveLoginTimestamp } from '../../services/auth-session';
-import { registerForPushNotifications, restoreOrderTrackingForDriver } from '../../services/notifications';
+import { restoreOrderTrackingForDriver } from '../../services/notifications';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { persistDriverIdentityFromMe } from '../../utils/persistDriverIdentity';
@@ -178,7 +178,6 @@ export default function DriverLogin() {
       await AsyncStorage.setItem('driverId', profileResponse.data.id);
       await persistDriverIdentityFromMe(profileResponse.data);
 
-      await registerForPushNotifications();
       await restoreOrderTrackingForDriver();
 
       await clearLoginFailures('driver', e164);
@@ -242,7 +241,6 @@ export default function DriverLogin() {
       await AsyncStorage.setItem('driverId', profileResponse.data.id);
       await persistDriverIdentityFromMe(profileResponse.data);
 
-      await registerForPushNotifications();
       await restoreOrderTrackingForDriver();
 
       // Navigate to driver home
