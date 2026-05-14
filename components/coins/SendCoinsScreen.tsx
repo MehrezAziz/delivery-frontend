@@ -19,7 +19,8 @@ import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { coinsService, type CoinTransferDto, type CoinTransferPreview } from '../../services/api/coins.service';
 import { securityService } from '../../services/api/security.service';
-import { ApiError } from '../../services/api/client';
+import { ApiError, api } from '../../services/api/client';
+import { walletService } from '../../services/api/wallet.service';
 import { useTheme } from '../../contexts/ThemeContext';
 import { EightDigitPinInput } from '../security/EightDigitPinInput';
 
@@ -87,6 +88,9 @@ export default function SendCoinsScreen() {
   const [rescheduleIosOpen, setRescheduleIosOpen] = useState(false);
   const [rescheduleAndroidPhase, setRescheduleAndroidPhase] = useState<'idle' | 'date' | 'time'>('idle');
   const [rescheduleSaving, setRescheduleSaving] = useState(false);
+  const [availableCoins, setAvailableCoins] = useState<number | null>(null);
+  const [availableLoading, setAvailableLoading] = useState(false);
+  const [availableTouched, setAvailableTouched] = useState(false);
   const paramsRef = useRef(params);
   paramsRef.current = params;
   const routerRef = useRef(router);
@@ -101,6 +105,27 @@ export default function SendCoinsScreen() {
       setTransfers([]);
     } finally {
       setTxLoading(false);
+    }
+  }, []);
+
+  const loadAvailableBalance = useCallback(async () => {
+    setAvailableTouched(true);
+    setAvailableLoading(true);
+    try {
+      const role = ((await AsyncStorage.getItem('userRole')) ?? '').toUpperCase();
+      if (role === 'DRIVER') {
+        const me = await api.get<{ account?: { balance?: number } | null }>('/drivers/me');
+        const b = me?.account?.balance;
+        setAvailableCoins(typeof b === 'number' && Number.isFinite(b) ? b : null);
+      } else {
+        const w = await walletService.getWallet();
+        const spend = w.spendable ?? w.balance;
+        setAvailableCoins(typeof spend === 'number' && Number.isFinite(spend) ? spend : null);
+      }
+    } catch {
+      setAvailableCoins(null);
+    } finally {
+      setAvailableLoading(false);
     }
   }, []);
 
@@ -120,6 +145,7 @@ export default function SendCoinsScreen() {
   useFocusEffect(
     useCallback(() => {
       void loadTransfers();
+      void loadAvailableBalance();
       const p = paramsRef.current;
       if (sendCoinsParam(p.celebrate) === '1') {
         const gift = decodeURIComponentSafe(sendCoinsParam(p.gift));
@@ -137,7 +163,7 @@ export default function SendCoinsScreen() {
         setSendsOnlyFilter(true);
         routerRef.current.setParams({ sendsOnly: undefined } as never);
       }
-    }, [loadTransfers]),
+    }, [loadTransfers, loadAvailableBalance]),
   );
 
   const transferListFiltered =
@@ -228,6 +254,7 @@ export default function SendCoinsScreen() {
       setScheduleOn(false);
       setAndroidPickPhase('idle');
       await loadTransfers();
+      void loadAvailableBalance();
     } catch (e) {
       Alert.alert('Send failed', errMsg(e));
     } finally {
@@ -540,6 +567,15 @@ export default function SendCoinsScreen() {
           onChangeText={setGrossStr}
           keyboardType="decimal-pad"
         />
+        {availableLoading ? (
+          <Text style={[styles.availableLine, { color: colors.textTertiary }]}>Loading available balance…</Text>
+        ) : availableCoins != null ? (
+          <Text style={[styles.availableLine, { color: colors.textSecondary }]}>
+            Available: <Text style={{ fontWeight: '700', color: colors.text }}>{availableCoins.toFixed(2)}</Text> coins
+          </Text>
+        ) : availableTouched ? (
+          <Text style={[styles.availableLine, { color: colors.textTertiary }]}>Available balance could not be loaded.</Text>
+        ) : null}
 
         <Text style={[styles.label, { color: colors.textSecondary }]}>Gift message (optional)</Text>
         <TextInput
@@ -924,6 +960,7 @@ const styles = StyleSheet.create({
   pad: { padding: 20, paddingBottom: 48 },
   hint: { fontSize: 13, lineHeight: 19, marginBottom: 16 },
   label: { fontSize: 12, marginBottom: 6, marginTop: 10 },
+  availableLine: { fontSize: 13, marginTop: 6 },
   input: {
     borderWidth: 1,
     borderRadius: 12,

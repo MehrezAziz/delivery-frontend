@@ -98,6 +98,7 @@ export default function DriverEarningsScreen() {
   const [wdBusy, setWdBusy] = useState(false);
   const [wdStep, setWdStep] = useState<'form' | 'preview'>('form');
   const [wdCancelling, setWdCancelling] = useState<string | null>(null);
+  const [walletQuickMore, setWalletQuickMore] = useState(false);
 
   useEffect(() => {
     if (!wdModal || wdPayout !== 'BANK_TRANSFER') return;
@@ -186,7 +187,6 @@ export default function DriverEarningsScreen() {
   }, [loadEarnings]);
 
   const balance = driver?.account?.balance ?? 0;
-  const currency = driver?.account?.currency ?? 'TND';
   const deliveries = driver?.account?.completedDeliveries ?? 0;
   const negative = balance < 0;
 
@@ -337,11 +337,103 @@ export default function DriverEarningsScreen() {
           <Text style={styles.heroLabel}>Available balance</Text>
           <Text style={styles.heroAmount} numberOfLines={1}>
             {balance.toFixed(2)}
-            <Text style={styles.heroCurrency}> {currency}</Text>
+            <Text style={styles.heroCurrency}> Coins</Text>
           </Text>
           <Text style={styles.heroHint}>
             {negative ? 'Settle negative balance to stay active' : `${deliveries} completed deliveries`}
           </Text>
+          <View style={styles.walletQuickWrap}>
+            <View style={styles.walletQuickRow}>
+              <TouchableOpacity
+                style={styles.walletQuickItem}
+                onPress={() => Alert.alert('Deposit', 'Coin top-up is coming soon.')}
+                activeOpacity={0.85}
+              >
+                <View style={styles.walletQuickCircle}>
+                  <Text style={styles.walletQuickGlyph}>+</Text>
+                </View>
+                <Text style={styles.walletQuickLabel}>Deposit</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.walletQuickItem}
+                onPress={() => {
+                  setWalletQuickMore(false);
+                  push('/(driver)/send-coins');
+                }}
+                activeOpacity={0.85}
+              >
+                <View style={styles.walletQuickCircle}>
+                  <Ionicons name="arrow-forward" size={22} color="rgba(255,255,255,0.95)" />
+                </View>
+                <Text style={styles.walletQuickLabel}>Send</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.walletQuickItem}
+                onPress={() => Alert.alert('Scan', 'QR scanning is coming soon.')}
+                activeOpacity={0.85}
+              >
+                <View style={styles.walletQuickCircle}>
+                  <Ionicons name="scan-outline" size={22} color="rgba(255,255,255,0.95)" />
+                </View>
+                <Text style={styles.walletQuickLabel}>Scan</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.walletQuickItem}
+                onPress={() => setWalletQuickMore((v) => !v)}
+                activeOpacity={0.85}
+              >
+                <View style={styles.walletQuickCircle}>
+                  <Text style={styles.walletQuickGlyph}>···</Text>
+                </View>
+                <Text style={styles.walletQuickLabel}>More</Text>
+              </TouchableOpacity>
+            </View>
+            {walletQuickMore && (
+              <View style={[styles.walletQuickRow, styles.walletQuickMoreRow]}>
+                <TouchableOpacity
+                  style={styles.walletQuickItem}
+                  onPress={() => {
+                    setWalletQuickMore(false);
+                    setWdStep('form');
+                    setWdModal(true);
+                  }}
+                  activeOpacity={0.85}
+                >
+                  <View style={styles.walletQuickCircle}>
+                    <Text style={styles.walletQuickGlyph}>−</Text>
+                  </View>
+                  <Text style={styles.walletQuickLabel}>Withdraw</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.walletQuickItem}
+                  onPress={() => {
+                    setWalletQuickMore(false);
+                    push('/(driver)/support');
+                  }}
+                  activeOpacity={0.85}
+                >
+                  <View style={styles.walletQuickCircle}>
+                    <Text style={styles.walletQuickGlyph}>?</Text>
+                  </View>
+                  <Text style={styles.walletQuickLabel}>Help</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.walletQuickItem}
+                  onPress={() => {
+                    setWalletQuickMore(false);
+                    Alert.alert('News', 'Updates and announcements are coming soon.');
+                  }}
+                  activeOpacity={0.85}
+                >
+                  <View style={styles.walletQuickCircle}>
+                    <Ionicons name="newspaper-outline" size={20} color="rgba(255,255,255,0.95)" />
+                  </View>
+                  <Text style={styles.walletQuickLabel}>News</Text>
+                </TouchableOpacity>
+                <View style={styles.walletQuickItem} />
+              </View>
+            )}
+          </View>
         </View>
 
         <View style={[styles.panel, { backgroundColor: colors.card, borderColor: colors.border }]}>
@@ -487,7 +579,7 @@ export default function DriverEarningsScreen() {
                 <View key={w.id} style={[styles.wdRow, { borderColor: colors.border }]}>
                   <View style={{ flex: 1 }}>
                     <Text style={{ color: colors.text, fontWeight: '800', fontSize: 18 }}>
-                      {w.amount.toFixed(2)} <Text style={{ fontSize: 14, fontWeight: '600', color: colors.textSecondary }}>{currency}</Text>
+                      {w.amount.toFixed(2)} <Text style={{ fontSize: 14, fontWeight: '600', color: colors.textSecondary }}>Coins</Text>
                     </Text>
                     <Text style={{ color: colors.textSecondary, fontSize: 12, marginTop: 4 }}>
                       {w.payoutMethod}
@@ -544,7 +636,7 @@ export default function DriverEarningsScreen() {
                 <>
                   <Text style={[styles.modalTitle, { color: colors.text }]}>Withdrawal request</Text>
                   <Text style={{ color: colors.textTertiary, marginBottom: 10, fontSize: 13 }}>
-                    Account balance {balance.toFixed(2)} {currency}
+                    Account balance {balance.toFixed(2)} Coins
                   </Text>
                   <Text style={{ color: colors.text, fontWeight: '600' }}>Amount</Text>
                   <TextInput
@@ -643,10 +735,10 @@ export default function DriverEarningsScreen() {
                   <Text style={{ color: colors.textSecondary, fontSize: 13, marginTop: 4 }}>You are requesting</Text>
                   <Text style={{ color: colors.text, fontSize: 32, fontWeight: '800', marginTop: 6 }}>
                     {parseFloat((wdAmount || '').replace(',', '.') || '0').toFixed(2)}{' '}
-                    <Text style={{ fontSize: 18, fontWeight: '600', color: colors.textSecondary }}>{currency}</Text>
+                    <Text style={{ fontSize: 18, fontWeight: '600', color: colors.textSecondary }}>Coins</Text>
                   </Text>
                   <Text style={{ color: colors.textTertiary, fontSize: 13, marginTop: 10 }}>
-                    Account balance {balance.toFixed(2)} {currency}
+                    Account balance {balance.toFixed(2)} Coins
                   </Text>
                   <Text style={{ color: colors.textSecondary, fontSize: 13, marginTop: 8 }}>
                     {wdPayout === 'CASH' ? 'Cash pickup' : 'Bank transfer'}
@@ -705,6 +797,39 @@ const styles = StyleSheet.create({
   heroAmount: { color: 'rgba(255,255,255,0.95)', fontSize: 36, fontWeight: '800' },
   heroCurrency: { fontSize: 17, fontWeight: '600', color: 'rgba(255,255,255,0.58)' },
   heroHint: { color: 'rgba(255,255,255,0.78)', fontSize: 13, marginTop: 10 },
+  walletQuickWrap: { width: '100%', marginTop: 14, paddingHorizontal: 4 },
+  walletQuickRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    width: '100%',
+  },
+  walletQuickMoreRow: {
+    marginTop: 14,
+    paddingTop: 14,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: 'rgba(255,255,255,0.25)',
+  },
+  walletQuickItem: { flex: 1, alignItems: 'center', maxWidth: '25%' },
+  walletQuickCircle: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: 'rgba(255,255,255,0.22)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.38)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  walletQuickGlyph: { color: 'rgba(255,255,255,0.95)', fontSize: 22, fontWeight: '700', marginTop: -2 },
+  walletQuickLabel: {
+    marginTop: 8,
+    color: 'rgba(255,255,255,0.92)',
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.2,
+    textAlign: 'center',
+  },
   panel: {
     borderRadius: 18,
     padding: 16,

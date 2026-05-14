@@ -284,7 +284,7 @@ export default function DriverProfileScreen() {
                         { color: driver.account.balance < 0 ? colors.danger : '#16a34a' },
                       ]}
                     >
-                      {driver.account.balance.toFixed(2)} {driver.account.currency}
+                      {driver.account.balance.toFixed(2)} Coins
                     </Text>
                   </View>
                   <View style={{ alignItems: 'flex-end' }}>
@@ -330,7 +330,7 @@ export default function DriverProfileScreen() {
                       remaining
                     </Text>
                     <Text style={[styles.warningBody, { color: colors.textSecondary }]}>
-                      Pay your fees ({Math.abs(driver.account.balance).toFixed(2)} {driver.account.currency}) or your
+                      Pay your fees ({Math.abs(driver.account.balance).toFixed(2)} Coins) or your
                       account will be paused.
                     </Text>
                   </>
