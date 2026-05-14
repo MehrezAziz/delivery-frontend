@@ -85,6 +85,7 @@ export default function WalletScreen() {
   const [myUserId, setMyUserId] = useState<string | null>(null);
   const [walletQuickMore, setWalletQuickMore] = useState(false);
   const [sendsOnlyFilter, setSendsOnlyFilter] = useState(false);
+  const [showCoinFiatModal, setShowCoinFiatModal] = useState(false);
   const [celebrateVisible, setCelebrateVisible] = useState(false);
   const [celebrateGift, setCelebrateGift] = useState('');
   const [celebrateAmount, setCelebrateAmount] = useState('');
@@ -570,10 +571,31 @@ export default function WalletScreen() {
         {/* Overview */}
         {activeTab === 'overview' && (
           <View style={{ gap: 16 }}>
-            <View style={[styles.infoCard, { backgroundColor: colors.card }]}>
-              <Text style={[styles.infoLabel, { color: colors.textSecondary }]}>Currency</Text>
-              <Text style={[styles.infoValue, { color: colors.text }]}>{wallet.currency}</Text>
-            </View>
+            <TouchableOpacity
+              style={[styles.infoCard, { backgroundColor: colors.card }]}
+              activeOpacity={0.75}
+              onPress={() => {
+                if (!wallet) return;
+                if (wallet.coinsToLocalFiat) setShowCoinFiatModal(true);
+                else {
+                  Alert.alert(
+                    'Cash equivalent',
+                    'No active coin rate is set for your country yet. Your balance is shown in coins only.',
+                  );
+                }
+              }}
+            >
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.infoLabel, { color: colors.textSecondary }]}>Currency</Text>
+                <Text style={{ color: colors.textTertiary, fontSize: 12, marginTop: 4 }}>
+                  Tap for estimated value in local money
+                </Text>
+              </View>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Text style={[styles.infoValue, { color: colors.text }]}>{wallet.currency}</Text>
+                <Ionicons name="chevron-forward" size={18} color={colors.textTertiary} />
+              </View>
+            </TouchableOpacity>
             <View style={[styles.infoCard, { backgroundColor: colors.card }]}>
               <Text style={[styles.infoLabel, { color: colors.textSecondary }]}>Last updated</Text>
               <Text style={[styles.infoValue, { color: colors.text }]}>{formatDate(wallet.updatedAt)}</Text>
@@ -769,18 +791,15 @@ export default function WalletScreen() {
                         <Text style={{ color: colors.primary, fontWeight: '700' }}>Edit time</Text>
                       </TouchableOpacity>
                     ) : null}
-                    {(t.status === 'PENDING' || t.status === 'SCHEDULED') && t.senderUserId === myUserId ? (
+                    {t.status === 'SCHEDULED' && t.senderUserId === myUserId ? (
                       cancellingCoinId === t.id ? (
                         <ActivityIndicator color={colors.primary} />
                       ) : (
                         <TouchableOpacity
                           onPress={() => {
-                            const isScheduled = t.status === 'SCHEDULED';
                             Alert.alert(
-                              isScheduled ? 'Cancel scheduled send?' : 'Cancel this send?',
-                              isScheduled
-                                ? 'This send will not happen. Coins are not locked until the scheduled time.'
-                                : 'Reserved coins will be released.',
+                              'Cancel scheduled send?',
+                              'This send will not happen. Coins are not locked until the scheduled time.',
                               [
                                 { text: 'No', style: 'cancel' },
                                 {
@@ -1048,6 +1067,63 @@ export default function WalletScreen() {
                 )}
               </TouchableOpacity>
             </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={showCoinFiatModal} transparent animationType="fade" onRequestClose={() => setShowCoinFiatModal(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={[styles.celebrateCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <Text style={[styles.modalTitle, { color: colors.text, marginBottom: 8 }]}>Coins in your currency</Text>
+            {wallet?.coinsToLocalFiat ? (
+              <>
+                <Text style={{ color: colors.textSecondary, fontSize: 14, lineHeight: 20, marginBottom: 16 }}>
+                  Using your country&apos;s active coin configuration:{' '}
+                  <Text style={{ fontWeight: '700', color: colors.text }}>
+                    1.00 {wallet.coinsToLocalFiat.currencyCode} ={' '}
+                    {wallet.coinsToLocalFiat.coinsPerFiatUnit % 1 === 0
+                      ? wallet.coinsToLocalFiat.coinsPerFiatUnit
+                      : Number(wallet.coinsToLocalFiat.coinsPerFiatUnit.toFixed(4))}{' '}
+                    coins
+                  </Text>
+                  .
+                </Text>
+                <View style={{ alignSelf: 'stretch', gap: 12, marginBottom: 8 }}>
+                  <View
+                    style={{
+                      flexDirection: 'row',
+                      justifyContent: 'space-between',
+                      paddingVertical: 10,
+                      borderBottomWidth: StyleSheet.hairlineWidth,
+                      borderBottomColor: colors.border,
+                    }}
+                  >
+                    <Text style={{ color: colors.textSecondary, fontSize: 15 }}>Total balance</Text>
+                    <Text style={{ color: colors.text, fontWeight: '800', fontSize: 16 }}>
+                      {wallet.coinsToLocalFiat.currencySymbol} {wallet.coinsToLocalFiat.balanceAsLocalFiat.toFixed(2)}{' '}
+                      {wallet.coinsToLocalFiat.currencyCode}
+                    </Text>
+                  </View>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 4 }}>
+                    <Text style={{ color: colors.textSecondary, fontSize: 15 }}>Available to spend</Text>
+                    <Text style={{ color: colors.text, fontWeight: '700', fontSize: 15 }}>
+                      {wallet.coinsToLocalFiat.currencySymbol}{' '}
+                      {wallet.coinsToLocalFiat.spendableAsLocalFiat.toFixed(2)} {wallet.coinsToLocalFiat.currencyCode}
+                    </Text>
+                  </View>
+                </View>
+                <Text style={{ color: colors.textTertiary, fontSize: 12, lineHeight: 18, marginBottom: 16 }}>
+                  Reference only (same rate as when cash is converted to coins). Actual order or payout amounts may
+                  differ.
+                </Text>
+              </>
+            ) : null}
+            <TouchableOpacity
+              style={[styles.celebrateBtn, { backgroundColor: colors.primary }]}
+              onPress={() => setShowCoinFiatModal(false)}
+            >
+              <Text style={styles.celebrateBtnText}>Close</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>

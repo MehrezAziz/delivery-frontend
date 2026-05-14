@@ -325,12 +325,9 @@ export default function SendCoinsScreen() {
   };
 
   const cancelTx = (transfer: CoinTransferDto) => {
-    const isScheduled = transfer.status === 'SCHEDULED';
     Alert.alert(
-      isScheduled ? 'Cancel scheduled send?' : 'Cancel transfer?',
-      isScheduled
-        ? 'This send will not happen. Coins are not locked until the scheduled time.'
-        : 'Reserved coins will be released if the transfer is still pending.',
+      'Cancel scheduled send?',
+      'This send will not happen. Coins are not locked until the scheduled time.',
       [
         { text: 'No', style: 'cancel' },
         {
@@ -658,10 +655,7 @@ export default function SendCoinsScreen() {
               t.senderUserId !== myUserId
             );
             const showFeeBreakdownRow = !isRecipientRow || t.showFeeBreakdown === true;
-            const canCancel =
-              (t.status === 'PENDING' || t.status === 'SCHEDULED') &&
-              !!myUserId &&
-              t.senderUserId === myUserId;
+            const canCancel = t.status === 'SCHEDULED' && !!myUserId && t.senderUserId === myUserId;
             return (
               <View key={t.id} style={[styles.txRow, { backgroundColor: colors.card, borderColor: colors.border }]}>
                 <View style={{ flex: 1, paddingRight: 8 }}>

@@ -3,6 +3,7 @@ import { api } from './client';
 export interface Wallet {
   id: string;
   customerId: string;
+  countryId?: string;
   balance: number;
   /** Available for orders & withdrawals (balance minus pending P2P locks) */
   spendable?: number;
@@ -10,6 +11,14 @@ export interface Wallet {
   /** Legacy: country fiat code; primary balance is shown as Coins in the app. */
   currency: string;
   balanceUnit?: 'COINS';
+  /** Estimated local fiat equivalent from active country coin config (coins per 1.00 fiat). */
+  coinsToLocalFiat?: {
+    coinsPerFiatUnit: number;
+    currencyCode: string;
+    currencySymbol: string;
+    balanceAsLocalFiat: number;
+    spendableAsLocalFiat: number;
+  } | null;
   discount: number;
   updatedAt: string;
 }
