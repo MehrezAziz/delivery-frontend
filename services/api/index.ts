@@ -16,6 +16,13 @@ export { walletService } from './wallet.service';
 export type { Wallet, WalletTransaction, WithdrawalRequest } from './wallet.service';
 export { coinsService, getCoinTransferDeviceId } from './coins.service';
 export type { CoinTransferDto, CoinTransferPreview } from './coins.service';
+export { coinTopupService } from './coin-topup.service';
+export type {
+  CoinTopUpQuote,
+  CoinTopUpInit,
+  CoinTopUpVerifyResponse,
+  CoinTopUpSessionSummary,
+} from './coin-topup.service';
 export { securityService } from './security.service';
 export type { SecuritySummary, SecurityTier } from './security.service';
 export { driverPayoutService } from './driver-payout.service';

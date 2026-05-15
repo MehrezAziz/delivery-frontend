@@ -436,7 +436,7 @@ export default function WalletScreen() {
           <View style={styles.walletQuickRow}>
             <TouchableOpacity
               style={styles.walletQuickItem}
-              onPress={() => Alert.alert('Deposit', 'Coin top-up is coming soon.')}
+              onPress={() => router.push('/(customer)/buy-coins')}
               activeOpacity={0.85}
             >
               <View style={styles.walletQuickCircle}>
@@ -523,12 +523,18 @@ export default function WalletScreen() {
         </View>
       </View>
 
-      <View style={[styles.comingSoonBanner, { backgroundColor: colors.card, borderColor: colors.border }]}>
+      <TouchableOpacity
+        activeOpacity={0.92}
+        accessibilityRole="button"
+        accessibilityLabel="Buy coins"
+        onPress={() => router.push('/(customer)/buy-coins')}
+        style={[styles.comingSoonBanner, { backgroundColor: colors.card, borderColor: colors.border }]}
+      >
         <Text style={[styles.comingSoonTitle, { color: colors.text }]}>Buy coins</Text>
         <Text style={[styles.comingSoonText, { color: colors.textSecondary }]}>
-          Top up your wallet with coins. <Text style={{ fontWeight: '700', color: colors.text }}>Coming soon.</Text>
+          Top up securely with Flouci. <Text style={{ fontWeight: '700', color: colors.primary }}>Tap to add coins.</Text>
         </Text>
-      </View>
+      </TouchableOpacity>
 
       {/* Tabs */}
       <View style={[styles.tabs, { backgroundColor: colors.card }]}>

@@ -906,7 +906,7 @@ export default function CreateOrderScreen() {
             <View style={s.insufficientActions}>
               <TouchableOpacity
                 style={[s.insufficientBtn, { backgroundColor: isDark ? 'rgba(59,130,246,0.2)' : '#dbeafe' }]}
-                onPress={() => appAlert('Coming Soon', 'The Add Coins feature will be available soon.')}
+                onPress={() => router.push('/(customer)/buy-coins')}
                 activeOpacity={0.7}
               >
                 <Ionicons name="add-circle-outline" size={18} color={isDark ? '#93c5fd' : '#1e40af'} />

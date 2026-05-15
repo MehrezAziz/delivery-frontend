@@ -294,17 +294,26 @@ export default function DriverProfileScreen() {
                 </View>
               </View>
             )}
-            <View
+            <TouchableOpacity
+              activeOpacity={0.9}
+              accessibilityRole="button"
+              accessibilityLabel="Buy coins"
+              onPress={() => router.push('/(driver)/buy-coins')}
               style={[
                 styles.comingSoonBox,
                 { borderColor: colors.border, backgroundColor: colors.surfaceVariant },
               ]}
             >
-              <Text style={[styles.comingSoonTitle, { color: colors.text }]}>Buy coins</Text>
-              <Text style={[styles.comingSoonBody, { color: colors.textSecondary }]}>
-                Top up your driver balance. <Text style={{ fontWeight: '700', color: colors.text }}>Coming soon.</Text>
-              </Text>
-            </View>
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.comingSoonTitle, { color: colors.text }]}>Buy coins</Text>
+                  <Text style={[styles.comingSoonBody, { color: colors.textSecondary }]}>
+                    Top up with Flouci and keep your balance healthy.
+                  </Text>
+                </View>
+                <Ionicons name="chevron-forward" size={22} color={colors.primary} />
+              </View>
+            </TouchableOpacity>
 
             {driver?.account?.balance < 0 && driver?.account?.daysRemainingToPay !== undefined && (
               <View
