@@ -39,8 +39,26 @@ export interface CoinTopUpSessionSummary {
   amountMillimes: number;
 }
 
+export interface CoinTopUpPending {
+  trackingId: string;
+  paymentId: string | null;
+  checkoutUrl: string | null;
+  coins: number;
+  fiatTotal: number;
+  currencyCode: string;
+  amountMillimes: number;
+  createdAt: string;
+}
+
 export const coinTopupService = {
   quote: () => api.get<CoinTopUpQuote>('/coin-topup/quote'),
+
+  pending: () => api.get<CoinTopUpPending[]>('/coin-topup/pending'),
+
+  cancelPending: (trackingId: string) =>
+    api.delete<{ ok: boolean; trackingId: string }>(
+      `/coin-topup/pending/${encodeURIComponent(trackingId)}`,
+    ),
 
   initFlouci: (coinsAmount: number) =>
     api.post<CoinTopUpInit>('/coin-topup/flouci/init', { coinsAmount }),

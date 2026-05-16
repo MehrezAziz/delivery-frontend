@@ -410,7 +410,7 @@ export default function DriverEarningsScreen() {
             <View style={styles.walletQuickRow}>
               <TouchableOpacity
                 style={styles.walletQuickItem}
-                onPress={() => Alert.alert('Deposit', 'Coin top-up is coming soon.')}
+                onPress={() => router.push('/(driver)/buy-coins')}
                 activeOpacity={0.85}
               >
                 <View style={styles.walletQuickCircle}>

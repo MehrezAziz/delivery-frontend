@@ -1051,10 +1051,14 @@ export default function CreateOrderScreen() {
           <OrderPreviewPaymentSwitch
             isCash={isCash}
             walletBalance={preview.walletBalance}
+            coinsPerFiatUnit={coinsPerFiatUnit}
+            currencySymbol={preview.currencySymbol}
+            orderTotalCoins={totalCoins}
             switching={switchingPayment}
             onSwitchToCash={handleSwitchToCash}
             onSwitchToWallet={handleSwitchToWallet}
             colors={colors}
+            isDark={isDark}
           />
 
           {/* Confirm */}

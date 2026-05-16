@@ -3,6 +3,8 @@ import {
   ActivityIndicator,
   Alert,
   AppState,
+  Modal,
+  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -18,11 +20,15 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../contexts/ThemeContext';
 import {
   coinTopupService,
+  type CoinTopUpPending,
   type CoinTopUpQuote,
 } from '../services/api/coin-topup.service';
 import { ApiError } from '../services/api/client';
+import { ThemedConfirmDialog } from './ThemedConfirmDialog';
+import { coinTopupRoutes, useCoinTopupRole } from '../lib/coin-topup-role';
 
-/** Plain amount: dot as decimal separator, no thousand separators or commas. */
+type PackPreset = CoinTopUpQuote['presets'][number];
+
 function formatFiat(price: number, q: CoinTopUpQuote) {
   if (!Number.isFinite(price)) return '—';
   const digits = q.currencyCode === 'TND' ? 3 : 2;
@@ -31,17 +37,216 @@ function formatFiat(price: number, q: CoinTopUpQuote) {
   return `${sym} ${n}`.replace(/,/g, '');
 }
 
-function snapCoins(v: number, q: CoinTopUpQuote) {
-  const step = q.stepCoins || 1;
-  const base = q.minCoins + Math.round((v - q.minCoins) / step) * step;
-  const x = Math.min(q.maxCoins, Math.max(q.minCoins, base));
-  return Math.round(x * 100) / 100;
+/** Slider / quick packs: clamp to min..max (5k). */
+function clampSliderCoins(v: number, q: CoinTopUpQuote) {
+  const n = Math.round(v * 100) / 100;
+  return Math.min(q.maxCoins, Math.max(q.minCoins, n));
 }
+
+/** Free-text input: minimum only (no upper cap). */
+function clampInputCoins(v: number, q: CoinTopUpQuote) {
+  if (!Number.isFinite(v)) return q.minCoins;
+  const n = Math.round(v * 100) / 100;
+  return Math.max(q.minCoins, n);
+}
+
+function isPopularPack(pack: { badge?: string }) {
+  const b = (pack.badge ?? '').toLowerCase();
+  return b.includes('most') || b.includes('popular');
+}
+
+function formatCoinsDisplay(coins: number) {
+  return coins % 1 === 0 ? coins.toLocaleString('en-US') : coins.toFixed(2);
+}
+
+function QuickPackCard({
+  pack,
+  quote,
+  selected,
+  popular,
+  busy,
+  onSelect,
+  colors,
+  isDark,
+  popularAccent,
+  popularBg,
+  popularBorder,
+}: {
+  pack: PackPreset;
+  quote: CoinTopUpQuote;
+  selected: boolean;
+  popular: boolean;
+  busy: boolean;
+  onSelect: () => void;
+  colors: ReturnType<typeof useTheme>['colors'];
+  isDark: boolean;
+  popularAccent: string;
+  popularBg: string;
+  popularBorder: string;
+}) {
+  const fiatPack = pack.coins / quote.coinsPerFiatUnit;
+  const accent = popular ? popularAccent : colors.primary;
+  const borderColor = selected ? colors.primary : popular ? popularBorder : colors.border;
+  const cardBg = popular ? popularBg : selected ? (isDark ? 'rgba(14,165,233,0.1)' : '#f0f9ff') : colors.card;
+
+  return (
+    <TouchableOpacity
+      accessibilityRole="button"
+      accessibilityState={{ selected }}
+      activeOpacity={0.9}
+      disabled={busy}
+      onPress={onSelect}
+      style={[
+        packStyles.card,
+        popular && packStyles.cardFeatured,
+        {
+          borderColor,
+          backgroundColor: cardBg,
+          shadowColor: popular ? popularAccent : isDark ? '#000' : '#0f172a',
+        },
+      ]}
+    >
+      {popular || pack.badge ? (
+        <View
+          style={[
+            packStyles.badgePill,
+            {
+              backgroundColor: popular ? popularAccent : colors.primary + '18',
+              alignSelf: 'flex-start',
+            },
+          ]}
+        >
+          {popular ? <Ionicons name="star" size={11} color="#fff" style={{ marginRight: 2 }} /> : null}
+          <Text style={[packStyles.badgeText, { color: popular ? '#fff' : colors.primary }]}>
+            {pack.badge ?? 'Featured'}
+          </Text>
+        </View>
+      ) : null}
+
+      <View style={packStyles.headerRow}>
+        <View style={packStyles.headerText}>
+          <Text style={[packStyles.packTitle, { color: colors.text }]}>{pack.label}</Text>
+          {pack.sub ? (
+            <Text style={[packStyles.packSub, { color: colors.textSecondary }]}>{pack.sub}</Text>
+          ) : null}
+        </View>
+        <View
+          style={[
+            packStyles.iconBubble,
+            { backgroundColor: accent + (isDark ? '28' : '1a'), borderColor: accent + '44' },
+          ]}
+        >
+          <Ionicons name={popular ? 'flash' : 'wallet-outline'} size={22} color={accent} />
+        </View>
+      </View>
+
+      <View style={[packStyles.amountBox, { backgroundColor: isDark ? 'rgba(15,23,42,0.45)' : 'rgba(255,255,255,0.72)' }]}>
+        <View>
+          <Text style={[packStyles.amountLabel, { color: colors.textTertiary }]}>You receive</Text>
+          <Text style={[packStyles.amountCoins, { color: colors.text }]}>
+            {formatCoinsDisplay(pack.coins)}{' '}
+            <Text style={[packStyles.amountCoinsUnit, { color: accent }]}>coins</Text>
+          </Text>
+        </View>
+        <View style={packStyles.amountRight}>
+          <Text style={[packStyles.amountLabel, { color: colors.textTertiary }]}>You pay</Text>
+          <Text style={[packStyles.amountFiat, { color: colors.text }]}>{formatFiat(fiatPack, quote)}</Text>
+        </View>
+      </View>
+
+      <View
+        style={[
+          packStyles.cta,
+          {
+            backgroundColor: selected || popular ? accent : colors.surfaceVariant,
+            borderColor: selected || popular ? accent : colors.border,
+          },
+        ]}
+      >
+        <Text style={[packStyles.ctaText, { color: selected || popular ? '#fff' : colors.text }]}>
+          {selected ? 'Selected' : 'Choose this pack'}
+        </Text>
+        <Ionicons name={selected ? 'checkmark-circle' : 'arrow-forward'} size={18} color={selected || popular ? '#fff' : colors.textSecondary} />
+      </View>
+    </TouchableOpacity>
+  );
+}
+
+const packStyles = StyleSheet.create({
+  card: {
+    width: '100%',
+    borderRadius: 20,
+    borderWidth: StyleSheet.hairlineWidth,
+    padding: 18,
+    overflow: 'hidden',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.12,
+    shadowRadius: 16,
+    elevation: 4,
+  },
+  cardFeatured: {
+    borderWidth: 2,
+    paddingTop: 22,
+    shadowOpacity: 0.2,
+    shadowRadius: 22,
+    elevation: 8,
+  },
+  badgePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 999,
+    marginBottom: 12,
+  },
+  badgeText: { fontSize: 11, fontWeight: '800', letterSpacing: 0.3 },
+  headerRow: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 },
+  headerText: { flex: 1 },
+  packTitle: { fontSize: 20, fontWeight: '900', letterSpacing: -0.4 },
+  packSub: { marginTop: 6, fontSize: 14, lineHeight: 20, fontWeight: '500' },
+  iconBubble: {
+    width: 48,
+    height: 48,
+    borderRadius: 14,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  amountBox: {
+    marginTop: 16,
+    borderRadius: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  amountLabel: { fontSize: 11, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.6 },
+  amountCoins: { marginTop: 4, fontSize: 26, fontWeight: '900', letterSpacing: -0.5 },
+  amountCoinsUnit: { fontSize: 16, fontWeight: '800' },
+  amountRight: { alignItems: 'flex-end' },
+  amountFiat: { marginTop: 4, fontSize: 18, fontWeight: '800' },
+  cta: {
+    marginTop: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 13,
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  ctaText: { fontSize: 15, fontWeight: '800' },
+});
 
 export default function BuyCoinsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { colors, isDark } = useTheme();
+  const role = useCoinTopupRole();
+  const { buyCoinsResult: resultPath } = coinTopupRoutes(role);
+
   const [quote, setQuote] = useState<CoinTopUpQuote | null>(null);
   const [loadErr, setLoadErr] = useState<string | null>(null);
   const [coins, setCoins] = useState(500);
@@ -49,12 +254,29 @@ export default function BuyCoinsScreen() {
   const [coinsFieldFocused, setCoinsFieldFocused] = useState(false);
   const [busy, setBusy] = useState(false);
   const [loadingQuote, setLoadingQuote] = useState(true);
+  const [pendingList, setPendingList] = useState<CoinTopUpPending[]>([]);
+  const [removingTrackingId, setRemovingTrackingId] = useState<string | null>(null);
+  const [removePendingTarget, setRemovePendingTarget] = useState<CoinTopUpPending | null>(null);
+  const [checkoutPreview, setCheckoutPreview] = useState<{
+    coins: number;
+    fiat: number;
+  } | null>(null);
 
   const pendingRef = useRef<{ trackingId: string; paymentId: string } | null>(null);
+  const verifyingRef = useRef(false);
 
   const syncDraftFromCoins = useCallback((c: number, q: CoinTopUpQuote) => {
-    const snapped = snapCoins(c, q);
-    setCoinsDraft(snapped % 1 !== 0 ? snapped.toFixed(2) : String(Math.round(snapped)));
+    const v = coinsFieldFocused ? clampInputCoins(c, q) : clampSliderCoins(c, q);
+    setCoinsDraft(v % 1 !== 0 ? v.toFixed(2) : String(Math.round(v)));
+  }, [coinsFieldFocused]);
+
+  const loadPending = useCallback(async () => {
+    try {
+      const rows = await coinTopupService.pending();
+      setPendingList(rows);
+    } catch {
+      setPendingList([]);
+    }
   }, []);
 
   const fetchQuote = useCallback(async () => {
@@ -63,16 +285,17 @@ export default function BuyCoinsScreen() {
       setLoadingQuote(true);
       const q = await coinTopupService.quote();
       setQuote(q);
-      const start = snapCoins(Math.min(Math.max(q.presets?.[1]?.coins ?? 2000, q.minCoins), q.maxCoins), q);
+      const start = clampSliderCoins(q.presets?.[1]?.coins ?? 2000, q);
       setCoins(start);
       syncDraftFromCoins(start, q);
+      await loadPending();
     } catch (e: unknown) {
       const msg = e instanceof ApiError ? e.message : 'Unable to load rates';
       setLoadErr(msg);
     } finally {
       setLoadingQuote(false);
     }
-  }, [syncDraftFromCoins]);
+  }, [loadPending, syncDraftFromCoins]);
 
   useEffect(() => {
     void fetchQuote();
@@ -91,12 +314,29 @@ export default function BuyCoinsScreen() {
       syncDraftFromCoins(coins, quote);
       return;
     }
-    setCoins(snapCoins(n, quote));
+    setCoins(clampInputCoins(n, quote));
   }
+
+  const goToResult = useCallback(
+    (status: 'success' | 'failed', extra?: { coins?: number; fiat?: number }) => {
+      router.replace({
+        pathname: resultPath,
+        params: {
+          status,
+          role,
+          coins: extra?.coins != null ? String(extra.coins) : undefined,
+          fiat: extra?.fiat != null ? String(extra.fiat) : undefined,
+          currencyCode: quote?.currencyCode ?? 'TND',
+        },
+      });
+    },
+    [quote?.currencyCode, resultPath, role, router],
+  );
 
   const tryVerifyPending = useCallback(async () => {
     const p = pendingRef.current;
-    if (!p) return;
+    if (!p || verifyingRef.current) return;
+    verifyingRef.current = true;
     try {
       const res = await coinTopupService.verify({
         trackingId: p.trackingId,
@@ -104,24 +344,28 @@ export default function BuyCoinsScreen() {
       });
       if (res.status === 'FAILED') {
         pendingRef.current = null;
+        const fiat = quote ? res.coins / quote.coinsPerFiatUnit : undefined;
+        goToResult('failed', { coins: res.coins, fiat });
+        void loadPending();
         return;
       }
       if (res.status !== 'COMPLETED' && !res.fulfilled) return;
       pendingRef.current = null;
-      Alert.alert(
-        'Coins added',
-        `${res.coins.toFixed(2)} coins were credited to your account.`,
-        [{ text: 'OK', onPress: () => router.back() }],
-      );
+      const fiat = quote ? res.coins / quote.coinsPerFiatUnit : undefined;
+      goToResult('success', { coins: res.coins, fiat });
+      void loadPending();
     } catch {
       /* network — retry later */
+    } finally {
+      verifyingRef.current = false;
     }
-  }, [router]);
+  }, [goToResult, loadPending, quote]);
 
   useFocusEffect(
     useCallback(() => {
       void tryVerifyPending();
-    }, [tryVerifyPending]),
+      void loadPending();
+    }, [loadPending, tryVerifyPending]),
   );
 
   useEffect(() => {
@@ -138,24 +382,38 @@ export default function BuyCoinsScreen() {
 
   const subtitle = quote?.flouciNote;
 
-  async function pay() {
-    if (!quote) return;
-    if (!quote.flouciReady) {
-      Alert.alert('Unavailable', subtitle || 'Payments are not available for this wallet.');
-      return;
-    }
-    const normalized = coinsDraft.replace(',', '.').replace(/[^\d.]/g, '');
-    const parsed = parseFloat(normalized);
-    const amount = Number.isFinite(parsed) ? snapCoins(parsed, quote) : snapCoins(coins, quote);
-    setCoins(amount);
-    syncDraftFromCoins(amount, quote);
-
-    setBusy(true);
-    try {
-      const init = await coinTopupService.initFlouci(amount);
+  const openFlouciCheckout = useCallback(
+    async (init: { trackingId: string; paymentId: string; checkoutUrl: string; coinsQuoted: number }) => {
       pendingRef.current = { trackingId: init.trackingId, paymentId: init.paymentId };
       await WebBrowser.openBrowserAsync(init.checkoutUrl);
       await tryVerifyPending();
+    },
+    [tryVerifyPending],
+  );
+
+  const startCheckout = useCallback(
+    async (amount: number) => {
+      if (!quote) return;
+      if (!quote.flouciReady) {
+        Alert.alert('Unavailable', subtitle || 'Payments are not available for this wallet.');
+        return;
+      }
+      const normalized = clampInputCoins(amount, quote);
+      setCoins(normalized);
+      syncDraftFromCoins(normalized, quote);
+      const fiat = normalized / quote.coinsPerFiatUnit;
+      setCheckoutPreview({ coins: normalized, fiat });
+    },
+    [quote, subtitle, syncDraftFromCoins],
+  );
+
+  const confirmCheckoutPreview = useCallback(async () => {
+    if (!checkoutPreview || !quote) return;
+    setCheckoutPreview(null);
+    setBusy(true);
+    try {
+      const init = await coinTopupService.initFlouci(checkoutPreview.coins);
+      await openFlouciCheckout(init);
     } catch (e: unknown) {
       pendingRef.current = null;
       const msg = e instanceof ApiError ? e.message : 'Could not open checkout';
@@ -163,10 +421,60 @@ export default function BuyCoinsScreen() {
     } finally {
       setBusy(false);
     }
-  }
+  }, [checkoutPreview, openFlouciCheckout, quote]);
+
+  const confirmRemovePending = useCallback(async () => {
+    const row = removePendingTarget;
+    if (!row) return;
+    setRemovingTrackingId(row.trackingId);
+    try {
+      await coinTopupService.cancelPending(row.trackingId);
+      if (pendingRef.current?.trackingId === row.trackingId) {
+        pendingRef.current = null;
+      }
+      setPendingList((prev) => prev.filter((p) => p.trackingId !== row.trackingId));
+      setRemovePendingTarget(null);
+    } catch (e: unknown) {
+      const msg = e instanceof ApiError ? e.message : 'Could not remove payment';
+      Alert.alert('Remove failed', msg);
+    } finally {
+      setRemovingTrackingId(null);
+    }
+  }, [removePendingTarget]);
+
+  const removePendingMessage = useMemo(() => {
+    if (!removePendingTarget) return '';
+    const fiatDigits = quote?.currencyCode === 'TND' ? 3 : 2;
+    return `${removePendingTarget.coins.toFixed(2)} coins · ${removePendingTarget.fiatTotal.toFixed(fiatDigits)} ${removePendingTarget.currencyCode}\n\nThis cancels the checkout session. You can start a new purchase anytime.`;
+  }, [quote?.currencyCode, removePendingTarget]);
+
+  const resumePending = useCallback(
+    async (row: CoinTopUpPending) => {
+      if (!row.checkoutUrl || !row.paymentId) {
+        Alert.alert('Unavailable', 'This payment session cannot be resumed. Start a new purchase.');
+        return;
+      }
+      setBusy(true);
+      try {
+        await openFlouciCheckout({
+          trackingId: row.trackingId,
+          paymentId: row.paymentId,
+          checkoutUrl: row.checkoutUrl,
+          coinsQuoted: row.coins,
+        });
+      } finally {
+        setBusy(false);
+      }
+    },
+    [openFlouciCheckout],
+  );
 
   const accentGlow = isDark ? 'rgba(94,234,212,0.16)' : 'rgba(14,165,233,0.22)';
   const accentRing = isDark ? 'rgba(94,234,212,0.35)' : 'rgba(59,130,246,0.35)';
+  const popularAccent = isDark ? '#fbbf24' : '#d97706';
+  const popularBg = isDark ? 'rgba(251,191,36,0.14)' : '#fffbeb';
+  const popularBorder = isDark ? 'rgba(251,191,36,0.55)' : 'rgba(217,119,6,0.45)';
+  const modalOverlayTint = isDark ? 'rgba(0,0,0,0.68)' : 'rgba(15,23,42,0.48)';
 
   if (loadingQuote && !quote) {
     return (
@@ -192,7 +500,6 @@ export default function BuyCoinsScreen() {
     <View style={[styles.fill, { backgroundColor: colors.background }]}>
       <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + 32 }} showsVerticalScrollIndicator={false}>
         <View style={{ paddingHorizontal: 20, paddingTop: insets.top + 12 }}>
-          {/* Decorative blobs */}
           <View style={styles.heroVisual} pointerEvents="none">
             <View style={[styles.blob, styles.blobOne, { backgroundColor: accentGlow }]} />
             <View style={[styles.blob, styles.blobTwo, { backgroundColor: accentRing }]} />
@@ -204,7 +511,49 @@ export default function BuyCoinsScreen() {
             <Text style={{ fontWeight: '700', color: colors.text }}>country coin configuration</Text>.
           </Text>
 
-          {subtitle && (
+          {pendingList.length > 0 ? (
+            <View style={[styles.pendingBlock, { borderColor: colors.border, backgroundColor: colors.card }]}>
+              <Text style={[styles.pendingTitle, { color: colors.text }]}>Pending payments</Text>
+              {pendingList.map((row) => {
+                const removing = removingTrackingId === row.trackingId;
+                return (
+                  <View key={row.trackingId} style={[styles.pendingRow, { borderTopColor: colors.border }]}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.pendingCoins, { color: colors.text }]}>{row.coins.toFixed(2)} coins</Text>
+                      <Text style={[styles.pendingFiat, { color: colors.textSecondary }]}>
+                        {row.fiatTotal.toFixed(quote.currencyCode === 'TND' ? 3 : 2)} {row.currencyCode}
+                      </Text>
+                    </View>
+                    <View style={styles.pendingActions}>
+                      <TouchableOpacity
+                        accessibilityRole="button"
+                        accessibilityLabel="Remove pending payment"
+                        disabled={busy || removing}
+                        onPress={() => setRemovePendingTarget(row)}
+                        style={[styles.pendingRemoveBtn, { borderColor: colors.border }]}
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                      >
+                        {removing ? (
+                          <ActivityIndicator size="small" color={colors.danger ?? '#dc2626'} />
+                        ) : (
+                          <Ionicons name="trash-outline" size={20} color={colors.danger ?? '#dc2626'} />
+                        )}
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[styles.pendingBtn, { backgroundColor: colors.primary }]}
+                        disabled={busy || removing || !row.checkoutUrl}
+                        onPress={() => void resumePending(row)}
+                      >
+                        <Text style={styles.pendingBtnText}>Complete payment</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                );
+              })}
+            </View>
+          ) : null}
+
+          {subtitle ? (
             <View
               style={[
                 styles.noticeCard,
@@ -218,7 +567,7 @@ export default function BuyCoinsScreen() {
               />
               <Text style={[styles.noticeBody, { color: colors.textSecondary }]}>{subtitle}</Text>
             </View>
-          )}
+          ) : null}
 
           <View
             style={[
@@ -247,7 +596,7 @@ export default function BuyCoinsScreen() {
                 keyboardType="decimal-pad"
                 inputMode="decimal"
                 selectTextOnFocus
-                placeholder="0"
+                placeholder={String(quote.minCoins)}
                 placeholderTextColor={colors.textTertiary}
                 underlineColorAndroid="transparent"
                 accessibilityLabel="Coin amount to buy"
@@ -255,6 +604,9 @@ export default function BuyCoinsScreen() {
               />
               <Text style={[styles.amountUnit, { color: colors.primary }]}> coins</Text>
             </View>
+            <Text style={[styles.amountHint, { color: colors.textTertiary }]}>
+              Min {quote.minCoins} coins · type any amount (e.g. 55)
+            </Text>
             <View style={[styles.divider, { backgroundColor: colors.border }]} />
             <Text style={[styles.payLabel, { color: colors.textSecondary }]}>You pay approximately</Text>
             <Text style={[styles.payValue, { color: colors.text }]}>{formatFiat(fiatNow, quote)}</Text>
@@ -266,27 +618,31 @@ export default function BuyCoinsScreen() {
                   minimumValue={quote.minCoins}
                   maximumValue={quote.maxCoins}
                   step={quote.stepCoins}
-                  value={Math.min(Math.max(coins, quote.minCoins), quote.maxCoins)}
+                  value={Math.min(Math.max(clampSliderCoins(coins, quote), quote.minCoins), quote.maxCoins)}
                   minimumTrackTintColor={colors.primary}
                   maximumTrackTintColor={isDark ? '#334155' : '#cbd5e1'}
                   thumbTintColor={colors.primary}
-                  onSlidingComplete={(v) => setCoins(snapCoins(v as number, quote))}
-                  onValueChange={(v) => setCoins(snapCoins(v as number, quote))}
+                  onSlidingComplete={(v) => {
+                    setCoinsFieldFocused(false);
+                    setCoins(clampSliderCoins(v as number, quote));
+                  }}
+                  onValueChange={(v) => {
+                    setCoinsFieldFocused(false);
+                    setCoins(clampSliderCoins(v as number, quote));
+                  }}
                 />
               </View>
               <View style={styles.sliderLegend}>
+                <Text style={[styles.legendText, { color: colors.textTertiary }]}>Min {quote.minCoins}</Text>
                 <Text style={[styles.legendText, { color: colors.textTertiary }]}>
-                  Min {quote.minCoins.toFixed(0)}
-                </Text>
-                <Text style={[styles.legendText, { color: colors.textTertiary }]}>
-                  Max {quote.maxCoins >= 1000 ? `${quote.maxCoins / 1000}k` : quote.maxCoins}
+                  Slider max {quote.maxCoins >= 1000 ? `${quote.maxCoins / 1000}k` : quote.maxCoins}
                 </Text>
               </View>
 
               <TouchableOpacity
                 accessibilityRole="button"
                 disabled={busy || !quote.flouciReady}
-                onPress={() => void pay()}
+                onPress={() => void startCheckout(coins)}
                 style={[
                   styles.buyNow,
                   {
@@ -296,56 +652,119 @@ export default function BuyCoinsScreen() {
                 ]}
                 activeOpacity={0.9}
               >
-                {busy ? (
-                  <ActivityIndicator color="#fff" />
-                ) : (
-                  <Text style={styles.buyNowText}>Buy now</Text>
-                )}
+                {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.buyNowText}>Buy now</Text>}
               </TouchableOpacity>
             </View>
           </View>
 
-          <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>Quick packs</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.packRow}>
-            {quote.presets.map((pack) => {
-              const fiatPack = pack.coins / quote.coinsPerFiatUnit;
-              const sel = snapCoins(coins, quote) === snapCoins(pack.coins, quote);
-              return (
-                <TouchableOpacity
-                  key={pack.label + pack.coins}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected: sel }}
-                  activeOpacity={0.92}
-                  onPress={() => setCoins(snapCoins(pack.coins, quote))}
-                  style={[
-                    styles.packCard,
-                    {
-                      borderColor: sel ? colors.primary : colors.border,
-                      backgroundColor: sel ? (isDark ? 'rgba(14,165,233,0.12)' : '#eff6ff') : colors.card,
-                    },
-                  ]}
-                >
-                  {pack.badge && (
-                    <View style={[styles.badgePill, { backgroundColor: colors.primary + '22' }]}>
-                      <Text style={[styles.badgeText, { color: colors.primary }]}>{pack.badge}</Text>
-                    </View>
-                  )}
-                  <Text style={[styles.packLabel, { color: colors.textSecondary }]}>{pack.label}</Text>
-                  <Text style={[styles.packCoins, { color: colors.text }]}>{pack.coins} coins</Text>
-                  <Text style={[styles.packFiat, { color: colors.textTertiary }]}>{formatFiat(fiatPack, quote)}</Text>
-                  <View style={[styles.packBtn, { backgroundColor: sel ? colors.primary : colors.surfaceVariant }]}>
-                    <Text style={[styles.packBtnText, { color: sel ? '#fff' : colors.text }]}>Choose</Text>
-                  </View>
-                </TouchableOpacity>
-              );
-            })}
-          </ScrollView>
-
-          <Text style={[styles.foot, { color: colors.textTertiary }]}>
-            You will complete payment in a secure browser. When you return here, your balance refreshes automatically.
-          </Text>
+          <View style={styles.packSection}>
+            <Text style={[styles.sectionTitle, { color: colors.textSecondary, marginTop: 0 }]}>Quick packs</Text>
+            <Text style={[styles.packSectionHint, { color: colors.textTertiary }]}>
+              Pick a ready-made bundle — amounts include live pricing for your country.
+            </Text>
+            <View style={styles.packList}>
+              {quote.presets.map((pack) => {
+                const sel = clampSliderCoins(coins, quote) === clampSliderCoins(pack.coins, quote);
+                const popular = isPopularPack(pack);
+                return (
+                  <QuickPackCard
+                    key={pack.label + pack.coins}
+                    pack={pack}
+                    quote={quote}
+                    selected={sel}
+                    popular={popular}
+                    busy={busy}
+                    colors={colors}
+                    isDark={isDark}
+                    popularAccent={popularAccent}
+                    popularBg={popularBg}
+                    popularBorder={popularBorder}
+                    onSelect={() => {
+                      setCoinsFieldFocused(false);
+                      setCoins(clampSliderCoins(pack.coins, quote));
+                      void startCheckout(pack.coins);
+                    }}
+                  />
+                );
+              })}
+            </View>
+          </View>
         </View>
       </ScrollView>
+
+      <Modal
+        visible={checkoutPreview != null}
+        transparent
+        animationType="fade"
+        statusBarTranslucent
+        onRequestClose={() => !busy && setCheckoutPreview(null)}
+      >
+        <View style={styles.modalRoot}>
+          <Pressable
+            style={[StyleSheet.absoluteFillObject, { backgroundColor: modalOverlayTint }]}
+            onPress={() => !busy && setCheckoutPreview(null)}
+            accessibilityRole="button"
+            accessibilityLabel="Dismiss"
+          />
+          <View style={styles.modalAlign} pointerEvents="box-none">
+            <View
+              style={[
+                styles.modalCard,
+                {
+                  backgroundColor: colors.card,
+                  borderColor: colors.border,
+                  shadowColor: isDark ? '#000' : '#0f172a',
+                },
+              ]}
+              accessibilityViewIsModal
+            >
+              <Text style={[styles.modalTitle, { color: colors.text }]}>Confirm payment</Text>
+              <Text style={[styles.modalSub, { color: colors.textSecondary }]}>
+                You will pay on Flouci (secure checkout). The amount below is sent to the payment page.
+              </Text>
+              {checkoutPreview ? (
+                <>
+                  <Text style={[styles.modalCoins, { color: colors.text }]}>
+                    {checkoutPreview.coins.toFixed(2)} coins
+                  </Text>
+                  <Text style={[styles.modalFiat, { color: colors.primary }]}>
+                    {formatFiat(checkoutPreview.fiat, quote)}
+                  </Text>
+                </>
+              ) : null}
+              <TouchableOpacity
+                style={[styles.buyNow, { backgroundColor: colors.primary, marginTop: 18 }]}
+                disabled={busy}
+                onPress={() => void confirmCheckoutPreview()}
+              >
+                {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.buyNowText}>Continue to Flouci</Text>}
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={{ marginTop: 12, paddingVertical: 10 }}
+                disabled={busy}
+                onPress={() => setCheckoutPreview(null)}
+              >
+                <Text style={{ textAlign: 'center', color: colors.textSecondary, fontWeight: '700' }}>Cancel</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <ThemedConfirmDialog
+        visible={removePendingTarget != null}
+        onClose={() => {
+          if (!removingTrackingId) setRemovePendingTarget(null);
+        }}
+        title="Remove pending payment?"
+        message={removePendingMessage}
+        icon="trash-outline"
+        destructive
+        confirmLabel="Remove"
+        cancelLabel="Keep"
+        busy={removingTrackingId != null}
+        onConfirm={() => void confirmRemovePending()}
+      />
     </View>
   );
 }
@@ -360,6 +779,34 @@ const styles = StyleSheet.create({
   blob: { position: 'absolute', borderRadius: 999 },
   blobOne: { width: 140, height: 140, top: 0, right: 0 },
   blobTwo: { width: 90, height: 90, top: 40, right: 60, opacity: 0.5 },
+  pendingBlock: {
+    marginTop: 18,
+    borderRadius: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 14,
+    paddingBottom: 6,
+  },
+  pendingTitle: { fontSize: 14, fontWeight: '800', paddingVertical: 12 },
+  pendingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  pendingActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  pendingRemoveBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    borderWidth: StyleSheet.hairlineWidth,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pendingCoins: { fontSize: 15, fontWeight: '800' },
+  pendingFiat: { fontSize: 12, marginTop: 2, fontWeight: '600' },
+  pendingBtn: { borderRadius: 10, paddingHorizontal: 12, paddingVertical: 9 },
+  pendingBtnText: { color: '#fff', fontWeight: '800', fontSize: 12 },
   noticeCard: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -378,6 +825,7 @@ const styles = StyleSheet.create({
     paddingVertical: 20,
   },
   amountLabel: { fontSize: 13, fontWeight: '600', letterSpacing: 0.2 },
+  amountHint: { marginTop: 6, fontSize: 11, fontWeight: '600' },
   amountInputRow: {
     flexDirection: 'row',
     alignItems: 'baseline',
@@ -401,20 +849,10 @@ const styles = StyleSheet.create({
   divider: { height: StyleSheet.hairlineWidth, marginVertical: 14, opacity: 0.85 },
   payLabel: { fontSize: 13, fontWeight: '600' },
   payValue: { marginTop: 4, fontSize: 26, fontWeight: '800' },
-  sliderTrackShell: {
-    borderRadius: 999,
-    paddingHorizontal: 4,
-    paddingVertical: 6,
-  },
+  sliderTrackShell: { borderRadius: 999, paddingHorizontal: 4, paddingVertical: 6 },
   sliderLegend: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 4 },
   legendText: { fontSize: 11, fontWeight: '700' },
-  buyNow: {
-    marginTop: 18,
-    borderRadius: 14,
-    paddingVertical: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+  buyNow: { borderRadius: 14, paddingVertical: 14, alignItems: 'center', justifyContent: 'center' },
   buyNowText: { color: '#fff', fontWeight: '900', fontSize: 16 },
   sectionTitle: {
     marginTop: 26,
@@ -424,38 +862,27 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     fontWeight: '800',
   },
-  packRow: { gap: 12, paddingRight: 24 },
-  packCard: {
-    width: 158,
-    borderRadius: 18,
-    borderWidth: StyleSheet.hairlineWidth,
-    padding: 14,
-    marginRight: 4,
-    gap: 6,
-    position: 'relative',
-    overflow: 'hidden',
-  },
-  badgePill: {
-    alignSelf: 'flex-start',
-    paddingHorizontal: 10,
-    paddingVertical: 3,
-    borderRadius: 999,
-    marginBottom: 6,
-  },
-  badgeText: { fontSize: 10, fontWeight: '800', letterSpacing: 0.3 },
-  packLabel: { fontSize: 12, fontWeight: '700' },
-  packCoins: { fontSize: 17, fontWeight: '900' },
-  packFiat: { fontSize: 13 },
-  packBtn: { marginTop: 10, alignItems: 'center', justifyContent: 'center', paddingVertical: 10, borderRadius: 12 },
-  packBtnText: { fontWeight: '800', fontSize: 13 },
+  packSection: { marginTop: 26 },
+  packSectionHint: { marginTop: -4, marginBottom: 14, fontSize: 13, lineHeight: 19, fontWeight: '500' },
+  packList: { gap: 14 },
   secondaryBtn: { alignSelf: 'flex-start', paddingHorizontal: 16, paddingVertical: 11, borderRadius: 12, borderWidth: 1 },
-  foot: {
-    marginTop: 14,
-    textAlign: 'center',
-    fontSize: 11,
-    lineHeight: 15,
-    fontWeight: '600',
-    opacity: 0.92,
-    paddingHorizontal: 8,
+  modalRoot: { flex: 1 },
+  modalAlign: {
+    flex: 1,
+    justifyContent: 'center',
+    paddingHorizontal: 24,
   },
+  modalCard: {
+    borderRadius: 22,
+    borderWidth: StyleSheet.hairlineWidth,
+    padding: 22,
+    shadowOffset: { width: 0, height: 16 },
+    shadowOpacity: 0.2,
+    shadowRadius: 24,
+    elevation: 12,
+  },
+  modalTitle: { fontSize: 20, fontWeight: '900' },
+  modalSub: { marginTop: 8, fontSize: 13, lineHeight: 18 },
+  modalCoins: { marginTop: 18, fontSize: 17, fontWeight: '800', textAlign: 'center' },
+  modalFiat: { marginTop: 6, fontSize: 32, fontWeight: '900', textAlign: 'center' },
 });

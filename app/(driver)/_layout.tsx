@@ -104,6 +104,7 @@ export default function DriverLayout() {
       <Tabs.Screen name="bank-details" options={{ href: null }} />
       <Tabs.Screen name="send-coins" options={{ href: null }} />
       <Tabs.Screen name="buy-coins" options={{ href: null }} />
+      <Tabs.Screen name="buy-coins-result" options={{ href: null, headerShown: false }} />
       <Tabs.Screen name="security" options={{ href: null }} />
       <Tabs.Screen name="transfer-pin" options={{ href: null }} />
     </Tabs>

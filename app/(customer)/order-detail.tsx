@@ -8,6 +8,9 @@ import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { clampMinSchedule, mergePublishDatePart, mergePublishTimePart } from '../../utils/schedPublishHelpers';
 import { orderService, Order, computeOrderCancelRemainingSec } from '../../services/api/order.service';
+import { walletService } from '../../services/api/wallet.service';
+import { OrderPreviewAvailableBalance } from '../../components/OrderPreviewPaymentUi';
+import { fiatToCoins, hasCoinRate } from '../../utils/orderPriceCoins';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useOrderChatUnread } from '../../hooks/useOrderChatUnread';
 import { ChatUnreadBadge } from '../../components/ChatUnreadBadge';
@@ -67,6 +70,7 @@ export default function OrderDetailScreen() {
   const [draftPublishAt, setDraftPublishAt] = useState(new Date());
   const [androidPublishStep, setAndroidPublishStep] = useState<'idle' | 'date' | 'time'>('idle');
   const [scheduleSaving, setScheduleSaving] = useState(false);
+  const [walletSpendable, setWalletSpendable] = useState<number | null>(null);
 
   const scrollViewRef = useRef<ScrollView>(null);
   const [driverCardY, setDriverCardY] = useState<number | null>(null);
@@ -82,6 +86,19 @@ export default function OrderDetailScreen() {
   }, [orderId]);
 
   useEffect(() => { loadOrder(); }, [loadOrder]);
+
+  const loadWalletBalance = useCallback(async () => {
+    try {
+      const w = await walletService.getWallet();
+      setWalletSpendable(w.spendable ?? w.balance ?? 0);
+    } catch {
+      setWalletSpendable(null);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadWalletBalance();
+  }, [loadWalletBalance]);
   useEffect(() => {
     if (!orderId) return;
     return subscribeOrderDetailRefresh(orderId, () => {
@@ -672,6 +689,22 @@ export default function OrderDetailScreen() {
           <View style={s.priceRow}>
             <Text style={[s.totalLabel, { color: colors.text }]}>Total</Text>
             <Text style={[s.totalValue, { color: colors.primary }]}>{order.price.toFixed(2)} TND</Text>
+          </View>
+          <View style={{ marginTop: 14 }}>
+            <OrderPreviewAvailableBalance
+              walletBalance={walletSpendable}
+              isCash={order.paymentType === 'COD'}
+              coinsPerFiatUnit={order.coinsPerFiatUnit}
+              currencySymbol={order.currencySymbol ?? order.currencyCode ?? 'TND'}
+              orderTotalCoins={
+                order.priceCoins ??
+                (hasCoinRate(order.coinsPerFiatUnit)
+                  ? fiatToCoins(order.price, order.coinsPerFiatUnit!)
+                  : order.price)
+              }
+              colors={colors}
+              isDark={isDark}
+            />
           </View>
         </View>
 
