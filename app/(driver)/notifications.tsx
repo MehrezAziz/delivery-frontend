@@ -120,6 +120,11 @@ export default function DriverNotifications() {
       push(`/(driver)/support-chat?ticketId=${item.relatedEntityId}`);
     } else if (item.relatedEntityType === 'Rating') {
       push('/(driver)/my-ratings');
+    } else if (
+      item.type === 'WITHDRAWAL_PROCESSED' ||
+      item.relatedEntityType === 'DriverWithdrawalRequest'
+    ) {
+      push('/(driver)/transactions');
     }
   };
 

@@ -1840,6 +1840,10 @@ export async function notificationDataToRoute(
     }
     case 'Rating':
       return '/(driver)/my-ratings';
+    case 'WithdrawalRequest':
+      return '/(customer)/wallet?tab=transactions';
+    case 'DriverWithdrawalRequest':
+      return '/(driver)/transactions';
     case 'CoinTransfer': {
       if (type === 'COIN_TRANSFER_RECEIVED') {
         const role = (await getStoredUserRole()) || 'CUSTOMER';

@@ -111,6 +111,11 @@ export default function CustomerNotifications() {
       router.push(`/(customer)/support-chat?ticketId=${item.relatedEntityId}`);
     } else if (item.relatedEntityType === 'Wallet') {
       router.push('/(customer)/wallet');
+    } else if (
+      item.type === 'WITHDRAWAL_PROCESSED' ||
+      item.relatedEntityType === 'WithdrawalRequest'
+    ) {
+      router.push('/(customer)/wallet?tab=transactions' as never);
     }
   };
 

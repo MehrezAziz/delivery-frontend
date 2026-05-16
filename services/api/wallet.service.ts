@@ -18,6 +18,7 @@ export interface Wallet {
     currencySymbol: string;
     balanceAsLocalFiat: number;
     spendableAsLocalFiat: number;
+    withdrawalFeeBps?: number;
   } | null;
   discount: number;
   updatedAt: string;
@@ -40,6 +41,7 @@ export interface WithdrawalRequest {
   id: string;
   walletId: string;
   amount: number;
+  feeAmount?: number;
   status: string;
   payoutMethod?: string | null;
   payoutBankHolderName?: string | null;
@@ -47,8 +49,26 @@ export interface WithdrawalRequest {
   payoutBankAccountRef?: string | null;
   descriptionOfCustomer?: string | null;
   descriptionOfAdmin?: string | null;
+  rejectionReason?: string | null;
   requestedAt: string;
   processedAt?: string | null;
+}
+
+export interface WithdrawalQuote {
+  amountCoins: number;
+  feeCoins: number;
+  feeBps: number;
+  /** Coins paid out to the user after fee is deducted. */
+  netPayoutCoins: number;
+  /** Total debited from wallet (= amountCoins). */
+  totalCoins: number;
+  spendableCoins: number;
+  currencyCode: string;
+  currencySymbol: string;
+  amountFiat: number | null;
+  feeFiat: number | null;
+  totalFiat: number | null;
+  coinsPerFiatUnit: number | null;
 }
 
 export interface PayoutBankDetails {
@@ -74,6 +94,9 @@ export const walletService = {
 
   getWithdrawals: (page = 1, limit = 20) =>
     api.get<PaginatedResponse<WithdrawalRequest>>(`/wallet/me/withdrawals?page=${page}&limit=${limit}`),
+
+  getWithdrawalQuote: (amount: number) =>
+    api.get<WithdrawalQuote>(`/wallet/me/withdrawals/quote?amount=${encodeURIComponent(String(amount))}`),
 
   getPayoutBankDetails: () =>
     api.get<PayoutBankDetails | null>('/wallet/me/payout-bank-details'),

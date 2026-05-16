@@ -70,13 +70,31 @@ type EarningsPayload = {
 type WithdrawRow = {
   id: string;
   amount: number;
+  feeAmount?: number;
   status: string;
   payoutMethod: string;
   payoutBankHolderName?: string | null;
   payoutBankName?: string | null;
   payoutBankAccountRef?: string | null;
+  descriptionFromDriver?: string | null;
+  descriptionFromStaff?: string | null;
+  rejectionReason?: string | null;
   requestedAt: string;
   processedAt?: string | null;
+};
+
+type WithdrawQuote = {
+  amountCoins: number;
+  feeCoins: number;
+  feeBps: number;
+  netPayoutCoins: number;
+  totalCoins: number;
+  spendableCoins: number;
+  currencyCode: string;
+  currencySymbol: string;
+  amountFiat: number | null;
+  feeFiat: number | null;
+  totalFiat: number | null;
 };
 
 export default function DriverEarningsScreen() {
@@ -104,6 +122,8 @@ export default function DriverEarningsScreen() {
   const [wdSaveBank, setWdSaveBank] = useState(false);
   const [wdBusy, setWdBusy] = useState(false);
   const [wdStep, setWdStep] = useState<'form' | 'preview'>('form');
+  const [wdQuote, setWdQuote] = useState<WithdrawQuote | null>(null);
+  const [wdQuoteLoading, setWdQuoteLoading] = useState(false);
   const [wdCancelling, setWdCancelling] = useState<string | null>(null);
   const [walletQuickMore, setWalletQuickMore] = useState(false);
 
@@ -214,8 +234,9 @@ export default function DriverEarningsScreen() {
       Alert.alert('Amount', 'Enter a valid positive amount.');
       return null;
     }
-    if (amt > balance) {
-      Alert.alert('Balance', 'Amount cannot exceed your available account balance.');
+    const totalDebit = wdQuote?.totalCoins ?? amt;
+    if (totalDebit > balance) {
+      Alert.alert('Balance', 'This amount exceeds your available account balance.');
       return null;
     }
     if (wdPayout === 'BANK_TRANSFER') {
@@ -227,10 +248,40 @@ export default function DriverEarningsScreen() {
     return amt;
   };
 
-  const goWdPreview = () => {
+  const goWdPreview = async () => {
     const amt = validateWdForm();
     if (amt == null) return;
-    setWdStep('preview');
+    const token = await AsyncStorage.getItem('accessToken');
+    if (!token) return;
+    setWdQuoteLoading(true);
+    try {
+      const { data: q } = await axios.get<WithdrawQuote>(
+        `${API_BASE}/drivers/me/withdrawal-requests/quote?amount=${encodeURIComponent(String(amt))}`,
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+      if (q.totalCoins > q.spendableCoins) {
+        Alert.alert(
+          'Balance',
+          `You need ${q.totalCoins.toFixed(2)} coins but only ${q.spendableCoins.toFixed(2)} are available.`,
+        );
+        return;
+      }
+      if (q.netPayoutCoins <= 0) {
+        Alert.alert('Amount too small', 'The amount after the withdrawal fee must be greater than zero.');
+        return;
+      }
+      setWdQuote(q);
+      setWdStep('preview');
+    } catch (e: unknown) {
+      const msg =
+        typeof e === 'object' && e !== null && 'response' in e &&
+        typeof (e as { response?: { data?: { message?: string } } }).response?.data?.message === 'string'
+          ? (e as { response: { data: { message: string } } }).response.data.message
+          : e instanceof Error ? e.message : 'Could not load quote';
+      Alert.alert('Error', msg);
+    } finally {
+      setWdQuoteLoading(false);
+    }
   };
 
   const submitWithdraw = async () => {
@@ -262,6 +313,7 @@ export default function DriverEarningsScreen() {
       setWdBankName('');
       setWdBankRef('');
       setWdSaveBank(false);
+      setWdQuote(null);
       Alert.alert('Submitted', 'Your payout request was sent to support. You will be notified when it is processed.');
       void loadProfile();
       void loadWithdrawals();
@@ -602,6 +654,21 @@ export default function DriverEarningsScreen() {
                         {w.payoutBankAccountRef || ''}
                       </Text>
                     ) : null}
+                    {(w.feeAmount ?? 0) > 0 ? (
+                      <Text style={{ color: colors.textTertiary, fontSize: 11, marginTop: 4 }}>
+                        Fee: {(w.feeAmount ?? 0).toFixed(2)} coins
+                      </Text>
+                    ) : null}
+                    {w.descriptionFromStaff ? (
+                      <Text style={{ color: colors.textSecondary, fontSize: 11, marginTop: 4 }}>
+                        Note from support: {w.descriptionFromStaff}
+                      </Text>
+                    ) : null}
+                    {w.status === 'REJECTED' && w.rejectionReason ? (
+                      <Text style={{ color: '#b91c1c', fontSize: 11, marginTop: 4, fontWeight: '600' }}>
+                        Rejected: {w.rejectionReason}
+                      </Text>
+                    ) : null}
                   </View>
                   <View style={{ alignItems: 'flex-end', gap: 6 }}>
                     <Text style={{ color: colors.textSecondary, fontSize: 12 }}>{w.status}</Text>
@@ -734,21 +801,42 @@ export default function DriverEarningsScreen() {
                       <Text style={{ color: colors.text, fontWeight: '700' }}>Cancel</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
-                      style={[styles.primaryBtn, { flex: 1, marginTop: 0 }]}
-                      onPress={goWdPreview}
+                      style={[styles.primaryBtn, { flex: 1, marginTop: 0 }, wdQuoteLoading && { opacity: 0.6 }]}
+                      onPress={() => void goWdPreview()}
+                      disabled={wdQuoteLoading}
                     >
-                      <Text style={styles.primaryBtnText}>Review request</Text>
+                      {wdQuoteLoading ? (
+                        <ActivityIndicator color="#fff" />
+                      ) : (
+                        <Text style={styles.primaryBtnText}>Review request</Text>
+                      )}
                     </TouchableOpacity>
                   </View>
                 </>
               ) : (
                 <>
                   <Text style={[styles.modalTitle, { color: colors.text }]}>Confirm withdrawal</Text>
-                  <Text style={{ color: colors.textSecondary, fontSize: 13, marginTop: 4 }}>You are requesting</Text>
+                  <Text style={{ color: colors.textSecondary, fontSize: 13, marginTop: 4 }}>From your account</Text>
                   <Text style={{ color: colors.text, fontSize: 32, fontWeight: '800', marginTop: 6 }}>
                     {parseFloat((wdAmount || '').replace(',', '.') || '0').toFixed(2)}{' '}
                     <Text style={{ fontSize: 18, fontWeight: '600', color: colors.textSecondary }}>Coins</Text>
                   </Text>
+                  {wdQuote && wdQuote.feeCoins > 0 ? (
+                    <Text style={{ color: colors.textSecondary, fontSize: 13, marginTop: 6 }}>
+                      Fee: {wdQuote.feeCoins.toFixed(2)} coins
+                      {wdQuote.feeBps > 0 ? ` (${wdQuote.feeBps / 100}%)` : ''}
+                    </Text>
+                  ) : null}
+                  <Text style={{ color: colors.textSecondary, fontSize: 13, marginTop: 10 }}>You receive</Text>
+                  <Text style={{ color: colors.text, fontSize: 28, fontWeight: '800', marginTop: 4 }}>
+                    {(wdQuote?.netPayoutCoins ?? parseFloat((wdAmount || '').replace(',', '.') || '0')).toFixed(2)}{' '}
+                    <Text style={{ fontSize: 16, fontWeight: '600', color: colors.textSecondary }}>Coins</Text>
+                  </Text>
+                  {wdQuote?.amountFiat != null ? (
+                    <Text style={{ color: colors.textTertiary, fontSize: 14, marginTop: 2 }}>
+                      ≈ {wdQuote.currencySymbol || wdQuote.currencyCode} {wdQuote.amountFiat.toFixed(2)}
+                    </Text>
+                  ) : null}
                   <Text style={{ color: colors.textTertiary, fontSize: 13, marginTop: 10 }}>
                     Account balance {balance.toFixed(2)} Coins
                   </Text>
@@ -762,7 +850,10 @@ export default function DriverEarningsScreen() {
                   <View style={{ flexDirection: 'row', gap: 10, marginTop: 18 }}>
                     <TouchableOpacity
                       style={[styles.chip, { flex: 1, justifyContent: 'center' }]}
-                      onPress={() => setWdStep('form')}
+                      onPress={() => {
+                        setWdStep('form');
+                        setWdQuote(null);
+                      }}
                       disabled={wdBusy}
                     >
                       <Text style={{ color: colors.text, fontWeight: '700' }}>Back</Text>

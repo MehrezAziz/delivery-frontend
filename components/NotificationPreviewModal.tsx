@@ -68,6 +68,20 @@ function navigateFromNotification(router: ReturnType<typeof useRouter>, item: No
     router.push('/(customer)/wallet' as any);
     return;
   }
+  if (
+    variant === 'customer' &&
+    (item.type === 'WITHDRAWAL_PROCESSED' || item.relatedEntityType === 'WithdrawalRequest')
+  ) {
+    router.push('/(customer)/wallet?tab=transactions' as any);
+    return;
+  }
+  if (
+    variant === 'driver' &&
+    (item.type === 'WITHDRAWAL_PROCESSED' || item.relatedEntityType === 'DriverWithdrawalRequest')
+  ) {
+    router.push('/(driver)/transactions' as any);
+    return;
+  }
   if (item.relatedEntityType === 'Rating' && variant === 'driver') {
     router.push('/(driver)/my-ratings' as any);
   }

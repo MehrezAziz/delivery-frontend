@@ -9,7 +9,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { walletService, coinsService } from '../../services/api';
-import type { Wallet, WalletTransaction, WithdrawalRequest, CoinTransferDto } from '../../services/api';
+import type { Wallet, WalletTransaction, WithdrawalRequest, WithdrawalQuote, CoinTransferDto } from '../../services/api';
 import { useTheme } from '../../contexts/ThemeContext';
 
 type Tab = 'overview' | 'transactions' | 'withdrawals' | 'coin';
@@ -74,6 +74,8 @@ export default function WalletScreen() {
   const [saveBankProfile, setSaveBankProfile] = useState(false);
   const [withdrawing, setWithdrawing] = useState(false);
   const [withdrawStep, setWithdrawStep] = useState<'edit' | 'preview'>('edit');
+  const [withdrawQuote, setWithdrawQuote] = useState<WithdrawalQuote | null>(null);
+  const [quoteLoading, setQuoteLoading] = useState(false);
   const [cancellingId, setCancellingId] = useState<string | null>(null);
   const [coinTransfers, setCoinTransfers] = useState<CoinTransferDto[]>([]);
   const [coinLoading, setCoinLoading] = useState(false);
@@ -276,8 +278,12 @@ export default function WalletScreen() {
       return null;
     }
     const cap = wallet?.spendable ?? wallet?.balance ?? 0;
-    if (wallet && amount > cap) {
-      Alert.alert('Insufficient balance', 'Amount exceeds your available balance (coins reserved for pending sends are excluded).');
+    const totalDebit = withdrawQuote?.totalCoins ?? amount;
+    if (wallet && totalDebit > cap) {
+      Alert.alert(
+        'Insufficient balance',
+        'This amount exceeds your available balance (coins reserved for pending sends are excluded).',
+      );
       return null;
     }
     if (withdrawPayout === 'BANK_TRANSFER') {
@@ -289,10 +295,30 @@ export default function WalletScreen() {
     return amount;
   };
 
-  const goWithdrawPreview = () => {
+  const goWithdrawPreview = async () => {
     const amount = validateWithdrawForm();
     if (amount == null) return;
-    setWithdrawStep('preview');
+    setQuoteLoading(true);
+    try {
+      const q = await walletService.getWithdrawalQuote(amount);
+      if (q.totalCoins > q.spendableCoins) {
+        Alert.alert(
+          'Insufficient balance',
+          `You need ${q.totalCoins.toFixed(2)} coins in your wallet but only ${q.spendableCoins.toFixed(2)} are available.`,
+        );
+        return;
+      }
+      if (q.netPayoutCoins <= 0) {
+        Alert.alert('Amount too small', 'The amount after the withdrawal fee must be greater than zero.');
+        return;
+      }
+      setWithdrawQuote(q);
+      setWithdrawStep('preview');
+    } catch (e: unknown) {
+      Alert.alert('Error', e instanceof Error ? e.message : 'Could not load withdrawal quote.');
+    } finally {
+      setQuoteLoading(false);
+    }
   };
 
   const handleWithdraw = async () => {
@@ -317,6 +343,7 @@ export default function WalletScreen() {
       setBankName('');
       setBankRef('');
       setSaveBankProfile(false);
+      setWithdrawQuote(null);
       Alert.alert('Request submitted', 'Your withdrawal request has been submitted.');
       loadWithdrawals();
     } catch (e: any) {
@@ -425,7 +452,6 @@ export default function WalletScreen() {
       'REFUND',
       'BONUS',
       'REFERRAL_REWARD',
-      'WITHDRAWAL_APPROVED',
       'COIN_TRANSFER_RECEIVED',
     ].includes(type);
     return `${isCredit ? '+' : '-'}${Math.abs(amount).toFixed(2)}`;
@@ -678,7 +704,7 @@ export default function WalletScreen() {
                 <View style={styles.txRight}>
                   <Text style={[
                     styles.txAmount,
-                    ['TOP_UP','REFUND','BONUS','REFERRAL_REWARD','WITHDRAWAL_APPROVED','COIN_TRANSFER_RECEIVED'].includes(tx.type)
+                    ['TOP_UP','REFUND','BONUS','REFERRAL_REWARD','COIN_TRANSFER_RECEIVED'].includes(tx.type)
                       ? styles.txCredit : styles.txDebit,
                   ]}>
                     {formatAmount(tx.amount, tx.type)} Coins
@@ -733,9 +759,17 @@ export default function WalletScreen() {
                     {wd.descriptionOfCustomer && (
                       <Text style={styles.txNote}>{wd.descriptionOfCustomer}</Text>
                     )}
-                    {wd.descriptionOfAdmin && (
-                      <Text style={styles.txAdminNote}>Admin: {wd.descriptionOfAdmin}</Text>
+                    {(wd.feeAmount ?? 0) > 0 && (
+                      <Text style={[styles.txNote, { color: colors.textTertiary }]}>
+                        Fee: {(wd.feeAmount ?? 0).toFixed(2)} coins
+                      </Text>
                     )}
+                    {wd.descriptionOfAdmin ? (
+                      <Text style={styles.txAdminNote}>Note from support: {wd.descriptionOfAdmin}</Text>
+                    ) : null}
+                    {wd.status === 'REJECTED' && wd.rejectionReason ? (
+                      <Text style={[styles.txAdminNote, { color: '#b91c1c' }]}>Rejected: {wd.rejectionReason}</Text>
+                    ) : null}
                   </View>
                   <View style={styles.wdRightCol}>
                     <View style={[styles.statusBadge, { backgroundColor: STATUS_COLORS[wd.status] + '22' }]}>
@@ -983,6 +1017,7 @@ export default function WalletScreen() {
                       style={styles.modalCancel}
                       onPress={() => {
                         setShowWithdrawModal(false);
+                        setWithdrawQuote(null);
                         setWithdrawStep('edit');
                         setWithdrawAmount('');
                         setWithdrawNote('');
@@ -995,19 +1030,44 @@ export default function WalletScreen() {
                     >
                       <Text style={styles.modalCancelText}>Cancel</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity style={styles.modalSubmit} onPress={goWithdrawPreview}>
-                      <Text style={styles.modalSubmitText}>Review request</Text>
+                    <TouchableOpacity
+                      style={[styles.modalSubmit, quoteLoading && styles.btnDisabled]}
+                      onPress={() => void goWithdrawPreview()}
+                      disabled={quoteLoading}
+                    >
+                      {quoteLoading ? (
+                        <ActivityIndicator color="#fff" />
+                      ) : (
+                        <Text style={styles.modalSubmitText}>Review request</Text>
+                      )}
                     </TouchableOpacity>
                   </View>
                 </>
               ) : (
                 <>
                   <Text style={[styles.modalTitle, { color: colors.text }]}>Confirm withdrawal</Text>
-                  <Text style={[styles.previewHint, { color: colors.textSecondary }]}>You are requesting</Text>
+                  <Text style={[styles.previewHint, { color: colors.textSecondary }]}>From your wallet</Text>
                   <Text style={[styles.previewAmount, { color: colors.text }]}>
                     {parseFloat(withdrawAmount || '0').toFixed(2)}{' '}
                     <Text style={[styles.previewCurrency, { color: colors.textSecondary }]}>Coins</Text>
                   </Text>
+                  {withdrawQuote && withdrawQuote.feeCoins > 0 ? (
+                    <Text style={[styles.previewMeta, { color: colors.textSecondary, marginTop: 6 }]}>
+                      Fee: {withdrawQuote.feeCoins.toFixed(2)} coins
+                      {withdrawQuote.feeBps > 0 ? ` (${withdrawQuote.feeBps / 100}%)` : ''}
+                    </Text>
+                  ) : null}
+                  <Text style={[styles.previewHint, { color: colors.textSecondary, marginTop: 10 }]}>You receive</Text>
+                  <Text style={[styles.previewAmount, { color: colors.text, fontSize: 28 }]}>
+                    {(withdrawQuote?.netPayoutCoins ?? parseFloat(withdrawAmount || '0')).toFixed(2)}{' '}
+                    <Text style={[styles.previewCurrency, { color: colors.textSecondary, fontSize: 16 }]}>Coins</Text>
+                  </Text>
+                  {withdrawQuote?.amountFiat != null ? (
+                    <Text style={[styles.previewFiat, { color: colors.textTertiary }]}>
+                      ≈ {withdrawQuote.currencySymbol || withdrawQuote.currencyCode}{' '}
+                      {withdrawQuote.amountFiat.toFixed(2)}
+                    </Text>
+                  ) : null}
                   <Text style={[styles.modalBalanceMuted, { color: colors.textTertiary }]}>
                     Available {(wallet.spendable ?? wallet.balance).toFixed(2)} Coins
                     {(wallet.lockedForTransfers ?? 0) > 0
@@ -1025,7 +1085,14 @@ export default function WalletScreen() {
                   ) : null}
 
                   <View style={styles.modalButtons}>
-                    <TouchableOpacity style={styles.modalCancel} onPress={() => setWithdrawStep('edit')} disabled={withdrawing}>
+                    <TouchableOpacity
+                      style={styles.modalCancel}
+                      onPress={() => {
+                        setWithdrawStep('edit');
+                        setWithdrawQuote(null);
+                      }}
+                      disabled={withdrawing}
+                    >
                       <Text style={styles.modalCancelText}>Back</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
@@ -1410,6 +1477,7 @@ const styles = StyleSheet.create({
   previewHint: { fontSize: 13, marginTop: 4 },
   previewAmount: { fontSize: 36, fontWeight: '800', marginTop: 4, letterSpacing: -0.5 },
   previewCurrency: { fontSize: 20, fontWeight: '600' },
+  previewFiat: { fontSize: 14, marginTop: 2, fontWeight: '500' },
   previewMeta: { fontSize: 13, marginTop: 10, lineHeight: 18 },
   modalLabel: { fontSize: 14, fontWeight: '600', color: '#374151' },
   modalInput: {
