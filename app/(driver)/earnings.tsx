@@ -34,7 +34,14 @@ type Channel = 'all' | 'wallet' | 'cash';
 type Preset = 'today' | 'week' | 'month' | 'all_time' | 'custom';
 
 type DriverMe = {
-  account?: { balance: number; currency: string; completedDeliveries: number } | null;
+  account?: {
+    balance: number;
+    balanceUnit?: 'COINS';
+    balanceAsLocalFiat?: number | null;
+    currencySymbol?: string;
+    currency: string;
+    completedDeliveries: number;
+  } | null;
 };
 
 type EarningItem = {
@@ -339,6 +346,11 @@ export default function DriverEarningsScreen() {
             {balance.toFixed(2)}
             <Text style={styles.heroCurrency}> Coins</Text>
           </Text>
+          {driver?.account?.balanceAsLocalFiat != null && driver.account.currencySymbol ? (
+            <Text style={styles.heroFiatHint}>
+              ≈ {driver.account.balanceAsLocalFiat.toFixed(2)} {driver.account.currencySymbol}
+            </Text>
+          ) : null}
           <Text style={styles.heroHint}>
             {negative ? 'Settle negative balance to stay active' : `${deliveries} completed deliveries`}
           </Text>
@@ -796,6 +808,12 @@ const styles = StyleSheet.create({
   heroLabel: { color: 'rgba(255,255,255,0.52)', fontSize: 12, fontWeight: '600', marginBottom: 6 },
   heroAmount: { color: 'rgba(255,255,255,0.95)', fontSize: 36, fontWeight: '800' },
   heroCurrency: { fontSize: 17, fontWeight: '600', color: 'rgba(255,255,255,0.58)' },
+  heroFiatHint: {
+    color: 'rgba(255,255,255,0.62)',
+    fontSize: 13,
+    fontWeight: '500',
+    marginTop: 6,
+  },
   heroHint: { color: 'rgba(255,255,255,0.78)', fontSize: 13, marginTop: 10 },
   walletQuickWrap: { width: '100%', marginTop: 14, paddingHorizontal: 4 },
   walletQuickRow: {

@@ -68,6 +68,11 @@ export interface Order {
   weight: number;
   distanceKm: number;
   price: number;
+  /** Order total in platform coins (from country coin config). */
+  priceCoins?: number;
+  coinsPerFiatUnit?: number | null;
+  currencySymbol?: string | null;
+  currencyCode?: string | null;
   /** Optional extra chosen by customer (errand / long service); charged in addition to calculated delivery price. */
   customerExtraAmount?: number;
   nightFee: number;
@@ -125,6 +130,11 @@ export interface Order {
     secondName: string | null;
     image?: string | null;
   } | null;
+  driverFeeBreakdown?: {
+    totalPriceCoins: number;
+    baseFeeCoins: number;
+    platformFeeCoins: number;
+  };
 }
 
 export interface AvailableOrders {
@@ -194,6 +204,8 @@ export const orderService = {
       calculatedPrice: number;
       customerExtraAmount: number;
       totalPrice: number;
+      totalPriceCoins: number;
+      coinsPerFiatUnit: number | null;
       currency: string;
       currencySymbol: string;
       walletBalance: number | null;

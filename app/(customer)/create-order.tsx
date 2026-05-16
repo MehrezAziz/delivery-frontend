@@ -22,6 +22,8 @@ import {
   isOrderConfirmIdentityVerified,
   setOrderConfirmIdentityVerified,
 } from '../../utils/createOrderStepUpSession';
+import { previewLineAmount, hasCoinRate } from '../../utils/orderPriceCoins';
+import { OrderPreviewPaymentSwitch, OrderPreviewTotalPrice } from '../../components/OrderPreviewPaymentUi';
 
 const ORDER_BIO_ROUND_LIMIT = 5;
 
@@ -52,6 +54,8 @@ interface PricePreview {
   calculatedPrice: number;
   customerExtraAmount: number;
   totalPrice: number;
+  totalPriceCoins: number;
+  coinsPerFiatUnit: number | null;
   currency: string;
   currencySymbol: string;
   walletBalance: number | null;
@@ -83,6 +87,7 @@ export default function CreateOrderScreen() {
   const [description, setDescription] = useState('');
   const [preview, setPreview] = useState<PricePreview | null>(null);
   const [loading, setLoading] = useState(false);
+  const [switchingPayment, setSwitchingPayment] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [resolvingPickup, setResolvingPickup] = useState(false);
   const [resolvingDropoff, setResolvingDropoff] = useState(false);
@@ -672,17 +677,17 @@ export default function CreateOrderScreen() {
     await attemptBiometricForOrder();
   };
 
-  // Switch to Cash handler for insufficient wallet balance
-  const handleSwitchToCash = async () => {
+  const rerunPreviewWithPayment = async (nextPayment: 'COD' | 'WALLET') => {
     if (!pickupAddress || !dropoffAddress) return;
-    setPaymentType('COD');
+    setPaymentType(nextPayment);
+    setSwitchingPayment(true);
     try {
       const ex = parseFloat((customerExtraAmount || '0').replace(',', '.'));
       const extraOk = !Number.isNaN(ex) && ex >= 0 && ex <= MAX_CUSTOMER_EXTRA ? ex : 0;
       const result = await orderService.previewOrder({
         pickupAddressId: pickupAddress.addressId,
         dropoffAddressId: dropoffAddress.addressId,
-        paymentType: 'COD',
+        paymentType: nextPayment,
         weight: parseFloat(weight),
         customerExtraAmount: extraOk,
         scheduledPublishAt: scheduleLater ? publishAt.toISOString() : undefined,
@@ -691,8 +696,13 @@ export default function CreateOrderScreen() {
       setCustomerExtraAmount(String(result.customerExtraAmount ?? extraOk));
     } catch (e: any) {
       appAlert('Error', e.message || 'Failed to recalculate price');
+    } finally {
+      setSwitchingPayment(false);
     }
   };
+
+  const handleSwitchToCash = () => void rerunPreviewWithPayment('COD');
+  const handleSwitchToWallet = () => void rerunPreviewWithPayment('WALLET');
 
   /** Re-run preview after customer changes optional extra on the summary screen. */
   const handleUpdatePreviewExtra = async (overrideExtraAmount?: number) => {
@@ -745,8 +755,12 @@ export default function CreateOrderScreen() {
   // ═══════════════════════════════════════════
   if (step === 'preview' && preview) {
     const isCash = preview.paymentType === 'COD';
-    const unit = isCash ? preview.currencySymbol : 'coins';
-    const insufficientWallet = !isCash && preview.walletBalance !== null && preview.walletBalance < preview.totalPrice;
+    const coinsPerFiatUnit = preview.coinsPerFiatUnit;
+    const totalCoins = preview.totalPriceCoins ?? preview.totalPrice;
+    const insufficientWallet =
+      !isCash && preview.walletBalance !== null && preview.walletBalance < totalCoins;
+    const line = (fiat: number) => previewLineAmount(fiat, isCash, coinsPerFiatUnit, preview.currencySymbol);
+    const secondaryColor = colors.textTertiary;
 
     return (
       <View style={[s.container, { backgroundColor: colors.background }]}>
@@ -824,7 +838,8 @@ export default function CreateOrderScreen() {
           <View style={[s.card, { backgroundColor: colors.card }]}>
             <Text style={[s.cardTitle, { color: colors.text }]}>Driver time / errand (optional)</Text>
             <Text style={[s.inputLabel, { color: colors.textSecondary, marginBottom: 8 }]}>
-              Add an amount for long waits or services (e.g. paying a bill at an office). Max {MAX_CUSTOMER_EXTRA} {unit}.
+              Add an amount for long waits or services (e.g. paying a bill at an office). Max {MAX_CUSTOMER_EXTRA}{' '}
+              {preview.currencySymbol}.
             </Text>
             <View style={s.extraStepperRow}>
               <TouchableOpacity
@@ -858,45 +873,51 @@ export default function CreateOrderScreen() {
           {/* Price breakdown */}
           <View style={[s.card, { backgroundColor: colors.card }]}>
             <Text style={[s.cardTitle, { color: colors.text }]}>Price Breakdown</Text>
-            <PriceRow label="Base Fee" value={preview.baseFee} unit={unit} labelColor={colors.textSecondary} valueColor={colors.text} />
-            <PriceRow label="Distance Fee" value={preview.distanceFee} unit={unit} labelColor={colors.textSecondary} valueColor={colors.text} />
+            <PriceRow label="Base Fee" {...line(preview.baseFee)} labelColor={colors.textSecondary} valueColor={colors.text} />
+            <PriceRow label="Distance Fee" {...line(preview.distanceFee)} labelColor={colors.textSecondary} valueColor={colors.text} />
             {preview.extraWeightFee > 0 && (
-              <PriceRow label="Extra Weight" value={preview.extraWeightFee} unit={unit} labelColor={colors.textSecondary} valueColor={colors.text} />
+              <PriceRow label="Extra Weight" {...line(preview.extraWeightFee)} labelColor={colors.textSecondary} valueColor={colors.text} />
             )}
             {preview.nightFee > 0 && (
-              <PriceRow label="Night Fee 🌙" value={preview.nightFee} unit={unit} labelColor={colors.textSecondary} valueColor={colors.text} />
+              <PriceRow label="Night Fee 🌙" {...line(preview.nightFee)} labelColor={colors.textSecondary} valueColor={colors.text} />
             )}
             <View style={[s.divider, { backgroundColor: colors.border }]} />
             <PriceRow
               label="Delivery (calculated)"
-              value={preview.calculatedPrice}
-              unit={unit}
+              {...line(preview.calculatedPrice)}
               labelColor={colors.textSecondary}
               valueColor={colors.text}
             />
             {preview.customerExtraAmount > 0 && (
               <PriceRow
                 label="Your extra (driver time / errand)"
-                value={preview.customerExtraAmount}
-                unit={unit}
+                {...line(preview.customerExtraAmount)}
                 labelColor={colors.textSecondary}
                 valueColor={colors.text}
               />
             )}
             <View style={[s.divider, { backgroundColor: colors.border }]} />
-            <View style={s.priceRow}>
-              <Text style={[s.totalLabel, { color: colors.text }]}>Total</Text>
-              <Text style={[s.totalValue, { color: colors.primary }]}>{preview.totalPrice.toFixed(2)} {unit}</Text>
-            </View>
+            <OrderPreviewTotalPrice
+              fiatTotal={preview.totalPrice}
+              coinsPerFiatUnit={coinsPerFiatUnit}
+              currencySymbol={preview.currencySymbol}
+              isCash={isCash}
+              labelColor={colors.text}
+              primaryColor={colors.primary}
+              secondaryColor={secondaryColor}
+            />
+            {!hasCoinRate(coinsPerFiatUnit) && (
+              <Text style={{ color: colors.textTertiary, fontSize: 12, marginTop: 6 }}>
+                Coin conversion rate is not configured for your country yet.
+              </Text>
+            )}
           </View>
 
-          {/* Wallet balance warning / Insufficient balance prompt */}
-          {!isCash && preview.walletBalance !== null && (
-            <View style={[s.walletBanner, { backgroundColor: insufficientWallet ? (isDark ? 'rgba(239,68,68,0.16)' : '#fef2f2') : (isDark ? 'rgba(34,197,94,0.16)' : '#f0fdf4') }]}>
-              <Ionicons name="wallet-outline" size={18} color={insufficientWallet ? colors.danger : colors.success} />
-              <Text style={[s.walletText, { color: insufficientWallet ? colors.danger : colors.success }]}>
-                Balance: {preview.walletBalance.toFixed(2)} coins
-                {insufficientWallet ? ' — Insufficient funds' : ''}
+          {insufficientWallet && (
+            <View style={[s.walletBanner, { backgroundColor: isDark ? 'rgba(239,68,68,0.16)' : '#fef2f2' }]}>
+              <Ionicons name="wallet-outline" size={18} color={colors.danger} />
+              <Text style={[s.walletText, { color: colors.danger }]}>
+                Insufficient funds — you need {totalCoins.toFixed(2)} coins
               </Text>
             </View>
           )}
@@ -1027,11 +1048,20 @@ export default function CreateOrderScreen() {
             </View>
           )}
 
+          <OrderPreviewPaymentSwitch
+            isCash={isCash}
+            walletBalance={preview.walletBalance}
+            switching={switchingPayment}
+            onSwitchToCash={handleSwitchToCash}
+            onSwitchToWallet={handleSwitchToWallet}
+            colors={colors}
+          />
+
           {/* Confirm */}
           <TouchableOpacity
             style={[s.primaryBtn, insufficientWallet && s.primaryBtnDisabled]}
             onPress={handleConfirmOrder}
-            disabled={submitting || insufficientWallet}
+            disabled={submitting || insufficientWallet || switchingPayment}
             activeOpacity={0.8}
           >
             {submitting ? (
@@ -1521,7 +1551,9 @@ function PriceRow({
   return (
     <View style={s.priceRow}>
       <Text style={[s.priceLabel, labelColor ? { color: labelColor } : undefined]}>{label}</Text>
-      <Text style={[s.priceValue, valueColor ? { color: valueColor } : undefined]}>{value.toFixed(2)} {unit}</Text>
+      <Text style={[s.priceValue, valueColor ? { color: valueColor } : undefined]}>
+        {value.toFixed(2)} {unit}
+      </Text>
     </View>
   );
 }

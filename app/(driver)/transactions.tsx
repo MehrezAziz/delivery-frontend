@@ -220,7 +220,7 @@ export default function DriverTransactionsScreen() {
               {isPositive ? '+' : ''}{row.netAmount.toFixed(2)}
             </Text>
             <Text style={[s.txBalance, { color: colors.textTertiary }]} accessibilityLabel="Wallet balance after">
-              {row.balanceAfter.toFixed(2)} bal.
+              {row.balanceAfter.toFixed(2)} coins
             </Text>
           </View>
         </TouchableOpacity>
@@ -251,7 +251,7 @@ export default function DriverTransactionsScreen() {
             {isPositive ? '+' : ''}{item.amount.toFixed(2)}
           </Text>
           <Text style={[s.txBalance, { color: colors.textTertiary }]} accessibilityLabel="Wallet balance after">
-            {item.balanceAfter.toFixed(2)} bal.
+            {item.balanceAfter.toFixed(2)} coins
           </Text>
         </View>
       </TouchableOpacity>
@@ -307,12 +307,12 @@ export default function DriverTransactionsScreen() {
             <ScrollView style={{ maxHeight: 420 }}>
               {detailExtra?.merged && (
                 <View style={{ marginBottom: 16 }}>
-                  <DetailLine label="Return gross (price + 50%)" value={`${detailExtra.merged.grossPayout.toFixed(2)} TND`} colors={colors} />
-                  <DetailLine label="Platform fee (deducted)" value={`-${detailExtra.merged.platformFee.toFixed(2)} TND`} colors={colors} />
-                  <DetailLine label="Net credited to wallet" value={`${detailExtra.merged.netAmount.toFixed(2)} TND`} colors={colors} bold />
+                  <DetailLine label="Return gross (price + 50%)" value={`${detailExtra.merged.grossPayout.toFixed(2)} coins`} colors={colors} />
+                  <DetailLine label="Platform fee (deducted)" value={`-${detailExtra.merged.platformFee.toFixed(2)} coins`} colors={colors} />
+                  <DetailLine label="Net credited to wallet" value={`${detailExtra.merged.netAmount.toFixed(2)} coins`} colors={colors} bold />
                   <DetailLine
                     label="Wallet balance after"
-                    value={`${Number(detailExtra.merged.balanceAfter).toFixed(2)} TND`}
+                    value={`${Number(detailExtra.merged.balanceAfter).toFixed(2)} coins`}
                     colors={colors}
                     bold
                   />
@@ -321,16 +321,39 @@ export default function DriverTransactionsScreen() {
               {detailExtra?.single && (
                 <View style={{ marginBottom: 12 }}>
                   <DetailLine label="Transaction type" value={detailExtra.single.type.replace(/_/g, ' ')} colors={colors} />
+                  {detailLoading && detailOrderId ? (
+                    <ActivityIndicator color={colors.primary} style={{ marginVertical: 8 }} />
+                  ) : null}
+                  {!detailLoading && detailOrder?.driverFeeBreakdown ? (
+                    <>
+                      <DetailLine
+                        label="Total price"
+                        value={`${detailOrder.driverFeeBreakdown.totalPriceCoins.toFixed(2)} coins`}
+                        colors={colors}
+                      />
+                      <DetailLine
+                        label="Base fee (platform)"
+                        value={`-${detailOrder.driverFeeBreakdown.baseFeeCoins.toFixed(2)} coins`}
+                        colors={colors}
+                      />
+                    </>
+                  ) : !detailLoading && detailExtra.single.type === 'PLATFORM_FEE' ? (
+                    <DetailLine
+                      label="Base fee (platform)"
+                      value={`-${Math.abs(Number(detailExtra.single.amount)).toFixed(2)} coins`}
+                      colors={colors}
+                    />
+                  ) : null}
                   <DetailLine
-                    label="Transaction amount (TND)"
-                    value={`${detailExtra.single.amount >= 0 ? '+' : ''}${Number(detailExtra.single.amount).toFixed(2)}`}
+                    label="Transaction amount (coins)"
+                    value={`${detailExtra.single.amount >= 0 ? '+' : ''}${Number(detailExtra.single.amount).toFixed(2)} coins`}
                     colors={colors}
+                    bold
                   />
                   <DetailLine
                     label="Wallet balance after (ledger)"
-                    value={`${Number(detailExtra.single.balanceAfter ?? 0).toFixed(2)} TND`}
+                    value={`${Number(detailExtra.single.balanceAfter ?? 0).toFixed(2)} coins`}
                     colors={colors}
-                    bold
                   />
                   {detailExtra.single.description ? (
                     <Text style={{ fontSize: 12, color: colors.textTertiary, marginTop: 8, fontStyle: 'italic' }}>
@@ -338,28 +361,6 @@ export default function DriverTransactionsScreen() {
                     </Text>
                   ) : null}
                 </View>
-              )}
-              {detailLoading && <ActivityIndicator color={colors.primary} style={{ marginVertical: 12 }} />}
-              {!detailLoading && detailOrder && (
-                <View style={{ borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border, paddingTop: 12 }}>
-                  <Text style={[s.sectionTitle, { color: colors.text }]}>Related delivery order</Text>
-                  <Text style={{ fontSize: 11, color: colors.textTertiary, marginBottom: 8 }}>
-                    Customer delivery price (not your wallet ledger).
-                  </Text>
-                  <DetailLine label="Order price" value={`${detailOrder.price.toFixed(2)} TND`} colors={colors} />
-                  <DetailLine label="Payment" value={detailOrder.paymentType} colors={colors} />
-                  <DetailLine label="Status" value={detailOrder.status.replace(/_/g, ' ')} colors={colors} />
-                  {detailOrder.extraWeightFee > 0 && (
-                    <DetailLine label="Extra weight fee" value={`${detailOrder.extraWeightFee.toFixed(2)} TND`} colors={colors} />
-                  )}
-                  {detailOrder.nightFee > 0 && (
-                    <DetailLine label="Night fee" value={`${detailOrder.nightFee.toFixed(2)} TND`} colors={colors} />
-                  )}
-                  <DetailLine label="Distance" value={`${detailOrder.distanceKm.toFixed(1)} km`} colors={colors} />
-                </View>
-              )}
-              {!detailLoading && !detailOrder && detailOrderId && (
-                <Text style={{ color: colors.textSecondary, fontSize: 13 }}>Could not load order.</Text>
               )}
             </ScrollView>
           </Pressable>

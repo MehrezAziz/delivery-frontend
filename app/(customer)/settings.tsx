@@ -174,9 +174,15 @@ export default function CustomerSettingsScreen() {
       pathname: '/(customer)/security',
       params: { returnTo: 'settings' },
     } as never);
+  const goNotifications = () =>
+    router.push({
+      pathname: '/(customer)/notifications-settings',
+      params: { returnTo: 'settings' },
+    } as never);
 
   const actionItems: { label: string; onPress: () => void }[] = [
     { label: 'Edit profile', onPress: goEditProfile },
+    { label: 'Notifications', onPress: goNotifications },
     { label: 'Security', onPress: goSecurity },
     { label: 'Add address', onPress: () => router.push('/(auth)/customer-setup') },
     { label: 'My addresses', onPress: goAddresses },

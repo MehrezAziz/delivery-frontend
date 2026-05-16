@@ -933,30 +933,22 @@ export default function OrderDetailScreen() {
             </TouchableOpacity>
           )}
           {order.status === 'DRIVER_ASSIGNED' && order.driverAssignment && (
-            <TouchableOpacity style={[s.actionBtn, { borderColor: '#fecaca' }]}
-              onPress={handleRejectDriver} activeOpacity={0.8}>
-              <View style={[s.actionIconCircle, { backgroundColor: '#fef2f2' }]}>
-                <Ionicons name="person-remove" size={18} color="#dc2626" />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={[s.actionTitle, { color: '#dc2626' }]}>Reject This Driver</Text>
-                <Text style={s.actionSub}>Search for another driver</Text>
-              </View>
-              <Ionicons name="chevron-forward" size={18} color="#fca5a5" />
-            </TouchableOpacity>
+            <View style={s.rejectDriverRow}>
+              <TouchableOpacity style={[s.rejectDriverBtn, { borderColor: '#fecaca' }]}
+                onPress={handleRejectDriver} activeOpacity={0.8}>
+                <Ionicons name="person-remove" size={14} color="#dc2626" />
+                <Text style={s.rejectDriverText}>Reject This Driver</Text>
+              </TouchableOpacity>
+            </View>
           )}
           {order.status === 'DRIVER_ARRIVED' && order.driverAssignment && (
-            <TouchableOpacity style={[s.actionBtn, { borderColor: '#fecaca' }]}
-              onPress={handleRejectDriver} activeOpacity={0.8}>
-              <View style={[s.actionIconCircle, { backgroundColor: '#fef2f2' }]}>
-                <Ionicons name="person-remove" size={18} color="#dc2626" />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={[s.actionTitle, { color: '#dc2626' }]}>Reject driver (after arrival)</Text>
-                <Text style={s.actionSub}>You must give a reason — support will be notified</Text>
-              </View>
-              <Ionicons name="chevron-forward" size={18} color="#fca5a5" />
-            </TouchableOpacity>
+            <View style={s.rejectDriverRow}>
+              <TouchableOpacity style={[s.rejectDriverBtn, { borderColor: '#fecaca' }]}
+                onPress={handleRejectDriver} activeOpacity={0.8}>
+                <Ionicons name="person-remove" size={14} color="#dc2626" />
+                <Text style={s.rejectDriverText}>Reject driver</Text>
+              </TouchableOpacity>
+            </View>
           )}
           {order.status === 'PENDING_CUSTOMER_APPROVAL' && order.driverAssignment && (
             <>
@@ -971,17 +963,13 @@ export default function OrderDetailScreen() {
                 </View>
                 <Ionicons name="chevron-forward" size={18} color="#86efac" />
               </TouchableOpacity>
-              <TouchableOpacity style={[s.actionBtn, { borderColor: '#fecaca' }]}
-                onPress={handleRejectDriver} activeOpacity={0.8}>
-                <View style={[s.actionIconCircle, { backgroundColor: '#fef2f2' }]}>
-                  <Ionicons name="person-remove" size={18} color="#dc2626" />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={[s.actionTitle, { color: '#dc2626' }]}>Reject This Driver</Text>
-                  <Text style={s.actionSub}>Search for another driver</Text>
-                </View>
-                <Ionicons name="chevron-forward" size={18} color="#fca5a5" />
-              </TouchableOpacity>
+              <View style={s.rejectDriverRow}>
+                <TouchableOpacity style={[s.rejectDriverBtn, { borderColor: '#fecaca' }]}
+                  onPress={handleRejectDriver} activeOpacity={0.8}>
+                  <Ionicons name="person-remove" size={14} color="#dc2626" />
+                  <Text style={s.rejectDriverText}>Reject This Driver</Text>
+                </TouchableOpacity>
+              </View>
             </>
           )}
           {order.status === 'DELIVERED' && !order.dispute && (
@@ -1339,6 +1327,18 @@ const s = StyleSheet.create({
   },
   actionTitle: { fontSize: 15, fontWeight: '700', color: '#111827' },
   actionSub: { fontSize: 12, color: '#9ca3af', marginTop: 1 },
+  rejectDriverRow: { alignItems: 'flex-end', marginBottom: 8 },
+  rejectDriverBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    backgroundColor: '#fef2f2',
+  },
+  rejectDriverText: { fontSize: 13, fontWeight: '600', color: '#dc2626' },
 
   // Modal
   modalOverlay: {

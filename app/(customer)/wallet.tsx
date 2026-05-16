@@ -1,7 +1,8 @@
 import {
-  View, Text, TouchableOpacity, ScrollView,
+  View, Text, TouchableOpacity, Pressable, ScrollView,
   StyleSheet, ActivityIndicator, TextInput, Alert, Modal, Switch, Platform,
 } from 'react-native';
+import * as Clipboard from 'expo-clipboard';
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { useFocusEffect, useRouter, useLocalSearchParams } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -90,12 +91,17 @@ export default function WalletScreen() {
   const [celebrateGift, setCelebrateGift] = useState('');
   const [celebrateAmount, setCelebrateAmount] = useState('');
   const celebrateHandledKeyRef = useRef<string | null>(null);
+  const [referralBonusVisible, setReferralBonusVisible] = useState(false);
+  const [referralBonusAmount, setReferralBonusAmount] = useState('');
+  const [referralCode, setReferralCode] = useState<string | null>(null);
+  const referralBonusHandledRef = useRef(false);
   const params = useLocalSearchParams<{
     tab?: string;
     celebrate?: string;
     gift?: string;
     amount?: string;
     sendsOnly?: string;
+    referralBonus?: string;
   }>();
   const paramsRef = useRef(params);
   paramsRef.current = params;
@@ -200,8 +206,44 @@ export default function WalletScreen() {
         setActiveTab('coin');
         routerRef.current.setParams({ sendsOnly: undefined, tab: 'coin' } as never);
       }
+      if (walletParam(p.referralBonus) === '1' && !referralBonusHandledRef.current) {
+        referralBonusHandledRef.current = true;
+        const amount = decodeURIComponentSafe(walletParam(p.amount));
+        setReferralBonusAmount(amount);
+        setReferralBonusVisible(true);
+        setActiveTab('overview');
+        void (async () => {
+          try {
+            const token = await AsyncStorage.getItem('accessToken');
+            if (!token) return;
+            const API_BASE = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api';
+            const res = await fetch(`${API_BASE}/referral/my-code`, {
+              headers: { Authorization: `Bearer ${token}` },
+            });
+            if (res.ok) {
+              const data = await res.json();
+              if (data?.code) setReferralCode(String(data.code));
+            }
+          } catch {
+            /* ignore */
+          }
+        })();
+        routerRef.current.setParams({ referralBonus: undefined, amount: undefined } as never);
+      }
     }, [loadWallet, loadCoinTransfers]),
   );
+
+  const closeReferralBonusModal = () => setReferralBonusVisible(false);
+
+  const copyReferralCode = async () => {
+    if (!referralCode) return;
+    try {
+      await Clipboard.setStringAsync(referralCode);
+      Alert.alert('Copied', 'Referral code copied to clipboard');
+    } catch {
+      Alert.alert('Error', 'Failed to copy referral code');
+    }
+  };
 
   useEffect(() => {
     void (async () => {
@@ -1156,6 +1198,46 @@ export default function WalletScreen() {
           </View>
         </View>
       </Modal>
+
+      <Modal visible={referralBonusVisible} transparent animationType="fade" onRequestClose={closeReferralBonusModal}>
+        <Pressable style={styles.celebrateOverlay} onPress={closeReferralBonusModal}>
+          <Pressable
+            style={[styles.celebrateCard, styles.referralBonusCard, { backgroundColor: colors.card, borderColor: colors.border }]}
+            onPress={(e) => e.stopPropagation()}
+          >
+            <TouchableOpacity style={styles.referralBonusClose} onPress={closeReferralBonusModal} hitSlop={12}>
+              <Ionicons name="close" size={22} color={colors.textSecondary} />
+            </TouchableOpacity>
+            <Text style={styles.celebrateEmoji}>🎉</Text>
+            <Text style={[styles.celebrateTitle, { color: colors.text }]}>Congratulations!</Text>
+            <Text style={[styles.referralBonusSub, { color: colors.textSecondary }]}>
+              You earned a referral bonus
+            </Text>
+            {referralBonusAmount.trim() ? (
+              <Text style={[styles.celebrateAmount, { color: '#16a34a' }]}>
+                +{referralBonusAmount.trim().match(/coins/i)
+                  ? referralBonusAmount.trim()
+                  : `${referralBonusAmount.trim()} coins`}
+              </Text>
+            ) : null}
+            <Text style={[styles.referralBonusHint, { color: colors.textSecondary }]}>
+              Share your code with friends so they can join — you earn when they complete deliveries!
+            </Text>
+            {referralCode ? (
+              <View style={[styles.referralCodeRow, { borderColor: colors.border, backgroundColor: colors.background }]}>
+                <Text style={[styles.referralCodeText, { color: colors.text }]} selectable>
+                  {referralCode}
+                </Text>
+                <TouchableOpacity onPress={copyReferralCode} hitSlop={8} style={styles.referralCopyBtn}>
+                  <Ionicons name="copy-outline" size={22} color={colors.primary} />
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <ActivityIndicator size="small" color={colors.primary} style={{ marginVertical: 8 }} />
+            )}
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
@@ -1408,6 +1490,24 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   celebrateBtnText: { color: '#fff', fontWeight: '800', fontSize: 16 },
+
+  referralBonusCard: { position: 'relative', width: '100%', maxWidth: 360, alignSelf: 'center' },
+  referralBonusClose: { position: 'absolute', top: 12, right: 12, zIndex: 1 },
+  referralBonusSub: { fontSize: 15, marginTop: 6, textAlign: 'center' },
+  referralBonusHint: { fontSize: 13, marginTop: 16, textAlign: 'center', lineHeight: 20, paddingHorizontal: 4 },
+  referralCodeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 16,
+    paddingVertical: 10,
+    paddingLeft: 14,
+    paddingRight: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+    width: '100%',
+  },
+  referralCodeText: { flex: 1, fontSize: 17, fontWeight: '700', letterSpacing: 1 },
+  referralCopyBtn: { padding: 8 },
 
   rescheduleModalCard: {
     marginHorizontal: 20,

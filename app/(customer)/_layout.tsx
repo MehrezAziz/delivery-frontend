@@ -99,6 +99,7 @@ export default function CustomerLayout() {
       <Tabs.Screen name="settings" options={{ href: null }} />
       <Tabs.Screen name="bank-details" options={{ href: null }} />
       <Tabs.Screen name="notifications" options={{ href: null }} />
+      <Tabs.Screen name="notifications-settings" options={{ href: null, title: 'Notifications' }} />
       <Tabs.Screen name="send-coins" options={{ href: null }} />
       <Tabs.Screen name="buy-coins" options={{ href: null }} />
       <Tabs.Screen name="security" options={{ href: null }} />

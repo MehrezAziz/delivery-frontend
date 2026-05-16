@@ -1735,6 +1735,17 @@ export async function notificationDataToRoute(
     }
   }
 
+  if ((data.type || '') === 'REFERRAL_BONUS') {
+    const role = await getStoredUserRole();
+    if (role === 'CUSTOMER') {
+      const amountRaw = (data.amount || '').trim();
+      const amountEnc = amountRaw ? encodeURIComponent(amountRaw) : '';
+      return amountEnc
+        ? `/(customer)/wallet?referralBonus=1&amount=${amountEnc}`
+        : '/(customer)/wallet?referralBonus=1';
+    }
+  }
+
   const { relatedEntityType, relatedEntityId, type } = data;
   if (!relatedEntityType || !relatedEntityId) return null;
 

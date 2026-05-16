@@ -576,7 +576,9 @@ export default function AvailableOrdersScreen() {
           </View>
           <View style={s.priceTag}>
             <Text style={[s.priceText, { color: colors.primary }]}>{order.price.toFixed(2)}</Text>
-            <Text style={[s.priceCurrency, { color: colors.textSecondary }]}>TND</Text>
+            <Text style={[s.priceCurrency, { color: colors.textSecondary }]}>
+              {order.currencySymbol ?? 'TND'}
+            </Text>
           </View>
         </View>
 
@@ -694,12 +696,19 @@ export default function AvailableOrdersScreen() {
             <Ionicons name="cube-outline" size={12} color={colors.textSecondary} />
             <Text style={[s.chipText, { color: colors.textSecondary }]}>{order.weight} kg</Text>
           </View>
-          <View style={[s.chip, { backgroundColor: order.paymentType === 'COD' ? '#dcfce7' : '#dbeafe' }]}>
-            <Text style={{ fontSize: 11 }}>{order.paymentType === 'COD' ? '💵' : '💰'}</Text>
-            <Text style={[s.chipText, { color: order.paymentType === 'COD' ? '#166534' : '#1e40af' }]}>
-              {order.paymentType === 'COD' ? 'Cash' : 'Wallet'}
-            </Text>
-          </View>
+          {order.paymentType === 'COD' ? (
+            <View style={[s.chip, { backgroundColor: '#dcfce7' }]}>
+              <Text style={{ fontSize: 11 }}>💵</Text>
+              <Text style={[s.chipText, { color: '#166534' }]}>Cash</Text>
+            </View>
+          ) : (
+            <View style={[s.chip, { backgroundColor: '#dbeafe', flexShrink: 1 }]}>
+              <Text style={{ fontSize: 11 }}>💰</Text>
+              <Text style={[s.chipText, { color: '#1e40af' }]} numberOfLines={1}>
+                Wallet: {(order.priceCoins ?? order.price).toFixed(2)} coins
+              </Text>
+            </View>
+          )}
           {order.isNightDelivery && (
             <View style={[s.chip, { backgroundColor: '#e0e7ff' }]}>
               <Text style={{ fontSize: 11 }}>🌙</Text>

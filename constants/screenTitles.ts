@@ -32,6 +32,7 @@ export const CUSTOMER_ROUTE_TITLES: Record<string, string> = {
   'track-driver': 'Track driver',
   'edit-profile': 'Edit profile',
   notifications: 'Notifications',
+  'notifications-settings': 'Notifications',
   'send-coins': 'Send coins',
   security: 'Security',
   'transfer-pin': 'Transfer PIN',

@@ -95,7 +95,15 @@ export default function CustomerNotifications() {
         .then(() => syncNativeChatPreviewAfterThreadRead(g.groupKey))
         .catch(() => {});
     }
-    if (item.relatedEntityType === 'Order' && item.relatedEntityId) {
+    if (item.type === 'REFERRAL_BONUS') {
+      const match = item.body?.match(/([\d.,]+)\s*coins/i);
+      const amount = match?.[1] ? encodeURIComponent(match[1]) : '';
+      router.push(
+        amount
+          ? (`/(customer)/wallet?referralBonus=1&amount=${amount}` as never)
+          : ('/(customer)/wallet?referralBonus=1' as never),
+      );
+    } else if (item.relatedEntityType === 'Order' && item.relatedEntityId) {
       router.push(`/(customer)/order-detail?orderId=${item.relatedEntityId}`);
     } else if (item.relatedEntityType === 'ChatRoom' && item.relatedEntityId) {
       router.push(`/(customer)/order-chat?orderId=${item.relatedEntityId}`);
