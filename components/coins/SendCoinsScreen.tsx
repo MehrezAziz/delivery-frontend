@@ -26,6 +26,7 @@ import { pickScheduleDateTimeAndroid } from '../../utils/scheduleDateTimePicker'
 import { appAlert } from '../../utils/appAlert';
 import { ThemedConfirmDialog } from '../ThemedConfirmDialog';
 import { coinTransferStatusMeta } from '../../utils/coinTransferStatus';
+import { formatCoinSenderLine } from '../../utils/coinTransferSenderDisplay';
 
 function errMsg(e: unknown): string {
   if (e instanceof ApiError) return e.message;
@@ -71,6 +72,7 @@ export default function SendCoinsScreen() {
     celebrate?: string;
     gift?: string;
     amount?: string;
+    sender?: string;
     sendsOnly?: string;
   }>();
   const { colors } = useTheme();
@@ -101,6 +103,7 @@ export default function SendCoinsScreen() {
   const [celebrateVisible, setCelebrateVisible] = useState(false);
   const [celebrateGift, setCelebrateGift] = useState('');
   const [celebrateAmount, setCelebrateAmount] = useState('');
+  const [celebrateSender, setCelebrateSender] = useState('');
   const celebrateHandledKeyRef = useRef<string | null>(null);
   const [rescheduleTargetId, setRescheduleTargetId] = useState<string | null>(null);
   const [rescheduleAt, setRescheduleAt] = useState(() => new Date(Date.now() + 3600_000));
@@ -168,14 +171,21 @@ export default function SendCoinsScreen() {
       if (sendCoinsParam(p.celebrate) === '1') {
         const gift = decodeURIComponentSafe(sendCoinsParam(p.gift));
         const amount = decodeURIComponentSafe(sendCoinsParam(p.amount));
-        const key = `${amount}|${gift}`;
+        const sender = decodeURIComponentSafe(sendCoinsParam(p.sender));
+        const key = `${amount}|${gift}|${sender}`;
         if (celebrateHandledKeyRef.current !== key) {
           celebrateHandledKeyRef.current = key;
           setCelebrateGift(gift);
           setCelebrateAmount(amount);
+          setCelebrateSender(sender);
           setCelebrateVisible(true);
         }
-        routerRef.current.setParams({ celebrate: undefined, gift: undefined, amount: undefined } as never);
+        routerRef.current.setParams({
+          celebrate: undefined,
+          gift: undefined,
+          amount: undefined,
+          sender: undefined,
+        } as never);
       }
       if (sendCoinsParam(p.sendsOnly) === '1') {
         setTransferFilter('sent');
@@ -695,6 +705,7 @@ export default function SendCoinsScreen() {
             const showFeeBreakdownRow = !isRecipientRow || t.showFeeBreakdown === true;
             const canCancel = t.status === 'SCHEDULED' && isSentRow;
             const status = coinTransferStatusMeta(t.status);
+            const senderLine = isRecipientRow ? formatCoinSenderLine(t) : null;
             return (
               <View key={t.id} style={[styles.txRow, { backgroundColor: colors.card, borderColor: colors.border }]}>
                 <View style={{ flex: 1, paddingRight: 8 }}>
@@ -707,6 +718,11 @@ export default function SendCoinsScreen() {
                       {isSentRow ? 'Sent' : isRecipientRow ? 'Received' : 'Transfer'}
                     </Text>
                   </View>
+                  {senderLine ? (
+                    <Text style={{ color: colors.text, fontSize: 13, fontWeight: '600', marginTop: 6 }}>
+                      From {senderLine}
+                    </Text>
+                  ) : null}
                   <Text style={{ color: colors.textTertiary, fontSize: 12, marginTop: 6 }}>
                     {new Date(t.createdAt).toLocaleString()}
                     {showFeeBreakdownRow
@@ -961,6 +977,11 @@ export default function SendCoinsScreen() {
             <Text style={[styles.celebrateTitle, { color: colors.text }]}>
               {celebrateGift.trim() ? 'You received a gift!' : 'Coins received'}
             </Text>
+            {celebrateSender.trim() ? (
+              <Text style={[styles.celebrateFrom, { color: colors.textSecondary }]}>
+                From <Text style={{ fontWeight: '800', color: colors.text }}>{celebrateSender.trim()}</Text>
+              </Text>
+            ) : null}
             {celebrateAmount.trim() ? (
               <Text style={[styles.celebrateAmount, { color: '#16a34a' }]}>+{celebrateAmount.trim()} coins</Text>
             ) : null}
@@ -1092,6 +1113,7 @@ const styles = StyleSheet.create({
   },
   celebrateEmoji: { fontSize: 56, marginBottom: 8 },
   celebrateTitle: { fontSize: 22, fontWeight: '800', textAlign: 'center' },
+  celebrateFrom: { fontSize: 15, marginTop: 10, textAlign: 'center' },
   celebrateAmount: { fontSize: 30, fontWeight: '900', marginTop: 12, textAlign: 'center' },
   celebrateGift: { fontSize: 16, marginTop: 16, textAlign: 'center', fontStyle: 'italic', lineHeight: 22 },
   celebrateBtn: {

@@ -1850,10 +1850,12 @@ export async function notificationDataToRoute(
         const amountEnc = encodeURIComponent((data.amount || '').trim());
         const giftRaw = (data.giftMessage || '').trim();
         const giftEnc = giftRaw ? `&gift=${encodeURIComponent(giftRaw)}` : '';
+        const senderRaw = (data.senderName || '').trim();
+        const senderEnc = senderRaw ? `&sender=${encodeURIComponent(senderRaw)}` : '';
         if (role === 'DRIVER') {
-          return `/(driver)/send-coins?celebrate=1&amount=${amountEnc}${giftEnc}`;
+          return `/(driver)/send-coins?celebrate=1&amount=${amountEnc}${giftEnc}${senderEnc}`;
         }
-        return `/(customer)/wallet?tab=coin&celebrate=1&amount=${amountEnc}${giftEnc}`;
+        return `/(customer)/wallet?tab=coin&celebrate=1&amount=${amountEnc}${giftEnc}${senderEnc}`;
       }
       if (type === 'COIN_TRANSFER_OUTBOUND_COMPLETED') {
         const role = (await getStoredUserRole()) || 'CUSTOMER';

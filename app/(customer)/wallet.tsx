@@ -13,6 +13,7 @@ import type { Wallet, WalletTransaction, WithdrawalRequest, WithdrawalQuote, Coi
 import { useTheme } from '../../contexts/ThemeContext';
 import { pickScheduleDateTimeAndroid } from '../../utils/scheduleDateTimePicker';
 import { coinTransferStatusMeta } from '../../utils/coinTransferStatus';
+import { formatCoinSenderLine } from '../../utils/coinTransferSenderDisplay';
 
 type Tab = 'overview' | 'transactions' | 'withdrawals' | 'coin';
 
@@ -93,6 +94,7 @@ export default function WalletScreen() {
   const [celebrateVisible, setCelebrateVisible] = useState(false);
   const [celebrateGift, setCelebrateGift] = useState('');
   const [celebrateAmount, setCelebrateAmount] = useState('');
+  const [celebrateSender, setCelebrateSender] = useState('');
   const celebrateHandledKeyRef = useRef<string | null>(null);
   const [referralBonusVisible, setReferralBonusVisible] = useState(false);
   const [referralBonusAmount, setReferralBonusAmount] = useState('');
@@ -103,6 +105,7 @@ export default function WalletScreen() {
     celebrate?: string;
     gift?: string;
     amount?: string;
+    sender?: string;
     sendsOnly?: string;
     referralBonus?: string;
   }>();
@@ -194,15 +197,22 @@ export default function WalletScreen() {
       if (walletParam(p.celebrate) === '1') {
         const gift = decodeURIComponentSafe(walletParam(p.gift));
         const amount = decodeURIComponentSafe(walletParam(p.amount));
-        const key = `${amount}|${gift}`;
+        const sender = decodeURIComponentSafe(walletParam(p.sender));
+        const key = `${amount}|${gift}|${sender}`;
         if (celebrateHandledKeyRef.current !== key) {
           celebrateHandledKeyRef.current = key;
           setCelebrateGift(gift);
           setCelebrateAmount(amount);
+          setCelebrateSender(sender);
           setCelebrateVisible(true);
           setActiveTab('coin');
         }
-        routerRef.current.setParams({ celebrate: undefined, gift: undefined, amount: undefined } as never);
+        routerRef.current.setParams({
+          celebrate: undefined,
+          gift: undefined,
+          amount: undefined,
+          sender: undefined,
+        } as never);
       }
       if (walletParam(p.sendsOnly) === '1') {
         setSendsOnlyFilter(true);
@@ -819,6 +829,7 @@ export default function WalletScreen() {
                 const showFeeBreakdownRow = !isRecipientRow || t.showFeeBreakdown === true;
                 const statusStyle = coinTransferStatusMeta(t.status);
                 const directionLabel = isSentRow ? 'Sent' : isRecipientRow ? 'Received' : null;
+                const senderLine = isRecipientRow ? formatCoinSenderLine(t) : null;
                 return (
                 <View key={t.id} style={[styles.txCard, { backgroundColor: colors.card }]}>
                   <View style={styles.txLeft}>
@@ -835,6 +846,11 @@ export default function WalletScreen() {
                         </Text>
                       ) : null}
                     </View>
+                    {senderLine ? (
+                      <Text style={[styles.coinSenderLine, { color: colors.text }]}>
+                        From {senderLine}
+                      </Text>
+                    ) : null}
                     <Text style={[styles.txDate, { color: colors.textTertiary }]}>{formatDate(t.createdAt)}</Text>
                     {showFeeBreakdownRow ? (
                       <Text style={[styles.txDate, { color: colors.textSecondary }]}>
@@ -1240,6 +1256,11 @@ export default function WalletScreen() {
             <Text style={[styles.celebrateTitle, { color: colors.text }]}>
               {celebrateGift.trim() ? 'You received a gift!' : 'Coins received'}
             </Text>
+            {celebrateSender.trim() ? (
+              <Text style={[styles.celebrateFrom, { color: colors.textSecondary }]}>
+                From <Text style={{ fontWeight: '800', color: colors.text }}>{celebrateSender.trim()}</Text>
+              </Text>
+            ) : null}
             {celebrateAmount.trim() ? (
               <Text style={[styles.celebrateAmount, { color: '#16a34a' }]}>+{celebrateAmount.trim()} coins</Text>
             ) : null}
@@ -1429,6 +1450,7 @@ const styles = StyleSheet.create({
   },
   coinStatusText: { fontSize: 12, fontWeight: '800' },
   coinDirection: { fontSize: 12, fontWeight: '600' },
+  coinSenderLine: { fontSize: 13, fontWeight: '600', marginBottom: 2 },
   txDate: { fontSize: 13, color: '#9ca3af' },
   txNote: { fontSize: 13, color: '#6b7280', fontStyle: 'italic' },
   txScheduled: { fontSize: 13, fontWeight: '700', marginTop: 4 },
@@ -1554,6 +1576,7 @@ const styles = StyleSheet.create({
   },
   celebrateEmoji: { fontSize: 56, marginBottom: 8 },
   celebrateTitle: { fontSize: 22, fontWeight: '800', textAlign: 'center' },
+  celebrateFrom: { fontSize: 15, marginTop: 10, textAlign: 'center' },
   celebrateAmount: { fontSize: 30, fontWeight: '900', marginTop: 12, textAlign: 'center' },
   celebrateGift: { fontSize: 16, marginTop: 16, textAlign: 'center', fontStyle: 'italic', lineHeight: 22 },
   celebrateBtn: {

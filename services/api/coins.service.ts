@@ -22,6 +22,9 @@ export interface CoinTransferDto {
   feeBps: number;
   /** When false, viewer is recipient — UI must not show sender fee breakdown (API also redacts fee fields). */
   showFeeBreakdown?: boolean;
+  /** Populated for incoming transfers when the viewer is the recipient. */
+  senderDisplayName?: string | null;
+  senderPhone?: string | null;
   status: string;
   giftMessage: string | null;
   scheduledAt: string | null;
