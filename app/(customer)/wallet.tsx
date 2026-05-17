@@ -12,6 +12,7 @@ import { walletService, coinsService } from '../../services/api';
 import type { Wallet, WalletTransaction, WithdrawalRequest, WithdrawalQuote, CoinTransferDto } from '../../services/api';
 import { useTheme } from '../../contexts/ThemeContext';
 import { pickScheduleDateTimeAndroid } from '../../utils/scheduleDateTimePicker';
+import { coinTransferStatusMeta } from '../../utils/coinTransferStatus';
 
 type Tab = 'overview' | 'transactions' | 'withdrawals' | 'coin';
 
@@ -814,17 +815,26 @@ export default function WalletScreen() {
                   t.recipientUserId === myUserId &&
                   t.senderUserId !== myUserId
                 );
+                const isSentRow = !!myUserId && t.senderUserId === myUserId;
                 const showFeeBreakdownRow = !isRecipientRow || t.showFeeBreakdown === true;
+                const statusStyle = coinTransferStatusMeta(t.status);
+                const directionLabel = isSentRow ? 'Sent' : isRecipientRow ? 'Received' : null;
                 return (
                 <View key={t.id} style={[styles.txCard, { backgroundColor: colors.card }]}>
                   <View style={styles.txLeft}>
-                    <Text style={[styles.txType, { color: colors.text }]}>
-                      {t.status === 'COMPLETED'
-                        ? t.senderUserId === myUserId
-                          ? 'Sent'
-                          : 'Received'
-                        : t.status}
-                    </Text>
+                    <View style={styles.coinTxTitleRow}>
+                      <View style={[styles.coinStatusBadge, { backgroundColor: statusStyle.bg }]}>
+                        <Ionicons name={statusStyle.icon} size={13} color={statusStyle.fg} />
+                        <Text style={[styles.coinStatusText, { color: statusStyle.fg }]}>
+                          {statusStyle.label}
+                        </Text>
+                      </View>
+                      {directionLabel ? (
+                        <Text style={[styles.coinDirection, { color: colors.textSecondary }]}>
+                          {directionLabel}
+                        </Text>
+                      ) : null}
+                    </View>
                     <Text style={[styles.txDate, { color: colors.textTertiary }]}>{formatDate(t.createdAt)}</Text>
                     {showFeeBreakdownRow ? (
                       <Text style={[styles.txDate, { color: colors.textSecondary }]}>
@@ -840,9 +850,19 @@ export default function WalletScreen() {
                         “{t.giftMessage}”
                       </Text>
                     ) : null}
-                    {t.status === 'SCHEDULED' && t.scheduledAt && t.senderUserId === myUserId ? (
+                    {t.status === 'SCHEDULED' && t.scheduledAt && isSentRow ? (
                       <Text style={[styles.txScheduled, { color: colors.primary }]}>
                         Sends at {formatDateTimeLocal(t.scheduledAt)}
+                      </Text>
+                    ) : null}
+                    {t.status === 'PENDING' && t.pendingUntil ? (
+                      <Text style={[styles.txDate, { color: colors.textSecondary, marginTop: 2 }]}>
+                        Activates after {formatDateTimeLocal(t.pendingUntil)}
+                      </Text>
+                    ) : null}
+                    {t.status === 'FAILED' && t.failedReason ? (
+                      <Text style={[styles.txDate, { color: colors.danger ?? '#dc2626', marginTop: 2 }]}>
+                        {t.failedReason}
                       </Text>
                     ) : null}
                   </View>
@@ -1392,6 +1412,23 @@ const styles = StyleSheet.create({
   cancelWdBtn: { paddingVertical: 4 },
   cancelWdText: { color: '#b91c1c', fontWeight: '700', fontSize: 13 },
   txType: { fontSize: 15, fontWeight: '600', color: '#111827' },
+  coinTxTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 2,
+  },
+  coinStatusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 999,
+  },
+  coinStatusText: { fontSize: 12, fontWeight: '800' },
+  coinDirection: { fontSize: 12, fontWeight: '600' },
   txDate: { fontSize: 13, color: '#9ca3af' },
   txNote: { fontSize: 13, color: '#6b7280', fontStyle: 'italic' },
   txScheduled: { fontSize: 13, fontWeight: '700', marginTop: 4 },
