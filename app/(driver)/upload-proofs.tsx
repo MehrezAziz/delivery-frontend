@@ -129,8 +129,8 @@ export default function UploadProofsScreen() {
     }
   };
 
-  const goOrderDetail = () => {
-    router.replace(`/(driver)/order-detail?orderId=${orderId}` as any);
+  const goOrderDetail = (scrollTo: 'delivery_actions' = 'delivery_actions') => {
+    router.replace(`/(driver)/order-detail?orderId=${orderId}&scrollTo=${scrollTo}` as any);
   };
 
   const handleSubmit = async () => {
@@ -147,9 +147,7 @@ export default function UploadProofsScreen() {
     setSubmitting(true);
     try {
       await orderService.uploadProofs(orderId, sendImage1 || image1, sendImage2);
-      Alert.alert('Success', 'Proofs uploaded successfully', [
-        { text: 'OK', onPress: () => (router.canGoBack() ? router.back() : router.replace('/(driver)/home')) },
-      ]);
+      goOrderDetail();
     } catch (e: any) {
       Alert.alert('Error', e.message);
     } finally {

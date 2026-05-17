@@ -551,14 +551,14 @@ export default function DriverOrderDetailScreen() {
         </View>
 
         {canOpenChat && (
-          <View style={{ position: 'relative', alignSelf: 'stretch' }}>
+          <View style={s.chatBtnWrap}>
             <TouchableOpacity
-              style={[s.card, { backgroundColor: '#16a34a', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 }]}
+              style={s.chatBtn}
               onPress={() => push(`/(driver)/order-chat?orderId=${order.id}`)}
               activeOpacity={0.85}
             >
-              <Ionicons name="chatbubbles" size={20} color="#fff" />
-              <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700' }}>Chat</Text>
+              <Ionicons name="chatbubbles" size={16} color="#fff" />
+              <Text style={s.chatBtnText}>Chat</Text>
             </TouchableOpacity>
             <ChatUnreadBadge count={chatUnread} />
           </View>
@@ -628,7 +628,16 @@ export default function DriverOrderDetailScreen() {
         )}
 
         {(canGoNext || order.status === 'DELIVERING' || (isCompanyOrder && order.status === 'RETURNED')) && (
-          <View style={[s.card, { backgroundColor: colors.card }]}>
+          <View
+            style={[s.card, { backgroundColor: colors.card }]}
+            onLayout={(e) => {
+              if (scrollTo !== 'delivery_actions') return;
+              const y = e.nativeEvent.layout.y;
+              requestAnimationFrame(() => {
+                scrollRef.current?.scrollTo({ y: Math.max(0, y - 16), animated: true });
+              });
+            }}
+          >
             <Text style={[s.cardTitle, { color: colors.text }]}>Delivery Actions</Text>
             <View style={s.stepActionsRow}>
               {canRevert && (
@@ -851,9 +860,29 @@ const s = StyleSheet.create({
     fontSize: 13,
     fontWeight: '700',
   },
-  stepActionsRow: {
+  chatBtnWrap: {
+    position: 'relative',
+    alignSelf: 'flex-start',
+    marginBottom: 14,
+  },
+  chatBtn: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: '#16a34a',
+    borderRadius: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+  },
+  chatBtnText: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  stepActionsRow: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
     gap: 10,
   },
   revertBtn: {
@@ -873,16 +902,18 @@ const s = StyleSheet.create({
   },
   nextBtn: {
     flex: 1,
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    minHeight: 52,
     alignItems: 'center',
     justifyContent: 'center',
   },
   nextBtnText: {
     color: '#fff',
-    fontSize: 13,
-    fontWeight: '700',
+    fontSize: 16,
+    fontWeight: '800',
+    textAlign: 'center',
   },
   footerActionsRow: {
     flexDirection: 'row',

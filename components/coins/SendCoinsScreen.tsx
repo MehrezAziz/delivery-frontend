@@ -23,6 +23,7 @@ import { ApiError, api } from '../../services/api/client';
 import { walletService } from '../../services/api/wallet.service';
 import { useTheme } from '../../contexts/ThemeContext';
 import { EightDigitPinInput } from '../security/EightDigitPinInput';
+import { pickScheduleDateTimeAndroid } from '../../utils/scheduleDateTimePicker';
 
 function errMsg(e: unknown): string {
   if (e instanceof ApiError) return e.message;
@@ -63,8 +64,6 @@ export default function SendCoinsScreen() {
   const [scheduleOn, setScheduleOn] = useState(false);
   const [scheduleAt, setScheduleAt] = useState(() => new Date(Date.now() + 3600_000));
   const [showPicker, setShowPicker] = useState(false);
-  /** Android: never use mode="datetime" + default (native dismiss bug). */
-  const [androidPickPhase, setAndroidPickPhase] = useState<'idle' | 'date' | 'time'>('idle');
   const [preview, setPreview] = useState<CoinTransferPreview | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [sending, setSending] = useState(false);
@@ -86,7 +85,6 @@ export default function SendCoinsScreen() {
   const [rescheduleTargetId, setRescheduleTargetId] = useState<string | null>(null);
   const [rescheduleAt, setRescheduleAt] = useState(() => new Date(Date.now() + 3600_000));
   const [rescheduleIosOpen, setRescheduleIosOpen] = useState(false);
-  const [rescheduleAndroidPhase, setRescheduleAndroidPhase] = useState<'idle' | 'date' | 'time'>('idle');
   const [rescheduleSaving, setRescheduleSaving] = useState(false);
   const [availableCoins, setAvailableCoins] = useState<number | null>(null);
   const [availableLoading, setAvailableLoading] = useState(false);
@@ -384,37 +382,20 @@ export default function SendCoinsScreen() {
     const d = new Date(t.scheduledAt);
     setRescheduleAt(Number.isNaN(d.getTime()) ? new Date(Date.now() + 3600_000) : d);
     setRescheduleTargetId(t.id);
-    setRescheduleAndroidPhase('idle');
     setRescheduleIosOpen(Platform.OS === 'ios');
+  };
+
+  const openReschedulePickers = async () => {
+    if (Platform.OS === 'android') {
+      const picked = await pickScheduleDateTimeAndroid(rescheduleAt);
+      if (picked) setRescheduleAt(picked);
+      return;
+    }
+    setRescheduleIosOpen(true);
   };
 
   const onRescheduleIosChange = (_: DateTimePickerEvent, d?: Date) => {
-    setRescheduleIosOpen(Platform.OS === 'ios');
     if (d) setRescheduleAt(d);
-  };
-
-  const onRescheduleAndroidChange = (event: DateTimePickerEvent, d?: Date) => {
-    if (event?.type === 'dismissed') {
-      setRescheduleAndroidPhase('idle');
-      return;
-    }
-    if (!d) {
-      setRescheduleAndroidPhase('idle');
-      return;
-    }
-    if (rescheduleAndroidPhase === 'date') {
-      const next = new Date(rescheduleAt);
-      next.setFullYear(d.getFullYear(), d.getMonth(), d.getDate());
-      setRescheduleAt(next);
-      setRescheduleAndroidPhase('time');
-      return;
-    }
-    if (rescheduleAndroidPhase === 'time') {
-      const next = new Date(rescheduleAt);
-      next.setHours(d.getHours(), d.getMinutes(), 0, 0);
-      setRescheduleAt(next);
-      setRescheduleAndroidPhase('idle');
-    }
   };
 
   const submitReschedule = async () => {
@@ -437,41 +418,17 @@ export default function SendCoinsScreen() {
     }
   };
 
-  const openSchedulePicker = () => {
+  const openSchedulePicker = async () => {
     if (Platform.OS === 'android') {
-      setAndroidPickPhase('date');
-    } else {
-      setShowPicker(true);
+      const picked = await pickScheduleDateTimeAndroid(scheduleAt);
+      if (picked) setScheduleAt(picked);
+      return;
     }
+    setShowPicker(true);
   };
 
   const onIosPickerChange = (_: DateTimePickerEvent, d?: Date) => {
-    setShowPicker(Platform.OS === 'ios');
     if (d) setScheduleAt(d);
-  };
-
-  const onAndroidPickerChange = (event: DateTimePickerEvent, d?: Date) => {
-    if (event?.type === 'dismissed') {
-      setAndroidPickPhase('idle');
-      return;
-    }
-    if (!d) {
-      setAndroidPickPhase('idle');
-      return;
-    }
-    if (androidPickPhase === 'date') {
-      const next = new Date(scheduleAt);
-      next.setFullYear(d.getFullYear(), d.getMonth(), d.getDate());
-      setScheduleAt(next);
-      setAndroidPickPhase('time');
-      return;
-    }
-    if (androidPickPhase === 'time') {
-      const next = new Date(scheduleAt);
-      next.setHours(d.getHours(), d.getMinutes(), 0, 0);
-      setScheduleAt(next);
-      setAndroidPickPhase('idle');
-    }
   };
 
   return (
@@ -559,9 +516,10 @@ export default function SendCoinsScreen() {
         )}
 
         <Text style={[styles.label, { color: colors.textSecondary }]}>Gross coins (you pay)</Text>
+        <Text style={[styles.fieldHint, { color: colors.textTertiary }]}>Minimum 25 coins</Text>
         <TextInput
           style={[styles.input, { color: colors.text, borderColor: colors.border, backgroundColor: colors.card }]}
-          placeholder="e.g. 100"
+          placeholder="e.g. 100 (min 25)"
           placeholderTextColor={colors.textTertiary}
           value={grossStr}
           onChangeText={setGrossStr}
@@ -596,7 +554,7 @@ export default function SendCoinsScreen() {
           <>
             <TouchableOpacity
               style={[styles.scheduleBtn, { borderColor: colors.border, backgroundColor: colors.card }]}
-              onPress={openSchedulePicker}
+              onPress={() => void openSchedulePicker()}
             >
               <Ionicons name="calendar-outline" size={20} color={colors.primary} />
               <Text style={{ color: colors.text, marginLeft: 10 }}>
@@ -609,16 +567,8 @@ export default function SendCoinsScreen() {
                 mode="datetime"
                 display="spinner"
                 minimumDate={new Date(Date.now() + 60_000)}
-                onChange={onIosPickerChange}
-              />
-            )}
-            {Platform.OS === 'android' && androidPickPhase !== 'idle' && (
-              <DateTimePicker
-                value={scheduleAt}
-                mode={androidPickPhase === 'date' ? 'date' : 'time'}
-                display="default"
-                minimumDate={androidPickPhase === 'date' ? new Date(Date.now() + 60_000) : undefined}
-                onChange={onAndroidPickerChange}
+                onValueChange={onIosPickerChange}
+                onDismiss={() => setShowPicker(false)}
               />
             )}
           </>
@@ -862,7 +812,6 @@ export default function SendCoinsScreen() {
         onRequestClose={() => {
           setRescheduleTargetId(null);
           setRescheduleIosOpen(false);
-          setRescheduleAndroidPhase('idle');
         }}
       >
         <View style={styles.modalOverlay}>
@@ -873,10 +822,7 @@ export default function SendCoinsScreen() {
             </Text>
             <TouchableOpacity
               style={[styles.reschedulePickRow, { borderColor: colors.border, backgroundColor: colors.inputBg }]}
-              onPress={() => {
-                if (Platform.OS === 'android') setRescheduleAndroidPhase('date');
-                else setRescheduleIosOpen(true);
-              }}
+              onPress={() => void openReschedulePickers()}
             >
               <Ionicons name="calendar-outline" size={22} color={colors.primary} />
               <Text style={{ color: colors.text, marginLeft: 12, flex: 1, fontWeight: '600' }}>
@@ -889,16 +835,8 @@ export default function SendCoinsScreen() {
                 mode="datetime"
                 display="spinner"
                 minimumDate={new Date(Date.now() + 60_000)}
-                onChange={onRescheduleIosChange}
-              />
-            ) : null}
-            {Platform.OS === 'android' && rescheduleAndroidPhase !== 'idle' && rescheduleTargetId ? (
-              <DateTimePicker
-                value={rescheduleAt}
-                mode={rescheduleAndroidPhase === 'date' ? 'date' : 'time'}
-                display="default"
-                minimumDate={rescheduleAndroidPhase === 'date' ? new Date(Date.now() + 60_000) : undefined}
-                onChange={onRescheduleAndroidChange}
+                onValueChange={onRescheduleIosChange}
+                onDismiss={() => setRescheduleIosOpen(false)}
               />
             ) : null}
             <View style={[styles.modalActions, { marginTop: 20, justifyContent: 'space-between', width: '100%' }]}>
@@ -906,7 +844,6 @@ export default function SendCoinsScreen() {
                 onPress={() => {
                   setRescheduleTargetId(null);
                   setRescheduleIosOpen(false);
-                  setRescheduleAndroidPhase('idle');
                 }}
                 style={styles.modalBtn}
                 disabled={rescheduleSaving}
@@ -960,6 +897,7 @@ const styles = StyleSheet.create({
   pad: { padding: 20, paddingBottom: 48 },
   hint: { fontSize: 13, lineHeight: 19, marginBottom: 16 },
   label: { fontSize: 12, marginBottom: 6, marginTop: 10 },
+  fieldHint: { fontSize: 12, fontWeight: '600', marginBottom: 6, marginTop: -2 },
   availableLine: { fontSize: 13, marginTop: 6 },
   input: {
     borderWidth: 1,

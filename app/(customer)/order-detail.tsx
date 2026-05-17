@@ -5,8 +5,9 @@ import {
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import DateTimePicker from '@react-native-community/datetimepicker';
-import { clampMinSchedule, mergePublishDatePart, mergePublishTimePart } from '../../utils/schedPublishHelpers';
+import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
+import { clampMinSchedule } from '../../utils/schedPublishHelpers';
+import { pickScheduleDateTimeAndroid } from '../../utils/scheduleDateTimePicker';
 import { orderService, Order, computeOrderCancelRemainingSec } from '../../services/api/order.service';
 import { walletService } from '../../services/api/wallet.service';
 import { OrderPreviewAvailableBalance } from '../../components/OrderPreviewPaymentUi';
@@ -68,7 +69,7 @@ export default function OrderDetailScreen() {
   const [nowTs, setNowTs] = useState(Date.now());
   const [scheduleModalVisible, setScheduleModalVisible] = useState(false);
   const [draftPublishAt, setDraftPublishAt] = useState(new Date());
-  const [androidPublishStep, setAndroidPublishStep] = useState<'idle' | 'date' | 'time'>('idle');
+  const [scheduleIosOpen, setScheduleIosOpen] = useState(false);
   const [scheduleSaving, setScheduleSaving] = useState(false);
   const [walletSpendable, setWalletSpendable] = useState<number | null>(null);
 
@@ -347,8 +348,21 @@ export default function OrderDetailScreen() {
       ? new Date(order.scheduledPublishAt)
       : new Date(Date.now() + 5 * 60 * 1000);
     setDraftPublishAt(clampMinSchedule(base));
-    setAndroidPublishStep('idle');
+    setScheduleIosOpen(Platform.OS === 'ios');
     setScheduleModalVisible(true);
+  };
+
+  const openSchedulePickers = async () => {
+    if (Platform.OS === 'android') {
+      const picked = await pickScheduleDateTimeAndroid(draftPublishAt);
+      if (picked) setDraftPublishAt(picked);
+      return;
+    }
+    setScheduleIosOpen(true);
+  };
+
+  const onScheduleIosChange = (_: DateTimePickerEvent, d?: Date) => {
+    if (d) setDraftPublishAt(clampMinSchedule(d));
   };
 
   const saveSchedule = async () => {
@@ -358,6 +372,7 @@ export default function OrderDetailScreen() {
       const updated = await orderService.updateScheduledPublish(orderId, iso);
       setOrder(updated);
       setScheduleModalVisible(false);
+      setScheduleIosOpen(false);
       void syncCustomerOrderTrackingFromOrder(updated);
     } catch (e: any) {
       Alert.alert('Could not update', e?.message || 'Try again');
@@ -1133,64 +1148,51 @@ export default function OrderDetailScreen() {
         </TouchableOpacity>
       </Modal>
 
-      <Modal visible={scheduleModalVisible} transparent animationType="fade" onRequestClose={() => setScheduleModalVisible(false)}>
+      <Modal
+        visible={scheduleModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+          setScheduleModalVisible(false);
+          setScheduleIosOpen(false);
+        }}
+      >
         <View style={s.modalOverlay}>
           <View style={[s.modalCard, { backgroundColor: colors.card }]}>
             <Text style={[s.modalTitle, { color: colors.text }]}>When should drivers see this order?</Text>
             <Text style={[s.modalSub, { color: colors.textSecondary }]}>
               Must be at least one minute from now (local time).
             </Text>
-            {Platform.OS === 'android' ? (
-              <TouchableOpacity
-                style={[s.actionBtn, { borderColor: colors.border, marginBottom: 8 }]}
-                onPress={() => setAndroidPublishStep('date')}
-                activeOpacity={0.8}
-              >
-                <Ionicons name="calendar-outline" size={20} color={colors.primary} />
-                <Text style={[s.actionTitle, { color: colors.text, flex: 1 }]}>
-                  {draftPublishAt.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}
-                </Text>
-              </TouchableOpacity>
-            ) : (
+            <TouchableOpacity
+              style={[s.schedulePickRow, { borderColor: colors.border, backgroundColor: colors.inputBg ?? colors.card }]}
+              onPress={() => void openSchedulePickers()}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="calendar-outline" size={22} color={colors.primary} />
+              <Text style={[s.actionTitle, { color: colors.text, flex: 1, marginLeft: 12 }]}>
+                {draftPublishAt.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}
+              </Text>
+            </TouchableOpacity>
+            {Platform.OS === 'ios' && scheduleIosOpen && scheduleModalVisible ? (
               <DateTimePicker
                 value={draftPublishAt}
                 mode="datetime"
                 display="spinner"
                 minimumDate={new Date(Date.now() + 60 * 1000)}
                 themeVariant={isDark ? 'dark' : 'light'}
-                onValueChange={(_, d) => {
-                  setDraftPublishAt(clampMinSchedule(d));
-                }}
+                onValueChange={onScheduleIosChange}
+                onDismiss={() => setScheduleIosOpen(false)}
                 style={{ marginBottom: 8 }}
               />
-            )}
-            {Platform.OS === 'android' && androidPublishStep === 'date' && (
-              <DateTimePicker
-                value={draftPublishAt}
-                mode="date"
-                display="default"
-                minimumDate={new Date()}
-                onDismiss={() => setAndroidPublishStep('idle')}
-                onValueChange={(_, d) => {
-                  setDraftPublishAt((prev) => clampMinSchedule(mergePublishDatePart(prev, d)));
-                  setAndroidPublishStep('time');
-                }}
-              />
-            )}
-            {Platform.OS === 'android' && androidPublishStep === 'time' && (
-              <DateTimePicker
-                value={draftPublishAt}
-                mode="time"
-                display="default"
-                onDismiss={() => setAndroidPublishStep('idle')}
-                onValueChange={(_, d) => {
-                  setDraftPublishAt((prev) => clampMinSchedule(mergePublishTimePart(prev, d)));
-                  setAndroidPublishStep('idle');
-                }}
-              />
-            )}
+            ) : null}
             <View style={s.modalActions}>
-              <TouchableOpacity style={s.modalCancelBtn} onPress={() => setScheduleModalVisible(false)}>
+              <TouchableOpacity
+                style={s.modalCancelBtn}
+                onPress={() => {
+                  setScheduleModalVisible(false);
+                  setScheduleIosOpen(false);
+                }}
+              >
                 <Text style={s.modalCancelText}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity
@@ -1383,6 +1385,14 @@ const s = StyleSheet.create({
   },
   modalTitle: { fontSize: 20, fontWeight: '800', color: '#111827', marginBottom: 6 },
   modalSub: { fontSize: 14, color: '#6b7280', marginBottom: 16 },
+  schedulePickRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 14,
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    marginBottom: 12,
+  },
   modalInput: {
     backgroundColor: '#f8fafc', borderRadius: 14, padding: 14, fontSize: 15, color: '#111827',
     borderWidth: 1, borderColor: '#e5e7eb', minHeight: 100,

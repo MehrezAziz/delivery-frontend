@@ -3,7 +3,7 @@ import {
   View, Text, ScrollView, TouchableOpacity, ActivityIndicator, Alert,
   TextInput, KeyboardAvoidingView, Platform, StyleSheet, Modal, FlatList, Switch,
 } from 'react-native';
-import DateTimePicker from '@react-native-community/datetimepicker';
+import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
@@ -14,7 +14,8 @@ import { orderService, Order } from '../../services/api/order.service';
 import { requestNotificationBadgeRefresh, startOrderTracking } from '../../services/notifications';
 import { useTheme } from '../../contexts/ThemeContext';
 import { appAlert } from '../../utils/appAlert';
-import { clampMinSchedule, mergePublishDatePart, mergePublishTimePart } from '../../utils/schedPublishHelpers';
+import { clampMinSchedule } from '../../utils/schedPublishHelpers';
+import { pickScheduleDateTimeAndroid } from '../../utils/scheduleDateTimePicker';
 import { EditProfileBiometricVerifyButton } from '../../components/EditProfileBiometricVerifyButton';
 import { PasswordTextField } from '../../components/PasswordTextField';
 import { getLocalAuthentication } from '../../utils/editProfileBiometricGate';
@@ -107,8 +108,7 @@ export default function CreateOrderScreen() {
   const [customerStatus, setCustomerStatus] = useState<string>('ACTIVE');
   const [scheduleLater, setScheduleLater] = useState(false);
   const [publishAt, setPublishAt] = useState(() => new Date(Date.now() + 15 * 60 * 1000));
-  /** Android: `datetime` mode is invalid — use date then time (see @react-native-community/datetimepicker). */
-  const [androidPublishStep, setAndroidPublishStep] = useState<'idle' | 'date' | 'time'>('idle');
+  const [scheduleIosOpen, setScheduleIosOpen] = useState(false);
 
   /** Face ID / fingerprint available — required before placing order (same session skip after first success). */
   const [orderBiometricAvailable, setOrderBiometricAvailable] = useState(false);
@@ -121,8 +121,21 @@ export default function CreateOrderScreen() {
   const ACTIVE_STATUSES = ['PENDING_PUBLISH', 'SEARCHING_DRIVER', 'DRIVER_ASSIGNED', 'DRIVER_ARRIVED', 'PICKED_UP', 'DELIVERING'];
 
   useEffect(() => {
-    if (!scheduleLater) setAndroidPublishStep('idle');
+    if (!scheduleLater) setScheduleIosOpen(false);
   }, [scheduleLater]);
+
+  const openSchedulePickers = async () => {
+    if (Platform.OS === 'android') {
+      const picked = await pickScheduleDateTimeAndroid(publishAt);
+      if (picked) setPublishAt(picked);
+      return;
+    }
+    setScheduleIosOpen(true);
+  };
+
+  const onScheduleIosChange = (_: DateTimePickerEvent, d?: Date) => {
+    if (d) setPublishAt(clampMinSchedule(d));
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -1386,62 +1399,27 @@ export default function CreateOrderScreen() {
             </View>
             {scheduleLater && (
               <>
-                {Platform.OS === 'android' ? (
-                  <TouchableOpacity
-                    style={[s.schedulePickBtn, { backgroundColor: colors.surfaceVariant, borderColor: colors.border }]}
-                    onPress={() => setAndroidPublishStep('date')}
-                    activeOpacity={0.75}
-                  >
-                    <Ionicons name="calendar-outline" size={18} color={colors.primary} />
-                    <Text style={[s.schedulePickText, { color: colors.text }]}>
-                      {publishAt.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}
-                    </Text>
-                  </TouchableOpacity>
-                ) : (
-                  <View style={[s.schedulePickBtn, { backgroundColor: colors.surfaceVariant, borderColor: colors.border }]}>
-                    <Ionicons name="calendar-outline" size={18} color={colors.primary} />
-                    <Text style={[s.schedulePickText, { color: colors.text }]}>
-                      {publishAt.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}
-                    </Text>
-                  </View>
-                )}
-                {scheduleLater && Platform.OS === 'ios' && (
+                <TouchableOpacity
+                  style={[s.schedulePickBtn, { backgroundColor: colors.surfaceVariant, borderColor: colors.border }]}
+                  onPress={() => void openSchedulePickers()}
+                  activeOpacity={0.75}
+                >
+                  <Ionicons name="calendar-outline" size={18} color={colors.primary} />
+                  <Text style={[s.schedulePickText, { color: colors.text }]}>
+                    {publishAt.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}
+                  </Text>
+                </TouchableOpacity>
+                {Platform.OS === 'ios' && scheduleIosOpen && scheduleLater ? (
                   <DateTimePicker
                     value={publishAt}
                     mode="datetime"
-                    display="compact"
+                    display="spinner"
                     minimumDate={new Date(Date.now() + 60 * 1000)}
                     themeVariant={isDark ? 'dark' : 'light'}
-                    onValueChange={(_, d) => {
-                      setPublishAt(d);
-                    }}
+                    onValueChange={onScheduleIosChange}
+                    onDismiss={() => setScheduleIosOpen(false)}
                   />
-                )}
-                {scheduleLater && Platform.OS === 'android' && androidPublishStep === 'date' && (
-                  <DateTimePicker
-                    value={publishAt}
-                    mode="date"
-                    display="default"
-                    minimumDate={new Date()}
-                    onDismiss={() => setAndroidPublishStep('idle')}
-                    onValueChange={(_, d) => {
-                      setPublishAt((prev) => clampMinSchedule(mergePublishDatePart(prev, d)));
-                      setAndroidPublishStep('time');
-                    }}
-                  />
-                )}
-                {scheduleLater && Platform.OS === 'android' && androidPublishStep === 'time' && (
-                  <DateTimePicker
-                    value={publishAt}
-                    mode="time"
-                    display="default"
-                    onDismiss={() => setAndroidPublishStep('idle')}
-                    onValueChange={(_, d) => {
-                      setPublishAt((prev) => clampMinSchedule(mergePublishTimePart(prev, d)));
-                      setAndroidPublishStep('idle');
-                    }}
-                  />
-                )}
+                ) : null}
               </>
             )}
           </View>

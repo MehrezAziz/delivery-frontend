@@ -11,6 +11,7 @@ import DateTimePicker, { type DateTimePickerEvent } from '@react-native-communit
 import { walletService, coinsService } from '../../services/api';
 import type { Wallet, WalletTransaction, WithdrawalRequest, WithdrawalQuote, CoinTransferDto } from '../../services/api';
 import { useTheme } from '../../contexts/ThemeContext';
+import { pickScheduleDateTimeAndroid } from '../../utils/scheduleDateTimePicker';
 
 type Tab = 'overview' | 'transactions' | 'withdrawals' | 'coin';
 
@@ -83,7 +84,6 @@ export default function WalletScreen() {
   const [rescheduleTargetId, setRescheduleTargetId] = useState<string | null>(null);
   const [rescheduleAt, setRescheduleAt] = useState(() => new Date(Date.now() + 3600_000));
   const [rescheduleIosOpen, setRescheduleIosOpen] = useState(false);
-  const [rescheduleAndroidPhase, setRescheduleAndroidPhase] = useState<'idle' | 'date' | 'time'>('idle');
   const [rescheduleSaving, setRescheduleSaving] = useState(false);
   const [myUserId, setMyUserId] = useState<string | null>(null);
   const [walletQuickMore, setWalletQuickMore] = useState(false);
@@ -393,37 +393,20 @@ export default function WalletScreen() {
     const d = new Date(t.scheduledAt);
     setRescheduleAt(Number.isNaN(d.getTime()) ? new Date(Date.now() + 3600_000) : d);
     setRescheduleTargetId(t.id);
-    setRescheduleAndroidPhase('idle');
     setRescheduleIosOpen(Platform.OS === 'ios');
+  };
+
+  const openReschedulePickers = async () => {
+    if (Platform.OS === 'android') {
+      const picked = await pickScheduleDateTimeAndroid(rescheduleAt);
+      if (picked) setRescheduleAt(picked);
+      return;
+    }
+    setRescheduleIosOpen(true);
   };
 
   const onRescheduleIosChange = (_: DateTimePickerEvent, d?: Date) => {
-    setRescheduleIosOpen(Platform.OS === 'ios');
     if (d) setRescheduleAt(d);
-  };
-
-  const onRescheduleAndroidChange = (event: DateTimePickerEvent, d?: Date) => {
-    if (event?.type === 'dismissed') {
-      setRescheduleAndroidPhase('idle');
-      return;
-    }
-    if (!d) {
-      setRescheduleAndroidPhase('idle');
-      return;
-    }
-    if (rescheduleAndroidPhase === 'date') {
-      const next = new Date(rescheduleAt);
-      next.setFullYear(d.getFullYear(), d.getMonth(), d.getDate());
-      setRescheduleAt(next);
-      setRescheduleAndroidPhase('time');
-      return;
-    }
-    if (rescheduleAndroidPhase === 'time') {
-      const next = new Date(rescheduleAt);
-      next.setHours(d.getHours(), d.getMinutes(), 0, 0);
-      setRescheduleAt(next);
-      setRescheduleAndroidPhase('idle');
-    }
   };
 
   const submitReschedule = async () => {
@@ -1119,7 +1102,6 @@ export default function WalletScreen() {
         onRequestClose={() => {
           setRescheduleTargetId(null);
           setRescheduleIosOpen(false);
-          setRescheduleAndroidPhase('idle');
         }}
       >
         <View style={styles.modalOverlay}>
@@ -1130,10 +1112,7 @@ export default function WalletScreen() {
             </Text>
             <TouchableOpacity
               style={[styles.reschedulePickRow, { borderColor: colors.border, backgroundColor: colors.inputBg }]}
-              onPress={() => {
-                if (Platform.OS === 'android') setRescheduleAndroidPhase('date');
-                else setRescheduleIosOpen(true);
-              }}
+              onPress={() => void openReschedulePickers()}
             >
               <Ionicons name="calendar-outline" size={22} color={colors.primary} />
               <Text style={{ color: colors.text, marginLeft: 12, flex: 1, fontWeight: '600' }}>
@@ -1146,16 +1125,8 @@ export default function WalletScreen() {
                 mode="datetime"
                 display="spinner"
                 minimumDate={new Date(Date.now() + 60_000)}
-                onChange={onRescheduleIosChange}
-              />
-            ) : null}
-            {Platform.OS === 'android' && rescheduleAndroidPhase !== 'idle' && rescheduleTargetId ? (
-              <DateTimePicker
-                value={rescheduleAt}
-                mode={rescheduleAndroidPhase === 'date' ? 'date' : 'time'}
-                display="default"
-                minimumDate={rescheduleAndroidPhase === 'date' ? new Date(Date.now() + 60_000) : undefined}
-                onChange={onRescheduleAndroidChange}
+                onValueChange={onRescheduleIosChange}
+                onDismiss={() => setRescheduleIosOpen(false)}
               />
             ) : null}
             <View style={[styles.modalButtons, { marginTop: 20 }]}>
@@ -1164,7 +1135,6 @@ export default function WalletScreen() {
                 onPress={() => {
                   setRescheduleTargetId(null);
                   setRescheduleIosOpen(false);
-                  setRescheduleAndroidPhase('idle');
                 }}
                 disabled={rescheduleSaving}
               >
