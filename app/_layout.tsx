@@ -9,6 +9,7 @@ import { ThemedAlertProvider } from '../components/ThemedAlert';
 import { AppNavigationProvider } from '../contexts/AppNavigationContext';
 import GlobalErrorBoundary from '../components/GlobalErrorBoundary';
 import FriendlyErrorModal from '../components/FriendlyErrorModal';
+import { GameCongratsModal } from '../components/games/GameCongratsModal';
 import { ApiError, setGlobalApiErrorHandler } from '../services/api/client';
 import {
   registerForPushNotifications,
@@ -162,6 +163,7 @@ function RootContent() {
           message={friendlyError.message}
           onClose={() => setFriendlyError((prev) => ({ ...prev, visible: false }))}
         />
+        <GameCongratsModal />
       </View>
     </GlobalErrorBoundary>
   );

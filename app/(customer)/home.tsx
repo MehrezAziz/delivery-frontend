@@ -14,6 +14,7 @@ import { appAlert } from '../../utils/appAlert';
 import { api } from '../../services/api/client';
 import { useActiveOrdersChatUnreadMap } from '../../hooks/useOrderChatUnread';
 import { ActiveOrderChatUnreadBadge } from '../../components/ActiveOrderChatUnreadBadge';
+import { GameEntrySection } from '../../components/games/GameEntrySection';
 
 const ACTIVE_STATUSES = [
   'PENDING_PUBLISH', 'SEARCHING_DRIVER', 'PENDING_CUSTOMER_APPROVAL', 'DRIVER_ASSIGNED', 'DRIVER_ARRIVED', 'PICKED_UP', 'DELIVERING',
@@ -120,6 +121,10 @@ export default function CustomerHomeScreen() {
             </View>
             <Ionicons name="chevron-forward" size={22} color="rgba(255,255,255,0.7)" />
           </TouchableOpacity>
+        </View>
+
+        <View style={s.section}>
+          <GameEntrySection placement="CUSTOMER_HOME" role="customer" />
         </View>
 
         {/* Quick Actions */}

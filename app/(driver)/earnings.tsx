@@ -22,6 +22,7 @@ import axios from 'axios';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useAppNavigation } from '../../contexts/AppNavigationContext';
 import { driverPayoutService } from '../../services/api/driver-payout.service';
+import { GameEntrySection } from '../../components/games/GameEntrySection';
 
 function resolveApiBase(): string {
   const raw = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
@@ -498,6 +499,10 @@ export default function DriverEarningsScreen() {
               </View>
             )}
           </View>
+        </View>
+
+        <View style={{ paddingHorizontal: 16, marginBottom: 8 }}>
+          <GameEntrySection placement="DRIVER_EARNINGS" role="driver" />
         </View>
 
         <View style={[styles.panel, { backgroundColor: colors.card, borderColor: colors.border }]}>

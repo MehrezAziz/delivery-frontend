@@ -17,6 +17,7 @@ import { syncDriverLocationTracking } from '../../services/driverLocationTrackin
 import { persistDriverIdentityFromMe } from '../../utils/persistDriverIdentity';
 import { useActiveOrdersChatUnreadMap } from '../../hooks/useOrderChatUnread';
 import { ActiveOrderChatUnreadBadge } from '../../components/ActiveOrderChatUnreadBadge';
+import { GameEntrySection } from '../../components/games/GameEntrySection';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
 
@@ -147,6 +148,10 @@ export default function DriverHome() {
             <Ionicons name="chevron-forward" size={18} color="#dc2626" />
           </TouchableOpacity>
         )}
+
+        <View style={s.section}>
+          <GameEntrySection placement="DRIVER_HOME" role="driver" />
+        </View>
 
         {/* Available + My orders (verified) */}
         {isVerified && (

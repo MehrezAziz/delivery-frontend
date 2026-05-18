@@ -100,6 +100,7 @@ export default function DriverSettingsScreen() {
 
   const actionItems: { label: string; onPress: () => void }[] = [
     { label: 'Edit profile', onPress: goEditProfile },
+    { label: 'Notification settings', onPress: () => push('/(driver)/notifications-settings') },
     { label: 'Security', onPress: goSecurity },
     { label: 'My documents', onPress: goDocuments },
     { label: 'My addresses', onPress: goAddresses },

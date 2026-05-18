@@ -14,6 +14,7 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { pickScheduleDateTimeAndroid } from '../../utils/scheduleDateTimePicker';
 import { coinTransferStatusMeta } from '../../utils/coinTransferStatus';
 import { formatCoinSenderLine } from '../../utils/coinTransferSenderDisplay';
+import { GameEntrySection } from '../../components/games/GameEntrySection';
 
 type Tab = 'overview' | 'transactions' | 'withdrawals' | 'coin';
 
@@ -29,6 +30,7 @@ const TRANSACTION_TYPE_LABELS: Record<string, string> = {
   ADJUSTMENT: 'Adjustment',
   COIN_TRANSFER_SENT: 'Coin send',
   COIN_TRANSFER_RECEIVED: 'Coin received',
+  GAME_PRIZE: 'Game prize',
 };
 
 const STATUS_COLORS: Record<string, string> = {
@@ -597,6 +599,10 @@ export default function WalletScreen() {
           Top up securely with Flouci. <Text style={{ fontWeight: '700', color: colors.primary }}>Tap to add coins.</Text>
         </Text>
       </TouchableOpacity>
+
+      <View style={{ paddingHorizontal: 16, paddingTop: 8 }}>
+        <GameEntrySection placement="CUSTOMER_WALLET" role="customer" />
+      </View>
 
       {/* Tabs */}
       <View style={[styles.tabs, { backgroundColor: colors.card }]}>

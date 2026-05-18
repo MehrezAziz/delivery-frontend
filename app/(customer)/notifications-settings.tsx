@@ -14,6 +14,7 @@ import { api } from '../../services/api/client';
 
 type NotificationPreferences = {
   notifyReferralCommission: boolean;
+  notifyGameEvents: boolean;
 };
 
 export default function CustomerNotificationsSettingsScreen() {
@@ -30,7 +31,7 @@ export default function CustomerNotificationsSettingsScreen() {
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Failed to load notification settings';
       Alert.alert('Error', msg);
-      setPrefs({ notifyReferralCommission: true });
+      setPrefs({ notifyReferralCommission: true, notifyGameEvents: false });
     } finally {
       setLoading(false);
     }
@@ -91,6 +92,43 @@ export default function CustomerNotificationsSettingsScreen() {
           <Switch
             value={prefs?.notifyReferralCommission ?? true}
             onValueChange={(v) => void updateReferralNotify(v)}
+            disabled={saving}
+            trackColor={{ false: colors.border, true: colors.primary }}
+            thumbColor="#fff"
+          />
+        </View>
+      </View>
+
+      <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border, marginTop: 16 }]}>
+        <View style={styles.row}>
+          <View style={{ flex: 1, paddingRight: 12 }}>
+            <Text style={[styles.rowTitle, { color: colors.text }]}>
+              Game notifications
+            </Text>
+            <Text style={[styles.rowSub, { color: colors.textSecondary }]}>
+              Reminders when a quiz is live, draw results, and if you win a prize.
+            </Text>
+          </View>
+          <Switch
+            value={prefs?.notifyGameEvents ?? false}
+            onValueChange={async (next) => {
+              if (!prefs || saving) return;
+              const prev = prefs.notifyGameEvents;
+              setPrefs({ ...prefs, notifyGameEvents: next });
+              setSaving(true);
+              try {
+                const data = await api.patch<NotificationPreferences>(
+                  '/customers/me/notification-preferences',
+                  { notifyGameEvents: next },
+                );
+                setPrefs(data);
+              } catch (e: unknown) {
+                setPrefs({ ...prefs, notifyGameEvents: prev });
+                Alert.alert('Error', e instanceof Error ? e.message : 'Failed to update');
+              } finally {
+                setSaving(false);
+              }
+            }}
             disabled={saving}
             trackColor={{ false: colors.border, true: colors.primary }}
             thumbColor="#fff"
