@@ -8,8 +8,9 @@ import {
   Image,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
+import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../contexts/ThemeContext';
-import { api } from '../../services/api/client';
+import { api, resolveImageUrl } from '../../services/api/client';
 
 type Congrats = {
   winnerId: string;
@@ -19,7 +20,22 @@ type Congrats = {
   congratsImageUrl: string | null;
   prizeImageUrl: string | null;
   prizeType: string;
+  wonAt: string;
+  announcedAt: string;
 };
+
+function formatAnnouncementDate(iso: string | null | undefined): string {
+  if (!iso) return '';
+  try {
+    return new Date(iso).toLocaleDateString(undefined, {
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+    });
+  } catch {
+    return '';
+  }
+}
 
 export function GameCongratsModal() {
   const { colors } = useTheme();
@@ -52,7 +68,8 @@ export function GameCongratsModal() {
 
   if (!data) return null;
 
-  const imageUri = data.congratsImageUrl || data.prizeImageUrl;
+  const imageUri = resolveImageUrl(data.congratsImageUrl || data.prizeImageUrl);
+  const announcedOn = formatAnnouncementDate(data.announcedAt || data.wonAt);
 
   return (
     <Modal visible transparent animationType="fade">
@@ -60,11 +77,23 @@ export function GameCongratsModal() {
         <View style={[styles.box, { backgroundColor: colors.card }]}>
           {imageUri ? (
             <Image source={{ uri: imageUri }} style={styles.hero} resizeMode="cover" />
-          ) : null}
+          ) : (
+            <View style={[styles.heroPlaceholder, { backgroundColor: colors.primary }]}>
+              <Ionicons name="trophy" size={56} color="#fff" />
+            </View>
+          )}
           <Text style={[styles.title, { color: colors.text }]}>Congratulations!</Text>
           <Text style={[styles.sub, { color: colors.textSecondary }]}>
             You won {data.prizeLabel} in {data.gameName}.
           </Text>
+          {announcedOn ? (
+            <View style={[styles.dateRow, { backgroundColor: colors.primary + '15' }]}>
+              <Ionicons name="calendar-outline" size={16} color={colors.primary} />
+              <Text style={[styles.dateText, { color: colors.text }]}>
+                Announced on <Text style={{ fontWeight: '800' }}>{announcedOn}</Text>
+              </Text>
+            </View>
+          ) : null}
           {data.prizeType === 'PHYSICAL' && (
             <Text style={[styles.hint, { color: colors.textSecondary }]}>
               Our team will contact you to arrange your prize.
@@ -91,9 +120,27 @@ const styles = StyleSheet.create({
   },
   box: { borderRadius: 20, padding: 24, alignItems: 'center' },
   hero: { width: '100%', height: 140, borderRadius: 12, marginBottom: 16 },
+  heroPlaceholder: {
+    width: '100%',
+    height: 140,
+    borderRadius: 12,
+    marginBottom: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   title: { fontSize: 24, fontWeight: '800', marginBottom: 8 },
-  sub: { fontSize: 16, textAlign: 'center', lineHeight: 22, marginBottom: 8 },
-  hint: { fontSize: 13, textAlign: 'center', marginBottom: 16 },
-  btn: { paddingHorizontal: 32, paddingVertical: 14, borderRadius: 12, marginTop: 8 },
+  sub: { fontSize: 16, textAlign: 'center', lineHeight: 22, marginBottom: 10 },
+  dateRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+    marginBottom: 6,
+  },
+  dateText: { fontSize: 13 },
+  hint: { fontSize: 13, textAlign: 'center', marginTop: 8, marginBottom: 8 },
+  btn: { paddingHorizontal: 32, paddingVertical: 14, borderRadius: 12, marginTop: 12 },
   btnText: { color: '#fff', fontWeight: '800', fontSize: 16 },
 });

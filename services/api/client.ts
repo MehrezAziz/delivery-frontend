@@ -3,6 +3,24 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 // API Configuration
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api';
 const TOKEN_STORAGE_KEY = 'accessToken';
+
+/**
+ * Backend host without the /api suffix — used to resolve static assets
+ * like /uploads/<file>.
+ */
+export const API_HOST_URL = API_BASE_URL.replace(/\/api\/?$/, '');
+
+/**
+ * Resolves a stored image URL to one usable in an <Image source={{ uri }}/>.
+ * - Absolute URLs (http/https) are returned as-is.
+ * - Relative paths like "/uploads/games/x.jpg" are prefixed with the backend host.
+ */
+export function resolveImageUrl(url: string | null | undefined): string | undefined {
+  if (!url) return undefined;
+  if (/^https?:\/\//i.test(url)) return url;
+  const path = url.startsWith('/') ? url : `/${url}`;
+  return `${API_HOST_URL}${path}`;
+}
 let globalApiErrorHandler: ((error: ApiError) => void) | null = null;
 
 // Custom error class for API errors

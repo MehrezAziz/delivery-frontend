@@ -12,7 +12,7 @@ import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../contexts/ThemeContext';
-import { api } from '../../services/api/client';
+import { api, resolveImageUrl } from '../../services/api/client';
 
 type Eligibility =
   | 'OK'
@@ -155,7 +155,7 @@ export function GameEntrySection({ placement, role }: Props) {
           >
             <View style={styles.heroWrap}>
               {g.bannerImageUrls[0] ? (
-                <Image source={{ uri: g.bannerImageUrls[0] }} style={styles.banner} />
+                <Image source={{ uri: resolveImageUrl(g.bannerImageUrls[0]) }} style={styles.banner} />
               ) : (
                 <View
                   style={[

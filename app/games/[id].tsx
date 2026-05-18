@@ -14,7 +14,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../contexts/ThemeContext';
-import { api } from '../../services/api/client';
+import { api, resolveImageUrl } from '../../services/api/client';
 import { CorrectCelebration } from '../../components/games/CorrectCelebration';
 
 type GameDetail = {
@@ -208,7 +208,7 @@ export default function GameScreen() {
     <View style={{ flex: 1, backgroundColor: colors.background }}>
       <ScrollView style={styles.container} contentContainerStyle={styles.content}>
         {game.bannerImageUrls[0] ? (
-          <Image source={{ uri: game.bannerImageUrls[0] }} style={styles.hero} />
+          <Image source={{ uri: resolveImageUrl(game.bannerImageUrls[0]) }} style={styles.hero} />
         ) : null}
 
         <Text style={[styles.title, { color: colors.text }]}>{game.name}</Text>
@@ -349,7 +349,7 @@ export default function GameScreen() {
           <View style={[styles.quizCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <Text style={[styles.cat, { color: colors.textSecondary }]}>{question.categoryName}</Text>
             {question.imageUrl ? (
-              <Image source={{ uri: question.imageUrl }} style={styles.qImage} resizeMode="contain" />
+              <Image source={{ uri: resolveImageUrl(question.imageUrl) }} style={styles.qImage} resizeMode="contain" />
             ) : null}
             {question.text ? (
               <Text style={[styles.qText, { color: colors.text }]}>{question.text}</Text>
@@ -361,7 +361,7 @@ export default function GameScreen() {
                 onPress={() => void answer(o.id)}
               >
                 {o.imageUrl ? (
-                  <Image source={{ uri: o.imageUrl }} style={styles.optImage} resizeMode="contain" />
+                  <Image source={{ uri: resolveImageUrl(o.imageUrl) }} style={styles.optImage} resizeMode="contain" />
                 ) : null}
                 <Text style={{ color: colors.text, flex: 1 }}>{o.text || 'Option'}</Text>
               </TouchableOpacity>
@@ -386,7 +386,7 @@ export default function GameScreen() {
                 ]}
               >
                 {w.prizeImageUrl ? (
-                  <Image source={{ uri: w.prizeImageUrl }} style={styles.winnerImg} />
+                  <Image source={{ uri: resolveImageUrl(w.prizeImageUrl) }} style={styles.winnerImg} />
                 ) : (
                   <View
                     style={[
