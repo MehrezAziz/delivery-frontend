@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -7,6 +7,8 @@ import {
   Image,
   Alert,
   Platform,
+  Animated,
+  Easing,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
@@ -107,93 +109,296 @@ export function GameEntrySection({ placement, role }: Props) {
 
   return (
     <View style={styles.wrap}>
-      {entries.map((g) => {
-        const comingSoon = g.status === 'COMING_SOON';
-        return (
-          <TouchableOpacity
-            key={g.id}
-            activeOpacity={0.9}
-            onPress={() => handlePress(g)}
-            style={[
-              styles.card,
-              {
-                backgroundColor: colors.card,
-                borderColor: colors.border,
-                shadowColor: colors.primary,
-                opacity: comingSoon ? 0.85 : 1,
-              },
-            ]}
-          >
-            {g.bannerImageUrls[0] ? (
-              <Image source={{ uri: resolveImageUrl(g.bannerImageUrls[0]) }} style={styles.banner} />
+      {entries.map((g) => (
+        <GameEntryCard
+          key={g.id}
+          game={g}
+          colors={colors}
+          onPress={() => handlePress(g)}
+        />
+      ))}
+    </View>
+  );
+}
+
+type Colors = ReturnType<typeof useTheme>['colors'];
+
+function GameEntryCard({
+  game,
+  colors,
+  onPress,
+}: {
+  game: GameEntry;
+  colors: Colors;
+  onPress: () => void;
+}) {
+  const comingSoon = game.status === 'COMING_SOON';
+  const banners = game.bannerImageUrls;
+  const [bannerIdx, setBannerIdx] = useState(0);
+  const fade = useRef(new Animated.Value(1)).current;
+  const float = useRef(new Animated.Value(0)).current;
+
+  // Crossfade through banners every ~3.2s
+  useEffect(() => {
+    if (banners.length <= 1) return;
+    const interval = setInterval(() => {
+      Animated.sequence([
+        Animated.timing(fade, {
+          toValue: 0,
+          duration: 350,
+          useNativeDriver: true,
+        }),
+      ]).start(() => {
+        setBannerIdx((i) => (i + 1) % banners.length);
+        Animated.timing(fade, {
+          toValue: 1,
+          duration: 350,
+          useNativeDriver: true,
+        }).start();
+      });
+    }, 3200);
+    return () => clearInterval(interval);
+  }, [banners.length, fade]);
+
+  // Gentle floating motion
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(float, {
+          toValue: 1,
+          duration: 1800,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: true,
+        }),
+        Animated.timing(float, {
+          toValue: 0,
+          duration: 1800,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: true,
+        }),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [float]);
+
+  const translateY = float.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, -6],
+  });
+  const shadowScale = float.interpolate({
+    inputRange: [0, 1],
+    outputRange: [1, 0.92],
+  });
+
+  const banner = banners[bannerIdx];
+
+  return (
+    <View>
+      <Animated.View
+        style={[
+          styles.cardWrap,
+          {
+            transform: [{ translateY }],
+            shadowColor: colors.primary,
+          },
+        ]}
+      >
+        <TouchableOpacity
+          activeOpacity={0.92}
+          onPress={onPress}
+          style={[
+            styles.card,
+            {
+              backgroundColor: colors.card,
+              borderColor: colors.border,
+              opacity: comingSoon ? 0.85 : 1,
+            },
+          ]}
+        >
+          <View style={styles.heroWrap}>
+            {banner ? (
+              <Animated.Image
+                source={{ uri: resolveImageUrl(banner) }}
+                style={[styles.banner, { opacity: fade }]}
+              />
             ) : (
               <View
                 style={[
                   styles.bannerPlaceholder,
                   {
                     backgroundColor: colors.primary + '15',
-                    borderColor: colors.primary + '33',
                   },
                 ]}
-              >
-                <View style={[styles.iconCircle, { backgroundColor: colors.primary }]}>
-                  <Ionicons name="game-controller" size={28} color="#fff" />
-                </View>
-              </View>
+              />
             )}
 
-            <View style={styles.body}>
-              <Text
-                style={[styles.title, { color: colors.text }]}
-                numberOfLines={1}
-              >
-                {g.name}
-              </Text>
-              {g.description ? (
-                <Text
-                  style={[styles.sub, { color: colors.textSecondary }]}
-                  numberOfLines={2}
-                >
-                  {g.description}
-                </Text>
-              ) : null}
+            {/* Top-left attractive badge */}
+            <View style={styles.badgeWrap} pointerEvents="none">
+              <View style={[styles.badge, { backgroundColor: '#F59E0B' }]}>
+                <Ionicons name="sparkles" size={12} color="#fff" />
+                <Text style={styles.badgeText}>Win valuable prizes</Text>
+              </View>
             </View>
-          </TouchableOpacity>
-        );
-      })}
+
+            {/* Game logo overlay (always visible) */}
+            <View style={styles.logoWrap} pointerEvents="none">
+              <View style={[styles.logoCircle, { backgroundColor: colors.primary }]}>
+                <Ionicons name="game-controller" size={24} color="#fff" />
+              </View>
+            </View>
+
+            {/* Pagination dots when multiple banners */}
+            {banners.length > 1 && (
+              <View style={styles.dotsWrap} pointerEvents="none">
+                {banners.map((_, i) => (
+                  <View
+                    key={i}
+                    style={[
+                      styles.dot,
+                      {
+                        backgroundColor: i === bannerIdx ? '#fff' : 'rgba(255,255,255,0.5)',
+                        width: i === bannerIdx ? 14 : 6,
+                      },
+                    ]}
+                  />
+                ))}
+              </View>
+            )}
+          </View>
+
+          <View style={styles.body}>
+            <Text
+              style={[styles.title, { color: colors.text }]}
+              numberOfLines={1}
+            >
+              {game.name}
+            </Text>
+            {game.description ? (
+              <Text
+                style={[styles.sub, { color: colors.textSecondary }]}
+                numberOfLines={2}
+              >
+                {game.description}
+              </Text>
+            ) : null}
+          </View>
+        </TouchableOpacity>
+      </Animated.View>
+
+      {/* Soft glowing ground shadow that subtly pulses with the floating motion */}
+      <Animated.View
+        pointerEvents="none"
+        style={[
+          styles.glow,
+          {
+            backgroundColor: colors.primary,
+            transform: [{ scaleX: shadowScale }],
+          },
+        ]}
+      />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  wrap: { gap: 14, marginBottom: 16 },
-  card: {
-    borderRadius: 20,
-    borderWidth: StyleSheet.hairlineWidth,
-    overflow: 'hidden',
+  wrap: { gap: 22, marginBottom: 18 },
+  cardWrap: {
     ...Platform.select({
       ios: {
-        shadowOpacity: 0.12,
-        shadowRadius: 14,
-        shadowOffset: { width: 0, height: 6 },
+        shadowOpacity: 0.18,
+        shadowRadius: 18,
+        shadowOffset: { width: 0, height: 10 },
+      },
+      android: { elevation: 8 },
+    }),
+  },
+  card: {
+    borderRadius: 22,
+    borderWidth: StyleSheet.hairlineWidth,
+    overflow: 'hidden',
+  },
+  heroWrap: {
+    width: '100%',
+    height: 150,
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  banner: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    width: '100%',
+    height: '100%',
+  },
+  bannerPlaceholder: {
+    width: '100%',
+    height: '100%',
+  },
+  badgeWrap: {
+    position: 'absolute',
+    top: 12,
+    left: 12,
+  },
+  badge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOpacity: 0.25,
+        shadowRadius: 6,
+        shadowOffset: { width: 0, height: 3 },
       },
       android: { elevation: 4 },
     }),
   },
-  banner: { width: '100%', height: 130 },
-  bannerPlaceholder: {
-    width: '100%',
-    height: 110,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderBottomWidth: StyleSheet.hairlineWidth,
+  badgeText: {
+    color: '#fff',
+    fontWeight: '800',
+    fontSize: 12,
+    letterSpacing: 0.3,
   },
-  iconCircle: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
+  logoWrap: {
+    position: 'absolute',
+    bottom: 12,
+    right: 12,
+  },
+  logoCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.85)',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOpacity: 0.3,
+        shadowRadius: 6,
+        shadowOffset: { width: 0, height: 3 },
+      },
+      android: { elevation: 6 },
+    }),
+  },
+  dotsWrap: {
+    position: 'absolute',
+    bottom: 10,
+    alignSelf: 'center',
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 5,
+  },
+  dot: {
+    height: 6,
+    borderRadius: 3,
   },
   body: { padding: 16, alignItems: 'center' },
   title: {
@@ -206,5 +411,14 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     textAlign: 'center',
     marginTop: 6,
+  },
+  glow: {
+    position: 'absolute',
+    bottom: -14,
+    left: '15%',
+    right: '15%',
+    height: 16,
+    borderRadius: 999,
+    opacity: 0.18,
   },
 });
