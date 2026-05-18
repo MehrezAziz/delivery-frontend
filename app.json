@@ -49,7 +49,7 @@
       }
     },
     "android": {
-      "versionCode": 6,
+      "versionCode": 7,
       "softwareKeyboardLayoutMode": "resize",
       "blockedPermissions": ["com.google.android.gms.permission.AD_ID"],
       "permissions": [
