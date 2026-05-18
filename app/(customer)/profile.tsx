@@ -20,6 +20,7 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { getCustomerStatusLabel, getCustomerStatusTextColor } from '../../utils/customerStatus';
 import { consumeCustomerProfileNeedsRefresh } from '../../utils/profileRefreshSignals';
 import { resetOrderConfirmIdentitySession } from '../../utils/createOrderStepUpSession';
+import { GameEntrySection } from '../../components/games/GameEntrySection';
 
 // Get API URL from environment variable
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api';
@@ -351,6 +352,7 @@ export default function CustomerProfileScreen() {
           />
         }
       >
+        <GameEntrySection placement="CUSTOMER_PROFILE" role="customer" />
         {/* Profile Info */}
         <View style={[styles.profileCard, { backgroundColor: colors.card }]}>
           <View style={styles.profileHeader}>

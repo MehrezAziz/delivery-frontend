@@ -24,6 +24,7 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { useAppNavigation } from '../../contexts/AppNavigationContext';
 import { persistDriverIdentityFromMe } from '../../utils/persistDriverIdentity';
 import { consumeDriverProfileNeedsRefresh } from '../../utils/profileRefreshSignals';
+import { GameEntrySection } from '../../components/games/GameEntrySection';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
 
@@ -247,6 +248,7 @@ export default function DriverProfileScreen() {
           />
         }
       >
+        <GameEntrySection placement="DRIVER_PROFILE" role="driver" />
         <View style={[styles.profileCard, { backgroundColor: colors.card }]}>
           <View style={styles.avatarWrap}>
             {driver?.user?.image ? (

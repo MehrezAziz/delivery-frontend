@@ -105,39 +105,10 @@ export function GameEntrySection({ placement, role }: Props) {
     router.push(`/games/${g.id}`);
   };
 
-  const subLabel = (g: GameEntry) => {
-    if (g.status === 'COMING_SOON') return 'Coming soon';
-    if (g.status === 'CLOSED_TODAY') return 'Open on scheduled days — check back soon';
-    if (g.eligibility === 'PHONE_REQUIRED') return 'Add your phone number to join';
-    if (g.eligibility === 'NOT_ACTIVE_USER') return 'Account not eligible';
-    if (g.eligibility === 'COUNTRY_NOT_ELIGIBLE') return 'Not available in your country';
-    if (g.eligibility === 'ORDER_REQUIRED') return 'Complete a delivered order to play';
-    if (g.eligibility === 'CODE_REQUIRED' || g.eligibility === 'CODE_VERSION_STALE') {
-      return 'Tap to enter the code & play';
-    }
-    return 'Tap to play and win prizes';
-  };
-
-  const statusPill = (g: GameEntry) => {
-    if (g.status === 'COMING_SOON') return { label: 'Soon', bg: '#94A3B8' };
-    if (g.status === 'CLOSED_TODAY') return { label: 'Closed today', bg: '#94A3B8' };
-    if (g.eligibility === 'OK') return { label: 'Play now', bg: '#22C55E' };
-    if (g.eligibility === 'CODE_REQUIRED' || g.eligibility === 'CODE_VERSION_STALE') {
-      return { label: 'New', bg: '#3B82F6' };
-    }
-    return null;
-  };
-
   return (
     <View style={styles.wrap}>
       {entries.map((g) => {
         const comingSoon = g.status === 'COMING_SOON';
-        const isBlocked =
-          g.eligibility === 'NOT_ACTIVE_USER' ||
-          g.eligibility === 'COUNTRY_NOT_ELIGIBLE' ||
-          g.eligibility === 'ORDER_REQUIRED';
-        const tappable = !comingSoon;
-        const pill = statusPill(g);
         return (
           <TouchableOpacity
             key={g.id}
@@ -153,69 +124,39 @@ export function GameEntrySection({ placement, role }: Props) {
               },
             ]}
           >
-            <View style={styles.heroWrap}>
-              {g.bannerImageUrls[0] ? (
-                <Image source={{ uri: resolveImageUrl(g.bannerImageUrls[0]) }} style={styles.banner} />
-              ) : (
-                <View
-                  style={[
-                    styles.bannerPlaceholder,
-                    {
-                      backgroundColor: colors.primary + '15',
-                      borderColor: colors.primary + '33',
-                    },
-                  ]}
-                >
-                  <View
-                    style={[styles.iconCircle, { backgroundColor: colors.primary }]}
-                  >
-                    <Ionicons name="game-controller" size={28} color="#fff" />
-                  </View>
-                  <Text style={[styles.bannerHeading, { color: colors.primary }]}>
-                    Quiz Game
-                  </Text>
-                </View>
-              )}
-              {pill && (
-                <View style={[styles.pill, { backgroundColor: pill.bg }]}>
-                  <Text style={styles.pillText}>{pill.label}</Text>
-                </View>
-              )}
-            </View>
-
-            <View style={styles.body}>
-              <Text style={[styles.title, { color: colors.text }]} numberOfLines={1}>
-                {g.name}
-              </Text>
-              {g.description ? (
-                <Text style={[styles.sub, { color: colors.textSecondary }]} numberOfLines={2}>
-                  {g.description}
-                </Text>
-              ) : null}
-
+            {g.bannerImageUrls[0] ? (
+              <Image source={{ uri: resolveImageUrl(g.bannerImageUrls[0]) }} style={styles.banner} />
+            ) : (
               <View
                 style={[
-                  styles.cta,
+                  styles.bannerPlaceholder,
                   {
-                    backgroundColor: tappable && !isBlocked ? colors.primary : colors.border,
+                    backgroundColor: colors.primary + '15',
+                    borderColor: colors.primary + '33',
                   },
                 ]}
               >
-                <Text
-                  style={[
-                    styles.ctaText,
-                    { color: tappable && !isBlocked ? '#fff' : colors.textSecondary },
-                  ]}
-                  numberOfLines={1}
-                >
-                  {subLabel(g)}
-                </Text>
-                <Ionicons
-                  name="arrow-forward"
-                  size={18}
-                  color={tappable && !isBlocked ? '#fff' : colors.textSecondary}
-                />
+                <View style={[styles.iconCircle, { backgroundColor: colors.primary }]}>
+                  <Ionicons name="game-controller" size={28} color="#fff" />
+                </View>
               </View>
+            )}
+
+            <View style={styles.body}>
+              <Text
+                style={[styles.title, { color: colors.text }]}
+                numberOfLines={1}
+              >
+                {g.name}
+              </Text>
+              {g.description ? (
+                <Text
+                  style={[styles.sub, { color: colors.textSecondary }]}
+                  numberOfLines={2}
+                >
+                  {g.description}
+                </Text>
+              ) : null}
             </View>
           </TouchableOpacity>
         );
@@ -239,14 +180,12 @@ const styles = StyleSheet.create({
       android: { elevation: 4 },
     }),
   },
-  heroWrap: { position: 'relative' },
   banner: { width: '100%', height: 130 },
   bannerPlaceholder: {
     width: '100%',
     height: 110,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   iconCircle: {
@@ -256,27 +195,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  bannerHeading: { fontSize: 13, fontWeight: '800', letterSpacing: 1, textTransform: 'uppercase' },
-  pill: {
-    position: 'absolute',
-    top: 12,
-    right: 12,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 999,
+  body: { padding: 16, alignItems: 'center' },
+  title: {
+    fontSize: 18,
+    fontWeight: '800',
+    textAlign: 'center',
   },
-  pillText: { color: '#fff', fontWeight: '800', fontSize: 11, letterSpacing: 0.5 },
-  body: { padding: 14, gap: 6 },
-  title: { fontSize: 17, fontWeight: '800' },
-  sub: { fontSize: 13, lineHeight: 18 },
-  cta: {
-    marginTop: 10,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 14,
-    paddingVertical: 11,
-    borderRadius: 12,
+  sub: {
+    fontSize: 13,
+    lineHeight: 18,
+    textAlign: 'center',
+    marginTop: 6,
   },
-  ctaText: { fontWeight: '800', fontSize: 14, flex: 1 },
 });

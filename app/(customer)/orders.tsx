@@ -11,6 +11,7 @@ import { orderService, Order } from '../../services/api/order.service';
 import { useTheme } from '../../contexts/ThemeContext';
 import { fetchChatUnreadMapForOrders } from '../../hooks/useOrderChatUnread';
 import { ChatUnreadBadge } from '../../components/ChatUnreadBadge';
+import { GameEntrySection } from '../../components/games/GameEntrySection';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const SIDEBAR_WIDTH = SCREEN_WIDTH * 0.65;
@@ -194,6 +195,7 @@ export default function CustomerOrdersScreen() {
       {/* Orders list */}
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 40 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
+        <GameEntrySection placement="CUSTOMER_ORDERS" role="customer" />
         {filteredOrders.length === 0 ? (
           <View style={st.empty}>
             <Ionicons name="receipt-outline" size={48} color={colors.border} />

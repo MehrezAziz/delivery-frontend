@@ -3,6 +3,7 @@ import { useRouter } from 'expo-router';
 import { useState, useEffect, useCallback } from 'react';
 import { supportService, SupportTicket } from '../../services/api/support.service';
 import { useTheme } from '../../contexts/ThemeContext';
+import { GameEntrySection } from '../../components/games/GameEntrySection';
 
 const CATEGORIES = ['ORDER_ISSUE', 'PAYMENT', 'TECHNICAL', 'OTHER'];
 const PRIORITIES = ['LOW', 'MEDIUM', 'HIGH', 'URGENT'];
@@ -85,16 +86,22 @@ export default function CustomerSupportScreen() {
       {loading ? (
         <ActivityIndicator size="large" color={colors.primary} style={{ marginTop: 40 }} />
       ) : tickets.length === 0 ? (
-        <View style={styles.empty}>
-          <Text style={styles.emptyIcon}>💬</Text>
-          <Text style={[styles.emptyText, { color: colors.text }]}>No support tickets yet</Text>
-          <Text style={[styles.emptySubtext, { color: colors.textTertiary }]}>Tap "+ New" to create one</Text>
-        </View>
+        <ScrollView contentContainerStyle={{ padding: 16 }}>
+          <GameEntrySection placement="CUSTOMER_SUPPORT" role="customer" />
+          <View style={styles.empty}>
+            <Text style={styles.emptyIcon}>💬</Text>
+            <Text style={[styles.emptyText, { color: colors.text }]}>No support tickets yet</Text>
+            <Text style={[styles.emptySubtext, { color: colors.textTertiary }]}>Tap "+ New" to create one</Text>
+          </View>
+        </ScrollView>
       ) : (
         <FlatList
           data={tickets}
           keyExtractor={t => t.id}
           contentContainerStyle={{ padding: 16 }}
+          ListHeaderComponent={
+            <GameEntrySection placement="CUSTOMER_SUPPORT" role="customer" />
+          }
           renderItem={({ item }) => (
             <TouchableOpacity
               style={[styles.ticketCard, { backgroundColor: colors.card, borderColor: colors.border }]}

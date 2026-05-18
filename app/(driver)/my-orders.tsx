@@ -9,6 +9,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { orderService, Order } from '../../services/api/order.service';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useAppNavigation } from '../../contexts/AppNavigationContext';
+import { GameEntrySection } from '../../components/games/GameEntrySection';
 import {
   restoreOrderTrackingForDriver,
   stopOrderTrackingSilently,
@@ -401,6 +402,7 @@ export default function DriverMyOrdersScreen() {
 
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 40 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} />}>
+        <GameEntrySection placement="DRIVER_MY_ORDERS" role="driver" />
         {orders.length === 0 ? (
           <View style={s.empty}>
             <Ionicons name="car-outline" size={56} color={colors.textTertiary} />

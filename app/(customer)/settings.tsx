@@ -18,6 +18,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../contexts/ThemeContext';
 import { securityService, type SecurityTier } from '../../services/api/security.service';
 import { SecurityTierPoles } from '../../components/settings/SecurityTierPoles';
+import { GameEntrySection } from '../../components/games/GameEntrySection';
 
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api';
 
@@ -207,6 +208,7 @@ export default function CustomerSettingsScreen() {
         />
       }
     >
+      <GameEntrySection placement="CUSTOMER_SETTINGS" role="customer" />
       <View style={[styles.group, { backgroundColor: colors.card, borderColor: colors.border }]}>
         {actionItems.map((item) => (
           <TouchableOpacity

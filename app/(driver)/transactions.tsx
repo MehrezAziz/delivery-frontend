@@ -9,6 +9,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
 import { useTheme } from '../../contexts/ThemeContext';
 import { orderService, Order } from '../../services/api/order.service';
+import { GameEntrySection } from '../../components/games/GameEntrySection';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
 
@@ -285,6 +286,9 @@ export default function DriverTransactionsScreen() {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
         onEndReached={onEndReached}
         onEndReachedThreshold={0.3}
+        ListHeaderComponent={
+          <GameEntrySection placement="DRIVER_TRANSACTIONS" role="driver" />
+        }
         ListEmptyComponent={
           <View style={s.empty}>
             <Ionicons name="receipt-outline" size={48} color="#d1d5db" />

@@ -8,6 +8,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../contexts/ThemeContext';
 import { securityService, type SecurityTier } from '../../services/api/security.service';
 import { SecurityTierPoles } from '../../components/settings/SecurityTierPoles';
+import { GameEntrySection } from '../../components/games/GameEntrySection';
 
 export default function DriverSettingsScreen() {
   const router = useRouter();
@@ -113,6 +114,7 @@ export default function DriverSettingsScreen() {
       style={[styles.container, { backgroundColor: colors.background }]}
       contentContainerStyle={styles.scrollContent}
     >
+      <GameEntrySection placement="DRIVER_SETTINGS" role="driver" />
       <View style={[styles.group, { backgroundColor: colors.card, borderColor: colors.border }]}>
         {actionItems.map((item) => (
           <TouchableOpacity
