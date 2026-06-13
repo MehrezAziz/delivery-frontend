@@ -1,4 +1,5 @@
 import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import { SvgFingerprintBadge, SvgFaceIdBadge } from './icons/EditProfileGateBiometricSvgs';
 import type { ThemeColors } from '../contexts/ThemeContext';
 
@@ -11,17 +12,17 @@ type Props = {
   label?: string;
 };
 
-const DEFAULT_LABEL = 'Face ID - Fingerprint';
-
 /** Primary gate action: fingerprint + Face ID copy + face mesh icons */
 export function EditProfileBiometricVerifyButton({
   onPress,
   disabled,
   verifying,
   colors,
-  label = DEFAULT_LABEL,
+  label,
 }: Props) {
+  const { t } = useTranslation();
   const iconColor = '#ffffff';
+  const resolvedLabel = label ?? t('biometric.faceAndFingerprint');
 
   return (
     <TouchableOpacity
@@ -30,7 +31,7 @@ export function EditProfileBiometricVerifyButton({
       disabled={disabled || verifying}
       activeOpacity={0.88}
       accessibilityRole="button"
-      accessibilityLabel="Face ID and fingerprint verification"
+      accessibilityLabel={t('biometric.faceAndFingerprint')}
     >
       {verifying ? (
         <ActivityIndicator color={iconColor} />
@@ -39,7 +40,7 @@ export function EditProfileBiometricVerifyButton({
           <SvgFaceIdBadge size={26} color={iconColor} />
           
           <Text style={styles.label} numberOfLines={2}>
-            {label}
+            {resolvedLabel}
           </Text>
           <SvgFingerprintBadge size={26} color={iconColor} />
         </View>

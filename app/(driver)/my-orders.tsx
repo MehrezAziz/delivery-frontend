@@ -6,6 +6,7 @@ import {
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import { orderService, Order } from '../../services/api/order.service';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useAppNavigation } from '../../contexts/AppNavigationContext';
@@ -19,31 +20,31 @@ import { fetchChatUnreadMapForOrders } from '../../hooks/useOrderChatUnread';
 import { ChatUnreadBadge } from '../../components/ChatUnreadBadge';
 import { appAlert } from '../../utils/appAlert';
 
-const STATUS_META: Record<string, { color: string; bg: string; label: string; icon: string }> = {
-  PENDING_CUSTOMER_APPROVAL: { color: '#ea580c', bg: '#ffedd5', label: 'Waiting for Customer', icon: 'hourglass-outline' },
-  DRIVER_ASSIGNED: { color: '#2563eb', bg: '#dbeafe', label: 'Assigned',    icon: 'person-outline' },
-  DRIVER_ARRIVED:  { color: '#7c3aed', bg: '#ede9fe', label: 'Arrived',     icon: 'flag-outline' },
-  PICKED_UP:       { color: '#ea580c', bg: '#ffedd5', label: 'Picked Up',   icon: 'cube-outline' },
-  DELIVERING:      { color: '#4f46e5', bg: '#e0e7ff', label: 'Delivering',  icon: 'bicycle-outline' },
-  DELIVERED:       { color: '#16a34a', bg: '#dcfce7', label: 'Delivered',    icon: 'checkmark-circle' },
-  RETURNED:        { color: '#e11d48', bg: '#ffe4e6', label: 'Returned',     icon: 'return-up-back-outline' },
-  RETURN_DEPOSIT:  { color: '#a21caf', bg: '#fae8ff', label: 'Return deposit', icon: 'archive-outline' },
-  CANCELLED:       { color: '#dc2626', bg: '#fee2e2', label: 'Cancelled',   icon: 'close-circle' },
+const STATUS_META: Record<string, { color: string; bg: string; labelKey: string; icon: string }> = {
+  PENDING_CUSTOMER_APPROVAL: { color: '#ea580c', bg: '#ffedd5', labelKey: 'driverMyOrders.status.WaitingForCustomer', icon: 'hourglass-outline' },
+  DRIVER_ASSIGNED: { color: '#2563eb', bg: '#dbeafe', labelKey: 'driverMyOrders.status.Assigned',    icon: 'person-outline' },
+  DRIVER_ARRIVED:  { color: '#7c3aed', bg: '#ede9fe', labelKey: 'driverMyOrders.status.Arrived',     icon: 'flag-outline' },
+  PICKED_UP:       { color: '#ea580c', bg: '#ffedd5', labelKey: 'driverMyOrders.status.PickedUp',   icon: 'cube-outline' },
+  DELIVERING:      { color: '#4f46e5', bg: '#e0e7ff', labelKey: 'driverMyOrders.status.Delivering',  icon: 'bicycle-outline' },
+  DELIVERED:       { color: '#16a34a', bg: '#dcfce7', labelKey: 'driverMyOrders.status.Delivered',    icon: 'checkmark-circle' },
+  RETURNED:        { color: '#e11d48', bg: '#ffe4e6', labelKey: 'driverMyOrders.status.Returned',     icon: 'return-up-back-outline' },
+  RETURN_DEPOSIT:  { color: '#a21caf', bg: '#fae8ff', labelKey: 'driverMyOrders.status.ReturnDeposit', icon: 'archive-outline' },
+  CANCELLED:       { color: '#dc2626', bg: '#fee2e2', labelKey: 'driverMyOrders.status.Cancelled',   icon: 'close-circle' },
 };
 
-const STATUS_ACTIONS: Record<string, { next: string; label: string; color: string; icon: string }> = {
-  DRIVER_ASSIGNED: { next: 'DRIVER_ARRIVED', label: 'I Have Arrived',    color: '#7c3aed', icon: 'flag' },
-  DRIVER_ARRIVED:  { next: 'PICKED_UP',     label: 'Package Picked Up', color: '#ea580c', icon: 'cube' },
-  PICKED_UP:       { next: 'DELIVERING',    label: 'Start Delivering',  color: '#4f46e5', icon: 'bicycle' },
-  DELIVERING:      { next: 'DELIVERED',     label: 'Mark Delivered',    color: '#16a34a', icon: 'checkmark-circle' },
-  RETURNED:        { next: 'RETURN_DEPOSIT', label: 'Mark return deposit', color: '#a21caf', icon: 'archive' },
+const STATUS_ACTIONS: Record<string, { next: string; labelKey: string; color: string; icon: string }> = {
+  DRIVER_ASSIGNED: { next: 'DRIVER_ARRIVED', labelKey: 'driverMyOrders.actions.iHaveArrived',    color: '#7c3aed', icon: 'flag' },
+  DRIVER_ARRIVED:  { next: 'PICKED_UP',     labelKey: 'driverMyOrders.actions.packagePickedUp', color: '#ea580c', icon: 'cube' },
+  PICKED_UP:       { next: 'DELIVERING',    labelKey: 'driverMyOrders.actions.startDelivering',  color: '#4f46e5', icon: 'bicycle' },
+  DELIVERING:      { next: 'DELIVERED',     labelKey: 'driverMyOrders.actions.markDelivered',    color: '#16a34a', icon: 'checkmark-circle' },
+  RETURNED:        { next: 'RETURN_DEPOSIT', labelKey: 'driverMyOrders.actions.markReturnDeposit', color: '#a21caf', icon: 'archive' },
 };
 
-const STATUS_REVERT: Record<string, { prev: string; label: string }> = {
-  DRIVER_ARRIVED: { prev: 'DRIVER_ASSIGNED', label: 'Back to Assigned' },
-  PICKED_UP:      { prev: 'DRIVER_ARRIVED',  label: 'Back to Arrived' },
-  DELIVERING:     { prev: 'PICKED_UP',       label: 'Back to Picked Up' },
-  RETURNED:       { prev: 'DELIVERING',      label: 'Back to Delivering' },
+const STATUS_REVERT: Record<string, { prev: string; labelKey: string }> = {
+  DRIVER_ARRIVED: { prev: 'DRIVER_ASSIGNED', labelKey: 'driverMyOrders.revert.backToAssigned' },
+  PICKED_UP:      { prev: 'DRIVER_ARRIVED',  labelKey: 'driverMyOrders.revert.backToArrived' },
+  DELIVERING:     { prev: 'PICKED_UP',       labelKey: 'driverMyOrders.revert.backToPickedUp' },
+  RETURNED:       { prev: 'DELIVERING',      labelKey: 'driverMyOrders.revert.backToDelivering' },
 };
 
 function formatMoney(v: unknown): string {
@@ -72,6 +73,7 @@ export default function DriverMyOrdersScreen() {
   const router = useRouter();
   const { push } = useAppNavigation();
   const { colors, isDark } = useTheme();
+  const { t } = useTranslation();
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -133,11 +135,11 @@ export default function DriverMyOrdersScreen() {
       const order = orders.find(o => o.id === orderId);
       if (order && !order.driverAssignment?.image1Proof) {
         appAlert(
-          'Proof Required',
-          'You must upload at least the first proof image before marking this order.',
+          t('driverMyOrders.proofRequired'),
+          t('driverMyOrders.proofRequiredBody'),
           [
-            { text: 'Cancel', style: 'cancel' },
-            { text: 'Upload Now', onPress: () => push(`/(driver)/upload-proofs?orderId=${orderId}`) },
+            { text: t('common.cancel'), style: 'cancel' },
+            { text: t('driverMyOrders.uploadNow'), onPress: () => push(`/(driver)/upload-proofs?orderId=${orderId}`) },
           ],
         );
         return;
@@ -149,38 +151,38 @@ export default function DriverMyOrdersScreen() {
       await load();
       if (status === 'DELIVERED' || status === 'RETURNED') await restoreOrderTrackingForDriver();
     } catch (e: any) {
-      appAlert('Error', e.message);
+      appAlert(t('common.error'), e.message);
     } finally {
       setUpdatingStatus(null);
     }
   };
 
   const handleRevertStatus = (orderId: string) => {
-    appAlert('Go Back', 'Revert to the previous status?', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Yes, Go Back', onPress: async () => {
+    appAlert(t('driverMyOrders.goBack'), t('driverMyOrders.revertConfirm'), [
+      { text: t('common.cancel'), style: 'cancel' },
+      { text: t('driverMyOrders.yesGoBack'), onPress: async () => {
         setUpdatingStatus(orderId);
         try {
           await orderService.revertOrderStatus(orderId);
           await load();
           await restoreOrderTrackingForDriver();
         }
-        catch (e: any) { appAlert('Error', e.message); }
+        catch (e: any) { appAlert(t('common.error'), e.message); }
         finally { setUpdatingStatus(null); }
       }},
     ]);
   };
 
   const handleCancel = (orderId: string) => {
-    appAlert('Cancel Assignment', 'Are you sure you want to cancel this delivery?', [
-      { text: 'No', style: 'cancel' },
-      { text: 'Yes, Cancel', style: 'destructive', onPress: async () => {
+    appAlert(t('driverMyOrders.cancelAssignment'), t('driverMyOrders.cancelConfirm'), [
+      { text: t('common.no'), style: 'cancel' },
+      { text: t('driverMyOrders.yesCancel'), style: 'destructive', onPress: async () => {
         try {
-          await orderService.cancelAssignment(orderId, 'Driver cancelled');
+          await orderService.cancelAssignment(orderId, t('driverMyOrders.driverCancelled'));
           await stopOrderTrackingSilently();
           router.replace('/(driver)/available-orders');
         }
-        catch (e: any) { appAlert('Error', e.message); }
+        catch (e: any) { appAlert(t('common.error'), e.message); }
       }},
     ]);
   };
@@ -211,12 +213,12 @@ export default function DriverMyOrdersScreen() {
             <Text style={[s.orderId, { color: colors.text }]}>#{order.id.slice(0, 8)}</Text>
             <View style={[s.statusBadge, { backgroundColor: meta.bg }]}>
               <Ionicons name={meta.icon as any} size={12} color={meta.color} />
-              <Text style={[s.statusText, { color: meta.color }]}>{meta.label}</Text>
+              <Text style={[s.statusText, { color: meta.color }]}>{t(meta.labelKey)}</Text>
             </View>
           </View>
           <View style={s.priceCol}>
             <Text style={[s.priceText, { color: colors.primary }]}>{formatMoney(order.price)}</Text>
-            <Text style={[s.priceCurrency, { color: colors.textTertiary }]}>TND</Text>
+            <Text style={[s.priceCurrency, { color: colors.textTertiary }]}>{t('common.tnd')}</Text>
           </View>
         </View>
 
@@ -229,11 +231,11 @@ export default function DriverMyOrdersScreen() {
           </View>
           <View style={{ flex: 1 }}>
             <Text style={[s.routeText, { color: colors.text }]} numberOfLines={1}>
-              {order.pickupAddress?.street || order.pickupAddress?.delegation?.nameDelegation || 'Pickup'}
+              {order.pickupAddress?.street || order.pickupAddress?.delegation?.nameDelegation || t('driverMyOrders.pickup')}
             </Text>
             <View style={{ height: 14 }} />
             <Text style={[s.routeText, { color: colors.text }]} numberOfLines={1}>
-              {order.dropoffAddress?.street || order.dropoffAddress?.delegation?.nameDelegation || 'Dropoff'}
+              {order.dropoffAddress?.street || order.dropoffAddress?.delegation?.nameDelegation || t('driverMyOrders.dropoff')}
             </Text>
           </View>
         </View>
@@ -251,7 +253,7 @@ export default function DriverMyOrdersScreen() {
           <View style={[s.chip, { backgroundColor: order.paymentType === 'COD' ? '#dcfce7' : '#dbeafe' }]}>
             <Text style={{ fontSize: 11 }}>{order.paymentType === 'COD' ? '💵' : '💰'}</Text>
             <Text style={[s.chipText, { color: order.paymentType === 'COD' ? '#166534' : '#1e40af' }]}>
-              {order.paymentType === 'COD' ? 'Cash' : 'Wallet'}
+              {order.paymentType === 'COD' ? t('driverMyOrders.cash') : t('driverMyOrders.wallet')}
             </Text>
           </View>
         </View>
@@ -266,7 +268,7 @@ export default function DriverMyOrdersScreen() {
                 activeOpacity={0.7}
               >
                 <Ionicons name="chatbubbles" size={18} color="#2563eb" />
-                <Text style={[s.quickBtnText, { color: '#2563eb' }]}>Chat</Text>
+                <Text style={[s.quickBtnText, { color: '#2563eb' }]}>{t('driverMyOrders.chat')}</Text>
               </TouchableOpacity>
               <ChatUnreadBadge count={chatUnreadMap[order.id] ?? 0} />
             </View>
@@ -274,12 +276,12 @@ export default function DriverMyOrdersScreen() {
               style={[s.quickBtn, s.quickBtnHelp, { flex: 1, backgroundColor: isDark ? 'rgba(234,88,12,0.18)' : '#fff7ed' }]}
               onPress={async () => {
                 try { await orderService.driverRequestAssistance(order.id); push('/(driver)/support'); }
-                catch (e: any) { appAlert('Error', e.message); }
+                catch (e: any) { appAlert(t('common.error'), e.message); }
               }}
               activeOpacity={0.7}
             >
               <Ionicons name="headset" size={15} color="#ea580c" />
-              <Text style={[s.quickBtnText, { color: '#ea580c', fontSize: 12 }]}>Help</Text>
+              <Text style={[s.quickBtnText, { color: '#ea580c', fontSize: 12 }]}>{t('driverMyOrders.help')}</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -309,7 +311,7 @@ export default function DriverMyOrdersScreen() {
                     {isUpdating ? (
                       <ActivityIndicator size="small" color="#fff" />
                     ) : (
-                      <Text style={s.actionBtnText}>rejected</Text>
+                      <Text style={s.actionBtnText}>{t('driverMyOrders.rejected')}</Text>
                     )}
                   </TouchableOpacity>
                 )}
@@ -324,7 +326,7 @@ export default function DriverMyOrdersScreen() {
                   ) : (
                     <>
                       <Ionicons name={action.icon as any} size={18} color="#fff" />
-                      <Text style={s.actionBtnText}>{action.label}</Text>
+                      <Text style={s.actionBtnText}>{t(action.labelKey)}</Text>
                       {action.next === 'DELIVERED' && !order.driverAssignment?.image1Proof && (
                         <Ionicons name="alert-circle" size={16} color="#fbbf24" />
                       )}
@@ -344,7 +346,7 @@ export default function DriverMyOrdersScreen() {
                 ) : (
                   <>
                     <Ionicons name={action.icon as any} size={18} color="#fff" />
-                    <Text style={s.actionBtnText}>{action.label}</Text>
+                    <Text style={s.actionBtnText}>{t(action.labelKey)}</Text>
                     {action.next === 'DELIVERED' && !order.driverAssignment?.image1Proof && (
                       <Ionicons name="alert-circle" size={16} color="#fbbf24" />
                     )}
@@ -364,7 +366,7 @@ export default function DriverMyOrdersScreen() {
               color={order.driverAssignment?.image1Proof ? '#16a34a' : '#f59e0b'}
             />
             <Text style={{ fontSize: 12, color: order.driverAssignment?.image1Proof ? '#16a34a' : '#f59e0b', fontWeight: '500' }}>
-              {order.driverAssignment?.image1Proof ? 'Proof uploaded' : 'Proof required before delivery'}
+              {order.driverAssignment?.image1Proof ? t('driverUploadProofs.uploaded') : t('driverMyOrders.proofRequiredBody')}
             </Text>
           </View>
         )}
@@ -374,7 +376,7 @@ export default function DriverMyOrdersScreen() {
           {order.status === 'DRIVER_ASSIGNED' && (
             <TouchableOpacity style={[s.cancelBtn, { backgroundColor: colors.dangerBg }]} onPress={() => handleCancel(order.id)} activeOpacity={0.7}>
               <Ionicons name="close-circle-outline" size={16} color={colors.danger} />
-              <Text style={[s.cancelBtnText, { color: colors.danger }]}>Cancel</Text>
+              <Text style={[s.cancelBtnText, { color: colors.danger }]}>{t('common.cancel')}</Text>
             </TouchableOpacity>
           )}
           {['PICKED_UP', 'DELIVERING', 'DELIVERED'].includes(order.status) && (
@@ -383,7 +385,7 @@ export default function DriverMyOrdersScreen() {
               <Ionicons name={order.driverAssignment?.image1Proof ? 'checkmark-circle' : 'camera-outline'} size={16}
                 color={order.driverAssignment?.image1Proof ? '#16a34a' : colors.text} />
               <Text style={[s.proofBtnText, { color: colors.text }, order.driverAssignment?.image1Proof && { color: '#16a34a' }]}>
-                {order.driverAssignment?.image1Proof ? 'Image Uploaded' : 'Upload Proofs'}
+                {order.driverAssignment?.image1Proof ? t('driverUploadProofs.uploaded') : t('driverUploadProofs.title')}
               </Text>
             </TouchableOpacity>
           )}
@@ -396,7 +398,7 @@ export default function DriverMyOrdersScreen() {
     <View style={[s.container, { backgroundColor: colors.background }]}>
       <View style={[s.statsBar, { backgroundColor: colors.card, borderColor: colors.border }]}>
         <Text style={[s.headerSub, { color: colors.textTertiary }]}>
-          {activeOrders.length} active · {pastOrders.length} completed
+          {activeOrders.length} {t('customerOrders.active').toLowerCase()} · {pastOrders.length} {t('driverEarnings.completedDeliveries').toLowerCase()}
         </Text>
       </View>
 
@@ -406,8 +408,8 @@ export default function DriverMyOrdersScreen() {
         {orders.length === 0 ? (
           <View style={s.empty}>
             <Ionicons name="car-outline" size={56} color={colors.textTertiary} />
-            <Text style={[s.emptyTitle, { color: colors.textTertiary }]}>No deliveries yet</Text>
-            <Text style={s.emptySub}>Accept orders to start delivering</Text>
+            <Text style={[s.emptyTitle, { color: colors.textTertiary }]}>{t('driverMyOrders.empty')}</Text>
+            <Text style={s.emptySub}>{t('driverAvailableOrders.empty')}</Text>
           </View>
         ) : (
           <>
@@ -415,7 +417,7 @@ export default function DriverMyOrdersScreen() {
               <View style={{ marginBottom: 20 }}>
                 <View style={s.sectionHeader}>
                   <View style={[s.sectionDot, { backgroundColor: '#22c55e' }]} />
-                  <Text style={[s.sectionTitle, { color: colors.text }]}>Active</Text>
+                  <Text style={[s.sectionTitle, { color: colors.text }]}>{t('customerOrders.active')}</Text>
                 </View>
                 {activeOrders.map(renderOrder)}
               </View>
@@ -424,7 +426,7 @@ export default function DriverMyOrdersScreen() {
               <View>
                 <View style={s.sectionHeader}>
                   <View style={[s.sectionDot, { backgroundColor: '#9ca3af' }]} />
-                  <Text style={[s.sectionTitle, { color: colors.text }]}>Past</Text>
+                  <Text style={[s.sectionTitle, { color: colors.text }]}>{t('customerOrders.past')}</Text>
                 </View>
                 {pastOrders.map(renderOrder)}
               </View>

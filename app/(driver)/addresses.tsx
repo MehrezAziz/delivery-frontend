@@ -12,6 +12,7 @@ import {
   FlatList,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import axios from 'axios';
@@ -40,6 +41,7 @@ export default function DriverAddressesScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ add?: string }>();
   const { colors, isDark } = useTheme();
+  const { t } = useTranslation();
   const [addresses, setAddresses] = useState<Address[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -85,7 +87,7 @@ export default function DriverAddressesScreen() {
       });
       setAddresses(res.data);
     } catch (err: any) {
-      Alert.alert('Error', getErrMsg(err, 'Failed to load addresses'));
+      Alert.alert(t('common.error'), getErrMsg(err, t('addresses.saveFailed')));
     } finally { setLoading(false); }
   };
 
@@ -150,8 +152,8 @@ export default function DriverAddressesScreen() {
   };
 
   const saveEdit = async (addressId: string) => {
-    if (!editStreet.trim()) { Alert.alert('Error', 'Street cannot be empty'); return; }
-    if (!selectedDelegationId) { Alert.alert('Error', 'Please select a delegation'); return; }
+    if (!editStreet.trim()) { Alert.alert(t('common.error'), t('addresses.streetPlaceholder')); return; }
+    if (!selectedDelegationId) { Alert.alert(t('common.error'), t('addresses.delegation')); return; }
     setSaving(true);
     try {
       const token = await AsyncStorage.getItem('accessToken');
@@ -162,12 +164,12 @@ export default function DriverAddressesScreen() {
       resetForm();
       loadAddresses();
     } catch (err: any) {
-      Alert.alert('Error', getErrMsg(err, 'Failed to update'));
+      Alert.alert(t('common.error'), getErrMsg(err, t('addresses.saveFailed')));
     } finally { setSaving(false); }
   };
 
   const saveNewAddress = async () => {
-    if (!selectedDelegationId) { Alert.alert('Error', 'Please select a delegation'); return; }
+    if (!selectedDelegationId) { Alert.alert(t('common.error'), t('addresses.delegation')); return; }
     setSaving(true);
     try {
       const token = await AsyncStorage.getItem('accessToken');
@@ -179,19 +181,19 @@ export default function DriverAddressesScreen() {
       resetForm();
       loadAddresses();
     } catch (err: any) {
-      Alert.alert('Error', getErrMsg(err, 'Failed to add address'));
+      Alert.alert(t('common.error'), getErrMsg(err, t('addresses.saveFailed')));
     } finally { setSaving(false); }
   };
 
   const deleteAddress = (addressId: string) => {
     if (addresses.length <= 1) {
-      Alert.alert('Cannot Delete', 'You must have at least one address.');
+      Alert.alert(t('common.error'), t('addresses.empty'));
       return;
     }
-    Alert.alert('Delete Address', 'Are you sure?', [
-      { text: 'Cancel', style: 'cancel' },
+    Alert.alert(t('addresses.delete'), t('addresses.deleteConfirm'), [
+      { text: t('common.cancel'), style: 'cancel' },
       {
-        text: 'Delete', style: 'destructive', onPress: async () => {
+        text: t('common.delete'), style: 'destructive', onPress: async () => {
           try {
             const token = await AsyncStorage.getItem('accessToken');
             await axios.delete(`${API_URL}/addresses/${addressId}`, {
@@ -199,7 +201,7 @@ export default function DriverAddressesScreen() {
             });
             loadAddresses();
           } catch (err: any) {
-            Alert.alert('Error', getErrMsg(err, 'Failed to delete'));
+            Alert.alert(t('common.error'), getErrMsg(err, t('addresses.deleteFailed')));
           }
         },
       },
@@ -234,14 +236,14 @@ export default function DriverAddressesScreen() {
   };
 
   const getSelectedLabel = (type: 'country' | 'governorate' | 'delegation'): string => {
-    if (type === 'country') return countries.find(c => c.id === selectedCountryId)?.name || 'Select Country';
-    if (type === 'governorate') return governorates.find(g => g.id === selectedGovernorateId)?.nameGovernorate || 'Select Governorate';
-    return delegations.find(d => d.id === selectedDelegationId)?.nameDelegation || 'Select Delegation';
+    if (type === 'country') return countries.find(c => c.id === selectedCountryId)?.name || t('driverAvailableOrders.selectCountry');
+    if (type === 'governorate') return governorates.find(g => g.id === selectedGovernorateId)?.nameGovernorate || t('driverAvailableOrders.selectGovernorate');
+    return delegations.find(d => d.id === selectedDelegationId)?.nameDelegation || t('driverAvailableOrders.selectDelegation');
   };
 
   const renderGeoPickers = () => (
     <>
-      <Text style={[s.fieldLabel, { color: colors.textSecondary }]}>Country</Text>
+      <Text style={[s.fieldLabel, { color: colors.textSecondary }]}>{t('addresses.country')}</Text>
       <TouchableOpacity style={[s.pickerBtn, { backgroundColor: colors.inputBg, borderColor: colors.inputBorder }]} onPress={() => openPicker('country')}>
         <Text style={selectedCountryId ? [s.pickerBtnText, { color: colors.text }] : [s.pickerBtnPlaceholder, { color: colors.textTertiary }]}>
           {getSelectedLabel('country')}
@@ -249,7 +251,7 @@ export default function DriverAddressesScreen() {
         <Ionicons name="chevron-down" size={18} color={colors.textSecondary} />
       </TouchableOpacity>
 
-      <Text style={[s.fieldLabel, { color: colors.textSecondary }]}>Governorate</Text>
+      <Text style={[s.fieldLabel, { color: colors.textSecondary }]}>{t('addresses.governorate')}</Text>
       <TouchableOpacity
         style={[s.pickerBtn, { backgroundColor: colors.inputBg, borderColor: colors.inputBorder }, !selectedCountryId && s.pickerBtnDisabled]}
         onPress={() => selectedCountryId && openPicker('governorate')}
@@ -261,7 +263,7 @@ export default function DriverAddressesScreen() {
         <Ionicons name="chevron-down" size={18} color={colors.textSecondary} />
       </TouchableOpacity>
 
-      <Text style={[s.fieldLabel, { color: colors.textSecondary }]}>Delegation</Text>
+      <Text style={[s.fieldLabel, { color: colors.textSecondary }]}>{t('addresses.delegation')}</Text>
       <TouchableOpacity
         style={[s.pickerBtn, { backgroundColor: colors.inputBg, borderColor: colors.inputBorder }, !selectedGovernorateId && s.pickerBtnDisabled]}
         onPress={() => selectedGovernorateId && openPicker('delegation')}
@@ -285,24 +287,24 @@ export default function DriverAddressesScreen() {
           <View style={[s.card, { backgroundColor: colors.card, borderColor: colors.primary, borderWidth: 1.5 }]}>
             <View style={s.cardTop}>
               <Ionicons name="add-circle" size={20} color={colors.primary} />
-              <Text style={[s.locationText, { color: colors.text }]}>New Address</Text>
+              <Text style={[s.locationText, { color: colors.text }]}>{t('addresses.addNew')}</Text>
             </View>
             <View style={s.editContainer}>
               {renderGeoPickers()}
-              <Text style={[s.fieldLabel, { color: colors.textSecondary }]}>Street (optional)</Text>
+              <Text style={[s.fieldLabel, { color: colors.textSecondary }]}>{t('addresses.street')}</Text>
               <TextInput
                 style={[s.editInput, { backgroundColor: colors.inputBg, borderColor: colors.inputBorder, color: colors.text }]}
                 value={editStreet}
                 onChangeText={setEditStreet}
-                placeholder="Street address"
+                placeholder={t('addresses.streetPlaceholder')}
                 placeholderTextColor={colors.textTertiary}
               />
               <View style={s.editActions}>
                 <TouchableOpacity style={[s.cancelBtn, { backgroundColor: colors.surfaceVariant }]} onPress={resetForm}>
-                  <Text style={[s.cancelBtnText, { color: colors.textSecondary }]}>Cancel</Text>
+                  <Text style={[s.cancelBtnText, { color: colors.textSecondary }]}>{t('common.cancel')}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={[s.saveBtn, { backgroundColor: colors.primary }]} onPress={saveNewAddress} disabled={saving}>
-                  {saving ? <ActivityIndicator size="small" color="#fff" /> : <Text style={s.saveBtnText}>Add</Text>}
+                  {saving ? <ActivityIndicator size="small" color="#fff" /> : <Text style={s.saveBtnText}>{t('common.add')}</Text>}
                 </TouchableOpacity>
               </View>
             </View>
@@ -312,7 +314,7 @@ export default function DriverAddressesScreen() {
         {addresses.length === 0 && !showAddForm && (
           <View style={s.emptyBox}>
             <Ionicons name="location-outline" size={48} color={colors.textTertiary} />
-            <Text style={[s.emptyTitle, { color: colors.text }]}>No Addresses</Text>
+            <Text style={[s.emptyTitle, { color: colors.text }]}>{t('addresses.empty')}</Text>
           </View>
         )}
         {addresses.map((addr) => (
@@ -326,38 +328,38 @@ export default function DriverAddressesScreen() {
             {editingId === addr.id ? (
               <View style={s.editContainer}>
                 {renderGeoPickers()}
-                <Text style={[s.fieldLabel, { color: colors.textSecondary }]}>Street</Text>
+                <Text style={[s.fieldLabel, { color: colors.textSecondary }]}>{t('addresses.street')}</Text>
                 <TextInput
                   style={[s.editInput, { backgroundColor: colors.inputBg, borderColor: colors.inputBorder, color: colors.text }]}
                   value={editStreet}
                   onChangeText={setEditStreet}
-                  placeholder="Street address"
+                  placeholder={t('addresses.streetPlaceholder')}
                   placeholderTextColor={colors.textTertiary}
                 />
                 <View style={s.editActions}>
                   <TouchableOpacity style={[s.cancelBtn, { backgroundColor: colors.surfaceVariant }]} onPress={resetForm}>
-                    <Text style={[s.cancelBtnText, { color: colors.textSecondary }]}>Cancel</Text>
+                    <Text style={[s.cancelBtnText, { color: colors.textSecondary }]}>{t('common.cancel')}</Text>
                   </TouchableOpacity>
                   <TouchableOpacity style={[s.saveBtn, { backgroundColor: colors.primary }]} onPress={() => saveEdit(addr.id)} disabled={saving}>
-                    {saving ? <ActivityIndicator size="small" color="#fff" /> : <Text style={s.saveBtnText}>Save</Text>}
+                    {saving ? <ActivityIndicator size="small" color="#fff" /> : <Text style={s.saveBtnText}>{t('common.save')}</Text>}
                   </TouchableOpacity>
                 </View>
               </View>
             ) : (
               <>
-                <Text style={[s.streetText, { color: colors.textSecondary }]}>{addr.street || 'No street specified'}</Text>
+                <Text style={[s.streetText, { color: colors.textSecondary }]}>{addr.street || t('addresses.streetPlaceholder')}</Text>
                 {addr.latitude && addr.longitude && (
                   <Text style={[s.coordText, { color: colors.textTertiary }]}>📍 {addr.latitude.toFixed(4)}, {addr.longitude.toFixed(4)}</Text>
                 )}
                 <View style={[s.cardActions, { borderTopColor: colors.border }]}>
                   <TouchableOpacity style={s.editBtn} onPress={() => startEdit(addr)}>
                     <Ionicons name="pencil" size={16} color={colors.primary} />
-                    <Text style={[s.editBtnText, { color: colors.primary }]}>Edit</Text>
+                    <Text style={[s.editBtnText, { color: colors.primary }]}>{t('common.edit')}</Text>
                   </TouchableOpacity>
                   {addresses.length > 1 && (
                     <TouchableOpacity style={s.deleteBtn} onPress={() => deleteAddress(addr.id)}>
                       <Ionicons name="trash" size={16} color="#FF3B30" />
-                      <Text style={s.deleteBtnText}>Delete</Text>
+                      <Text style={s.deleteBtnText}>{t('common.delete')}</Text>
                     </TouchableOpacity>
                   )}
                 </View>
@@ -373,7 +375,7 @@ export default function DriverAddressesScreen() {
           <View style={[s.modalContent, { backgroundColor: colors.card }]}>
             <View style={[s.modalHeader, { borderBottomColor: colors.border }]}>
               <Text style={[s.modalTitle, { color: colors.text }]}>
-                {pickerType === 'country' ? 'Select Country' : pickerType === 'governorate' ? 'Select Governorate' : 'Select Delegation'}
+                {pickerType === 'country' ? t('driverAvailableOrders.selectCountry') : pickerType === 'governorate' ? t('driverAvailableOrders.selectGovernorate') : t('driverAvailableOrders.selectDelegation')}
               </Text>
               <TouchableOpacity onPress={() => setPickerVisible(false)}>
                 <Ionicons name="close" size={24} color={colors.textSecondary} />

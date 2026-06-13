@@ -11,6 +11,7 @@ import {
   Platform,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
@@ -26,22 +27,17 @@ import { useLivenessVoiceEN } from '../../hooks/useLivenessVoiceEN';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api';
 
-const DOCUMENT_TYPES = [
-  { value: 'PASSPORT', label: 'Passport' },
-  { value: 'ID_CARD', label: 'ID Card' },
-  { value: 'STUDENT_CARD', label: 'Student Card' },
-];
+const DOCUMENT_TYPES = ['PASSPORT', 'ID_CARD', 'STUDENT_CARD'] as const;
 
 const LIVENESS_STEPS: Array<{
   action: 'TURN_RIGHT' | 'TURN_LEFT' | 'HOLD_HIGH' | 'BLINK';
-  label: string;
   progress: number;
 }> = [
   // Labels swapped vs ML actions: front-camera preview mirrors left↔right for the driver.
-  { action: 'TURN_RIGHT', label: 'Turn your face left', progress: 25 },
-  { action: 'TURN_LEFT', label: 'Turn your face right', progress: 50 },
-  { action: 'HOLD_HIGH', label: 'Look directly at the camera', progress: 75 },
-  { action: 'BLINK', label: 'Single eye wink (left or right)', progress: 100 },
+  { action: 'TURN_RIGHT', progress: 25 },
+  { action: 'TURN_LEFT', progress: 50 },
+  { action: 'HOLD_HIGH', progress: 75 },
+  { action: 'BLINK', progress: 100 },
 ];
 
 /** Throttle ML Kit analysis (Vision Camera preview stays smooth). ~≤40s total with 4 steps if each step completes quickly. */
@@ -130,12 +126,11 @@ function isOneEyeWink(leftOpen: number, rightOpen: number): boolean {
   );
 }
 
-function formatPoseHint(face: RNMLKitFace | null): string {
-  if (!face) return 'No face detected. Keep your full face inside the frame.';
+function formatPoseAngles(face: RNMLKitFace): string {
   const { yaw, pitch } = getYawPitchRoll(face);
   const yawS = yaw == null ? '—' : yaw.toFixed(1);
   const pitchS = pitch == null ? '—' : pitch.toFixed(1);
-  return `Adjust position. yaw=${yawS}° pitch=${pitchS}°`;
+  return `yaw=${yawS}° pitch=${pitchS}°`;
 }
 
 function readEyeOpen(face: RNMLKitFace, side: 'left' | 'right'): number {
@@ -149,6 +144,34 @@ export default function DriverRegisterStep3() {
   const params = useLocalSearchParams<{ source?: string }>();
   const fromVerification = params.source === 'verification';
   const { colors, isDark } = useTheme();
+  const { t } = useTranslation();
+  const documentTypeLabel = (value: string) => {
+    switch (value) {
+      case 'ID_CARD':
+        return t('auth.nationalId');
+      case 'STUDENT_CARD':
+        return t('auth.drivingLicense');
+      case 'PASSPORT':
+      default:
+        return t('auth.documentNumber');
+    }
+  };
+  const livenessStepLabel = (idx: number) => {
+    const step = LIVENESS_STEPS[idx];
+    if (!step) return t('common.done');
+    switch (step.action) {
+      case 'TURN_RIGHT':
+        return t('auth.turnLeft');
+      case 'TURN_LEFT':
+        return t('auth.turnRight');
+      case 'HOLD_HIGH':
+        return t('auth.lookStraight');
+      case 'BLINK':
+        return t('auth.blink');
+      default:
+        return t('common.done');
+    }
+  };
   const [documentType, setDocumentType] = useState('');
   const [selfieImage, setSelfieImage] = useState<string | null>(null);
   const [docImageTop, setDocImageTop] = useState<string | null>(null);
@@ -160,7 +183,7 @@ export default function DriverRegisterStep3() {
   const [livenessActive, setLivenessActive] = useState(false);
   const [currentLivenessStep, setCurrentLivenessStep] = useState(0);
   const [livenessProgress, setLivenessProgress] = useState(0);
-  const [livenessHint, setLivenessHint] = useState('Center your face in the frame.');
+  const [livenessHint, setLivenessHint] = useState(t('auth.livenessHint'));
   const device = useCameraDevice('front');
   const { hasPermission: visionCamGranted, requestPermission: requestVisionPermission } = useCameraPermission();
   const cameraRef = useRef<Camera>(null);
@@ -298,7 +321,7 @@ export default function DriverRegisterStep3() {
         setSelfieImage(photoUri);
         setLivenessPassed(true);
         setLivenessActive(false);
-        setTimeout(() => Alert.alert('Liveness Complete', 'Step 1 Completed successfully!'), 0);
+        setTimeout(() => Alert.alert(t('auth.livenessSuccess'), t('common.success')), 0);
       }
 
       return nextSteps;
@@ -337,7 +360,7 @@ export default function DriverRegisterStep3() {
         const step = LIVENESS_STEPS[stepIndexRef.current];
 
         if (!face) {
-          setLivenessHint('No face detected. Keep your full face inside the box.');
+          setLivenessHint(t('auth.livenessHint'));
           matchStreakRef.current = 0;
           frameErrorCountRef.current = 0;
           return;
@@ -351,16 +374,16 @@ export default function DriverRegisterStep3() {
           if (blinkPhaseRef.current === 0) {
             if (bothOpen) {
               blinkPhaseRef.current = 1;
-              setLivenessHint('Wink with one eye (left or right).');
+              setLivenessHint(t('auth.blink'));
             } else {
-              setLivenessHint('Open both eyes and look at the camera.');
+              setLivenessHint(t('auth.lookStraight'));
             }
             return;
           }
           if (blinkPhaseRef.current === 1) {
             if (isOneEyeWink(left, right)) {
               blinkPhaseRef.current = 2;
-              setLivenessHint('Great. Open both eyes again.');
+              setLivenessHint(t('auth.blink'));
             }
             return;
           }
@@ -375,7 +398,7 @@ export default function DriverRegisterStep3() {
 
         if (poseMatched(step.action, face)) {
           matchStreakRef.current += 1;
-          setLivenessHint('Good. Hold that position.');
+          setLivenessHint(t('auth.holdStill'));
           if (matchStreakRef.current >= MATCH_STREAK_REQUIRED) {
             advanceLivenessStep(uri);
           }
@@ -387,10 +410,10 @@ export default function DriverRegisterStep3() {
           const { yaw } = getYawPitchRoll(face);
           let hint =
             yaw == null
-              ? 'Face found, but head angles are missing. Use good light and keep your face centered.'
-              : formatPoseHint(face);
+              ? t('auth.livenessHint')
+              : `${t('auth.livenessHint')} (${formatPoseAngles(face)})`;
           if (Date.now() - stepStartMsRef.current > MAX_MS_PER_STEP) {
-            hint += ' — aim for under 10s per step.';
+            hint += ` — ${t('common.pleaseWait')}`;
           }
           setLivenessHint(hint);
         }
@@ -398,13 +421,13 @@ export default function DriverRegisterStep3() {
       } catch (e) {
         console.warn('Liveness frame:', e);
         frameErrorCountRef.current += 1;
-        setLivenessHint('Face analysis failed. Retrying...');
+        setLivenessHint(t('auth.livenessFailedBody'));
         if (frameErrorCountRef.current >= 6) {
           setLivenessActive(false);
-          setLivenessHint('On-device analysis failed. Please try again.');
+          setLivenessHint(t('auth.livenessFailedBody'));
           Alert.alert(
-            'Liveness error',
-            'Could not analyze camera frames. Ensure you are on a supported device and try again.',
+            t('auth.livenessFailed'),
+            t('auth.livenessFailedBody'),
           );
         }
       } finally {
@@ -418,25 +441,25 @@ export default function DriverRegisterStep3() {
 
   const startLivenessChallenge = async () => {
     if (Platform.OS === 'web') {
-      Alert.alert('Not available on web', 'Complete verification in the Android or iOS app.');
+      Alert.alert(t('common.error'), t('auth.livenessHint'));
       return;
     }
 
     if (!device) {
-      Alert.alert('Camera unavailable', 'No front camera was found on this device.');
+      Alert.alert(t('auth.cameraPermission'), t('auth.cameraPermissionBody'));
       return;
     }
 
     if (!visionCamGranted) {
       const granted = await requestVisionPermission();
       if (!granted) {
-        Alert.alert('Permission Denied', 'We need camera permissions to run liveness check.');
+        Alert.alert(t('common.permissionDenied'), t('auth.cameraPermissionBody'));
         return;
       }
     }
 
     if (!mlReady) {
-      Alert.alert('Please wait', 'Face detection is still loading. Try again in a moment.');
+      Alert.alert(t('common.pleaseWait'), t('common.loading'));
       return;
     }
 
@@ -452,11 +475,11 @@ export default function DriverRegisterStep3() {
     setPendingFromServer(false);
     setPendingExpiresAt(null);
     checkpointSentRef.current = false;
-    setLivenessHint('Center your face in the frame.');
+    setLivenessHint(t('auth.livenessHint'));
     frameErrorCountRef.current = 0;
     const token = await AsyncStorage.getItem('accessToken');
     if (!token) {
-      Alert.alert('Error', 'Session expired. Please start registration again.');
+      Alert.alert(t('common.error'), t('forgotPassword.sessionExpired'));
       router.push('/(auth)/driver-register-step1');
       return;
     }
@@ -467,7 +490,7 @@ export default function DriverRegisterStep3() {
   const takeDocumentPhoto = async (side: 'top' | 'bottom') => {
     const permission = await ImagePicker.requestCameraPermissionsAsync();
     if (!permission.granted) {
-      Alert.alert('Permission Denied', 'We need camera permissions.');
+      Alert.alert(t('common.permissionDenied'), t('auth.cameraPermissionBody'));
       return;
     }
 
@@ -495,7 +518,7 @@ export default function DriverRegisterStep3() {
     setLivenessPassed(false);
     setSelfieImage(null);
     setLivenessSessionPayload(null);
-    setLivenessHint('Center your face in the frame.');
+    setLivenessHint(t('auth.livenessHint'));
     matchStreakRef.current = 0;
     blinkPhaseRef.current = 0;
     frameErrorCountRef.current = 0;
@@ -503,15 +526,15 @@ export default function DriverRegisterStep3() {
 
   const handleSkip = () => {
     Alert.alert(
-      'Skip Verification?',
-      'You can complete document verification later from your profile. Your account will remain INCOMPLETE until verified.',
+      t('common.skip'),
+      t('auth.documentsRequired'),
       [
         {
-          text: 'Cancel',
+          text: t('common.cancel'),
           style: 'cancel',
         },
         {
-          text: 'Skip for Now',
+          text: t('common.skip'),
           onPress: () => router.replace('/(driver)/home'),
         },
       ],
@@ -520,22 +543,22 @@ export default function DriverRegisterStep3() {
 
   const handleSubmit = async () => {
     if (!documentType) {
-      Alert.alert('Error', 'Please select a document type');
+      Alert.alert(t('common.error'), t('auth.documentsRequired'));
       return;
     }
 
     if (!livenessPassed) {
-      Alert.alert('Error', 'Please complete the liveness check first');
+      Alert.alert(t('common.error'), t('auth.livenessFailedBody'));
       return;
     }
 
     if (!pendingFromServer && (!selfieImage || !livenessSessionPayload)) {
-      Alert.alert('Error', 'Please complete the liveness check first');
+      Alert.alert(t('common.error'), t('auth.livenessFailedBody'));
       return;
     }
 
     if (!docImageTop) {
-      Alert.alert('Error', 'Please capture the front of your document');
+      Alert.alert(t('common.error'), t('auth.pleaseUploadAll'));
       return;
     }
 
@@ -545,7 +568,7 @@ export default function DriverRegisterStep3() {
       const token = await AsyncStorage.getItem('accessToken');
 
       if (!token) {
-        Alert.alert('Error', 'Session expired. Please start registration again.');
+        Alert.alert(t('common.error'), t('forgotPassword.sessionExpired'));
         router.push('/(auth)/driver-register-step1');
         return;
       }
@@ -595,18 +618,18 @@ export default function DriverRegisterStep3() {
       });
 
       Alert.alert(
-        'Registration Complete!',
-        response.data.message || 'Your documents have been submitted for review.',
+        t('auth.registrationSubmitted'),
+        response.data.message || t('auth.registrationSubmittedBody'),
         [
           {
-            text: 'OK',
+            text: t('common.ok'),
             onPress: () => router.replace('/(driver)/home'),
           },
         ],
       );
     } catch (error: any) {
       console.error('Step 3 error:', error);
-      Alert.alert('Error', error.response?.data?.message || 'An error occurred');
+      Alert.alert(t('common.error'), error.response?.data?.message || t('auth.somethingWentWrongRetry'));
     } finally {
       setLoading(false);
     }
@@ -622,13 +645,13 @@ export default function DriverRegisterStep3() {
     >
       <View style={[styles.heroCard, { backgroundColor: colors.surfaceVariant, borderColor: colors.border }]}>
         {!fromVerification ? (
-          <Text style={[styles.stepBadge, { color: colors.primary, backgroundColor: colors.primaryLight }]}>Step 3 of 3</Text>
+          <Text style={[styles.stepBadge, { color: colors.primary, backgroundColor: colors.primaryLight }]}>{t('auth.stepOf', { current: 3, total: 3 })}</Text>
         ) : null}
         <Text style={[styles.title, { color: colors.text }]}>
-          {fromVerification ? 'Complete verification' : 'Documents & identity'}
+          {fromVerification ? t('auth.submitForReview') : t('auth.driverRegistrationTitle')}
         </Text>
         <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-          {fromVerification ? 'Upload identity and documents to finish verification.' : 'Upload your ID and vehicle documents to finish registration.'}
+          {fromVerification ? t('auth.submitForReview') : t('auth.driverRegisterStep3Subtitle')}
         </Text>
       </View>
 
@@ -643,26 +666,26 @@ export default function DriverRegisterStep3() {
       ) : null}
 
       <View style={styles.inputGroup}>
-        <Text style={[styles.label, { color: colors.text }]}>Document Type *</Text>
+        <Text style={[styles.label, { color: colors.text }]}>{t('auth.nationalId')} *</Text>
         <View style={styles.documentTypeContainer}>
-          {DOCUMENT_TYPES.map((type) => (
+          {DOCUMENT_TYPES.map((value) => (
             <TouchableOpacity
-              key={type.value}
+              key={value}
               style={[
                 styles.documentTypeButton,
                 { borderColor: colors.inputBorder, backgroundColor: colors.inputBg },
-                documentType === type.value && { backgroundColor: colors.primary, borderColor: colors.primary },
+                documentType === value && { backgroundColor: colors.primary, borderColor: colors.primary },
               ]}
-              onPress={() => setDocumentType(type.value)}
+              onPress={() => setDocumentType(value)}
             >
               <Text
                 style={[
                   styles.documentTypeText,
                   { color: colors.text },
-                  documentType === type.value && styles.documentTypeTextActive,
+                  documentType === value && styles.documentTypeTextActive,
                 ]}
               >
-                {type.label}
+                {documentTypeLabel(value)}
               </Text>
             </TouchableOpacity>
           ))}
@@ -670,18 +693,16 @@ export default function DriverRegisterStep3() {
       </View>
 
       <View style={styles.inputGroup}>
-        <Text style={[styles.label, { color: colors.text }]}>Realtime Liveness Check *</Text>
+        <Text style={[styles.label, { color: colors.text }]}>{t('auth.livenessTitle')} *</Text>
         <Text style={[styles.hint, { color: colors.textTertiary }]}>
-          Follow each pose. Pose and wink are verified on-device (Google ML Kit) with a smooth camera preview — no
-          server round-trip during the challenge. One final selfie is sent with your documents for InsightFace review.
-          If you finish liveness before uploading documents, we keep it for 24 hours.
+          {t('auth.livenessHint')}
         </Text>
         {livenessUiUnavailable ? (
           <View style={[styles.webUnavailable, { borderColor: colors.border }]}>
             <Text style={{ color: colors.textSecondary, textAlign: 'center' }}>
               {Platform.OS === 'web'
-                ? 'Liveness runs in the native app (Android/iOS) only.'
-                : 'No front camera found. Use a physical device.'}
+                ? t('auth.cameraPermissionBody')
+                : t('auth.cameraPermissionBody')}
             </Text>
           </View>
         ) : livenessActive ? (
@@ -697,7 +718,7 @@ export default function DriverRegisterStep3() {
               />
             </View>
             <Text style={[styles.livenessInstruction, { color: colors.text }]}>
-              {`${currentLivenessStep + 1}. ${LIVENESS_STEPS[currentLivenessStep]?.label ?? 'Done'}`}
+              {`${currentLivenessStep + 1}. ${livenessStepLabel(currentLivenessStep)}`}
             </Text>
             {Platform.OS !== 'web' ? (
               <LivenessStepCoach
@@ -707,17 +728,17 @@ export default function DriverRegisterStep3() {
               />
             ) : null}
             <Text style={[styles.livenessProgressText, { color: colors.primary }]}>
-              Progress: {livenessProgress}%
+              {`${t('common.loading')}: ${livenessProgress}%`}
             </Text>
             <Text style={[styles.livenessSubHint, { color: colors.textTertiary }]}>{livenessHint}</Text>
             {!mlReady ? (
-              <Text style={[styles.livenessSubHint, { color: colors.textTertiary }]}>Loading face detection…</Text>
+              <Text style={[styles.livenessSubHint, { color: colors.textTertiary }]}>{t('common.loading')}</Text>
             ) : null}
             <TouchableOpacity
               style={[styles.secondaryActionBtn, { borderColor: colors.border, marginTop: 12, alignSelf: 'center' }]}
               onPress={cancelLiveness}
             >
-              <Text style={[styles.secondaryActionText, { color: colors.text }]}>Cancel</Text>
+              <Text style={[styles.secondaryActionText, { color: colors.text }]}>{t('common.cancel')}</Text>
             </TouchableOpacity>
           </View>
         ) : livenessPassed && pendingFromServer && !selfieImage ? (
@@ -732,14 +753,14 @@ export default function DriverRegisterStep3() {
             ]}
           >
             <Ionicons name="checkmark-circle" size={44} color="#34C759" />
-            <Text style={[styles.serverLivenessTitle, { color: colors.text }]}>Liveness saved (24h)</Text>
+            <Text style={[styles.serverLivenessTitle, { color: colors.text }]}>{t('auth.livenessSuccess')}</Text>
             {pendingExpiresAt ? (
               <Text style={[styles.hint, { color: colors.textTertiary, textAlign: 'center', marginTop: 6 }]}>
-                Upload documents before {new Date(pendingExpiresAt).toLocaleString()}
+                {`${t('auth.submitDocuments')} · ${new Date(pendingExpiresAt).toLocaleString()}`}
               </Text>
             ) : null}
             <TouchableOpacity style={{ marginTop: 14 }} onPress={startLivenessChallenge} hitSlop={8}>
-              <Text style={{ color: colors.primary, fontWeight: '600' }}>Redo liveness check</Text>
+              <Text style={{ color: colors.primary, fontWeight: '600' }}>{t('common.retry')}</Text>
             </TouchableOpacity>
           </View>
         ) : (
@@ -754,21 +775,21 @@ export default function DriverRegisterStep3() {
                 ]}
               >
                 <Ionicons name="camera" size={40} color={colors.primary} />
-                <Text style={[styles.photoPlaceholderText, { color: colors.primary }]}>Start Liveness Check</Text>
+                <Text style={[styles.photoPlaceholderText, { color: colors.primary }]}>{t('auth.livenessTitle')}</Text>
               </View>
             )}
           </TouchableOpacity>
         )}
         {livenessPassed ? (
           <Text style={[styles.hint, { color: '#34C759', marginTop: 8 }]}>
-            Liveness completed at 100%. Step 1 Completed successfully!
+            {t('auth.livenessSuccess')}
           </Text>
         ) : null}
       </View>
 
       <View style={styles.inputGroup}>
-        <Text style={[styles.label, { color: colors.text }]}>Document Front *</Text>
-        <Text style={[styles.hint, { color: colors.textTertiary }]}>Capture the front side of your document</Text>
+        <Text style={[styles.label, { color: colors.text }]}>{t('auth.documentFront')} *</Text>
+        <Text style={[styles.hint, { color: colors.textTertiary }]}>{t('auth.captureDocument')}</Text>
         <TouchableOpacity style={styles.photoButton} onPress={() => takeDocumentPhoto('top')}>
           {docImageTop ? (
             <Image source={{ uri: docImageTop }} style={styles.photoPreview} />
@@ -780,15 +801,15 @@ export default function DriverRegisterStep3() {
               ]}
             >
               <Ionicons name="document" size={40} color={colors.primary} />
-              <Text style={[styles.photoPlaceholderText, { color: colors.primary }]}>Capture Front</Text>
+              <Text style={[styles.photoPlaceholderText, { color: colors.primary }]}>{t('auth.uploadFront')}</Text>
             </View>
           )}
         </TouchableOpacity>
       </View>
 
       <View style={styles.inputGroup}>
-        <Text style={[styles.label, { color: colors.text }]}>Document Back (Optional)</Text>
-        <Text style={[styles.hint, { color: colors.textTertiary }]}>Capture the back side if applicable</Text>
+        <Text style={[styles.label, { color: colors.text }]}>{`${t('auth.documentBack')} (${t('common.optional')})`}</Text>
+        <Text style={[styles.hint, { color: colors.textTertiary }]}>{t('auth.captureDocument')}</Text>
         <TouchableOpacity style={styles.photoButton} onPress={() => takeDocumentPhoto('bottom')}>
           {docImageBottom ? (
             <Image source={{ uri: docImageBottom }} style={styles.photoPreview} />
@@ -800,7 +821,7 @@ export default function DriverRegisterStep3() {
               ]}
             >
               <Ionicons name="document-outline" size={40} color={colors.primary} />
-              <Text style={[styles.photoPlaceholderText, { color: colors.primary }]}>Capture Back</Text>
+              <Text style={[styles.photoPlaceholderText, { color: colors.primary }]}>{t('auth.uploadBack')}</Text>
             </View>
           )}
         </TouchableOpacity>
@@ -814,7 +835,7 @@ export default function DriverRegisterStep3() {
         {loading ? (
           <ActivityIndicator color="#fff" />
         ) : (
-          <Text style={styles.submitButtonText}>Submit for Verification</Text>
+          <Text style={styles.submitButtonText}>{t('auth.submitForReview')}</Text>
         )}
       </TouchableOpacity>
 
@@ -824,14 +845,14 @@ export default function DriverRegisterStep3() {
           onPress={handleSkip}
           disabled={loading}
         >
-          <Text style={[styles.skipButtonText, { color: colors.primary }]}>Skip for Now</Text>
+          <Text style={[styles.skipButtonText, { color: colors.primary }]}>{t('common.skip')}</Text>
         </TouchableOpacity>
       ) : null}
 
       <View style={[styles.infoBox, { backgroundColor: isDark ? colors.primaryLight : '#f0f9ff' }]}>
         <Ionicons name="information-circle" size={24} color={colors.primary} />
         <Text style={[styles.infoText, { color: colors.textSecondary }]}>
-          Your documents will be reviewed by our team. You will be notified once verified.
+          {t('auth.registrationSubmittedBody')}
         </Text>
       </View>
     </ScrollView>

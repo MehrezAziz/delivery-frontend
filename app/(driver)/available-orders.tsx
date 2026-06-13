@@ -5,6 +5,7 @@ import {
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { orderService, AvailableOrders, FilteredOrders, Order, computeOrderCancelRemainingSec } from '../../services/api/order.service';
 import { startDriverLocationTracking } from '../../services/driverLocationTracking';
@@ -50,7 +51,7 @@ function formatDriverAddressLine(addr: Order['pickupAddress'] | Order['dropoffAd
     }
     return `${head}, ${del}`;
   }
-  return displayStreet || del || 'Address';
+  return displayStreet || del || '';
 }
 
 const STORAGE_KEY_FILTER_LEVEL = 'avail_quick_filter_level';
@@ -70,6 +71,7 @@ interface DriverGeoData {
 }
 
 function SearchPicker({ visible, title, data, onSelect, onClose, search, setSearch, labelKey }: any) {
+  const { t } = useTranslation();
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
       <View style={s.modalContainer}>
@@ -79,7 +81,7 @@ function SearchPicker({ visible, title, data, onSelect, onClose, search, setSear
         </View>
         <View style={s.searchBox}>
           <Ionicons name="search" size={16} color="#9ca3af" />
-          <TextInput style={s.searchInput} placeholder="Search..." placeholderTextColor="#9ca3af"
+          <TextInput style={s.searchInput} placeholder={`${t('common.search')}...`} placeholderTextColor="#9ca3af"
             value={search} onChangeText={setSearch} autoFocus />
           {search.length > 0 && (
             <TouchableOpacity onPress={() => setSearch('')}><Text style={s.clearIcon}>✕</Text></TouchableOpacity>
@@ -92,7 +94,7 @@ function SearchPicker({ visible, title, data, onSelect, onClose, search, setSear
               {item.isoCode && <Text style={s.pickerItemSub}>{item.isoCode} · {item.currencyCode}</Text>}
             </TouchableOpacity>
           )}
-          ListEmptyComponent={<Text style={s.emptyPickerText}>No results</Text>}
+          ListEmptyComponent={<Text style={s.emptyPickerText}>{t('common.noResults')}</Text>}
         />
       </View>
     </Modal>
@@ -101,6 +103,7 @@ function SearchPicker({ visible, title, data, onSelect, onClose, search, setSear
 
 function OrderDescriptionCard({ description }: { description: string | null | undefined }) {
   const { colors, isDark } = useTheme();
+  const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
   const text = (description || '').trim();
   if (!text) return null;
@@ -120,7 +123,7 @@ function OrderDescriptionCard({ description }: { description: string | null | un
         <View style={[s.orderDescIconWrap, { backgroundColor: isDark ? 'rgba(2, 132, 199, 0.35)' : '#e0f2fe' }]}>
           <Ionicons name="reader-outline" size={17} color={colors.primary} />
         </View>
-        <Text style={[s.orderDescTitle, { color: colors.textSecondary }]}>Package description</Text>
+        <Text style={[s.orderDescTitle, { color: colors.textSecondary }]}>{t('createOrder.packageDescription')}</Text>
       </View>
       <Text
         style={[s.orderDescBody, { color: colors.text }]}
@@ -136,7 +139,7 @@ function OrderDescriptionCard({ description }: { description: string | null | un
           hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
         >
           <Text style={[s.orderDescToggleText, { color: colors.primary }]}>
-            {expanded ? 'Show less' : 'Show more'}
+            {expanded ? t('common.showAll') : t('common.seeAll')}
           </Text>
           <Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={15} color={colors.primary} />
         </TouchableOpacity>
@@ -153,6 +156,7 @@ export default function AvailableOrdersScreen() {
     declinedFlash?: string | string[];
   }>();
   const { colors, isDark } = useTheme();
+  const { t } = useTranslation();
   const [data, setData] = useState<AvailableOrders | null>(null);
   const [filteredData, setFilteredData] = useState<FilteredOrders | null>(null);
   const [loading, setLoading] = useState(true);
@@ -314,7 +318,7 @@ export default function AvailableOrdersScreen() {
   const handleAdvSelectDelegation = (d: GeoDelegation) => { setAdvSelectedDelegation(d); setShowDelPicker(false); };
 
   const applyAdvFilter = () => {
-    if (!advSelectedCountry) { Alert.alert('Select Location', 'Please select at least a country.'); return; }
+    if (!advSelectedCountry) { Alert.alert(t('auth.selectCountry'), t('auth.selectCountryRequired')); return; }
     setShowFilter(false); setFilterActive(true); setLoading(true);
   };
   const clearAdvFilter = () => {
@@ -438,10 +442,10 @@ export default function AvailableOrdersScreen() {
 
   const handleAccept = async (orderId: string) => {
     const ca = filterActive || quickFilterLevel ? filteredData?.canAccept : data?.canAccept;
-    if (!ca) { Alert.alert('Not Verified', 'Your account must be verified before you can accept orders.'); return; }
-    Alert.alert('Accept Order', 'Take this delivery?', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Accept', onPress: async () => {
+    if (!ca) { Alert.alert(t('driverHome.underReview'), t('driverHome.underReviewBody')); return; }
+    Alert.alert(t('driverAvailableOrders.accept'), t('common.confirm'), [
+      { text: t('common.cancel'), style: 'cancel' },
+      { text: t('driverAvailableOrders.accept'), onPress: async () => {
         setAccepting(orderId);
         try {
           await orderService.acceptOrder(orderId);
@@ -450,8 +454,8 @@ export default function AvailableOrdersScreen() {
           void startDriverLocationTracking(orderId).then((locOk) => {
             if (!locOk) {
               Alert.alert(
-                'Location permission',
-                'Please allow location access so the customer can see your position on the map during delivery. You can enable it in Settings.',
+                t('driverAvailableOrders.locationPermission'),
+                t('driverAvailableOrders.locationPermissionBody'),
               );
             }
           });
@@ -461,15 +465,15 @@ export default function AvailableOrdersScreen() {
           const msg = e.message || '';
           if (msg.toLowerCase().includes('phone number')) {
             Alert.alert(
-              'Phone Number Required',
-              'You must add a phone number to your profile before accepting orders. Customers need to be able to contact you.',
+              t('driverAvailableOrders.phoneRequired'),
+              t('driverAvailableOrders.phoneRequiredBody'),
               [
-                { text: 'Later', style: 'cancel' },
-                { text: 'Add Phone Number', onPress: () => push('/(driver)/edit-profile') },
+                { text: t('common.later'), style: 'cancel' },
+                { text: t('driverAvailableOrders.addPhoneNumber'), onPress: () => push('/(driver)/edit-profile') },
               ],
             );
           } else {
-            Alert.alert('Error', msg);
+            Alert.alert(t('common.error'), msg);
           }
         }
         finally { setAccepting(null); }
@@ -486,7 +490,7 @@ export default function AvailableOrdersScreen() {
     mapTitle: string,
   ) => {
     if (lat == null || lng == null || !Number.isFinite(lat) || !Number.isFinite(lng)) {
-      Alert.alert('Location unavailable', 'Map coordinates are not available for this address.');
+      Alert.alert(t('pickLocation.permissionDenied'), t('pickLocation.fetchFailed'));
       return;
     }
     push(
@@ -498,7 +502,7 @@ export default function AvailableOrdersScreen() {
   const renderOrderCard = (order: Order) => {
     const isAccepting = accepting === order.id;
     const isUrgentHighlighted = !!urgentOrderId && order.id === urgentOrderId;
-    const customerName = [order.customer?.firstName, order.customer?.secondName].filter(Boolean).join(' ').trim() || 'Customer';
+    const customerName = [order.customer?.firstName, order.customer?.secondName].filter(Boolean).join(' ').trim() || t('orderDetail.customer');
     const customerInitials = customerName
       .split(' ')
       .filter(Boolean)
@@ -540,8 +544,8 @@ export default function AvailableOrdersScreen() {
       dropLng != null &&
       Number.isFinite(dropLat) &&
       Number.isFinite(dropLng);
-    const pickupMapTitle = formatDriverAddressLine(order.pickupAddress) || 'Pickup';
-    const dropoffMapTitle = formatDriverAddressLine(order.dropoffAddress) || 'Delivery';
+    const pickupMapTitle = formatDriverAddressLine(order.pickupAddress) || t('driverAddressMap.pickup');
+    const dropoffMapTitle = formatDriverAddressLine(order.dropoffAddress) || t('driverAddressMap.delivery');
     const pickupLine = formatDriverAddressLine(order.pickupAddress);
     const dropoffLine = formatDriverAddressLine(order.dropoffAddress);
     return (
@@ -555,7 +559,7 @@ export default function AvailableOrdersScreen() {
       >
         {isUrgentHighlighted && (
           <View style={{ alignSelf: 'flex-start', marginBottom: 8, backgroundColor: '#f59e0b', borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 }}>
-            <Text style={{ color: '#fff', fontSize: 11, fontWeight: '700' }}>URGENT</Text>
+            <Text style={{ color: '#fff', fontSize: 11, fontWeight: '700' }}>{t('driverAvailableOrders.urgent')}</Text>
           </View>
         )}
         <View style={s.cardTop}>
@@ -577,7 +581,7 @@ export default function AvailableOrdersScreen() {
           <View style={s.priceTag}>
             <Text style={[s.priceText, { color: colors.primary }]}>{order.price.toFixed(2)}</Text>
             <Text style={[s.priceCurrency, { color: colors.textSecondary }]}>
-              {order.currencySymbol ?? 'TND'}
+              {order.currencySymbol ?? t('common.tnd')}
             </Text>
           </View>
         </View>
@@ -614,7 +618,7 @@ export default function AvailableOrdersScreen() {
                 ]}
                 numberOfLines={2}
               >
-                {pickupLine || 'Pickup'}
+                {pickupLine || t('driverMyOrders.pickup')}
               </Text>
               {pickupHasCoords ? (
                 <Ionicons name="map-outline" size={20} color={colors.primary} />
@@ -624,16 +628,16 @@ export default function AvailableOrdersScreen() {
               typeof order.pickupAddress?.latitude === 'number' &&
               typeof order.pickupAddress?.longitude === 'number' && (
                 <Text style={[s.chipText, { color: colors.textSecondary, marginTop: 2 }]}>
-                  Exact source: {order.pickupAddress.latitude.toFixed(5)}, {order.pickupAddress.longitude.toFixed(5)}
+                  {t('driverAvailableOrders.distance')}: {order.pickupAddress.latitude.toFixed(5)}, {order.pickupAddress.longitude.toFixed(5)}
                 </Text>
               )}
             {distanceToPickup !== null && (
               
               <Text style={[s.distanceToYouHint, { color: colors.textTertiary }]} numberOfLines={1}>
-                <Text style={{ color: colors.textTertiary }}>Distance to pickup position:  </Text>
+                <Text style={{ color: colors.textTertiary }}>{t('driverAvailableOrders.distance')}:  </Text>
                 {distanceToPickup < 1
                   ? `${Math.round(distanceToPickup * 1000)} m`
-                  : `${distanceToPickup.toFixed(1)} km`}
+                  : `${distanceToPickup.toFixed(1)}${t('common.km')}`}
               </Text>
             )}
             {!order.localPickupOnly && Number.isFinite(order.distanceKm) && (
@@ -642,10 +646,10 @@ export default function AvailableOrdersScreen() {
                   <Ionicons name="navigate" size={16} color={isDark ? '#7dd3fc' : '#0369a1'} />
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={[s.distanceToPickupLabel, { color: colors.textSecondary }]}>Distance </Text>
+                  <Text style={[s.distanceToPickupLabel, { color: colors.textSecondary }]}>{t('driverAvailableOrders.distance')} </Text>
                   <Text style={[s.distanceToPickupValue, { color: colors.text }]}>
                     <Text style={{ color: colors.textTertiary }}>~</Text>
-                    {order.distanceKm.toFixed(1)} km
+                    {order.distanceKm.toFixed(1)}{t('common.km')}
                   </Text>
                 </View>
               </View>
@@ -653,7 +657,7 @@ export default function AvailableOrdersScreen() {
             <View style={{ height: 14 }} />
             {order.localPickupOnly ? (
               <Text style={[s.routeText, { color: colors.textSecondary, fontWeight: '500' }]} numberOfLines={3}>
-                Local pickup only — bring items to the pickup address (no separate drop-off).
+                {t('localPickup.description')}
               </Text>
             ) : (
               <TouchableOpacity
@@ -672,7 +676,7 @@ export default function AvailableOrdersScreen() {
                   ]}
                   numberOfLines={2}
                 >
-                  {dropoffLine || 'Dropoff'}
+                  {dropoffLine || t('driverMyOrders.dropoff')}
                 </Text>
                 {dropoffHasCoords ? (
                   <Ionicons name="map-outline" size={20} color={colors.primary} />
@@ -694,25 +698,25 @@ export default function AvailableOrdersScreen() {
           )}
           <View style={[s.chip, { backgroundColor: colors.surfaceVariant }]}>
             <Ionicons name="cube-outline" size={12} color={colors.textSecondary} />
-            <Text style={[s.chipText, { color: colors.textSecondary }]}>{order.weight} kg</Text>
+            <Text style={[s.chipText, { color: colors.textSecondary }]}>{order.weight}{t('common.kg')}</Text>
           </View>
           {order.paymentType === 'COD' ? (
             <View style={[s.chip, { backgroundColor: '#dcfce7' }]}>
               <Text style={{ fontSize: 11 }}>💵</Text>
-              <Text style={[s.chipText, { color: '#166534' }]}>Cash</Text>
+              <Text style={[s.chipText, { color: '#166534' }]}>{t('driverMyOrders.cash')}</Text>
             </View>
           ) : (
             <View style={[s.chip, { backgroundColor: '#dbeafe', flexShrink: 1 }]}>
               <Text style={{ fontSize: 11 }}>💰</Text>
               <Text style={[s.chipText, { color: '#1e40af' }]} numberOfLines={1}>
-                Wallet: {(order.priceCoins ?? order.price).toFixed(2)} coins
+                {t('driverMyOrders.wallet')}: {(order.priceCoins ?? order.price).toFixed(2)}{t('common.coinsSuffix')}
               </Text>
             </View>
           )}
           {order.isNightDelivery && (
             <View style={[s.chip, { backgroundColor: '#e0e7ff' }]}>
               <Text style={{ fontSize: 11 }}>🌙</Text>
-              <Text style={[s.chipText, { color: '#3730a3' }]}>Night</Text>
+              <Text style={[s.chipText, { color: '#3730a3' }]}>{t('driverAvailableOrders.night')}</Text>
             </View>
           )}
         </View>
@@ -727,7 +731,7 @@ export default function AvailableOrdersScreen() {
           ) : (
             <>
               <Ionicons name={canAccept ? 'checkmark-circle' : 'eye-outline'} size={18} color="#fff" />
-              <Text style={s.acceptBtnText}>{canAccept ? 'Accept Order' : 'View Only'}</Text>
+              <Text style={s.acceptBtnText}>{canAccept ? t('driverAvailableOrders.accept') : t('common.open')}</Text>
             </>
           )}
         </TouchableOpacity>
@@ -738,13 +742,22 @@ export default function AvailableOrdersScreen() {
   const renderSection = (title: string, orders: Order[]) => {
     if (orders.length === 0) return null;
     const meta = ZONE_META[title] || ZONE_META['Same Delegation'];
+    const translatedTitle = title === 'Same Delegation'
+      ? t('driverAvailableOrders.delegationFilter')
+      : title === 'Same Governorate'
+      ? t('driverAvailableOrders.governorateFilter')
+      : title === 'Different Governorate'
+      ? t('driverAvailableOrders.governorateFilter')
+      : title === 'Different Country'
+      ? t('driverAvailableOrders.countryFilter')
+      : title;
     return (
       <View style={{ marginBottom: 20 }}>
         <View style={s.sectionHeader}>
           <View style={[s.sectionIcon, { backgroundColor: meta.bg }]}>
             <Ionicons name={meta.icon as any} size={14} color={meta.color} />
           </View>
-          <Text style={[s.sectionTitle, { color: colors.text }]}>{title}</Text>
+          <Text style={[s.sectionTitle, { color: colors.text }]}>{translatedTitle}</Text>
           <View style={[s.sectionBadge, { backgroundColor: colors.border }]}><Text style={[s.sectionBadgeText, { color: colors.textSecondary }]}>{orders.length}</Text></View>
         </View>
         {orders.map(renderOrderCard)}
@@ -785,8 +798,8 @@ export default function AvailableOrdersScreen() {
       <View style={[s.subHeaderBar, { backgroundColor: colors.card, borderColor: colors.border }]}>
         <Text style={[s.headerSub, { color: colors.textSecondary }]} numberOfLines={2}>
           {filterActive
-            ? `${totalOrders} order${totalOrders !== 1 ? 's' : ''} in ${advFilterLabel}`
-            : `${totalOrders} order${totalOrders !== 1 ? 's' : ''} near you`}
+            ? `${totalOrders} · ${advFilterLabel}`
+            : `${totalOrders} · ${t('driverAvailableOrders.title')}`}
         </Text>
         <TouchableOpacity
           style={[s.filterChipBtn, { backgroundColor: colors.surfaceVariant }, filterActive && { backgroundColor: colors.primary }]}
@@ -799,7 +812,7 @@ export default function AvailableOrdersScreen() {
 
       {showDeclinedFlash && (
         <View style={s.declinedFlashOverlay} pointerEvents="none" accessibilityRole="alert">
-          <Text style={s.declinedFlashCenterText}>declined</Text>
+          <Text style={s.declinedFlashCenterText}>{t('driverMyOrders.rejected')}</Text>
         </View>
       )}
 
@@ -812,7 +825,7 @@ export default function AvailableOrdersScreen() {
           <Ionicons name={availableNow ? 'radio-button-on' : 'radio-button-off'} size={20}
             color={availableNow ? '#16a34a' : '#9ca3af'} />
           <Text style={[s.availableToggleText, { color: availableNow ? '#16a34a' : '#6b7280' }]}>
-            {availableNow ? "I'm available now" : "I'm not available"}
+            {availableNow ? t('driverAvailability.statusActive') : t('driverAvailability.statusInactive')}
           </Text>
           <View style={[s.availableDot, { backgroundColor: availableNow ? '#16a34a' : '#d1d5db' }]} />
         </TouchableOpacity>
@@ -824,7 +837,11 @@ export default function AvailableOrdersScreen() {
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.quickFilterRow}>
             {(['delegation', 'governorate', 'country'] as ('delegation' | 'governorate' | 'country')[]).map((level) => {
               const isActive = quickFilterLevel === level;
-              const label = level === 'delegation' ? 'Delegation' : level === 'governorate' ? 'Governorate' : 'Country';
+              const label = level === 'delegation'
+                ? t('driverAvailableOrders.delegationFilter')
+                : level === 'governorate'
+                ? t('driverAvailableOrders.governorateFilter')
+                : t('driverAvailableOrders.countryFilter');
               const icon = level === 'delegation' ? 'location' : level === 'governorate' ? 'map' : 'globe-outline';
               return (
                 <TouchableOpacity key={level}
@@ -865,7 +882,7 @@ export default function AvailableOrdersScreen() {
       {!canAccept && (
         <View style={s.warningBanner}>
           <Ionicons name="alert-circle" size={18} color="#92400e" />
-          <Text style={s.warningText}>Your account is not verified yet. You can browse orders but cannot accept them.</Text>
+          <Text style={s.warningText}>{t('driverHome.underReviewBody')}</Text>
         </View>
       )}
 
@@ -888,8 +905,8 @@ export default function AvailableOrdersScreen() {
         {totalOrders === 0 ? (
           <View style={s.empty}>
             <Ionicons name="cube-outline" size={56} color={colors.textTertiary} />
-            <Text style={[s.emptyTitle, { color: colors.textTertiary }]}>{filterActive ? 'No orders in this area' : 'No orders available'}</Text>
-            <Text style={s.emptySub}>{filterActive ? 'Try a different location' : 'Pull down to refresh'}</Text>
+            <Text style={[s.emptyTitle, { color: colors.textTertiary }]}>{t('driverAvailableOrders.empty')}</Text>
+            <Text style={s.emptySub}>{t('common.refresh')}</Text>
           </View>
         ) : isFlat ? (
           <>
@@ -915,7 +932,7 @@ export default function AvailableOrdersScreen() {
               if (!urgent) return null;
               return (
                 <View style={{ marginBottom: 16 }}>
-                  <Text style={{ color: '#b45309', fontWeight: '800', marginBottom: 8 }}>Urgent order on top</Text>
+                  <Text style={{ color: '#b45309', fontWeight: '800', marginBottom: 8 }}>{t('driverAvailableOrders.title')}</Text>
                   {renderOrderCard(urgent)}
                 </View>
               );
@@ -934,7 +951,7 @@ export default function AvailableOrdersScreen() {
               <View style={[s.sectionIcon, { backgroundColor: '#fee2e2' }]}>
                 <Ionicons name="ban" size={14} color="#dc2626" />
               </View>
-              <Text style={[s.sectionTitle, { color: '#dc2626' }]}>No longer assigned</Text>
+              <Text style={[s.sectionTitle, { color: '#dc2626' }]}>{t('driverMyOrders.rejected')}</Text>
               <View style={[s.sectionBadge, { backgroundColor: '#fee2e2' }]}>
                 <Text style={[s.sectionBadgeText, { color: '#dc2626' }]}>{rejectedOrders.length}</Text>
               </View>
@@ -956,14 +973,14 @@ export default function AvailableOrdersScreen() {
                 rDropLng != null &&
                 Number.isFinite(rDropLat) &&
                 Number.isFinite(rDropLng);
-              const rPickupTitle = formatDriverAddressLine(ro.pickupAddress) || 'Pickup';
-              const rDropTitle = formatDriverAddressLine(ro.dropoffAddress) || 'Delivery';
+              const rPickupTitle = formatDriverAddressLine(ro.pickupAddress) || t('driverAddressMap.pickup');
+              const rDropTitle = formatDriverAddressLine(ro.dropoffAddress) || t('driverAddressMap.delivery');
               return (
               <View key={r.rejectionId} style={[s.card, { borderLeftWidth: 4, borderLeftColor: '#dc2626', opacity: 0.7 }]}>
                 <View style={s.cardTop}>
                   <Text style={s.orderId}>#{r.order.id.slice(0, 8)}</Text>
                   <View style={[s.priceTag, { backgroundColor: '#fee2e2' }]}>
-                    <Text style={[s.priceText, { color: '#dc2626', fontSize: 14 }]}>Rejected</Text>
+                    <Text style={[s.priceText, { color: '#dc2626', fontSize: 14 }]}>{t('driverDocuments.statusRejected')}</Text>
                   </View>
                 </View>
                 <View style={s.routeSection}>
@@ -989,14 +1006,14 @@ export default function AvailableOrdersScreen() {
                         ]}
                         numberOfLines={1}
                       >
-                        {formatDriverAddressLine(ro.pickupAddress) || 'Pickup'}
+                        {formatDriverAddressLine(ro.pickupAddress) || t('driverMyOrders.pickup')}
                       </Text>
                       {rPickupHas ? <Ionicons name="map-outline" size={20} color={colors.primary} /> : null}
                     </TouchableOpacity>
                     <View style={{ height: 14 }} />
                     {ro.localPickupOnly ? (
                       <Text style={[s.routeText, { color: colors.textSecondary, fontWeight: '500' }]} numberOfLines={3}>
-                        Local pickup only — bring items to the pickup address (no separate drop-off).
+                        {t('localPickup.description')}
                       </Text>
                     ) : (
                       <TouchableOpacity
@@ -1015,7 +1032,7 @@ export default function AvailableOrdersScreen() {
                           ]}
                           numberOfLines={1}
                         >
-                          {formatDriverAddressLine(ro.dropoffAddress) || 'Dropoff'}
+                          {formatDriverAddressLine(ro.dropoffAddress) || t('driverMyOrders.dropoff')}
                         </Text>
                         {rDropHas ? <Ionicons name="map-outline" size={20} color={colors.primary} /> : null}
                       </TouchableOpacity>
@@ -1025,19 +1042,17 @@ export default function AvailableOrdersScreen() {
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 }}>
                   <Ionicons name="information-circle-outline" size={16} color="#dc2626" />
                   <Text style={{ fontSize: 13, color: '#dc2626', fontWeight: '500', flex: 1 }}>
-                    {r.order?.sourceType === 'DELIVERY_COMPANY'
-                      ? 'The company / department removed you from this order.'
-                      : 'The customer declined working with you on this order.'}
+                    {t('driverMyOrders.rejected')}
                   </Text>
                 </View>
                 {r.reason ? (
                   <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 6 }}>
-                    Reason: {r.reason}
+                    {t('restrictions.reason')} {r.reason}
                   </Text>
                 ) : null}
                 {r.driverResponse ? (
                   <Text style={{ fontSize: 12, color: colors.text, marginTop: 8 }}>
-                    Your response: {r.driverResponse}
+                    {r.driverResponse}
                   </Text>
                 ) : (
                   <View style={{ marginTop: 10, gap: 8 }}>
@@ -1051,10 +1066,10 @@ export default function AvailableOrdersScreen() {
                         color: colors.text,
                         backgroundColor: colors.background,
                       }}
-                      placeholder="Your response (min. 5 characters, optional)"
+                      placeholder={t('support.messagePlaceholder')}
                       placeholderTextColor={colors.textTertiary}
                       value={rejectionDrafts[r.rejectionId] ?? ''}
-                      onChangeText={(t) => setRejectionDrafts((prev) => ({ ...prev, [r.rejectionId]: t }))}
+                      onChangeText={(txt) => setRejectionDrafts((prev) => ({ ...prev, [r.rejectionId]: txt }))}
                       multiline
                       textAlignVertical="top"
                     />
@@ -1071,7 +1086,7 @@ export default function AvailableOrdersScreen() {
                       onPress={async () => {
                         const text = (rejectionDrafts[r.rejectionId] ?? '').trim();
                         if (text.length < 5) {
-                          Alert.alert('Too short', 'Please write at least 5 characters.');
+                          Alert.alert(t('common.error'), t('support.messagePlaceholder'));
                           return;
                         }
                         try {
@@ -1085,7 +1100,7 @@ export default function AvailableOrdersScreen() {
                           const list = await orderService.getDriverRejectedOrders();
                           setRejectedOrders(list || []);
                         } catch (e: any) {
-                          Alert.alert('Error', e?.message || 'Could not save');
+                          Alert.alert(t('common.error'), e?.message || t('common.operationFailed'));
                         } finally {
                           setRejectionSubmitting(null);
                         }
@@ -1094,7 +1109,7 @@ export default function AvailableOrdersScreen() {
                       {rejectionSubmitting === r.rejectionId ? (
                         <ActivityIndicator color="#fff" size="small" />
                       ) : (
-                        <Text style={{ color: '#fff', fontWeight: '700', fontSize: 14 }}>Submit response</Text>
+                        <Text style={{ color: '#fff', fontWeight: '700', fontSize: 14 }}>{t('common.submit')}</Text>
                       )}
                     </TouchableOpacity>
                   </View>
@@ -1113,30 +1128,30 @@ export default function AvailableOrdersScreen() {
       <Modal visible={showFilter} animationType="slide" onRequestClose={() => setShowFilter(false)}>
         <View style={[s.filterModal, { backgroundColor: colors.background }]}>
           <View style={[s.filterModalHeader, { borderBottomColor: colors.border }]}>
-            <Text style={[s.filterModalTitle, { color: colors.text }]}>Filter Orders</Text>
+            <Text style={[s.filterModalTitle, { color: colors.text }]}>{t('driverAvailableOrders.filters')}</Text>
             <TouchableOpacity onPress={() => setShowFilter(false)}>
               <Ionicons name="close" size={24} color={colors.text} />
             </TouchableOpacity>
           </View>
           <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 20 }}>
             <Text style={[s.filterHint, { color: colors.textSecondary }]}>
-              Search for orders in a specific location. This ignores your availability and address — useful when traveling or on break.
+              {t('driverAvailableOrders.title')}
             </Text>
-            <Text style={s.filterLabel}>Country</Text>
+            <Text style={s.filterLabel}>{t('driverAvailableOrders.countryFilter')}</Text>
             <TouchableOpacity style={s.filterPicker} onPress={() => setShowCountryPicker(true)}>
               <Text style={advSelectedCountry ? s.filterPickerText : s.filterPickerPlaceholder}>
-                {advSelectedCountry ? advSelectedCountry.name : 'Select Country'}
+                {advSelectedCountry ? advSelectedCountry.name : t('driverAvailableOrders.selectCountry')}
               </Text>
               <Ionicons name="chevron-down" size={18} color="#9ca3af" />
             </TouchableOpacity>
             {advSelectedCountry && (
               <>
-                <Text style={s.filterLabel}>Governorate (optional)</Text>
+                <Text style={s.filterLabel}>{t('driverAvailableOrders.governorateFilter')} ({t('common.optional')})</Text>
                 <TouchableOpacity style={s.filterPicker} onPress={() => setShowGovPicker(true)} disabled={geoLoading}>
                   {geoLoading && !advSelectedGovernorate
                     ? <ActivityIndicator size="small" color="#0284c7" />
                     : <Text style={advSelectedGovernorate ? s.filterPickerText : s.filterPickerPlaceholder}>
-                        {advSelectedGovernorate ? advSelectedGovernorate.nameGovernorate : 'All Governorates'}
+                        {advSelectedGovernorate ? advSelectedGovernorate.nameGovernorate : t('driverAvailableOrders.selectGovernorate')}
                       </Text>}
                   <Ionicons name="chevron-down" size={18} color="#9ca3af" />
                 </TouchableOpacity>
@@ -1144,12 +1159,12 @@ export default function AvailableOrdersScreen() {
             )}
             {advSelectedGovernorate && (
               <>
-                <Text style={s.filterLabel}>Delegation (optional)</Text>
+                <Text style={s.filterLabel}>{t('driverAvailableOrders.delegationFilter')} ({t('common.optional')})</Text>
                 <TouchableOpacity style={s.filterPicker} onPress={() => setShowDelPicker(true)} disabled={geoLoading}>
                   {geoLoading && !advSelectedDelegation
                     ? <ActivityIndicator size="small" color="#0284c7" />
                     : <Text style={advSelectedDelegation ? s.filterPickerText : s.filterPickerPlaceholder}>
-                        {advSelectedDelegation ? advSelectedDelegation.nameDelegation : 'All Delegations'}
+                        {advSelectedDelegation ? advSelectedDelegation.nameDelegation : t('driverAvailableOrders.selectDelegation')}
                       </Text>}
                   <Ionicons name="chevron-down" size={18} color="#9ca3af" />
                 </TouchableOpacity>
@@ -1159,23 +1174,23 @@ export default function AvailableOrdersScreen() {
           <View style={s.filterActions}>
             {filterActive && (
               <TouchableOpacity style={s.filterClearBtn} onPress={() => { clearAdvFilter(); setShowFilter(false); }}>
-                <Text style={s.filterClearBtnText}>Clear Filter</Text>
+                <Text style={s.filterClearBtnText}>{t('driverAvailability.clearAll')}</Text>
               </TouchableOpacity>
             )}
             <TouchableOpacity style={[s.filterApplyBtn, !advSelectedCountry && { opacity: 0.5 }]}
               onPress={applyAdvFilter} disabled={!advSelectedCountry}>
               <Ionicons name="search" size={18} color="#fff" />
-              <Text style={s.filterApplyBtnText}>Search Orders</Text>
+              <Text style={s.filterApplyBtnText}>{t('common.search')}</Text>
             </TouchableOpacity>
           </View>
         </View>
-        <SearchPicker visible={showCountryPicker} title="Select Country" data={filteredCountries}
+        <SearchPicker visible={showCountryPicker} title={t('driverAvailableOrders.selectCountry')} data={filteredCountries}
           onSelect={handleAdvSelectCountry} onClose={() => setShowCountryPicker(false)}
           search={countrySearch} setSearch={setCountrySearch} labelKey="name" />
-        <SearchPicker visible={showGovPicker} title="Select Governorate" data={filteredGov}
+        <SearchPicker visible={showGovPicker} title={t('driverAvailableOrders.selectGovernorate')} data={filteredGov}
           onSelect={handleAdvSelectGovernorate} onClose={() => setShowGovPicker(false)}
           search={govSearch} setSearch={setGovSearch} labelKey="nameGovernorate" />
-        <SearchPicker visible={showDelPicker} title="Select Delegation" data={filteredDel}
+        <SearchPicker visible={showDelPicker} title={t('driverAvailableOrders.selectDelegation')} data={filteredDel}
           onSelect={handleAdvSelectDelegation} onClose={() => setShowDelPicker(false)}
           search={delSearch} setSearch={setDelSearch} labelKey="nameDelegation" />
       </Modal>

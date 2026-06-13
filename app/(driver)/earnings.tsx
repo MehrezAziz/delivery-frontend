@@ -17,6 +17,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -102,6 +103,7 @@ export default function DriverEarningsScreen() {
   const router = useRouter();
   const { push } = useAppNavigation();
   const { colors, isDark } = useTheme();
+  const { t } = useTranslation();
   const [driver, setDriver] = useState<DriverMe | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -232,17 +234,17 @@ export default function DriverEarningsScreen() {
   const validateWdForm = (): number | null => {
     const amt = parseFloat((wdAmount || '').replace(',', '.'));
     if (!Number.isFinite(amt) || amt <= 0) {
-      Alert.alert('Amount', 'Enter a valid positive amount.');
+      Alert.alert(t('common.invalidAmount'), t('common.enterValidAmount'));
       return null;
     }
     const totalDebit = wdQuote?.totalCoins ?? amt;
     if (totalDebit > balance) {
-      Alert.alert('Balance', 'This amount exceeds your available account balance.');
+      Alert.alert(t('wallet.insufficientBalance'), t('wallet.insufficientBalanceBody'));
       return null;
     }
     if (wdPayout === 'BANK_TRANSFER') {
       if (!wdBankHolder.trim() || !wdBankName.trim() || !wdBankRef.trim()) {
-        Alert.alert('Bank details', 'Please enter account holder, bank name, and IBAN/RIB/account number.');
+        Alert.alert(t('bankDetails.title'), t('bankDetails.required'));
         return null;
       }
     }
@@ -262,13 +264,13 @@ export default function DriverEarningsScreen() {
       );
       if (q.totalCoins > q.spendableCoins) {
         Alert.alert(
-          'Balance',
-          `You need ${q.totalCoins.toFixed(2)} coins but only ${q.spendableCoins.toFixed(2)} are available.`,
+          t('wallet.insufficientBalance'),
+          t('wallet.insufficientBalanceBody'),
         );
         return;
       }
       if (q.netPayoutCoins <= 0) {
-        Alert.alert('Amount too small', 'The amount after the withdrawal fee must be greater than zero.');
+        Alert.alert(t('wallet.amountTooSmall'), t('common.enterValidAmount'));
         return;
       }
       setWdQuote(q);
@@ -278,8 +280,8 @@ export default function DriverEarningsScreen() {
         typeof e === 'object' && e !== null && 'response' in e &&
         typeof (e as { response?: { data?: { message?: string } } }).response?.data?.message === 'string'
           ? (e as { response: { data: { message: string } } }).response.data.message
-          : e instanceof Error ? e.message : 'Could not load quote';
-      Alert.alert('Error', msg);
+          : e instanceof Error ? e.message : t('common.operationFailed');
+      Alert.alert(t('common.error'), msg);
     } finally {
       setWdQuoteLoading(false);
     }
@@ -315,7 +317,7 @@ export default function DriverEarningsScreen() {
       setWdBankRef('');
       setWdSaveBank(false);
       setWdQuote(null);
-      Alert.alert('Submitted', 'Your payout request was sent to support. You will be notified when it is processed.');
+      Alert.alert(t('wallet.requestSubmitted'), t('wallet.withdrawalSubmitted'));
       void loadProfile();
       void loadWithdrawals();
     } catch (e: unknown) {
@@ -327,8 +329,8 @@ export default function DriverEarningsScreen() {
           ? (e as { response: { data: { message: string } } }).response.data.message
           : e instanceof Error
             ? e.message
-            : 'Failed';
-      Alert.alert('Error', msg);
+            : t('common.operationFailed');
+      Alert.alert(t('common.error'), msg);
     } finally {
       setWdBusy(false);
     }
@@ -336,12 +338,12 @@ export default function DriverEarningsScreen() {
 
   const cancelWithdrawalRequest = (requestId: string) => {
     Alert.alert(
-      'Cancel withdrawal?',
-      'This will cancel your pending payout request.',
+      t('wallet.cancelWithdrawal'),
+      t('wallet.cancelWithdrawal'),
       [
-        { text: 'Keep', style: 'cancel' },
+        { text: t('wallet.keep'), style: 'cancel' },
         {
-          text: 'Cancel request',
+          text: t('wallet.cancelRequest'),
           style: 'destructive',
           onPress: async () => {
             setWdCancelling(requestId);
@@ -350,7 +352,7 @@ export default function DriverEarningsScreen() {
               void loadProfile();
               void loadWithdrawals();
             } catch (e: unknown) {
-              Alert.alert('Error', e instanceof Error ? e.message : 'Could not cancel');
+              Alert.alert(t('common.error'), e instanceof Error ? e.message : t('common.operationFailed'));
             } finally {
               setWdCancelling(null);
             }
@@ -391,13 +393,13 @@ export default function DriverEarningsScreen() {
           <View style={styles.heroTopRow}>
             <View style={[styles.heroBadge, { backgroundColor: 'rgba(255,255,255,0.2)' }]}>
               <Ionicons name="wallet-outline" size={14} color="#fff" />
-              <Text style={styles.heroBadgeText}>Account</Text>
+              <Text style={styles.heroBadgeText}>{t('common.account')}</Text>
             </View>
           </View>
-          <Text style={styles.heroLabel}>Available balance</Text>
+          <Text style={styles.heroLabel}>{t('wallet.available')}</Text>
           <Text style={styles.heroAmount} numberOfLines={1}>
             {balance.toFixed(2)}
-            <Text style={styles.heroCurrency}> Coins</Text>
+            <Text style={styles.heroCurrency}> {t('wallet.coins')}</Text>
           </Text>
           {driver?.account?.balanceAsLocalFiat != null && driver.account.currencySymbol ? (
             <Text style={styles.heroFiatHint}>
@@ -405,7 +407,7 @@ export default function DriverEarningsScreen() {
             </Text>
           ) : null}
           <Text style={styles.heroHint}>
-            {negative ? 'Settle negative balance to stay active' : `${deliveries} completed deliveries`}
+            {negative ? t('wallet.insufficientBalanceBody') : `${deliveries} ${t('driverEarnings.completedDeliveries')}`}
           </Text>
           <View style={styles.walletQuickWrap}>
             <View style={styles.walletQuickRow}>
@@ -417,7 +419,7 @@ export default function DriverEarningsScreen() {
                 <View style={styles.walletQuickCircle}>
                   <Text style={styles.walletQuickGlyph}>+</Text>
                 </View>
-                <Text style={styles.walletQuickLabel}>Deposit</Text>
+                <Text style={styles.walletQuickLabel}>{t('wallet.txTypes.TOP_UP')}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.walletQuickItem}
@@ -430,17 +432,17 @@ export default function DriverEarningsScreen() {
                 <View style={styles.walletQuickCircle}>
                   <Ionicons name="arrow-forward" size={22} color="rgba(255,255,255,0.95)" />
                 </View>
-                <Text style={styles.walletQuickLabel}>Send</Text>
+                <Text style={styles.walletQuickLabel}>{t('sendCoins.send')}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.walletQuickItem}
-                onPress={() => Alert.alert('Scan', 'QR scanning is coming soon.')}
+                onPress={() => Alert.alert(t('wallet.scan'), t('wallet.scanComingSoon'))}
                 activeOpacity={0.85}
               >
                 <View style={styles.walletQuickCircle}>
                   <Ionicons name="scan-outline" size={22} color="rgba(255,255,255,0.95)" />
                 </View>
-                <Text style={styles.walletQuickLabel}>Scan</Text>
+                <Text style={styles.walletQuickLabel}>{t('wallet.scan')}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.walletQuickItem}
@@ -450,7 +452,7 @@ export default function DriverEarningsScreen() {
                 <View style={styles.walletQuickCircle}>
                   <Text style={styles.walletQuickGlyph}>···</Text>
                 </View>
-                <Text style={styles.walletQuickLabel}>More</Text>
+                <Text style={styles.walletQuickLabel}>{t('common.menu')}</Text>
               </TouchableOpacity>
             </View>
             {walletQuickMore && (
@@ -467,7 +469,7 @@ export default function DriverEarningsScreen() {
                   <View style={styles.walletQuickCircle}>
                     <Text style={styles.walletQuickGlyph}>−</Text>
                   </View>
-                  <Text style={styles.walletQuickLabel}>Withdraw</Text>
+                  <Text style={styles.walletQuickLabel}>{t('wallet.requestWithdrawal')}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={styles.walletQuickItem}
@@ -480,20 +482,20 @@ export default function DriverEarningsScreen() {
                   <View style={styles.walletQuickCircle}>
                     <Text style={styles.walletQuickGlyph}>?</Text>
                   </View>
-                  <Text style={styles.walletQuickLabel}>Help</Text>
+                  <Text style={styles.walletQuickLabel}>{t('driverMyOrders.help')}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={styles.walletQuickItem}
                   onPress={() => {
                     setWalletQuickMore(false);
-                    Alert.alert('News', 'Updates and announcements are coming soon.');
+                    Alert.alert(t('wallet.news'), t('wallet.newsComingSoon'));
                   }}
                   activeOpacity={0.85}
                 >
                   <View style={styles.walletQuickCircle}>
                     <Ionicons name="newspaper-outline" size={20} color="rgba(255,255,255,0.95)" />
                   </View>
-                  <Text style={styles.walletQuickLabel}>News</Text>
+                  <Text style={styles.walletQuickLabel}>{t('wallet.news')}</Text>
                 </TouchableOpacity>
                 <View style={styles.walletQuickItem} />
               </View>
@@ -506,12 +508,12 @@ export default function DriverEarningsScreen() {
         </View>
 
         <View style={[styles.panel, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          <Text style={[styles.sectionTitle, { color: colors.text }]}>Earnings (filtered)</Text>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>{t('driverEarnings.title')}</Text>
           <Text style={[styles.hint, { color: colors.textSecondary }]}>
-            Cash = COD net you keep after fees. Wallet = in-app credits from wallet-paid orders.
+            {t('driverEarnings.breakdown')}
           </Text>
 
-          <Text style={[styles.filterLabel, { color: colors.textSecondary }]}>Source</Text>
+          <Text style={[styles.filterLabel, { color: colors.textSecondary }]}>{t('driverTransactions.title')}</Text>
           <View style={styles.chipRow}>
             {(['all', 'wallet', 'cash'] as Channel[]).map((c) => (
               <TouchableOpacity
@@ -523,21 +525,21 @@ export default function DriverEarningsScreen() {
                 onPress={() => setChannel(c)}
               >
                 <Text style={{ color: channel === c ? '#fff' : colors.text, fontWeight: '700', textTransform: 'capitalize' }}>
-                  {c}
+                  {c === 'all' ? t('driverTransactions.all') : c === 'wallet' ? t('driverMyOrders.wallet') : t('driverMyOrders.cash')}
                 </Text>
               </TouchableOpacity>
             ))}
           </View>
 
-          <Text style={[styles.filterLabel, { color: colors.textSecondary }]}>Period</Text>
+          <Text style={[styles.filterLabel, { color: colors.textSecondary }]}>{t('driverEarnings.thisWeek')}</Text>
           <View style={styles.chipRow}>
             {(
               [
-                ['today', 'Today'],
-                ['week', 'This week'],
-                ['month', 'This month'],
-                ['all_time', 'All time'],
-                ['custom', 'Custom'],
+                ['today', t('driverEarnings.today')],
+                ['week', t('driverEarnings.thisWeek')],
+                ['month', t('driverEarnings.thisMonth')],
+                ['all_time', t('driverEarnings.total')],
+                ['custom', t('common.edit')],
               ] as [Preset, string][]
             ).map(([p, label]) => (
               <TouchableOpacity
@@ -558,14 +560,14 @@ export default function DriverEarningsScreen() {
               <Text style={{ color: colors.textSecondary, fontSize: 12 }}>YYYY-MM-DD</Text>
               <TextInput
                 style={[styles.dateInp, { color: colors.text, borderColor: colors.border, backgroundColor: colors.inputBg }]}
-                placeholder="From"
+                placeholder={t('common.next')}
                 placeholderTextColor={colors.textTertiary}
                 value={customFrom}
                 onChangeText={setCustomFrom}
               />
               <TextInput
                 style={[styles.dateInp, { color: colors.text, borderColor: colors.border, backgroundColor: colors.inputBg }]}
-                placeholder="To"
+                placeholder={t('common.back')}
                 placeholderTextColor={colors.textTertiary}
                 value={customTo}
                 onChangeText={setCustomTo}
@@ -574,14 +576,14 @@ export default function DriverEarningsScreen() {
                 style={[styles.applyBtn, { backgroundColor: colors.primary }]}
                 onPress={() => {
                   if (!customFrom || !customTo) {
-                    Alert.alert('Dates', 'Enter both from and to dates.');
+                    Alert.alert(t('common.error'), t('common.enterValidAmount'));
                     return;
                   }
                   setPreset('custom');
                   void loadEarnings();
                 }}
               >
-                <Text style={{ color: '#fff', fontWeight: '700' }}>Apply custom range</Text>
+                <Text style={{ color: '#fff', fontWeight: '700' }}>{t('common.confirm')}</Text>
               </TouchableOpacity>
             </View>
           )}
@@ -591,12 +593,12 @@ export default function DriverEarningsScreen() {
           ) : earnings ? (
             <View style={{ marginTop: 14 }}>
               <View style={[styles.totalBanner, { backgroundColor: colors.surfaceVariant }]}>
-                <Text style={{ color: colors.textSecondary, fontSize: 13 }}>Total in filter</Text>
+                <Text style={{ color: colors.textSecondary, fontSize: 13 }}>{t('driverEarnings.total')}</Text>
                 <Text style={{ color: colors.text, fontSize: 22, fontWeight: '800' }}>
                   {displayTotal.toFixed(2)} {earnings.currency}
                 </Text>
                 <Text style={{ color: colors.textTertiary, fontSize: 11, marginTop: 4 }}>
-                  Cash {earnings.totals.cash.toFixed(2)} · Wallet {earnings.totals.wallet.toFixed(2)}
+                  {t('driverMyOrders.cash')} {earnings.totals.cash.toFixed(2)} · {t('driverMyOrders.wallet')} {earnings.totals.wallet.toFixed(2)}
                 </Text>
               </View>
               <FlatList
@@ -604,7 +606,7 @@ export default function DriverEarningsScreen() {
                 keyExtractor={(it) => it.id}
                 scrollEnabled={false}
                 ListEmptyComponent={
-                  <Text style={{ color: colors.textTertiary, marginTop: 12 }}>No rows in this period.</Text>
+                  <Text style={{ color: colors.textTertiary, marginTop: 12 }}>{t('driverEarnings.empty')}</Text>
                 }
                 renderItem={({ item }) => (
                   <View style={[styles.rowLine, { borderBottomColor: colors.border }]}>
@@ -627,9 +629,9 @@ export default function DriverEarningsScreen() {
         </View>
 
         <View style={[styles.panel, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          <Text style={[styles.sectionTitle, { color: colors.text }]}>Request payout (coins → cash / bank)</Text>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>{t('wallet.requestWithdrawal')}</Text>
           <Text style={[styles.hint, { color: colors.textSecondary }]}>
-            Support will process manually. Amount cannot exceed your available balance.
+            {t('wallet.insufficientBalanceBody')}
           </Text>
           <TouchableOpacity
             style={[styles.primaryBtn, { backgroundColor: colors.primary }, balance <= 0 && { opacity: 0.45 }]}
@@ -639,16 +641,16 @@ export default function DriverEarningsScreen() {
               setWdModal(true);
             }}
           >
-            <Text style={styles.primaryBtnText}>New withdrawal request</Text>
+            <Text style={styles.primaryBtnText}>{t('wallet.requestWithdrawal')}</Text>
           </TouchableOpacity>
           {withdrawals.length > 0 && (
             <View style={{ marginTop: 14 }}>
-              <Text style={{ color: colors.text, fontWeight: '700', marginBottom: 8 }}>Your requests</Text>
+              <Text style={{ color: colors.text, fontWeight: '700', marginBottom: 8 }}>{t('driverTransactions.title')}</Text>
               {withdrawals.map((w) => (
                 <View key={w.id} style={[styles.wdRow, { borderColor: colors.border }]}>
                   <View style={{ flex: 1 }}>
                     <Text style={{ color: colors.text, fontWeight: '800', fontSize: 18 }}>
-                      {w.amount.toFixed(2)} <Text style={{ fontSize: 14, fontWeight: '600', color: colors.textSecondary }}>Coins</Text>
+                      {w.amount.toFixed(2)} <Text style={{ fontSize: 14, fontWeight: '600', color: colors.textSecondary }}>{t('wallet.coins')}</Text>
                     </Text>
                     <Text style={{ color: colors.textSecondary, fontSize: 12, marginTop: 4 }}>
                       {w.payoutMethod}
@@ -661,17 +663,17 @@ export default function DriverEarningsScreen() {
                     ) : null}
                     {(w.feeAmount ?? 0) > 0 ? (
                       <Text style={{ color: colors.textTertiary, fontSize: 11, marginTop: 4 }}>
-                        Fee: {(w.feeAmount ?? 0).toFixed(2)} coins
+                        {t('orderDetail.fee')}: {(w.feeAmount ?? 0).toFixed(2)} {t('wallet.coins').toLowerCase()}
                       </Text>
                     ) : null}
                     {w.descriptionFromStaff ? (
                       <Text style={{ color: colors.textSecondary, fontSize: 11, marginTop: 4 }}>
-                        Note from support: {w.descriptionFromStaff}
+                        {t('support.title')}: {w.descriptionFromStaff}
                       </Text>
                     ) : null}
                     {w.status === 'REJECTED' && w.rejectionReason ? (
                       <Text style={{ color: '#b91c1c', fontSize: 11, marginTop: 4, fontWeight: '600' }}>
-                        Rejected: {w.rejectionReason}
+                        {t('driverDocuments.statusRejected')}: {w.rejectionReason}
                       </Text>
                     ) : null}
                   </View>
@@ -682,7 +684,7 @@ export default function DriverEarningsScreen() {
                         <ActivityIndicator color={colors.primary} />
                       ) : (
                         <TouchableOpacity onPress={() => cancelWithdrawalRequest(w.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                          <Text style={{ color: '#b91c1c', fontWeight: '700', fontSize: 13 }}>Cancel</Text>
+                          <Text style={{ color: '#b91c1c', fontWeight: '700', fontSize: 13 }}>{t('common.cancel')}</Text>
                         </TouchableOpacity>
                       )
                     ) : null}
@@ -694,14 +696,14 @@ export default function DriverEarningsScreen() {
         </View>
 
         <View style={[styles.panel, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          <Text style={[styles.sectionTitle, { color: colors.text }]}>More</Text>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>{t('common.menu')}</Text>
           <TouchableOpacity
             style={[styles.actionRow, { backgroundColor: colors.surfaceVariant }]}
             onPress={() => push('/(driver)/transactions')}
           >
             <Ionicons name="receipt-outline" size={22} color={colors.primary} />
             <View style={{ flex: 1 }}>
-              <Text style={[styles.actionTitle, { color: colors.text }]}>Full transaction history</Text>
+              <Text style={[styles.actionTitle, { color: colors.text }]}>{t('wallet.viewTransactionHistory')}</Text>
             </View>
             <Ionicons name="chevron-forward" size={20} color={colors.textTertiary} />
           </TouchableOpacity>
@@ -718,11 +720,11 @@ export default function DriverEarningsScreen() {
             <View style={[styles.modalCard, { backgroundColor: colors.card }]}>
               {wdStep === 'form' ? (
                 <>
-                  <Text style={[styles.modalTitle, { color: colors.text }]}>Withdrawal request</Text>
+                  <Text style={[styles.modalTitle, { color: colors.text }]}>{t('wallet.requestWithdrawal')}</Text>
                   <Text style={{ color: colors.textTertiary, marginBottom: 10, fontSize: 13 }}>
-                    Account balance {balance.toFixed(2)} Coins
+                    {t('customerProfile.accountBalance')} {balance.toFixed(2)} {t('wallet.coins')}
                   </Text>
-                  <Text style={{ color: colors.text, fontWeight: '600' }}>Amount</Text>
+                  <Text style={{ color: colors.text, fontWeight: '600' }}>{t('wallet.amountCoins')}</Text>
                   <TextInput
                     style={[styles.dateInp, { color: colors.text, borderColor: colors.border }]}
                     keyboardType="decimal-pad"
@@ -731,58 +733,58 @@ export default function DriverEarningsScreen() {
                     placeholder="0.00"
                     placeholderTextColor={colors.textTertiary}
                   />
-                  <Text style={{ color: colors.text, fontWeight: '600', marginTop: 10 }}>Receive as</Text>
+                  <Text style={{ color: colors.text, fontWeight: '600', marginTop: 10 }}>{t('wallet.receiveAs')}</Text>
                   <View style={styles.chipRow}>
                     <TouchableOpacity
                       style={[styles.chip, wdPayout === 'BANK_TRANSFER' && { backgroundColor: colors.primary }]}
                       onPress={() => setWdPayout('BANK_TRANSFER')}
                     >
-                      <Text style={{ color: wdPayout === 'BANK_TRANSFER' ? '#fff' : colors.text, fontWeight: '700' }}>Bank</Text>
+                      <Text style={{ color: wdPayout === 'BANK_TRANSFER' ? '#fff' : colors.text, fontWeight: '700' }}>{t('wallet.bank')}</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
                       style={[styles.chip, wdPayout === 'CASH' && { backgroundColor: colors.primary }]}
                       onPress={() => setWdPayout('CASH')}
                     >
-                      <Text style={{ color: wdPayout === 'CASH' ? '#fff' : colors.text, fontWeight: '700' }}>Cash</Text>
+                      <Text style={{ color: wdPayout === 'CASH' ? '#fff' : colors.text, fontWeight: '700' }}>{t('wallet.cash')}</Text>
                     </TouchableOpacity>
                   </View>
                   {wdPayout === 'BANK_TRANSFER' && (
                     <>
                       <Text style={{ color: colors.textSecondary, fontSize: 12, marginTop: 8, marginBottom: 6 }}>
-                        Bank transfers may take a few business days after we send the payment.
+                        {t('bankDetails.notes')}
                       </Text>
-                      <Text style={{ color: colors.text, fontWeight: '600', marginTop: 6 }}>Account holder name</Text>
+                      <Text style={{ color: colors.text, fontWeight: '600', marginTop: 6 }}>{t('bankDetails.accountHolder')}</Text>
                       <TextInput
                         style={[styles.dateInp, { color: colors.text, borderColor: colors.border }]}
                         value={wdBankHolder}
                         onChangeText={setWdBankHolder}
-                        placeholder="Full name"
+                        placeholder={t('bankDetails.accountHolder')}
                         placeholderTextColor={colors.textTertiary}
                       />
-                      <Text style={{ color: colors.text, fontWeight: '600', marginTop: 8 }}>Bank name</Text>
+                      <Text style={{ color: colors.text, fontWeight: '600', marginTop: 8 }}>{t('bankDetails.bankName')}</Text>
                       <TextInput
                         style={[styles.dateInp, { color: colors.text, borderColor: colors.border }]}
                         value={wdBankName}
                         onChangeText={setWdBankName}
-                        placeholder="Bank"
+                        placeholder={t('bankDetails.bankName')}
                         placeholderTextColor={colors.textTertiary}
                       />
-                      <Text style={{ color: colors.text, fontWeight: '600', marginTop: 8 }}>IBAN / RIB / account number</Text>
+                      <Text style={{ color: colors.text, fontWeight: '600', marginTop: 8 }}>{t('bankDetails.iban')} / {t('bankDetails.rib')}</Text>
                       <TextInput
                         style={[styles.dateInp, { color: colors.text, borderColor: colors.border }]}
                         value={wdBankRef}
                         onChangeText={setWdBankRef}
-                        placeholder="Payout reference"
+                        placeholder={t('bankDetails.iban')}
                         placeholderTextColor={colors.textTertiary}
                         autoCapitalize="characters"
                       />
                       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 10 }}>
-                        <Text style={{ color: colors.text, fontWeight: '600', flex: 1 }}>Save bank details for next time</Text>
+                        <Text style={{ color: colors.text, fontWeight: '600', flex: 1 }}>{t('common.save')}</Text>
                         <Switch value={wdSaveBank} onValueChange={setWdSaveBank} />
                       </View>
                     </>
                   )}
-                  <Text style={{ color: colors.text, fontWeight: '600', marginTop: 10 }}>Note (optional)</Text>
+                  <Text style={{ color: colors.text, fontWeight: '600', marginTop: 10 }}>{t('bankDetails.notes')} ({t('common.optional')})</Text>
                   <TextInput
                     style={[styles.dateInp, { height: 72, textAlignVertical: 'top', color: colors.text, borderColor: colors.border }]}
                     multiline
@@ -803,7 +805,7 @@ export default function DriverEarningsScreen() {
                         setWdSaveBank(false);
                       }}
                     >
-                      <Text style={{ color: colors.text, fontWeight: '700' }}>Cancel</Text>
+                      <Text style={{ color: colors.text, fontWeight: '700' }}>{t('common.cancel')}</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
                       style={[styles.primaryBtn, { flex: 1, marginTop: 0 }, wdQuoteLoading && { opacity: 0.6 }]}
@@ -813,29 +815,29 @@ export default function DriverEarningsScreen() {
                       {wdQuoteLoading ? (
                         <ActivityIndicator color="#fff" />
                       ) : (
-                        <Text style={styles.primaryBtnText}>Review request</Text>
+                        <Text style={styles.primaryBtnText}>{t('common.next')}</Text>
                       )}
                     </TouchableOpacity>
                   </View>
                 </>
               ) : (
                 <>
-                  <Text style={[styles.modalTitle, { color: colors.text }]}>Confirm withdrawal</Text>
-                  <Text style={{ color: colors.textSecondary, fontSize: 13, marginTop: 4 }}>From your account</Text>
+                  <Text style={[styles.modalTitle, { color: colors.text }]}>{t('common.confirm')}</Text>
+                  <Text style={{ color: colors.textSecondary, fontSize: 13, marginTop: 4 }}>{t('customerProfile.accountBalance')}</Text>
                   <Text style={{ color: colors.text, fontSize: 32, fontWeight: '800', marginTop: 6 }}>
                     {parseFloat((wdAmount || '').replace(',', '.') || '0').toFixed(2)}{' '}
-                    <Text style={{ fontSize: 18, fontWeight: '600', color: colors.textSecondary }}>Coins</Text>
+                    <Text style={{ fontSize: 18, fontWeight: '600', color: colors.textSecondary }}>{t('wallet.coins')}</Text>
                   </Text>
                   {wdQuote && wdQuote.feeCoins > 0 ? (
                     <Text style={{ color: colors.textSecondary, fontSize: 13, marginTop: 6 }}>
-                      Fee: {wdQuote.feeCoins.toFixed(2)} coins
+                      {t('orderDetail.fee')}: {wdQuote.feeCoins.toFixed(2)} {t('wallet.coins').toLowerCase()}
                       {wdQuote.feeBps > 0 ? ` (${wdQuote.feeBps / 100}%)` : ''}
                     </Text>
                   ) : null}
-                  <Text style={{ color: colors.textSecondary, fontSize: 13, marginTop: 10 }}>You receive</Text>
+                  <Text style={{ color: colors.textSecondary, fontSize: 13, marginTop: 10 }}>{t('buyCoins.youReceive')}</Text>
                   <Text style={{ color: colors.text, fontSize: 28, fontWeight: '800', marginTop: 4 }}>
                     {(wdQuote?.netPayoutCoins ?? parseFloat((wdAmount || '').replace(',', '.') || '0')).toFixed(2)}{' '}
-                    <Text style={{ fontSize: 16, fontWeight: '600', color: colors.textSecondary }}>Coins</Text>
+                    <Text style={{ fontSize: 16, fontWeight: '600', color: colors.textSecondary }}>{t('wallet.coins')}</Text>
                   </Text>
                   {wdQuote?.amountFiat != null ? (
                     <Text style={{ color: colors.textTertiary, fontSize: 14, marginTop: 2 }}>
@@ -843,14 +845,14 @@ export default function DriverEarningsScreen() {
                     </Text>
                   ) : null}
                   <Text style={{ color: colors.textTertiary, fontSize: 13, marginTop: 10 }}>
-                    Account balance {balance.toFixed(2)} Coins
+                    {t('customerProfile.accountBalance')} {balance.toFixed(2)} {t('wallet.coins')}
                   </Text>
                   <Text style={{ color: colors.textSecondary, fontSize: 13, marginTop: 8 }}>
-                    {wdPayout === 'CASH' ? 'Cash pickup' : 'Bank transfer'}
+                    {wdPayout === 'CASH' ? t('wallet.cash') : t('wallet.bank')}
                     {wdPayout === 'BANK_TRANSFER' && wdBankName.trim() ? ` · ${wdBankName.trim()}` : ''}
                   </Text>
                   {wdNote.trim() ? (
-                    <Text style={{ color: colors.textTertiary, fontSize: 13, marginTop: 6 }}>Note: {wdNote.trim()}</Text>
+                    <Text style={{ color: colors.textTertiary, fontSize: 13, marginTop: 6 }}>{t('bankDetails.notes')}: {wdNote.trim()}</Text>
                   ) : null}
                   <View style={{ flexDirection: 'row', gap: 10, marginTop: 18 }}>
                     <TouchableOpacity
@@ -861,14 +863,14 @@ export default function DriverEarningsScreen() {
                       }}
                       disabled={wdBusy}
                     >
-                      <Text style={{ color: colors.text, fontWeight: '700' }}>Back</Text>
+                      <Text style={{ color: colors.text, fontWeight: '700' }}>{t('common.back')}</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
                       style={[styles.primaryBtn, { flex: 1, marginTop: 0 }, wdBusy && { opacity: 0.6 }]}
                       onPress={submitWithdraw}
                       disabled={wdBusy}
                     >
-                      {wdBusy ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryBtnText}>Confirm request</Text>}
+                      {wdBusy ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryBtnText}>{t('common.confirm')}</Text>}
                     </TouchableOpacity>
                   </View>
                 </>

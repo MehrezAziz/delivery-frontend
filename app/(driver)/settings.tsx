@@ -5,13 +5,18 @@ import { useFocusEffect } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Clipboard from 'expo-clipboard';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import { useTheme } from '../../contexts/ThemeContext';
+import { useAppNavigation } from '../../contexts/AppNavigationContext';
 import { securityService, type SecurityTier } from '../../services/api/security.service';
 import { SecurityTierPoles } from '../../components/settings/SecurityTierPoles';
 import { GameEntrySection } from '../../components/games/GameEntrySection';
+import { LanguagePicker } from '../../components/settings/LanguagePicker';
 
 export default function DriverSettingsScreen() {
   const router = useRouter();
+  const { push } = useAppNavigation();
+  const { t } = useTranslation();
   const { colors, isDark, toggleTheme } = useTheme();
   const [userId, setUserId] = useState<string | null>(null);
   const [securityTier, setSecurityTier] = useState<SecurityTier | null>(null);
@@ -64,7 +69,7 @@ export default function DriverSettingsScreen() {
         idCopyHideTimerRef.current = null;
       }, 3000);
     } catch {
-      Alert.alert('Error', 'Failed to copy user ID');
+      Alert.alert(t('common.error'), t('common.failedToCopyId'));
     }
   };
 
@@ -99,14 +104,14 @@ export default function DriverSettingsScreen() {
       params: { returnTo: 'settings' },
     } as never);
 
-  const actionItems: { label: string; onPress: () => void }[] = [
-    { label: 'Edit profile', onPress: goEditProfile },
-    { label: 'Notification settings', onPress: () => push('/(driver)/notifications-settings') },
-    { label: 'Security', onPress: goSecurity },
-    { label: 'My documents', onPress: goDocuments },
-    { label: 'My addresses', onPress: goAddresses },
-    { label: 'Restrictions', onPress: goRestrictions },
-    { label: 'Payout bank details', onPress: goBankDetails },
+  const actionItems: { key: string; label: string; onPress: () => void }[] = [
+    { key: 'editProfile', label: t('driverSettings.editProfile'), onPress: goEditProfile },
+    { key: 'notificationSettings', label: t('driverSettings.notificationSettings'), onPress: () => push('/(driver)/notifications-settings') },
+    { key: 'security', label: t('driverSettings.security'), onPress: goSecurity },
+    { key: 'myDocuments', label: t('driverSettings.myDocuments'), onPress: goDocuments },
+    { key: 'myAddresses', label: t('driverSettings.myAddresses'), onPress: goAddresses },
+    { key: 'restrictions', label: t('driverSettings.restrictions'), onPress: goRestrictions },
+    { key: 'payoutBankDetails', label: t('driverSettings.payoutBankDetails'), onPress: goBankDetails },
   ];
 
   return (
@@ -118,35 +123,38 @@ export default function DriverSettingsScreen() {
       <View style={[styles.group, { backgroundColor: colors.card, borderColor: colors.border }]}>
         {actionItems.map((item) => (
           <TouchableOpacity
-            key={item.label}
+            key={item.key}
             style={[styles.linkRow, { borderBottomColor: colors.border }]}
             onPress={item.onPress}
             activeOpacity={0.7}
           >
             <Text style={[styles.linkLabel, { color: colors.text }]}>{item.label}</Text>
             <View style={styles.linkRowRight}>
-              {item.label === 'Security' && securityTier != null ? (
+              {item.key === 'security' && securityTier != null ? (
                 <SecurityTierPoles tier={securityTier} colors={colors} compact />
               ) : null}
               <Text style={[styles.chevron, { color: colors.textTertiary }]}>›</Text>
             </View>
           </TouchableOpacity>
         ))}
+        <LanguagePicker />
         <View style={[styles.linkRow, styles.linkRowLast, { borderBottomColor: colors.border }]}>
-          <Text style={[styles.linkLabel, { color: colors.text }]}>Appearance</Text>
+          <Text style={[styles.linkLabel, { color: colors.text }]}>{t('driverSettings.appearance')}</Text>
           <TouchableOpacity
             onPress={toggleTheme}
             activeOpacity={0.7}
             hitSlop={{ top: 12, bottom: 12, left: 10, right: 8 }}
             accessibilityRole="button"
-            accessibilityLabel={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+            accessibilityLabel={isDark ? t('customerSettings.switchToLight') : t('customerSettings.switchToDark')}
           >
-            <Text style={[styles.linkRight, { color: colors.textSecondary }]}>{isDark ? 'Dark' : 'Light'}</Text>
+            <Text style={[styles.linkRight, { color: colors.textSecondary }]}>
+              {isDark ? t('customerSettings.appearanceDark') : t('customerSettings.appearanceLight')}
+            </Text>
           </TouchableOpacity>
         </View>
       </View>
 
-      <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>Account</Text>
+      <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>{t('driverSettings.account')}</Text>
       <View style={[styles.group, { backgroundColor: colors.card, borderColor: colors.border }]}>
         <TouchableOpacity
           style={[styles.idRow, { borderBottomColor: colors.border }]}
@@ -154,9 +162,9 @@ export default function DriverSettingsScreen() {
           activeOpacity={userId ? 0.65 : 1}
           disabled={!userId}
           accessibilityRole="button"
-          accessibilityLabel="Copy ID"
+          accessibilityLabel={t('common.copyId')}
         >
-          <Text style={[styles.linkLabel, { color: colors.text }]}>ID</Text>
+          <Text style={[styles.linkLabel, { color: colors.text }]}>{t('driverSettings.idLabel')}</Text>
           <View style={styles.idRowRight}>
             <Text style={[styles.idValue, { color: colors.textSecondary }]} numberOfLines={1} selectable>
               {userId ?? '—'}
@@ -165,7 +173,7 @@ export default function DriverSettingsScreen() {
           </View>
         </TouchableOpacity>
         {showIdCopied ? (
-          <Text style={[styles.idCopiedHint, { color: colors.success }]}>ID copied</Text>
+          <Text style={[styles.idCopiedHint, { color: colors.success }]}>{t('common.idCopied')}</Text>
         ) : null}
       </View>
     </ScrollView>

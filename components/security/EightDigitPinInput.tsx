@@ -1,5 +1,6 @@
 import { useRef, useEffect } from 'react';
 import { View, Text, TextInput, StyleSheet, Pressable } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import type { ThemeColors } from '../../contexts/ThemeContext';
 
 type Props = {
@@ -25,6 +26,7 @@ export function EightDigitPinInput({
   focusNonce = 0,
   onFilled,
 }: Props) {
+  const { t } = useTranslation();
   const inputRef = useRef<TextInput>(null);
   const safe = value.replace(/\D/g, '').slice(0, 8);
   const slots = Array.from({ length: 8 }, (_, i) => safe[i]);
@@ -57,7 +59,7 @@ export function EightDigitPinInput({
         editable={!disabled}
         showSoftInputOnFocus
         style={styles.hidden}
-        accessibilityLabel="8 digit PIN"
+        accessibilityLabel={t('security.eightDigitPin')}
       />
       <View style={styles.row}>
         {slots.map((ch, i) => {

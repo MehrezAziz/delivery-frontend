@@ -13,6 +13,7 @@ import {
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useTranslation } from 'react-i18next';
 import { useTheme } from '../../contexts/ThemeContext';
 import {
   ensurePhoneCountriesLoaded,
@@ -42,6 +43,7 @@ const GATE_MAX_ATTEMPTS = 3;
 export default function CustomerEditProfileScreen() {
   const router = useRouter();
   const { colors } = useTheme();
+  const { t } = useTranslation();
   const [feedback, setFeedback] = useState<{
     variant: 'success' | 'error';
     title: string;
@@ -69,8 +71,8 @@ export default function CustomerEditProfileScreen() {
   const [referralApplying, setReferralApplying] = useState(false);
   /** Device biometrics enrolled — offered before account password */
   const [canUseBiometric, setCanUseBiometric] = useState(false);
-  const [biometricPrimaryLabel, setBiometricPrimaryLabel] = useState('Verify with biometrics');
-  const [biometricSwitchLinkLabel, setBiometricSwitchLinkLabel] = useState('Use biometrics');
+  const [biometricPrimaryLabel, setBiometricPrimaryLabel] = useState('');
+  const [biometricSwitchLinkLabel, setBiometricSwitchLinkLabel] = useState('');
   const [preferPassword, setPreferPassword] = useState(false);
   const [bioAttemptsLeft, setBioAttemptsLeft] = useState(GATE_MAX_ATTEMPTS);
   const [pwdAttemptsLeft, setPwdAttemptsLeft] = useState(GATE_MAX_ATTEMPTS);
@@ -118,7 +120,7 @@ export default function CustomerEditProfileScreen() {
         setCanUseBiometric(false);
       } else {
         let bioOk = false;
-        let label = 'Verify with biometrics';
+        let label = t('security.biometrics');
         const LA = await getLocalAuthentication();
         if (LA) {
           try {
@@ -158,8 +160,8 @@ export default function CustomerEditProfileScreen() {
         setGateHint(null);
         setFeedback({
           variant: 'error',
-          title: 'Biometrics unavailable',
-          message: 'This app build doesn’t include biometric support yet. Rebuild the app, or use your password.',
+          title: t('security.biometricFailed'),
+          message: t('security.biometricFailed'),
           okNavigates: false,
         });
         return;
@@ -171,15 +173,15 @@ export default function CustomerEditProfileScreen() {
         setGateHint(null);
         setFeedback({
           variant: 'error',
-          title: 'Biometrics unavailable',
-          message: 'No biometric login is set up on this device. Use your password instead.',
+          title: t('security.biometricFailed'),
+          message: t('security.biometricFailed'),
           okNavigates: false,
         });
         return;
       }
       const auth = await LA.authenticateAsync({
-        promptMessage: 'Confirm it’s you to edit your profile',
-        cancelLabel: 'Cancel',
+        promptMessage: t('editProfile.verifyIdentity'),
+        cancelLabel: t('common.cancel'),
         disableDeviceFallback: true,
       });
       if (auth.success) {
@@ -197,8 +199,8 @@ export default function CustomerEditProfileScreen() {
         setGateHint(null);
         setFeedback({
           variant: 'error',
-          title: 'Biometric attempts used',
-          message: 'You reached 3 failed biometric attempts. Use your password to continue.',
+          title: t('security.biometricFailed'),
+          message: t('security.biometricFailed'),
           okNavigates: false,
         });
         setPreferPassword(true);
@@ -208,8 +210,8 @@ export default function CustomerEditProfileScreen() {
         setBioAttemptsLeft(next);
         setGateHint(
           auth.error === 'lockout'
-            ? 'Biometric locked. Try again later or use your password.'
-            : `${next} biometric attempt${next === 1 ? '' : 's'} remaining.`,
+            ? t('security.biometricFailed')
+            : `${next} ${t('security.biometrics')}`,
         );
       }
     } catch (e: any) {
@@ -218,8 +220,8 @@ export default function CustomerEditProfileScreen() {
         setGateHint(null);
         setFeedback({
           variant: 'error',
-          title: 'Biometric attempts used',
-          message: 'You reached 3 failed biometric attempts. Use your password to continue.',
+          title: t('security.biometricFailed'),
+          message: t('security.biometricFailed'),
           okNavigates: false,
         });
         setPreferPassword(true);
@@ -227,7 +229,7 @@ export default function CustomerEditProfileScreen() {
         setPwdAttemptsLeft(GATE_MAX_ATTEMPTS);
       } else {
         setBioAttemptsLeft(next);
-        setGateHint(`${next} biometric attempt${next === 1 ? '' : 's'} remaining.`);
+        setGateHint(`${next} ${t('security.biometrics')}`);
       }
     } finally {
       setVerifying(false);
@@ -256,7 +258,7 @@ export default function CustomerEditProfileScreen() {
       });
       if (!res.ok) {
         const d = await res.json();
-        throw new Error(d.message || 'Invalid password');
+        throw new Error(d.message || t('security.couldNotUnlock'));
       }
       setGateHint(null);
       setVerified(true);
@@ -268,23 +270,23 @@ export default function CustomerEditProfileScreen() {
         if (canUseBiometric) {
           setFeedback({
             variant: 'error',
-            title: 'Password attempts used',
-            message: 'You reached 3 failed password attempts. Use Face ID or fingerprint instead.',
+            title: t('security.couldNotUnlock'),
+            message: t('security.couldNotUnlock'),
             okNavigates: false,
           });
           setPreferPassword(false);
         } else {
           setFeedback({
             variant: 'error',
-            title: 'Password attempts used',
-            message: 'You reached 3 failed password attempts. Try again when you remember your password.',
+            title: t('security.couldNotUnlock'),
+            message: t('security.couldNotUnlock'),
             okNavigates: false,
           });
         }
         setPwdAttemptsLeft(GATE_MAX_ATTEMPTS);
         setBioAttemptsLeft(GATE_MAX_ATTEMPTS);
       } else {
-        setGateHint(`Incorrect password. ${next} attempt${next === 1 ? '' : 's'} remaining.`);
+        setGateHint(`${t('security.couldNotUnlock')} ${next}`);
       }
     } finally {
       setVerifying(false);
@@ -302,20 +304,20 @@ export default function CustomerEditProfileScreen() {
         body: JSON.stringify({ code: referralCodeInput.trim() }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.message || 'Failed to apply referral code');
+      if (!res.ok) throw new Error(data.message || t('common.operationFailed'));
       setHasReferralCode(true);
       setReferralCodeInput('');
       setFeedback({
         variant: 'success',
-        title: 'Success',
-        message: 'Referral code applied successfully.',
+        title: t('common.success'),
+        message: t('common.success'),
         okNavigates: false,
       });
     } catch (e: any) {
       setFeedback({
         variant: 'error',
-        title: 'Could not apply code',
-        message: e.message || 'Failed to apply referral code',
+        title: t('common.error'),
+        message: e.message || t('common.operationFailed'),
         okNavigates: false,
       });
     } finally { setReferralApplying(false); }
@@ -325,8 +327,8 @@ export default function CustomerEditProfileScreen() {
     if (!selectedPhoneCountry) {
       setFeedback({
         variant: 'error',
-        title: 'Country required',
-        message: 'Please select a country for the phone number.',
+        title: t('common.required'),
+        message: t('common.required'),
         okNavigates: false,
       });
       return;
@@ -339,7 +341,7 @@ export default function CustomerEditProfileScreen() {
     if (!phoneCheck.ok) {
       setFeedback({
         variant: 'error',
-        title: 'Invalid phone',
+        title: t('common.error'),
         message: phoneCheck.message,
         okNavigates: false,
       });
@@ -361,18 +363,18 @@ export default function CustomerEditProfileScreen() {
         }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.message || 'Failed to update profile');
+      if (!res.ok) throw new Error(data.message || t('editProfile.saveFailed'));
       setFeedback({
         variant: 'success',
-        title: 'Profile updated',
-        message: 'Your changes have been saved.',
+        title: t('editProfile.saved'),
+        message: t('editProfile.saved'),
         okNavigates: true,
       });
     } catch (e: any) {
       setFeedback({
         variant: 'error',
-        title: 'Could not save',
-        message: e?.message || 'Failed to update profile. This phone number may already be in use.',
+        title: t('editProfile.saveFailed'),
+        message: e?.message || t('editProfile.saveFailed'),
         okNavigates: false,
       });
     } finally { setSaving(false); }
@@ -417,11 +419,11 @@ export default function CustomerEditProfileScreen() {
               color={colors.primary}
             />
           </View>
-          <Text style={[s.gateTitle, { color: colors.text }]}>Verify Your Identity</Text>
+          <Text style={[s.gateTitle, { color: colors.text }]}>{t('editProfile.verifyIdentity')}</Text>
           <Text style={[s.gateSub, { color: colors.textSecondary }]}>
             {showBiometricFirst
-              ? 'Confirm with your device to edit your profile.'
-              : 'Enter your account password to edit your profile.'}
+              ? t('editProfile.verifyIdentityBody')
+              : t('editProfile.verifyIdentityBody')}
           </Text>
 
           {showBiometricFirst ? (
@@ -447,7 +449,7 @@ export default function CustomerEditProfileScreen() {
                   }}
                   disabled={verifying}
                 >
-                  <Text style={[s.gateLinkText, { color: colors.primary }]}>Use password instead</Text>
+                  <Text style={[s.gateLinkText, { color: colors.primary }]}>{t('security.useAccountPasswordInstead')}</Text>
                 </TouchableOpacity>
               ) : null}
             </>
@@ -457,7 +459,7 @@ export default function CustomerEditProfileScreen() {
                 value={password}
                 onChangeText={setPassword}
                 colors={colors}
-                placeholder="Enter your password"
+                placeholder={t('auth.enterPassword')}
                 autoFocus
                 containerStyle={{ marginBottom: 16 }}
               />
@@ -466,7 +468,7 @@ export default function CustomerEditProfileScreen() {
                 onPress={handleVerify}
                 disabled={verifying || !password.trim()}
               >
-                {verifying ? <ActivityIndicator color="#fff" /> : <Text style={s.gateBtnText}>Verify</Text>}
+                {verifying ? <ActivityIndicator color="#fff" /> : <Text style={s.gateBtnText}>{t('editProfile.verifyIdentity')}</Text>}
               </TouchableOpacity>
               {gateHint ? (
                 <Text style={[s.gateHint, { color: colors.danger }]}>{gateHint}</Text>
@@ -504,10 +506,10 @@ export default function CustomerEditProfileScreen() {
         onOkPress={handleFeedbackOk}
       />
       <ScrollView style={{ flex: 1 }} contentContainerStyle={s.content}>
-        <Field label="First Name" value={firstName} onChange={setFirstName} colors={colors} />
-        <Field label="Last Name" value={secondName} onChange={setSecondName} colors={colors} />
+        <Field label={t('editProfile.firstName')} value={firstName} onChange={setFirstName} colors={colors} />
+        <Field label={t('editProfile.lastName')} value={secondName} onChange={setSecondName} colors={colors} />
         <View style={{ marginBottom: 16 }}>
-          <Text style={[s.fieldLabel, { color: colors.textSecondary }]}>Phone</Text>
+          <Text style={[s.fieldLabel, { color: colors.textSecondary }]}>{t('editProfile.phone')}</Text>
           <View style={[s.phoneRow, { borderColor: colors.border, backgroundColor: colors.inputBg }]}>
             <TouchableOpacity
               style={[s.countryCodeBtn, { borderRightColor: colors.border, backgroundColor: colors.surfaceVariant }]}
@@ -527,9 +529,9 @@ export default function CustomerEditProfileScreen() {
             />
           </View>
         </View>
-        <Field label="Email" value={email} onChange={setEmail} keyboardType="email-address" colors={colors} />
+        <Field label={t('editProfile.email')} value={email} onChange={setEmail} keyboardType="email-address" colors={colors} />
 
-        <Text style={[s.fieldLabel, { color: colors.textSecondary }]}>Gender</Text>
+        <Text style={[s.fieldLabel, { color: colors.textSecondary }]}>{t('auth.genderOptional')}</Text>
         <View style={{ flexDirection: 'row', gap: 10, marginBottom: 16 }}>
           {['MALE', 'FEMALE'].map(g => (
             <TouchableOpacity
@@ -541,7 +543,7 @@ export default function CustomerEditProfileScreen() {
               ]}
               onPress={() => setGender(g)}
             >
-              <Text style={[s.genderBtnText, { color: colors.text }, gender === g && { color: '#fff' }]}>{g}</Text>
+              <Text style={[s.genderBtnText, { color: colors.text }, gender === g && { color: '#fff' }]}>{g === 'MALE' ? t('auth.male') : t('auth.female')}</Text>
             </TouchableOpacity>
           ))}
         </View>
@@ -549,13 +551,13 @@ export default function CustomerEditProfileScreen() {
         {/* Referral Code Section */}
         {!hasReferralCode && (
           <View style={{ marginBottom: 16 }}>
-            <Text style={[s.fieldLabel, { color: colors.textSecondary }]}>Referral Code</Text>
+            <Text style={[s.fieldLabel, { color: colors.textSecondary }]}>{t('customerProfile.referrals')}</Text>
             <View style={{ flexDirection: 'row', gap: 10 }}>
               <TextInput
                 style={[s.input, { flex: 1, backgroundColor: colors.inputBg, borderColor: colors.border, color: colors.text }]}
                 value={referralCodeInput}
                 onChangeText={setReferralCodeInput}
-                placeholder="Enter a referral code"
+                placeholder={t('customerProfile.referrals')}
                 placeholderTextColor={colors.textTertiary}
                 autoCapitalize="characters"
               />
@@ -564,30 +566,30 @@ export default function CustomerEditProfileScreen() {
                 onPress={handleApplyReferralCode}
                 disabled={!referralCodeInput.trim() || referralApplying}
               >
-                {referralApplying ? <ActivityIndicator color="#fff" size="small" /> : <Text style={s.saveBtnText}>Apply</Text>}
+                {referralApplying ? <ActivityIndicator color="#fff" size="small" /> : <Text style={s.saveBtnText}>{t('common.submit')}</Text>}
               </TouchableOpacity>
             </View>
             <Text style={{ fontSize: 12, color: colors.textTertiary, marginTop: 4 }}>
-              You can only add a referral code once. It cannot be changed later.
+              {t('common.permanent')}
             </Text>
           </View>
         )}
         {hasReferralCode && (
           <View style={{ marginBottom: 16 }}>
-            <Text style={[s.fieldLabel, { color: colors.textSecondary }]}>Referral Code</Text>
-            <Text style={{ fontSize: 14, color: colors.success, fontWeight: '600' }}>✓ Referral code already applied</Text>
+            <Text style={[s.fieldLabel, { color: colors.textSecondary }]}>{t('customerProfile.referrals')}</Text>
+            <Text style={{ fontSize: 14, color: colors.success, fontWeight: '600' }}>{t('common.success')}</Text>
           </View>
         )}
 
         <TouchableOpacity style={[s.saveBtn, { backgroundColor: colors.primary }]} onPress={handleSave} disabled={saving}>
-          {saving ? <ActivityIndicator color="#fff" /> : <Text style={s.saveBtnText}>Save Changes</Text>}
+          {saving ? <ActivityIndicator color="#fff" /> : <Text style={s.saveBtnText}>{t('editProfile.save')}</Text>}
         </TouchableOpacity>
       </ScrollView>
       <Modal visible={showPhoneCountryModal} transparent animationType="slide" onRequestClose={() => setShowPhoneCountryModal(false)}>
         <View style={s.pickerOverlay}>
           <View style={[s.pickerCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <View style={[s.pickerHeader, { borderBottomColor: colors.border }]}>
-              <Text style={[s.pickerTitle, { color: colors.text }]}>Select country code</Text>
+              <Text style={[s.pickerTitle, { color: colors.text }]}>{t('common.select')}</Text>
               <TouchableOpacity onPress={() => setShowPhoneCountryModal(false)} style={s.pickerCloseBtn}>
                 <Text style={[s.pickerCloseText, { color: colors.textTertiary }]}>✕</Text>
               </TouchableOpacity>
@@ -596,7 +598,7 @@ export default function CustomerEditProfileScreen() {
               <Text style={s.pickerSearchIcon}>🔍</Text>
               <TextInput
                 style={[s.pickerSearchInput, { color: colors.text }]}
-                placeholder="Search country, ISO or code"
+                placeholder={t('common.search')}
                 placeholderTextColor={colors.textTertiary}
                 value={phoneCountrySearch}
                 onChangeText={setPhoneCountrySearch}

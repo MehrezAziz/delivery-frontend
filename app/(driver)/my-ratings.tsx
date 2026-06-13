@@ -4,13 +4,13 @@ import {
   RefreshControl, StyleSheet,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import { orderService } from '../../services/api/order.service';
 import { useTheme } from '../../contexts/ThemeContext';
 
-const STAR_LABELS = ['', 'Terrible', 'Very Bad', 'Bad', 'Poor', 'Below Avg', 'Average', 'Above Avg', 'Good', 'Very Good', 'Excellent'];
-
 export default function DriverMyRatingsScreen() {
   const { colors, isDark } = useTheme();
+  const { t } = useTranslation();
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -46,7 +46,7 @@ export default function DriverMyRatingsScreen() {
               ))}
             </View>
             <Text style={[s.summaryText, { color: colors.textSecondary }]}>
-              {data?.totalRatings || 0} ratings · {data?.completedOrders || 0} deliveries
+              {data?.totalRatings || 0} {t('myRatings.totalReviews')} · {data?.completedOrders || 0} {t('driverEarnings.completedDeliveries')}
             </Text>
           </View>
         </View>
@@ -55,8 +55,8 @@ export default function DriverMyRatingsScreen() {
         {ratings.length === 0 ? (
           <View style={s.empty}>
             <Ionicons name="star-outline" size={48} color={colors.textTertiary} />
-            <Text style={[s.emptyTitle, { color: colors.textTertiary }]}>No ratings yet</Text>
-            <Text style={s.emptySub}>Complete deliveries to receive ratings</Text>
+            <Text style={[s.emptyTitle, { color: colors.textTertiary }]}>{t('myRatings.empty')}</Text>
+            <Text style={s.emptySub}>{t('myRatings.breakdown')}</Text>
           </View>
         ) : (
           ratings.map((r: any) => (

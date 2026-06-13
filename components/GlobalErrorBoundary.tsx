@@ -1,5 +1,6 @@
 import React from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import i18n from '../i18n';
 
 type Props = {
   children: React.ReactNode;
@@ -19,7 +20,7 @@ export default class GlobalErrorBoundary extends React.Component<Props, State> {
   static getDerivedStateFromError(error: Error): State {
     return {
       hasError: true,
-      message: error?.message || 'Unexpected app error',
+      message: error?.message || i18n.t('globalErrors.unexpectedAppErrorBadge'),
     };
   }
 
@@ -37,13 +38,11 @@ export default class GlobalErrorBoundary extends React.Component<Props, State> {
     return (
       <View style={s.wrap}>
         <Text style={s.emoji}>😵‍💫</Text>
-        <Text style={s.title}>Oops! Something went wrong</Text>
-        <Text style={s.text}>
-          We hit an unexpected issue. Please tap retry to continue. If this keeps happening, check your internet and try again.
-        </Text>
+        <Text style={s.title}>{i18n.t('globalErrorBoundary.title')}</Text>
+        <Text style={s.text}>{i18n.t('globalErrorBoundary.body')}</Text>
         <Text style={s.reason}>{this.state.message}</Text>
         <TouchableOpacity style={s.button} onPress={this.handleRetry} activeOpacity={0.85}>
-          <Text style={s.buttonText}>Retry</Text>
+          <Text style={s.buttonText}>{i18n.t('globalErrorBoundary.retry')}</Text>
         </TouchableOpacity>
       </View>
     );

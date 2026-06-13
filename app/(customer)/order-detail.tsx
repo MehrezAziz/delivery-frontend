@@ -5,6 +5,7 @@ import {
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { clampMinSchedule } from '../../utils/schedPublishHelpers';
 import { pickScheduleDateTimeAndroid } from '../../utils/scheduleDateTimePicker';
@@ -49,6 +50,7 @@ const STAR_LABELS = ['Terrible', 'Very Bad', 'Bad', 'Poor', 'Below Average', 'Av
 
 export default function OrderDetailScreen() {
   const router = useRouter();
+  const { t } = useTranslation();
   const { orderId: orderIdParam, scrollTo } = useLocalSearchParams<{ orderId: string; scrollTo?: string }>();
   const orderId = Array.isArray(orderIdParam) ? orderIdParam[0] : orderIdParam;
   const { unread: chatUnread } = useOrderChatUnread(orderId);
@@ -82,9 +84,26 @@ export default function OrderDetailScreen() {
       const data = await orderService.getOrder(orderId);
       setOrder(data);
     } catch (e: any) {
-      Alert.alert('Error', e.message || 'Failed to load order');
+      Alert.alert(t('common.error'), e.message || t('common.something_went_wrong'));
     } finally { setLoading(false); setRefreshing(false); }
-  }, [orderId]);
+  }, [orderId, t]);
+
+  const getStatusLabel = (status: string): string => {
+    switch (status) {
+      case 'PENDING_PUBLISH': return t('customerHome.status.Scheduled');
+      case 'SEARCHING_DRIVER': return t('customerHome.status.Searching');
+      case 'PENDING_CUSTOMER_APPROVAL': return t('orderDetail.waitingApproval');
+      case 'DRIVER_ASSIGNED': return t('customerHome.status.Assigned');
+      case 'DRIVER_ARRIVED': return t('customerHome.status.Arrived');
+      case 'PICKED_UP': return t('customerHome.status.PickedUp');
+      case 'DELIVERING': return t('customerHome.status.OnTheWay');
+      case 'DELIVERED': return t('orderDetail.delivered');
+      case 'CANCELLED': return t('orderDetail.cancelled');
+      case 'REFUNDED': return t('orderDetail.refunded');
+      case 'DISPUTED': return t('orderDetail.dispute');
+      default: return STATUS_META[status]?.label ?? status;
+    }
+  };
 
   useEffect(() => { loadOrder(); }, [loadOrder]);
 
@@ -139,8 +158,8 @@ export default function OrderDetailScreen() {
     if (prev != null && prev > 0 && rem === 0) void loadOrder();
   }, [order, nowTs, loadOrder]);
   useEffect(() => {
-    const t = setInterval(() => setNowTs(Date.now()), 1000);
-    return () => clearInterval(t);
+    const timer = setInterval(() => setNowTs(Date.now()), 1000);
+    return () => clearInterval(timer);
   }, []);
 
   // Deep-link support from notification actions
@@ -163,35 +182,34 @@ export default function OrderDetailScreen() {
   }, [order, scrollTo, driverCardY]);
 
   const handleCancel = () => {
-    Alert.alert('Cancel Order', 'Are you sure you want to cancel this order?', [
-      { text: 'No', style: 'cancel' },
-      { text: 'Yes, Cancel', style: 'destructive', onPress: async () => {
+    Alert.alert(t('orderDetail.cancelConfirm'), t('orderDetail.cancelConfirmBody'), [
+      { text: t('common.no'), style: 'cancel' },
+      { text: t('common.yes'), style: 'destructive', onPress: async () => {
         try {
-          await orderService.cancelOrder(orderId, 'Customer cancelled');
+          await orderService.cancelOrder(orderId, t('orderDetail.cancelled'));
           loadOrder();
-        } catch (e: any) { Alert.alert('Error', e.message); }
+        } catch (e: any) { Alert.alert(t('common.error'), e.message); }
       }},
     ]);
   };
 
   const handleChangePayment = (type: 'COD' | 'WALLET') => {
-    Alert.alert('Change Payment', `Switch to ${type === 'COD' ? 'Cash on Delivery' : 'Wallet'}?`, [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Confirm', onPress: async () => {
+    Alert.alert(t('orderDetail.paymentMethod'), `${type === 'COD' ? t('orderDetail.cash') : t('orderDetail.wallet')}?`, [
+      { text: t('common.cancel'), style: 'cancel' },
+      { text: t('common.confirm'), onPress: async () => {
         try {
           const updated = await orderService.changePaymentMethod(orderId, type);
           setOrder(updated);
-        } catch (e: any) { Alert.alert('Error', e.message); }
+        } catch (e: any) { Alert.alert(t('common.error'), e.message); }
       }},
     ]);
   };
 
   const handleAssistance = async () => {
     try {
-      const ticket = await orderService.requestAssistance(orderId, 'I need help with this order');
-      // Navigate directly to the support chat for this ticket
+      const ticket = await orderService.requestAssistance(orderId, t('support.describeIssue'));
       router.push(`/(customer)/support-chat?ticketId=${(ticket as any).id}`);
-    } catch (e: any) { Alert.alert('Error', e.message); }
+    } catch (e: any) { Alert.alert(t('common.error'), e.message); }
   };
 
   const handleDispute = () => {
@@ -201,42 +219,42 @@ export default function OrderDetailScreen() {
 
   const submitDispute = async () => {
     if (!disputeReason.trim()) {
-      Alert.alert('Error', 'Please provide a reason for the dispute');
+      Alert.alert(t('common.error'), t('orderDetail.disputeReason'));
       return;
     }
     setDisputeModalVisible(false);
     try {
       await orderService.createDispute(orderId, disputeReason.trim());
-      Alert.alert('Dispute Created', 'A customer service agent will review your case.');
+      Alert.alert(t('orderDetail.disputeSubmitted'), t('support.submittedBody'));
       loadOrder();
-    } catch (e: any) { Alert.alert('Error', e.message); }
+    } catch (e: any) { Alert.alert(t('common.error'), e.message); }
   };
 
   const submitRating = async () => {
     if (ratingScore === null) {
-      Alert.alert('Error', 'Please select a score');
+      Alert.alert(t('common.error'), t('orderDetail.rateExperience'));
       return;
     }
     setRatingSubmitting(true);
     try {
       await orderService.rateOrder(orderId, ratingScore, ratingComment.trim() || undefined);
-      Alert.alert('Thank you!', 'Your rating has been submitted.');
+      Alert.alert(t('common.success'), t('orderDetail.ratingSubmitted'));
       loadOrder();
     } catch (e: any) {
-      Alert.alert('Error', e.message || 'Failed to submit rating');
+      Alert.alert(t('common.error'), e.message || t('orderDetail.ratingFailed'));
     } finally {
       setRatingSubmitting(false);
     }
   };
 
   const handleCancelDispute = () => {
-    Alert.alert('Cancel Dispute', 'Are you sure you want to cancel this dispute?', [
-      { text: 'No', style: 'cancel' },
-      { text: 'Yes, Cancel', style: 'destructive', onPress: async () => {
+    Alert.alert(t('orderDetail.dispute'), t('orderDetail.cancelConfirmBody'), [
+      { text: t('common.no'), style: 'cancel' },
+      { text: t('common.yes'), style: 'destructive', onPress: async () => {
         try {
           await orderService.cancelDispute(orderId);
           loadOrder();
-        } catch (e: any) { Alert.alert('Error', e.message); }
+        } catch (e: any) { Alert.alert(t('common.error'), e.message); }
       }},
     ]);
   };
@@ -248,7 +266,7 @@ export default function OrderDetailScreen() {
       setRejectReason('');
       loadOrder();
     } catch (e: any) {
-      Alert.alert('Error', e.message);
+      Alert.alert(t('common.error'), e.message);
     }
   };
 
@@ -259,11 +277,11 @@ export default function OrderDetailScreen() {
       return;
     }
     Alert.alert(
-      'Reject Driver',
-      'Are you sure? The order will go back to searching. This driver cannot accept this order again.',
+      t('orderDetail.rejectDriver'),
+      t('orderDetail.cancelConfirmBody'),
       [
-        { text: 'No', style: 'cancel' },
-        { text: 'Yes, Reject', style: 'destructive', onPress: () => submitRejectDriver(undefined) },
+        { text: t('common.no'), style: 'cancel' },
+        { text: t('common.yes'), style: 'destructive', onPress: () => submitRejectDriver(undefined) },
       ],
     );
   };
@@ -271,7 +289,7 @@ export default function OrderDetailScreen() {
   const confirmRejectArrived = () => {
     const r = rejectReason.trim();
     if (r.length < 10) {
-      Alert.alert('Reason required', 'Please explain in at least 10 characters. Support may review this.');
+      Alert.alert(t('common.required'), t('orderDetail.disputeReason'));
       return;
     }
     submitRejectDriver(r);
@@ -281,10 +299,10 @@ export default function OrderDetailScreen() {
     setNotifyLoading(true);
     try {
       const res = await orderService.notifyDriversUrgent(orderId);
-      Alert.alert('Sent', res.message || `We notified ${res.notifiedDrivers} drivers for you.`);
+      Alert.alert(t('common.success'), res.message || `${res.notifiedDrivers}`);
       loadOrder();
     } catch (e: any) {
-      Alert.alert('Cannot notify', e.message || 'Try again later');
+      Alert.alert(t('common.error'), e.message || t('common.tryAgain'));
     } finally {
       setNotifyLoading(false);
     }
@@ -294,7 +312,7 @@ export default function OrderDetailScreen() {
     try {
       await orderService.approveDriver(orderId);
       loadOrder();
-    } catch (e: any) { Alert.alert('Error', e.message); }
+    } catch (e: any) { Alert.alert(t('common.error'), e.message); }
   };
 
   const handleShowReviews = async () => {
@@ -302,7 +320,7 @@ export default function OrderDetailScreen() {
       const data = await orderService.getDriverReviews(orderId);
       setDriverReviews(data.reviews);
       setReviewsModalVisible(true);
-    } catch (e: any) { Alert.alert('Error', e.message || 'Failed to load reviews'); }
+    } catch (e: any) { Alert.alert(t('common.error'), e.message || t('common.something_went_wrong')); }
   };
 
   if (loading || !order) {
@@ -375,7 +393,7 @@ export default function OrderDetailScreen() {
       setScheduleIosOpen(false);
       void syncCustomerOrderTrackingFromOrder(updated);
     } catch (e: any) {
-      Alert.alert('Could not update', e?.message || 'Try again');
+      Alert.alert(t('common.error'), e?.message || t('common.tryAgain'));
     } finally {
       setScheduleSaving(false);
     }
@@ -386,7 +404,7 @@ export default function OrderDetailScreen() {
       <View style={[s.header, { backgroundColor: meta.color }]}>
         <View style={s.headerAssistRow}>
           <View style={{ flex: 1 }} />
-          <TouchableOpacity onPress={handleAssistance} style={s.headerBtn} accessibilityLabel="Help and support">
+          <TouchableOpacity onPress={handleAssistance} style={s.headerBtn} accessibilityLabel={t('support.contactSupport')}>
             <Ionicons name="headset-outline" size={20} color="#fff" />
           </TouchableOpacity>
         </View>
@@ -394,7 +412,7 @@ export default function OrderDetailScreen() {
           <View style={[s.statusIconCircle, { backgroundColor: 'rgba(255,255,255,0.2)' }]}>
             <Ionicons name={meta.icon as any} size={32} color="#fff" />
           </View>
-          <Text style={s.statusLabel}>{meta.label}</Text>
+          <Text style={s.statusLabel}>{getStatusLabel(order.status)}</Text>
           <Text style={s.statusOrderId}>#{order.id.slice(0, 8)}</Text>
         </View>
       </View>
@@ -407,16 +425,14 @@ export default function OrderDetailScreen() {
 
         {order.status === 'PENDING_PUBLISH' && order.scheduledPublishAt ? (
           <View style={[s.card, { backgroundColor: colors.card, marginBottom: 16 }]}>
-            <Text style={[s.cardTitle, { color: colors.text }]}>Scheduled go-live</Text>
+            <Text style={[s.cardTitle, { color: colors.text }]}>{t('customerHome.status.Scheduled')}</Text>
             <Text style={{ color: colors.textSecondary, fontSize: 14, lineHeight: 20, marginBottom: 14 }}>
-              Drivers will see this order on{' '}
               <Text style={{ fontWeight: '800', color: colors.text }}>
                 {new Date(order.scheduledPublishAt).toLocaleString(undefined, {
                   dateStyle: 'medium',
                   timeStyle: 'short',
                 })}
               </Text>
-              .
             </Text>
             <TouchableOpacity
               style={[s.actionBtn, { borderColor: colors.primary, backgroundColor: isDark ? 'rgba(14,165,233,0.15)' : '#e0f2fe' }]}
@@ -424,7 +440,7 @@ export default function OrderDetailScreen() {
               activeOpacity={0.8}
             >
               <Ionicons name="calendar-outline" size={20} color={colors.primary} />
-              <Text style={[s.actionTitle, { color: colors.primary }]}>Change date & time</Text>
+              <Text style={[s.actionTitle, { color: colors.primary }]}>{t('common.edit')}</Text>
             </TouchableOpacity>
           </View>
         ) : null}
@@ -432,7 +448,7 @@ export default function OrderDetailScreen() {
         {/* ── Progress Steps (only for active orders) ── */}
         {isActive && currentStepIndex >= 0 && (
           <View style={[s.card, { backgroundColor: colors.card }]}>
-            <Text style={[s.cardTitle, { color: colors.text }]}>Delivery progress</Text>
+            <Text style={[s.cardTitle, { color: colors.text }]}>{t('orderDetail.timeline')}</Text>
             <View style={s.progressOneLine}>
               {STATUS_FLOW.map((step, i) => {
                 const stepMeta = STATUS_META[step];
@@ -482,7 +498,7 @@ export default function OrderDetailScreen() {
                         done && !isCurrent && { color: colors.text },
                       ]}
                     >
-                      {stepMeta.label}
+                      {getStatusLabel(step)}
                     </Text>
                   </View>
                 );
@@ -493,13 +509,11 @@ export default function OrderDetailScreen() {
 
         {order.status === 'SEARCHING_DRIVER' && order.driverAvailability && (
           <View style={[s.card, { backgroundColor: colors.card }]}>
-            <Text style={[s.cardTitle, { color: colors.text }]}>Drivers nearby</Text>
+            <Text style={[s.cardTitle, { color: colors.text }]}>{t('orderDetail.driver')}</Text>
             <Text style={{ color: colors.textSecondary, marginBottom: 8 }}>
-              Available in your delegation:{' '}
               <Text style={{ fontWeight: '800', color: colors.text }}>{order.driverAvailability.availableInDelegation}</Text>
             </Text>
             <Text style={{ color: colors.textSecondary, marginBottom: 12 }}>
-              Approx. in same governorate (other delegations):{' '}
               <Text style={{ fontWeight: '800', color: colors.text }}>{order.driverAvailability.availableNearDelegationApprox}</Text>
             </Text>
             {order.urgentNotify && (
@@ -521,15 +535,15 @@ export default function OrderDetailScreen() {
                       color: order.urgentNotify.canStartNewCycle && !order.urgentNotify.cycleInProgress ? '#fff' : '#9ca3af',
                       fontWeight: '700',
                     }}>
-                      Notify drivers (urgent)
+                      {t('orderDetail.driver')}
                     </Text>
                   )}
                 </TouchableOpacity>
                 {order.urgentNotify.nextButtonEnabledAt && (
                   <Text style={{ fontSize: 12, color: colors.textTertiary, marginTop: 8 }}>
                     {urgentRemainingSec > 0
-                      ? `Enabled in ${Math.floor(urgentRemainingSec / 60)}:${String(urgentRemainingSec % 60).padStart(2, '0')}`
-                      : `Next action: ${new Date(order.urgentNotify.nextButtonEnabledAt).toLocaleString()}`}
+                      ? `${Math.floor(urgentRemainingSec / 60)}:${String(urgentRemainingSec % 60).padStart(2, '0')}`
+                      : new Date(order.urgentNotify.nextButtonEnabledAt).toLocaleString()}
                   </Text>
                 )}
               </>
@@ -539,9 +553,8 @@ export default function OrderDetailScreen() {
 
         {order.status === 'SEARCHING_DRIVER' && (
           <View style={[s.card, { backgroundColor: colors.card }]}>
-            <Text style={[s.cardTitle, { color: colors.text }]}>Auto-cancel timer</Text>
+            <Text style={[s.cardTitle, { color: colors.text }]}>{t('orderDetail.cancelOrder')}</Text>
             <Text style={{ color: colors.textSecondary, marginBottom: 10 }}>
-              Remaining:{' '}
               <Text style={{ fontWeight: '800', color: cancelTimerAccentColor, fontVariant: ['tabular-nums'] }}>
                 {cancelRemainingText}
               </Text>
@@ -570,7 +583,7 @@ export default function OrderDetailScreen() {
                           await orderService.updateCancelAfter(order.id, m);
                           await loadOrder();
                         } catch (e: any) {
-                          Alert.alert('Error', e.message || 'Unable to update timer');
+                          Alert.alert(t('common.error'), e.message || t('common.tryAgain'));
                         }
                       }}
                     >
@@ -593,7 +606,7 @@ export default function OrderDetailScreen() {
                 <TouchableOpacity style={[s.quickAction, { backgroundColor: '#3b82f6' }]}
                   onPress={() => router.push(`/(customer)/order-chat?orderId=${order.id}`)} activeOpacity={0.8}>
                   <Ionicons name="chatbubbles" size={20} color="#fff" />
-                  <Text style={s.quickActionText}>Chat</Text>
+                  <Text style={s.quickActionText}>{t('orderDetail.chat')}</Text>
                 </TouchableOpacity>
                 <ChatUnreadBadge count={chatUnread} />
               </View>
@@ -603,7 +616,7 @@ export default function OrderDetailScreen() {
                 <TouchableOpacity style={[s.quickAction, { backgroundColor: '#6366f1' }]}
                   onPress={() => router.push(`/(customer)/track-driver?orderId=${order.id}`)} activeOpacity={0.8}>
                   <Ionicons name="navigate" size={20} color="#fff" />
-                  <Text style={s.quickActionText}>Track</Text>
+                  <Text style={s.quickActionText}>{t('orderDetail.track')}</Text>
                 </TouchableOpacity>
               </View>
             )}
@@ -612,7 +625,7 @@ export default function OrderDetailScreen() {
 
         {/* ── Route Card ── */}
         <View style={[s.card, { backgroundColor: colors.card }]}>
-          <Text style={[s.cardTitle, { color: colors.text }]}>Route</Text>
+          <Text style={[s.cardTitle, { color: colors.text }]}>{t('orderDetail.pickup')} / {t('orderDetail.delivery')}</Text>
           <View style={s.routeRow}>
             <View style={s.routeIconCol}>
               <View style={[s.routeDot, { backgroundColor: '#22c55e' }]} />
@@ -621,10 +634,10 @@ export default function OrderDetailScreen() {
             </View>
             <View style={{ flex: 1 }}>
               <View style={{ marginBottom: 22 }}>
-                <Text style={s.routeLabel}>PICKUP</Text>
+                <Text style={s.routeLabel}>{t('createOrder.pickup').toUpperCase()}</Text>
                 <Text style={[s.routeAddress, { color: colors.text }]} numberOfLines={2}>
                   {(order.pickupAddress as any)?.nickname ? `${(order.pickupAddress as any).nickname} — ` : ''}
-                  {order.pickupAddress?.street || 'Pickup location'}
+                  {order.pickupAddress?.street || t('orderDetail.pickup')}
                 </Text>
                 <Text style={[s.routeSub, { color: colors.textSecondary }]}>
                   {order.pickupAddress?.delegation?.nameDelegation}, {order.pickupAddress?.delegation?.governorate?.nameGovernorate}
@@ -632,14 +645,14 @@ export default function OrderDetailScreen() {
               </View>
               {order.localPickupOnly ? (
                 <Text style={[s.routeSub, { color: colors.textSecondary, fontStyle: 'italic' }]}>
-                  Local pickup — driver brings items to you (no separate delivery address).
+                  {t('localPickup.description')}
                 </Text>
               ) : (
                 <View>
-                  <Text style={s.routeLabel}>DELIVERY</Text>
+                  <Text style={s.routeLabel}>{t('createOrder.delivery').toUpperCase()}</Text>
                   <Text style={[s.routeAddress, { color: colors.text }]} numberOfLines={2}>
                     {(order.dropoffAddress as any)?.nickname ? `${(order.dropoffAddress as any).nickname} — ` : ''}
-                    {order.dropoffAddress?.street || 'Delivery location'}
+                    {order.dropoffAddress?.street || t('orderDetail.delivery')}
                   </Text>
                   <Text style={[s.routeSub, { color: colors.textSecondary }]}>
                     {order.dropoffAddress?.delegation?.nameDelegation}, {order.dropoffAddress?.delegation?.governorate?.nameGovernorate}
@@ -655,21 +668,21 @@ export default function OrderDetailScreen() {
           <View style={[s.chip, { backgroundColor: order.paymentType === 'COD' ? '#dcfce7' : '#dbeafe' }]}>
             <Text style={s.chipEmoji}>{order.paymentType === 'COD' ? '💵' : '💰'}</Text>
             <Text style={[s.chipText, { color: order.paymentType === 'COD' ? '#166534' : '#1e40af' }]}>
-              {order.paymentType === 'COD' ? 'Cash' : 'Wallet'}
+              {order.paymentType === 'COD' ? t('orderDetail.cash') : t('orderDetail.wallet')}
             </Text>
           </View>
           <View style={[s.chip, { backgroundColor: '#f3f4f6' }]}>
             <Text style={s.chipEmoji}>📦</Text>
-            <Text style={[s.chipText, { color: '#374151' }]}>{order.weight} kg</Text>
+            <Text style={[s.chipText, { color: '#374151' }]}>{order.weight} {t('common.kg')}</Text>
           </View>
           <View style={[s.chip, { backgroundColor: '#f3f4f6' }]}>
             <Text style={s.chipEmoji}>📏</Text>
-            <Text style={[s.chipText, { color: '#374151' }]}>{order.distanceKm.toFixed(1)} km</Text>
+            <Text style={[s.chipText, { color: '#374151' }]}>{order.distanceKm.toFixed(1)} {t('common.km')}</Text>
           </View>
           {order.isNightDelivery && (
             <View style={[s.chip, { backgroundColor: '#e0e7ff' }]}>
               <Text style={s.chipEmoji}>🌙</Text>
-              <Text style={[s.chipText, { color: '#3730a3' }]}>Night</Text>
+              <Text style={[s.chipText, { color: '#3730a3' }]}>{t('orderDetail.timeline')}</Text>
             </View>
           )}
           <View style={[s.chip, { backgroundColor: '#f3f4f6' }]}>
@@ -680,30 +693,30 @@ export default function OrderDetailScreen() {
 
         {/* ── Price Breakdown ── */}
         <View style={[s.card, { backgroundColor: colors.card }]}>
-          <Text style={[s.cardTitle, { color: colors.text }]}>Price Breakdown</Text>
+          <Text style={[s.cardTitle, { color: colors.text }]}>{t('orderDetail.fee')}</Text>
           <View style={s.priceRow}>
-            <Text style={s.priceLabel}>Distance</Text>
-            <Text style={s.priceValue}>{order.distanceKm.toFixed(1)} km</Text>
+            <Text style={s.priceLabel}>{t('orderDetail.distance')}</Text>
+            <Text style={s.priceValue}>{order.distanceKm.toFixed(1)} {t('common.km')}</Text>
           </View>
           <View style={s.priceRow}>
-            <Text style={s.priceLabel}>Weight</Text>
-            <Text style={s.priceValue}>{order.weight} kg</Text>
+            <Text style={s.priceLabel}>{t('createOrder.weight')}</Text>
+            <Text style={s.priceValue}>{order.weight} {t('common.kg')}</Text>
           </View>
           {order.deliveryZoneType && (
             <View style={s.priceRow}>
-              <Text style={s.priceLabel}>Zone</Text>
+              <Text style={s.priceLabel}>{t('orderDetail.delivery')}</Text>
               <Text style={s.priceValue}>{order.deliveryZoneType.replace(/_/g, ' ')}</Text>
             </View>
           )}
-          {order.extraWeightFee > 0 && <PriceRow label="Extra Weight Fee" value={order.extraWeightFee} />}
-          {order.nightFee > 0 && <PriceRow label="Night Fee 🌙" value={order.nightFee} />}
+          {order.extraWeightFee > 0 && <PriceRow label={t('createOrder.weight')} value={order.extraWeightFee} />}
+          {order.nightFee > 0 && <PriceRow label={t('orderDetail.fee')} value={order.nightFee} />}
           {(order.customerExtraAmount ?? 0) > 0 && (
-            <PriceRow label="Your extra (driver time / errand)" value={order.customerExtraAmount ?? 0} />
+            <PriceRow label={t('orderDetail.fee')} value={order.customerExtraAmount ?? 0} />
           )}
           <View style={[s.divider, { backgroundColor: colors.border }]} />
           <View style={s.priceRow}>
-            <Text style={[s.totalLabel, { color: colors.text }]}>Total</Text>
-            <Text style={[s.totalValue, { color: colors.primary }]}>{order.price.toFixed(2)} TND</Text>
+            <Text style={[s.totalLabel, { color: colors.text }]}>{t('orderDetail.total')}</Text>
+            <Text style={[s.totalValue, { color: colors.primary }]}>{order.price.toFixed(2)} {t('common.tnd')}</Text>
           </View>
           <View style={{ marginTop: 14 }}>
             <OrderPreviewAvailableBalance
@@ -729,7 +742,7 @@ export default function OrderDetailScreen() {
             style={[s.card, { backgroundColor: colors.card }]}
             onLayout={(event) => setDriverCardY(event.nativeEvent.layout.y)}
           >
-            <Text style={[s.cardTitle, { color: colors.text }]}>Your Driver</Text>
+            <Text style={[s.cardTitle, { color: colors.text }]}>{t('orderDetail.driver')}</Text>
             <View style={s.driverRow}>
               {order.driverAssignment.driver.user.image ? (
                 <Image source={{ uri: order.driverAssignment.driver.user.image }} style={s.driverAvatar} />
@@ -751,7 +764,7 @@ export default function OrderDetailScreen() {
                       {order.driverAssignment.driver.avgRating.toFixed(1)}/10
                     </Text>
                     <Text style={{ fontSize: 12, color: '#9ca3af' }}>
-                      · {order.driverAssignment.driver.completedOrders} deliveries
+                      · {order.driverAssignment.driver.completedOrders}
                     </Text>
                     <Ionicons name="chevron-forward" size={12} color="#9ca3af" />
                   </TouchableOpacity>
@@ -773,18 +786,18 @@ export default function OrderDetailScreen() {
                 {order.driverAssignment.driver.completionRate !== null && (
                   <View style={{ backgroundColor: '#f0fdf4', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10, flexDirection: 'row', alignItems: 'center', gap: 4 }}>
                     <Ionicons name="checkmark-done" size={14} color="#16a34a" />
-                    <Text style={{ fontSize: 12, fontWeight: '600', color: '#16a34a' }}>{order.driverAssignment.driver.completionRate.toFixed(0)}% completion</Text>
+                    <Text style={{ fontSize: 12, fontWeight: '600', color: '#16a34a' }}>{order.driverAssignment.driver.completionRate.toFixed(0)}%</Text>
                   </View>
                 )}
                 {order.driverAssignment.driver.avgDeliveryTimeMinutes !== null && (
                   <View style={{ backgroundColor: '#eff6ff', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10, flexDirection: 'row', alignItems: 'center', gap: 4 }}>
                     <Ionicons name="time-outline" size={14} color="#2563eb" />
-                    <Text style={{ fontSize: 12, fontWeight: '600', color: '#2563eb' }}>~{order.driverAssignment.driver.avgDeliveryTimeMinutes} min avg</Text>
+                    <Text style={{ fontSize: 12, fontWeight: '600', color: '#2563eb' }}>~{order.driverAssignment.driver.avgDeliveryTimeMinutes} min</Text>
                   </View>
                 )}
                 <View style={{ backgroundColor: '#f3f4f6', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10, flexDirection: 'row', alignItems: 'center', gap: 4 }}>
                   <Ionicons name="stats-chart-outline" size={14} color="#6b7280" />
-                  <Text style={{ fontSize: 12, fontWeight: '600', color: '#6b7280' }}>{order.driverAssignment.driver.totalOrders} total orders</Text>
+                  <Text style={{ fontSize: 12, fontWeight: '600', color: '#6b7280' }}>{order.driverAssignment.driver.totalOrders}</Text>
                 </View>
               </View>
             )}
@@ -793,16 +806,16 @@ export default function OrderDetailScreen() {
               order.driverAssignment.pickedUpAt || order.driverAssignment.deliveredAt) && (
               <View style={s.timeline}>
                 {order.driverAssignment.acceptedAt && (
-                  <TimelineItem label="Accepted" time={order.driverAssignment.acceptedAt} color="#2563eb" />
+                  <TimelineItem label={t('common.confirm')} time={order.driverAssignment.acceptedAt} color="#2563eb" />
                 )}
                 {order.driverAssignment.arrivedAt && (
-                  <TimelineItem label="Arrived at pickup" time={order.driverAssignment.arrivedAt} color="#7c3aed" />
+                  <TimelineItem label={t('trackDriver.arrivedAtPickup')} time={order.driverAssignment.arrivedAt} color="#7c3aed" />
                 )}
                 {order.driverAssignment.pickedUpAt && (
-                  <TimelineItem label="Package picked up" time={order.driverAssignment.pickedUpAt} color="#ea580c" />
+                  <TimelineItem label={t('customerHome.status.PickedUp')} time={order.driverAssignment.pickedUpAt} color="#ea580c" />
                 )}
                 {order.driverAssignment.deliveredAt && (
-                  <TimelineItem label="Delivered" time={order.driverAssignment.deliveredAt} color="#16a34a" />
+                  <TimelineItem label={t('orderDetail.delivered')} time={order.driverAssignment.deliveredAt} color="#16a34a" />
                 )}
               </View>
             )}
@@ -812,7 +825,7 @@ export default function OrderDetailScreen() {
         {/* ── Description ── */}
         {order.description && (
           <View style={[s.card, { backgroundColor: colors.card }]}>
-            <Text style={[s.cardTitle, { color: colors.text }]}>Package Description</Text>
+            <Text style={[s.cardTitle, { color: colors.text }]}>{t('createOrder.packageDescription')}</Text>
             <Text style={[s.descriptionText, { color: colors.text }]}>{order.description}</Text>
           </View>
         )}
@@ -820,7 +833,7 @@ export default function OrderDetailScreen() {
         {/* ── Rating (already submitted) ── */}
         {order.rating && (
           <View style={[s.card, { backgroundColor: colors.card, borderLeftWidth: 4, borderLeftColor: '#f59e0b' }]}>
-            <Text style={[s.cardTitle, { color: colors.text }]}>Your Rating</Text>
+            <Text style={[s.cardTitle, { color: colors.text }]}>{t('orderDetail.rateDriver')}</Text>
             <View style={{ alignItems: 'center', gap: 8 }}>
               <View style={{ flexDirection: 'row', gap: 4 }}>
                 {Array.from({ length: 10 }, (_, i) => (
@@ -841,7 +854,7 @@ export default function OrderDetailScreen() {
         {/* ── Rate Driver (not yet rated, delivered) ── */}
         {order.status === 'DELIVERED' && !order.rating && (
           <View style={[s.card, { backgroundColor: colors.card, borderLeftWidth: 4, borderLeftColor: '#f59e0b' }]}>
-            <Text style={[s.cardTitle, { color: colors.text }]}>Rate Your Driver</Text>
+            <Text style={[s.cardTitle, { color: colors.text }]}>{t('orderDetail.rateDriver')}</Text>
             <View style={{ alignItems: 'center', gap: 12 }}>
               <View style={{ flexDirection: 'row', gap: 6 }}>
                 {Array.from({ length: 10 }, (_, i) => (
@@ -863,7 +876,7 @@ export default function OrderDetailScreen() {
                 }}
                 value={ratingComment}
                 onChangeText={setRatingComment}
-                placeholder="Leave a comment (optional)"
+                placeholder={t('orderDetail.leaveAReview')}
                 placeholderTextColor={colors.textTertiary}
                 multiline
                 textAlignVertical="top"
@@ -880,7 +893,7 @@ export default function OrderDetailScreen() {
                 {ratingSubmitting ? (
                   <ActivityIndicator color="#fff" size="small" />
                 ) : (
-                  <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700' }}>Submit Rating</Text>
+                  <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700' }}>{t('orderDetail.submitRating')}</Text>
                 )}
               </TouchableOpacity>
             </View>
@@ -890,10 +903,10 @@ export default function OrderDetailScreen() {
         {/* ── Dispute Info ── */}
         {order.dispute && (
           <View style={[s.card, { backgroundColor: colors.card, borderLeftWidth: 4, borderLeftColor: '#dc2626' }]}>
-            <Text style={[s.cardTitle, { color: colors.text }]}>Dispute</Text>
+            <Text style={[s.cardTitle, { color: colors.text }]}>{t('orderDetail.dispute')}</Text>
             <View style={{ gap: 8 }}>
               <View style={s.priceRow}>
-                <Text style={s.priceLabel}>Status</Text>
+                <Text style={s.priceLabel}>{t('orderDetail.status')}</Text>
                 <View style={[s.chip, { backgroundColor: order.dispute.status === 'OPEN' ? '#fee2e2' : order.dispute.status === 'RESOLVED' ? '#dcfce7' : '#fef9c3' }]}>
                   <Text style={[s.chipText, { color: order.dispute.status === 'OPEN' ? '#dc2626' : order.dispute.status === 'RESOLVED' ? '#16a34a' : '#ca8a04' }]}>
                     {order.dispute.status}
@@ -901,12 +914,12 @@ export default function OrderDetailScreen() {
                 </View>
               </View>
               <View>
-                <Text style={s.priceLabel}>Reason</Text>
+                <Text style={s.priceLabel}>{t('restrictions.reason')}</Text>
                 <Text style={[s.descriptionText, { marginTop: 4 }]}>{order.dispute.reason}</Text>
               </View>
               {order.dispute.resolution && (
                 <View>
-                  <Text style={s.priceLabel}>Resolution</Text>
+                  <Text style={s.priceLabel}>{t('common.success')}</Text>
                   <Text style={[s.descriptionText, { marginTop: 4 }]}>{order.dispute.resolution}</Text>
                 </View>
               )}
@@ -924,8 +937,8 @@ export default function OrderDetailScreen() {
                   <Ionicons name="swap-horizontal" size={18} color="#4f46e5" />
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={[s.actionTitle, { color: colors.text }]}>Switch to {order.paymentType === 'COD' ? 'Wallet' : 'Cash'}</Text>
-                  <Text style={s.actionSub}>Change payment method</Text>
+                  <Text style={[s.actionTitle, { color: colors.text }]}>{order.paymentType === 'COD' ? t('orderDetail.wallet') : t('orderDetail.cash')}</Text>
+                  <Text style={s.actionSub}>{t('orderDetail.paymentMethod')}</Text>
                 </View>
                 <Ionicons name="chevron-forward" size={18} color="#9ca3af" />
               </TouchableOpacity>
@@ -939,7 +952,7 @@ export default function OrderDetailScreen() {
                   activeOpacity={0.85}
                 >
                   <Ionicons name="close-circle" size={14} color="#fff" />
-                  <Text style={s.cancelOrderText}>Cancel order</Text>
+                  <Text style={s.cancelOrderText}>{t('orderDetail.cancelOrder')}</Text>
                 </TouchableOpacity>
               )}
             </>
@@ -954,7 +967,7 @@ export default function OrderDetailScreen() {
               activeOpacity={0.85}
             >
               <Ionicons name="close-circle" size={14} color="#fff" />
-              <Text style={s.cancelOrderText}>Cancel order</Text>
+              <Text style={s.cancelOrderText}>{t('orderDetail.cancelOrder')}</Text>
             </TouchableOpacity>
           )}
           {canReactivate && (
@@ -965,7 +978,7 @@ export default function OrderDetailScreen() {
                   await orderService.reactivateOrder(order.id);
                   await loadOrder();
                 } catch (e: any) {
-                  Alert.alert('Error', e.message || 'Unable to reactivate order');
+                  Alert.alert(t('common.error'), e.message || t('common.tryAgain'));
                 }
               }}
               activeOpacity={0.8}
@@ -974,8 +987,8 @@ export default function OrderDetailScreen() {
                 <Ionicons name="refresh-circle" size={18} color="#16a34a" />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={[s.actionTitle, { color: '#16a34a' }]}>Reactivate Order</Text>
-                <Text style={s.actionSub}>Timer restarts from reactivation time</Text>
+                <Text style={[s.actionTitle, { color: '#16a34a' }]}>{t('common.refresh')}</Text>
+                <Text style={s.actionSub}>{t('common.retry')}</Text>
               </View>
               <Ionicons name="chevron-forward" size={18} color="#86efac" />
             </TouchableOpacity>
@@ -985,7 +998,7 @@ export default function OrderDetailScreen() {
               <TouchableOpacity style={[s.rejectDriverBtn, { borderColor: '#fecaca' }]}
                 onPress={handleRejectDriver} activeOpacity={0.8}>
                 <Ionicons name="person-remove" size={14} color="#dc2626" />
-                <Text style={s.rejectDriverText}>Reject This Driver</Text>
+                <Text style={s.rejectDriverText}>{t('orderDetail.rejectDriver')}</Text>
               </TouchableOpacity>
             </View>
           )}
@@ -994,7 +1007,7 @@ export default function OrderDetailScreen() {
               <TouchableOpacity style={[s.rejectDriverBtn, { borderColor: '#fecaca' }]}
                 onPress={handleRejectDriver} activeOpacity={0.8}>
                 <Ionicons name="person-remove" size={14} color="#dc2626" />
-                <Text style={s.rejectDriverText}>Reject driver</Text>
+                <Text style={s.rejectDriverText}>{t('orderDetail.rejectDriver')}</Text>
               </TouchableOpacity>
             </View>
           )}
@@ -1006,8 +1019,8 @@ export default function OrderDetailScreen() {
                   <Ionicons name="checkmark-circle" size={18} color="#16a34a" />
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={[s.actionTitle, { color: '#16a34a' }]}>Accept This Driver</Text>
-                  <Text style={s.actionSub}>Approve and start delivery</Text>
+                  <Text style={[s.actionTitle, { color: '#16a34a' }]}>{t('orderDetail.approveDriver')}</Text>
+                  <Text style={s.actionSub}>{t('orderDetail.driverApproved')}</Text>
                 </View>
                 <Ionicons name="chevron-forward" size={18} color="#86efac" />
               </TouchableOpacity>
@@ -1015,7 +1028,7 @@ export default function OrderDetailScreen() {
                 <TouchableOpacity style={[s.rejectDriverBtn, { borderColor: '#fecaca' }]}
                   onPress={handleRejectDriver} activeOpacity={0.8}>
                   <Ionicons name="person-remove" size={14} color="#dc2626" />
-                  <Text style={s.rejectDriverText}>Reject This Driver</Text>
+                  <Text style={s.rejectDriverText}>{t('orderDetail.rejectDriver')}</Text>
                 </TouchableOpacity>
               </View>
             </>
@@ -1027,8 +1040,8 @@ export default function OrderDetailScreen() {
                 <Ionicons name="flag" size={18} color="#ea580c" />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={[s.actionTitle, { color: '#ea580c' }]}>Report Issue</Text>
-                <Text style={s.actionSub}>Something went wrong?</Text>
+                <Text style={[s.actionTitle, { color: '#ea580c' }]}>{t('orderDetail.dispute')}</Text>
+                <Text style={s.actionSub}>{t('common.something_went_wrong')}</Text>
               </View>
               <Ionicons name="chevron-forward" size={18} color="#fdba74" />
             </TouchableOpacity>
@@ -1040,8 +1053,8 @@ export default function OrderDetailScreen() {
                 <Ionicons name="arrow-undo" size={18} color="#6b7280" />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={s.actionTitle}>Cancel Dispute</Text>
-                <Text style={s.actionSub}>Withdraw your dispute</Text>
+                <Text style={s.actionTitle}>{t('common.cancel')}</Text>
+                <Text style={s.actionSub}>{t('orderDetail.dispute')}</Text>
               </View>
               <Ionicons name="chevron-forward" size={18} color="#d1d5db" />
             </TouchableOpacity>
@@ -1052,15 +1065,15 @@ export default function OrderDetailScreen() {
       <Modal visible={rejectModalVisible} transparent animationType="fade">
         <View style={s.modalOverlay}>
           <View style={[s.modalCard, { backgroundColor: colors.card }]}>
-            <Text style={[s.modalTitle, { color: colors.text }]}>Reject driver after arrival</Text>
+            <Text style={[s.modalTitle, { color: colors.text }]}>{t('orderDetail.rejectDriver')}</Text>
             <Text style={[s.modalSub, { color: colors.textSecondary }]}>
-              This is serious. Describe what happened (min. 10 characters). The driver and customer service will be notified.
+              {t('orderDetail.disputeReason')}
             </Text>
             <TextInput
               style={[s.modalInput, { backgroundColor: colors.inputBg, color: colors.text, borderColor: colors.inputBorder }]}
               value={rejectReason}
               onChangeText={setRejectReason}
-              placeholder="Your reason..."
+              placeholder={t('restrictions.reason')}
               placeholderTextColor={colors.textTertiary}
               multiline
               numberOfLines={4}
@@ -1068,14 +1081,14 @@ export default function OrderDetailScreen() {
             />
             <View style={s.modalActions}>
               <TouchableOpacity style={s.modalCancelBtn} onPress={() => setRejectModalVisible(false)}>
-                <Text style={s.modalCancelText}>Cancel</Text>
+                <Text style={s.modalCancelText}>{t('common.cancel')}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[s.modalSubmitBtn, rejectReason.trim().length < 10 && { opacity: 0.5 }]}
                 onPress={confirmRejectArrived}
                 disabled={rejectReason.trim().length < 10}
               >
-                <Text style={s.modalSubmitText}>Submit</Text>
+                <Text style={s.modalSubmitText}>{t('common.submit')}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -1086,13 +1099,13 @@ export default function OrderDetailScreen() {
       <Modal visible={disputeModalVisible} transparent animationType="fade">
         <View style={s.modalOverlay}>
           <View style={[s.modalCard, { backgroundColor: colors.card }]}>
-            <Text style={[s.modalTitle, { color: colors.text }]}>Report an Issue</Text>
-            <Text style={[s.modalSub, { color: colors.textSecondary }]}>Please describe what went wrong with this order</Text>
+            <Text style={[s.modalTitle, { color: colors.text }]}>{t('orderDetail.dispute')}</Text>
+            <Text style={[s.modalSub, { color: colors.textSecondary }]}>{t('orderDetail.disputeReason')}</Text>
             <TextInput
               style={[s.modalInput, { backgroundColor: colors.inputBg, color: colors.text, borderColor: colors.inputBorder }]}
               value={disputeReason}
               onChangeText={setDisputeReason}
-              placeholder="Describe the issue..."
+              placeholder={t('support.describeIssue')}
               placeholderTextColor={colors.textTertiary}
               multiline
               numberOfLines={4}
@@ -1100,11 +1113,11 @@ export default function OrderDetailScreen() {
             />
             <View style={s.modalActions}>
               <TouchableOpacity style={s.modalCancelBtn} onPress={() => setDisputeModalVisible(false)}>
-                <Text style={s.modalCancelText}>Cancel</Text>
+                <Text style={s.modalCancelText}>{t('common.cancel')}</Text>
               </TouchableOpacity>
               <TouchableOpacity style={[s.modalSubmitBtn, !disputeReason.trim() && { opacity: 0.5 }]}
                 onPress={submitDispute} disabled={!disputeReason.trim()}>
-                <Text style={s.modalSubmitText}>Submit</Text>
+                <Text style={s.modalSubmitText}>{t('common.submit')}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -1116,14 +1129,14 @@ export default function OrderDetailScreen() {
         <TouchableOpacity style={s.modalOverlay} activeOpacity={1} onPress={() => setReviewsModalVisible(false)}>
           <TouchableOpacity activeOpacity={1} style={[s.modalCard, { maxHeight: '70%' }]}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-              <Text style={s.modalTitle}>Driver Reviews</Text>
+              <Text style={s.modalTitle}>{t('orderDetail.rateDriver')}</Text>
               <TouchableOpacity onPress={() => setReviewsModalVisible(false)}>
                 <Ionicons name="close-circle" size={28} color="#9ca3af" />
               </TouchableOpacity>
             </View>
             <ScrollView style={{ maxHeight: 400 }} showsVerticalScrollIndicator={false}>
               {driverReviews.length === 0 ? (
-                <Text style={{ textAlign: 'center', color: '#9ca3af', paddingVertical: 20 }}>No reviews yet</Text>
+                <Text style={{ textAlign: 'center', color: '#9ca3af', paddingVertical: 20 }}>{t('common.noResults')}</Text>
               ) : (
                 driverReviews.map(r => (
                   <View key={r.id} style={{ borderBottomWidth: 1, borderBottomColor: '#f3f4f6', paddingVertical: 12 }}>
@@ -1159,9 +1172,9 @@ export default function OrderDetailScreen() {
       >
         <View style={s.modalOverlay}>
           <View style={[s.modalCard, { backgroundColor: colors.card }]}>
-            <Text style={[s.modalTitle, { color: colors.text }]}>When should drivers see this order?</Text>
+            <Text style={[s.modalTitle, { color: colors.text }]}>{t('createOrder.scheduleFor')}</Text>
             <Text style={[s.modalSub, { color: colors.textSecondary }]}>
-              Must be at least one minute from now (local time).
+              {t('createOrder.later')}
             </Text>
             <TouchableOpacity
               style={[s.schedulePickRow, { borderColor: colors.border, backgroundColor: colors.inputBg ?? colors.card }]}
@@ -1193,7 +1206,7 @@ export default function OrderDetailScreen() {
                   setScheduleIosOpen(false);
                 }}
               >
-                <Text style={s.modalCancelText}>Cancel</Text>
+                <Text style={s.modalCancelText}>{t('common.cancel')}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[s.modalSubmitBtn, scheduleSaving && { opacity: 0.6 }]}
@@ -1203,7 +1216,7 @@ export default function OrderDetailScreen() {
                 {scheduleSaving ? (
                   <ActivityIndicator color="#fff" />
                 ) : (
-                  <Text style={s.modalSubmitText}>Save</Text>
+                  <Text style={s.modalSubmitText}>{t('common.save')}</Text>
                 )}
               </TouchableOpacity>
             </View>
@@ -1225,8 +1238,8 @@ function PriceRow({ label, value }: { label: string; value: number }) {
 }
 
 function TimelineItem({ label, time, color }: { label: string; time: string; color: string }) {
-  const t = new Date(time);
-  const timeStr = t.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+  const d = new Date(time);
+  const timeStr = d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
   return (
     <View style={s.timelineItem}>
       <View style={[s.timelineDot, { backgroundColor: color }]} />

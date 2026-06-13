@@ -7,6 +7,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import { orderService, Order } from '../../services/api/order.service';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useAppNavigation } from '../../contexts/AppNavigationContext';
@@ -19,23 +20,21 @@ import { useOrderChatUnread } from '../../hooks/useOrderChatUnread';
 import { appAlert } from '../../utils/appAlert';
 import { ChatUnreadBadge } from '../../components/ChatUnreadBadge';
 
-const STATUS_META: Record<string, { icon: string; color: string; bg: string; label: string }> = {
-  DRAFT:            { icon: 'document-outline',    color: '#6b7280', bg: '#f3f4f6', label: 'Draft' },
-  SEARCHING_DRIVER: { icon: 'search-outline',      color: '#ca8a04', bg: '#fef9c3', label: 'Searching' },
-  PENDING_CUSTOMER_APPROVAL: { icon: 'hourglass-outline', color: '#ea580c', bg: '#ffedd5', label: 'Waiting for Customer' },
-  DRIVER_ASSIGNED:  { icon: 'person-outline',      color: '#2563eb', bg: '#dbeafe', label: 'Assigned' },
-  DRIVER_ARRIVED:   { icon: 'flag-outline',        color: '#7c3aed', bg: '#ede9fe', label: 'Arrived' },
-  PICKED_UP:        { icon: 'cube-outline',        color: '#ea580c', bg: '#ffedd5', label: 'Picked Up' },
-  DELIVERING:       { icon: 'bicycle-outline',     color: '#4f46e5', bg: '#e0e7ff', label: 'Delivering' },
-  RETURNED:         { icon: 'return-up-back-outline', color: '#b45309', bg: '#fef3c7', label: 'Returned' },
-  RETURN_DEPOSIT:   { icon: 'archive-outline',     color: '#0f766e', bg: '#ccfbf1', label: 'Return Deposited' },
-  DELIVERED:        { icon: 'checkmark-circle',    color: '#16a34a', bg: '#dcfce7', label: 'Delivered' },
-  CANCELLED:        { icon: 'close-circle',        color: '#dc2626', bg: '#fee2e2', label: 'Cancelled' },
-  DISPUTED:         { icon: 'warning-outline',     color: '#dc2626', bg: '#fee2e2', label: 'Disputed' },
-  REFUNDED:         { icon: 'arrow-undo-outline',  color: '#6b7280', bg: '#f3f4f6', label: 'Refunded' },
+const STATUS_META: Record<string, { icon: string; color: string; bg: string; labelKey: string }> = {
+  DRAFT:            { icon: 'document-outline',    color: '#6b7280', bg: '#f3f4f6', labelKey: 'customerHome.status.Scheduled' },
+  SEARCHING_DRIVER: { icon: 'search-outline',      color: '#ca8a04', bg: '#fef9c3', labelKey: 'customerHome.status.Searching' },
+  PENDING_CUSTOMER_APPROVAL: { icon: 'hourglass-outline', color: '#ea580c', bg: '#ffedd5', labelKey: 'driverMyOrders.status.WaitingForCustomer' },
+  DRIVER_ASSIGNED:  { icon: 'person-outline',      color: '#2563eb', bg: '#dbeafe', labelKey: 'driverMyOrders.status.Assigned' },
+  DRIVER_ARRIVED:   { icon: 'flag-outline',        color: '#7c3aed', bg: '#ede9fe', labelKey: 'driverMyOrders.status.Arrived' },
+  PICKED_UP:        { icon: 'cube-outline',        color: '#ea580c', bg: '#ffedd5', labelKey: 'driverMyOrders.status.PickedUp' },
+  DELIVERING:       { icon: 'bicycle-outline',     color: '#4f46e5', bg: '#e0e7ff', labelKey: 'driverMyOrders.status.Delivering' },
+  RETURNED:         { icon: 'return-up-back-outline', color: '#b45309', bg: '#fef3c7', labelKey: 'driverMyOrders.status.Returned' },
+  RETURN_DEPOSIT:   { icon: 'archive-outline',     color: '#0f766e', bg: '#ccfbf1', labelKey: 'driverMyOrders.status.ReturnDeposit' },
+  DELIVERED:        { icon: 'checkmark-circle',    color: '#16a34a', bg: '#dcfce7', labelKey: 'driverMyOrders.status.Delivered' },
+  CANCELLED:        { icon: 'close-circle',        color: '#dc2626', bg: '#fee2e2', labelKey: 'driverMyOrders.status.Cancelled' },
+  DISPUTED:         { icon: 'warning-outline',     color: '#dc2626', bg: '#fee2e2', labelKey: 'orderDetail.dispute' },
+  REFUNDED:         { icon: 'arrow-undo-outline',  color: '#6b7280', bg: '#f3f4f6', labelKey: 'orderDetail.refunded' },
 };
-
-const STAR_LABELS = ['Terrible','Very Bad','Bad','Poor','Below Avg','Average','Above Avg','Good','Very Good','Excellent','Perfect'];
 
 export default function DriverOrderDetailScreen() {
   const router = useRouter();
@@ -45,6 +44,20 @@ export default function DriverOrderDetailScreen() {
   const scrollTo = Array.isArray(scrollToParam) ? scrollToParam[0] : scrollToParam;
   const { unread: chatUnread } = useOrderChatUnread(orderId);
   const { colors, isDark } = useTheme();
+  const { t } = useTranslation();
+  const STAR_LABELS = [
+    t('correctCelebration.nice'),
+    t('correctCelebration.nice'),
+    t('correctCelebration.nice'),
+    t('correctCelebration.keepGoing'),
+    t('correctCelebration.keepGoing'),
+    t('correctCelebration.great'),
+    t('correctCelebration.great'),
+    t('correctCelebration.great'),
+    t('correctCelebration.perfect'),
+    t('correctCelebration.perfect'),
+    t('correctCelebration.perfect'),
+  ];
   const [order, setOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -124,7 +137,7 @@ export default function DriverOrderDetailScreen() {
   const pickReturnEvidenceImage = async () => {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!perm.granted) {
-      appAlert('Permission needed', 'Allow photo library access to attach a photo.');
+      appAlert(t('common.permission'), t('auth.galleryPermissionBody'));
       return;
     }
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -140,19 +153,19 @@ export default function DriverOrderDetailScreen() {
 
   const submitCompanyRejectionResponse = async () => {
     if (!order) return;
-    const t = companyRejectionDraft.trim();
-    if (t.length < 5) {
-      appAlert('Too short', 'Please write at least 5 characters.');
+    const text = companyRejectionDraft.trim();
+    if (text.length < 5) {
+      appAlert(t('common.error'), t('support.messagePlaceholder'));
       return;
     }
     try {
       setCompanyRejectionSubmitting(true);
-      await orderService.respondToOrderDriverRejection(order.id, t);
+      await orderService.respondToOrderDriverRejection(order.id, text);
       setCompanyRejectionDraft('');
       await load();
-      appAlert('Sent', 'Your response was saved.');
+      appAlert(t('common.success'), t('common.saved'));
     } catch (e: any) {
-      appAlert('Error', e?.message || 'Could not save response');
+      appAlert(t('common.error'), e?.message || t('common.operationFailed'));
     } finally {
       setCompanyRejectionSubmitting(false);
     }
@@ -160,18 +173,18 @@ export default function DriverOrderDetailScreen() {
 
   const cancelAssignment = () => {
     if (!order) return;
-    appAlert('Cancel', 'Cancel your assignment for this order?', [
-      { text: 'No', style: 'cancel' },
+    appAlert(t('common.cancel'), t('driverMyOrders.cancelConfirm'), [
+      { text: t('common.no'), style: 'cancel' },
       {
-        text: 'Yes',
+        text: t('common.yes'),
         style: 'destructive',
         onPress: async () => {
           try {
-            await orderService.cancelAssignment(order.id, 'Driver cancelled');
+            await orderService.cancelAssignment(order.id, t('driverMyOrders.driverCancelled'));
             await stopOrderTrackingSilently();
             router.replace('/(driver)/available-orders');
           } catch (e: any) {
-            appAlert('Error', e?.message || 'Could not cancel');
+            appAlert(t('common.error'), e?.message || t('common.operationFailed'));
           }
         },
       },
@@ -180,19 +193,19 @@ export default function DriverOrderDetailScreen() {
 
   const submitConflictFeedback = async () => {
     if (!order) return;
-    const t = conflictFeedback.trim();
-    if (t.length < 5) {
-      appAlert('Too short', 'Please write at least 5 characters.');
+    const text = conflictFeedback.trim();
+    if (text.length < 5) {
+      appAlert(t('common.error'), t('support.messagePlaceholder'));
       return;
     }
     try {
       setConflictSubmitting(true);
-      await orderService.submitArrivalConflictFeedback(order.id, t);
+      await orderService.submitArrivalConflictFeedback(order.id, text);
       setConflictFeedback('');
       await load();
-      appAlert('Sent', 'Your response was saved. Customer service will review if needed.');
+      appAlert(t('common.success'), t('common.saved'));
     } catch (e: any) {
-      appAlert('Error', e?.message || 'Could not submit feedback');
+      appAlert(t('common.error'), e?.message || t('common.operationFailed'));
     } finally {
       setConflictSubmitting(false);
     }
@@ -273,9 +286,9 @@ export default function DriverOrderDetailScreen() {
   const chatFriendlyClosedStatuses = ['DELIVERED', 'RETURN_DEPOSIT', 'REFUNDED', 'FAILED', 'DISPUTED', 'CANCELLED'];
   const canOpenChat = !!order.chatRoom || chatFriendlyClosedStatuses.includes(order.status);
   const nextActionLabel: Record<string, string> = {
-    DRIVER_ASSIGNED: "I've arrived",
-    DRIVER_ARRIVED: 'Package picked up',
-    PICKED_UP: 'Start delivering now',
+    DRIVER_ASSIGNED: t('driverMyOrders.actions.iHaveArrived'),
+    DRIVER_ARRIVED: t('driverMyOrders.actions.packagePickedUp'),
+    PICKED_UP: t('driverMyOrders.actions.startDelivering'),
   };
   const canGoNext = Boolean(nextActionLabel[order.status]);
 
@@ -286,7 +299,7 @@ export default function DriverOrderDetailScreen() {
     mapTitle: string,
   ) => {
     if (lat == null || lng == null || !Number.isFinite(lat) || !Number.isFinite(lng)) {
-      appAlert('Location unavailable', 'Map coordinates are not available for this address.');
+      appAlert(t('pickLocation.permissionDenied'), t('pickLocation.fetchFailed'));
       return;
     }
     push(`/(driver)/address-map?lat=${lat}&lng=${lng}&kind=${kind}&title=${encodeURIComponent(mapTitle)}`);
@@ -311,11 +324,11 @@ export default function DriverOrderDetailScreen() {
 
   const pickupMapTitle =
     [order.pickupAddress?.street, order.pickupAddress?.delegation?.nameDelegation].filter(Boolean).join(', ') ||
-    'Pickup';
+    t('driverAddressMap.pickup');
 
   const dropoffMapTitle =
     [order.dropoffAddress?.street, order.dropoffAddress?.delegation?.nameDelegation].filter(Boolean).join(', ') ||
-    'Delivery';
+    t('driverAddressMap.delivery');
 
   return (
     <View style={[s.container, { backgroundColor: colors.background }]}>
@@ -324,7 +337,7 @@ export default function DriverOrderDetailScreen() {
           <View style={s.statusIconCircle}>
             <Ionicons name={meta.icon as any} size={32} color="#fff" />
           </View>
-          <Text style={s.statusLabel}>{meta.label}</Text>
+          <Text style={s.statusLabel}>{t(meta.labelKey)}</Text>
           <Text style={s.statusOrderId}>#{order.id.slice(0, 8)}</Text>
         </View>
       </View>
@@ -338,7 +351,7 @@ export default function DriverOrderDetailScreen() {
 
         {/* Route */}
         <View style={[s.card, { backgroundColor: colors.card }]}>
-          <Text style={[s.cardTitle, { color: colors.text }]}>Route</Text>
+          <Text style={[s.cardTitle, { color: colors.text }]}>{t('trackDriver.title')}</Text>
           <View style={s.routeRow}>
             <View style={s.routeIconCol}>
               <View style={[s.routeDot, { backgroundColor: '#22c55e' }]} />
@@ -347,7 +360,7 @@ export default function DriverOrderDetailScreen() {
             </View>
             <View style={{ flex: 1 }}>
               <View style={{ marginBottom: 22 }}>
-                <Text style={[s.routeLabel, { color: colors.textTertiary }]}>PICKUP</Text>
+                <Text style={[s.routeLabel, { color: colors.textTertiary }]}>{t('orderDetail.pickup').toUpperCase()}</Text>
                 <TouchableOpacity
                   style={s.addressTapRow}
                   onPress={() => openAddressOnMap(pickupLat, pickupLng, 'pickup', pickupMapTitle)}
@@ -361,7 +374,7 @@ export default function DriverOrderDetailScreen() {
                       ]}
                       numberOfLines={2}
                     >
-                      {order.pickupAddress?.street || 'Pickup'}
+                      {order.pickupAddress?.street || t('driverMyOrders.pickup')}
                     </Text>
                     <Text style={[s.routeSub, { color: colors.textSecondary }]}>
                       {order.pickupAddress?.delegation?.nameDelegation}, {order.pickupAddress?.delegation?.governorate?.nameGovernorate}
@@ -373,10 +386,10 @@ export default function DriverOrderDetailScreen() {
                 </TouchableOpacity>
               </View>
               <View>
-                <Text style={[s.routeLabel, { color: colors.textTertiary }]}>DELIVERY</Text>
+                <Text style={[s.routeLabel, { color: colors.textTertiary }]}>{t('orderDetail.delivery').toUpperCase()}</Text>
                 {order.localPickupOnly ? (
                   <Text style={[s.routeAddress, { color: colors.textSecondary }]}>
-                    Local pickup only — bring items to the pickup address (no separate drop-off).
+                    {t('localPickup.description')}
                   </Text>
                 ) : (
                   <TouchableOpacity
@@ -392,7 +405,7 @@ export default function DriverOrderDetailScreen() {
                         ]}
                         numberOfLines={2}
                       >
-                        {order.dropoffAddress?.street || 'Dropoff'}
+                        {order.dropoffAddress?.street || t('driverMyOrders.dropoff')}
                       </Text>
                       <Text style={[s.routeSub, { color: colors.textSecondary }]}>
                         {order.dropoffAddress?.delegation?.nameDelegation}, {order.dropoffAddress?.delegation?.governorate?.nameGovernorate}
@@ -410,28 +423,26 @@ export default function DriverOrderDetailScreen() {
 
         {order.myOrderDriverRejection && !order.arrivalConflict && (
           <View style={[s.card, { backgroundColor: colors.card, borderLeftWidth: 4, borderLeftColor: '#ea580c' }]}>
-            <Text style={[s.cardTitle, { color: colors.text }]}>Feedback on your assignment</Text>
+            <Text style={[s.cardTitle, { color: colors.text }]}>{t('driverMyOrders.rejected')}</Text>
             {order.myOrderDriverRejection.reason ? (
               <>
                 <Text style={{ fontSize: 12, color: colors.textSecondary, marginBottom: 6 }}>
-                  {order.sourceType === 'DELIVERY_COMPANY'
-                    ? 'The company / department indicated:'
-                    : 'The customer indicated:'}
+                  {t('restrictions.reason')}
                 </Text>
                 <Text style={{ color: colors.text, lineHeight: 20 }}>{order.myOrderDriverRejection.reason}</Text>
               </>
             ) : (
-              <Text style={{ color: colors.textSecondary, fontSize: 13 }}>You were unassigned from this order.</Text>
+              <Text style={{ color: colors.textSecondary, fontSize: 13 }}>{t('driverMyOrders.rejected')}</Text>
             )}
             {order.myOrderDriverRejection.driverResponse ? (
               <View style={{ marginTop: 12 }}>
-                <Text style={[s.routeLabel, { color: colors.textTertiary, marginBottom: 4 }]}>Your response</Text>
+                <Text style={[s.routeLabel, { color: colors.textTertiary, marginBottom: 4 }]}>{t('supportChat.wasHelpful')}</Text>
                 <Text style={{ color: colors.textSecondary, lineHeight: 20 }}>{order.myOrderDriverRejection.driverResponse}</Text>
               </View>
             ) : (
               <View style={{ gap: 10, marginTop: 12 }}>
                 <Text style={{ color: colors.textSecondary, fontSize: 13 }}>
-                  Optional: add your side (min. 5 characters).
+                  {t('common.optional')}
                 </Text>
                 <TextInput
                   style={{
@@ -443,7 +454,7 @@ export default function DriverOrderDetailScreen() {
                     color: colors.text,
                     backgroundColor: colors.background,
                   }}
-                  placeholder="Your response…"
+                  placeholder={t('support.messagePlaceholder')}
                   placeholderTextColor={colors.textTertiary}
                   value={companyRejectionDraft}
                   onChangeText={setCompanyRejectionDraft}
@@ -458,7 +469,7 @@ export default function DriverOrderDetailScreen() {
                   {companyRejectionSubmitting ? (
                     <ActivityIndicator color="#fff" size="small" />
                   ) : (
-                    <Text style={s.nextBtnText}>Submit response</Text>
+                    <Text style={s.nextBtnText}>{t('common.submit')}</Text>
                   )}
                 </TouchableOpacity>
               </View>
@@ -468,18 +479,18 @@ export default function DriverOrderDetailScreen() {
 
         {order.arrivalConflict && (
           <View style={[s.card, { backgroundColor: colors.card, borderLeftWidth: 4, borderLeftColor: '#dc2626' }]}>
-            <Text style={[s.cardTitle, { color: colors.text }]}>Customer declined after arrival</Text>
-            <Text style={[s.routeLabel, { color: colors.textTertiary, marginBottom: 4 }]}>Reason given by customer</Text>
+            <Text style={[s.cardTitle, { color: colors.text }]}>{t('orderDetail.dispute')}</Text>
+            <Text style={[s.routeLabel, { color: colors.textTertiary, marginBottom: 4 }]}>{t('orderDetail.disputeReason')}</Text>
             <Text style={{ color: colors.text, marginBottom: 14, lineHeight: 20 }}>{order.arrivalConflict.customerReason}</Text>
             {order.arrivalConflict.driverFeedback ? (
               <View>
-                <Text style={[s.routeLabel, { color: colors.textTertiary, marginBottom: 4 }]}>Your response</Text>
+                <Text style={[s.routeLabel, { color: colors.textTertiary, marginBottom: 4 }]}>{t('supportChat.wasHelpful')}</Text>
                 <Text style={{ color: colors.textSecondary, lineHeight: 20 }}>{order.arrivalConflict.driverFeedback}</Text>
               </View>
             ) : order.arrivalConflict.status === 'PENDING' ? (
               <View style={{ gap: 10 }}>
                 <Text style={{ color: colors.textSecondary, fontSize: 13 }}>
-                  Share your side of the story. This is sent to customer service only.
+                  {t('support.describeIssue')}
                 </Text>
                 <TextInput
                   style={{
@@ -491,7 +502,7 @@ export default function DriverOrderDetailScreen() {
                     color: colors.text,
                     backgroundColor: colors.background,
                   }}
-                  placeholder="Your feedback (min. 5 characters)"
+                  placeholder={t('support.messagePlaceholder')}
                   placeholderTextColor={colors.textTertiary}
                   value={conflictFeedback}
                   onChangeText={setConflictFeedback}
@@ -506,12 +517,12 @@ export default function DriverOrderDetailScreen() {
                   {conflictSubmitting ? (
                     <ActivityIndicator color="#fff" size="small" />
                   ) : (
-                    <Text style={s.nextBtnText}>Submit response</Text>
+                    <Text style={s.nextBtnText}>{t('common.submit')}</Text>
                   )}
                 </TouchableOpacity>
               </View>
             ) : (
-              <Text style={{ color: colors.textSecondary, fontSize: 13 }}>This incident was closed by support.</Text>
+              <Text style={{ color: colors.textSecondary, fontSize: 13 }}>{t('common.close')}</Text>
             )}
           </View>
         )}
@@ -521,33 +532,33 @@ export default function DriverOrderDetailScreen() {
           <View style={[s.chip, { backgroundColor: order.paymentType === 'COD' ? '#dcfce7' : '#dbeafe' }]}>
             <Text style={{ fontSize: 14 }}>{order.paymentType === 'COD' ? '💵' : '💰'}</Text>
             <Text style={[s.chipText, { color: order.paymentType === 'COD' ? '#166534' : '#1e40af' }]}>
-              {order.paymentType === 'COD' ? 'Cash' : 'Wallet'}
+              {order.paymentType === 'COD' ? t('orderDetail.cash') : t('orderDetail.wallet')}
             </Text>
           </View>
-          <View style={[s.chip, { backgroundColor: colors.surfaceVariant }]}><Text style={{ fontSize: 14 }}>📦</Text><Text style={[s.chipText, { color: colors.text }]}>{order.weight} kg</Text></View>
-          <View style={[s.chip, { backgroundColor: colors.surfaceVariant }]}><Text style={{ fontSize: 14 }}>📏</Text><Text style={[s.chipText, { color: colors.text }]}>{order.distanceKm.toFixed(1)} km</Text></View>
+          <View style={[s.chip, { backgroundColor: colors.surfaceVariant }]}><Text style={{ fontSize: 14 }}>📦</Text><Text style={[s.chipText, { color: colors.text }]}>{order.weight}{t('common.kg')}</Text></View>
+          <View style={[s.chip, { backgroundColor: colors.surfaceVariant }]}><Text style={{ fontSize: 14 }}>📏</Text><Text style={[s.chipText, { color: colors.text }]}>{order.distanceKm.toFixed(1)}{t('common.km')}</Text></View>
           {order.isNightDelivery && (
-            <View style={[s.chip, { backgroundColor: '#e0e7ff' }]}><Text style={{ fontSize: 14 }}>🌙</Text><Text style={[s.chipText, { color: '#3730a3' }]}>Night</Text></View>
+            <View style={[s.chip, { backgroundColor: '#e0e7ff' }]}><Text style={{ fontSize: 14 }}>🌙</Text><Text style={[s.chipText, { color: '#3730a3' }]}>{t('driverAvailableOrders.night')}</Text></View>
           )}
         </View>
 
         {/* Price */}
         <View style={[s.card, { backgroundColor: colors.card }]}>
-          <Text style={[s.cardTitle, { color: colors.text }]}>Price</Text>
-          <View style={s.priceRow}><Text style={[s.priceLabel, { color: colors.textSecondary }]}>Total</Text><Text style={[s.totalValue, { color: colors.primary }]}>{order.price.toFixed(2)} TND</Text></View>
-          {order.extraWeightFee > 0 && <View style={s.priceRow}><Text style={[s.priceLabel, { color: colors.textSecondary }]}>Extra Weight</Text><Text style={[s.priceValue, { color: colors.text }]}>{order.extraWeightFee.toFixed(2)} TND</Text></View>}
-          {order.nightFee > 0 && <View style={s.priceRow}><Text style={[s.priceLabel, { color: colors.textSecondary }]}>Night Fee</Text><Text style={[s.priceValue, { color: colors.text }]}>{order.nightFee.toFixed(2)} TND</Text></View>}
-          {order.deliveryZoneType && <View style={s.priceRow}><Text style={[s.priceLabel, { color: colors.textSecondary }]}>Zone</Text><Text style={[s.priceValue, { color: colors.text }]}>{order.deliveryZoneType.replace(/_/g, ' ')}</Text></View>}
+          <Text style={[s.cardTitle, { color: colors.text }]}>{t('createOrder.payment')}</Text>
+          <View style={s.priceRow}><Text style={[s.priceLabel, { color: colors.textSecondary }]}>{t('orderDetail.total')}</Text><Text style={[s.totalValue, { color: colors.primary }]}>{order.price.toFixed(2)} {t('common.tnd')}</Text></View>
+          {order.extraWeightFee > 0 && <View style={s.priceRow}><Text style={[s.priceLabel, { color: colors.textSecondary }]}>{t('createOrder.weight')}</Text><Text style={[s.priceValue, { color: colors.text }]}>{order.extraWeightFee.toFixed(2)} {t('common.tnd')}</Text></View>}
+          {order.nightFee > 0 && <View style={s.priceRow}><Text style={[s.priceLabel, { color: colors.textSecondary }]}>{t('orderDetail.fee')}</Text><Text style={[s.priceValue, { color: colors.text }]}>{order.nightFee.toFixed(2)} {t('common.tnd')}</Text></View>}
+          {order.deliveryZoneType && <View style={s.priceRow}><Text style={[s.priceLabel, { color: colors.textSecondary }]}>{t('driverAvailableOrders.delegationFilter')}</Text><Text style={[s.priceValue, { color: colors.text }]}>{order.deliveryZoneType.replace(/_/g, ' ')}</Text></View>}
         </View>
 
         {/* Timeline */}
         <View style={[s.card, { backgroundColor: colors.card }]}>
-          <Text style={[s.cardTitle, { color: colors.text }]}>Timeline</Text>
-          <TimelineItem label="Order Created" time={order.createdAt} color="#6b7280" />
-          {da?.acceptedAt && <TimelineItem label="Accepted" time={da.acceptedAt} color="#2563eb" />}
-          {da?.arrivedAt && <TimelineItem label="Arrived at Pickup" time={da.arrivedAt} color="#7c3aed" />}
-          {da?.pickedUpAt && <TimelineItem label="Package Picked Up" time={da.pickedUpAt} color="#ea580c" />}
-          {da?.deliveredAt && <TimelineItem label="Delivered" time={da.deliveredAt} color="#16a34a" />}
+          <Text style={[s.cardTitle, { color: colors.text }]}>{t('orderDetail.timeline')}</Text>
+          <TimelineItem label={t('createOrder.title')} time={order.createdAt} color="#6b7280" />
+          {da?.acceptedAt && <TimelineItem label={t('driverAvailableOrders.accept')} time={da.acceptedAt} color="#2563eb" />}
+          {da?.arrivedAt && <TimelineItem label={t('orderDetail.arrived')} time={da.arrivedAt} color="#7c3aed" />}
+          {da?.pickedUpAt && <TimelineItem label={t('driverMyOrders.status.PickedUp')} time={da.pickedUpAt} color="#ea580c" />}
+          {da?.deliveredAt && <TimelineItem label={t('orderDetail.delivered')} time={da.deliveredAt} color="#16a34a" />}
         </View>
 
         {canOpenChat && (
@@ -558,7 +569,7 @@ export default function DriverOrderDetailScreen() {
               activeOpacity={0.85}
             >
               <Ionicons name="chatbubbles" size={16} color="#fff" />
-              <Text style={s.chatBtnText}>Chat</Text>
+              <Text style={s.chatBtnText}>{t('orderDetail.chat')}</Text>
             </TouchableOpacity>
             <ChatUnreadBadge count={chatUnread} />
           </View>
@@ -575,9 +586,9 @@ export default function DriverOrderDetailScreen() {
               });
             }}
           >
-            <Text style={[s.cardTitle, { color: colors.text }]}>Return details (optional)</Text>
+            <Text style={[s.cardTitle, { color: colors.text }]}>{t('driverMyOrders.status.ReturnDeposit')} ({t('common.optional')})</Text>
             <Text style={{ fontSize: 12, color: colors.textSecondary, marginBottom: 8 }}>
-              Before confirming deposit: how many times you called the customer, and an optional photo from your gallery.
+              {t('createOrder.notes')}
             </Text>
             <TextInput
               style={{
@@ -589,7 +600,7 @@ export default function DriverOrderDetailScreen() {
                 color: colors.text,
                 backgroundColor: colors.background,
               }}
-              placeholder="Number of calls (optional)"
+              placeholder={t('common.optional')}
               placeholderTextColor={colors.textTertiary}
               keyboardType="number-pad"
               value={returnCallCount}
@@ -607,7 +618,7 @@ export default function DriverOrderDetailScreen() {
               onPress={pickReturnEvidenceImage}
             >
               <Text style={{ color: colors.primary, fontWeight: '600', textAlign: 'center' }}>
-                Choose photo from gallery
+                {t('auth.fromGallery')}
               </Text>
             </TouchableOpacity>
             {returnEvidenceUrl ? (
@@ -620,7 +631,7 @@ export default function DriverOrderDetailScreen() {
                   />
                 ) : null}
                 <TouchableOpacity onPress={() => setReturnEvidenceUrl('')}>
-                  <Text style={{ color: '#dc2626', fontSize: 13, textAlign: 'center' }}>Remove image</Text>
+                  <Text style={{ color: '#dc2626', fontSize: 13, textAlign: 'center' }}>{t('common.remove')}</Text>
                 </TouchableOpacity>
               </View>
             ) : null}
@@ -638,7 +649,7 @@ export default function DriverOrderDetailScreen() {
               });
             }}
           >
-            <Text style={[s.cardTitle, { color: colors.text }]}>Delivery Actions</Text>
+            <Text style={[s.cardTitle, { color: colors.text }]}>{t('orderDetail.timeline')}</Text>
             <View style={s.stepActionsRow}>
               {canRevert && (
                 <TouchableOpacity
@@ -647,7 +658,7 @@ export default function DriverOrderDetailScreen() {
                   disabled={statusUpdating}
                 >
                   <Ionicons name="return-up-back-outline" size={16} color="#6b7280" />
-                  <Text style={s.revertBtnText}>Go back</Text>
+                  <Text style={s.revertBtnText}>{t('driverMyOrders.goBack')}</Text>
                 </TouchableOpacity>
               )}
               {canGoNext && (
@@ -666,7 +677,7 @@ export default function DriverOrderDetailScreen() {
                     onPress={handleDelivered}
                     disabled={statusUpdating}
                   >
-                    <Text style={s.nextBtnText}>Delivered</Text>
+                    <Text style={s.nextBtnText}>{t('orderDetail.delivered')}</Text>
                   </TouchableOpacity>
                   {isCompanyOrder && (
                     <TouchableOpacity
@@ -674,7 +685,7 @@ export default function DriverOrderDetailScreen() {
                       onPress={handleReturned}
                       disabled={statusUpdating}
                     >
-                      <Text style={s.nextBtnText}>Returned</Text>
+                      <Text style={s.nextBtnText}>{t('driverMyOrders.status.Returned')}</Text>
                     </TouchableOpacity>
                   )}
                 </>
@@ -685,7 +696,7 @@ export default function DriverOrderDetailScreen() {
                   onPress={confirmReturnDeposit}
                   disabled={statusUpdating}
                 >
-                  <Text style={s.nextBtnText}>Confirm return deposit</Text>
+                  <Text style={s.nextBtnText}>{t('driverMyOrders.actions.markReturnDeposit')}</Text>
                 </TouchableOpacity>
               )}
             </View>
@@ -695,7 +706,7 @@ export default function DriverOrderDetailScreen() {
         {/* Customer info */}
         {order.description && (
           <View style={[s.card, { backgroundColor: colors.card }]}>
-            <Text style={[s.cardTitle, { color: colors.text }]}>Package Description</Text>
+            <Text style={[s.cardTitle, { color: colors.text }]}>{t('createOrder.packageDescription')}</Text>
             <Text style={[s.descText, { color: colors.text }]}>{order.description}</Text>
           </View>
         )}
@@ -703,7 +714,7 @@ export default function DriverOrderDetailScreen() {
         {/* Rating received */}
         {order.rating && (
           <View style={[s.card, { borderLeftWidth: 4, borderLeftColor: '#f59e0b', backgroundColor: colors.card }]}>
-            <Text style={[s.cardTitle, { color: colors.text }]}>Customer Rating</Text>
+            <Text style={[s.cardTitle, { color: colors.text }]}>{t('orderDetail.rateExperience')}</Text>
             <View style={{ alignItems: 'center', gap: 8 }}>
               <View style={{ flexDirection: 'row', gap: 4 }}>
                 {Array.from({ length: 10 }, (_, i) => (
@@ -734,20 +745,20 @@ export default function DriverOrderDetailScreen() {
               }
             }}
           >
-            <Text style={[s.cardTitle, { color: colors.text }]}>Proof Images</Text>
+            <Text style={[s.cardTitle, { color: colors.text }]}>{t('orderDetail.proofPhotos')}</Text>
             <View style={{ flexDirection: 'row', gap: 8 }}>
               <View style={[s.proofStatus, da.image1Proof ? { backgroundColor: '#dcfce7' } : { backgroundColor: '#fef2f2' }]}>
                 <Ionicons name={da.image1Proof ? 'checkmark-circle' : 'close-circle'} size={16}
                   color={da.image1Proof ? '#16a34a' : '#dc2626'} />
                 <Text style={{ fontSize: 13, fontWeight: '600', color: da.image1Proof ? '#16a34a' : '#dc2626' }}>
-                  Image 1 {da.image1Proof ? 'Uploaded' : 'Missing'}
+                  {t('orderDetail.pickupProof')} {da.image1Proof ? t('driverUploadProofs.uploaded') : t('common.required')}
                 </Text>
               </View>
               <View style={[s.proofStatus, da.image2Proof ? { backgroundColor: '#dcfce7' } : { backgroundColor: '#f3f4f6' }]}>
                 <Ionicons name={da.image2Proof ? 'checkmark-circle' : 'remove-circle-outline'} size={16}
                   color={da.image2Proof ? '#16a34a' : '#9ca3af'} />
                 <Text style={{ fontSize: 13, fontWeight: '600', color: da.image2Proof ? '#16a34a' : '#9ca3af' }}>
-                  Image 2 {da.image2Proof ? 'Uploaded' : 'None'}
+                  {t('orderDetail.deliveryProof')} {da.image2Proof ? t('driverUploadProofs.uploaded') : t('common.optional')}
                 </Text>
               </View>
             </View>
@@ -758,7 +769,7 @@ export default function DriverOrderDetailScreen() {
             >
               <Ionicons name="cloud-upload-outline" size={16} color="#fff" />
               <Text style={s.proofActionText}>
-                {da.image1Proof ? 'Update proof images' : 'Add proof images'}
+                {da.image1Proof ? t('common.update') : t('common.add')}
               </Text>
             </TouchableOpacity>
           </View>
@@ -774,12 +785,12 @@ export default function DriverOrderDetailScreen() {
                 activeOpacity={0.85}
               >
                 <Ionicons name="return-up-back-outline" size={14} color="#6b7280" />
-                <Text style={s.footerMiniBtnText}>Back</Text>
+                <Text style={s.footerMiniBtnText}>{t('common.back')}</Text>
               </TouchableOpacity>
             )}
             {canCancelAssignment && (
               <TouchableOpacity style={s.footerMiniBtnDanger} onPress={cancelAssignment} activeOpacity={0.85}>
-                <Text style={s.footerMiniBtnDangerText}>Cancel assignment</Text>
+                <Text style={s.footerMiniBtnDangerText}>{t('driverMyOrders.cancelAssignment')}</Text>
               </TouchableOpacity>
             )}
           </View>

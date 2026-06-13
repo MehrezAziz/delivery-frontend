@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, ActivityIndicator, StyleSheet } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import { Ionicons } from '@expo/vector-icons';
 import { fiatToCoins, coinsToFiat, hasCoinRate } from '../utils/orderPriceCoins';
 
@@ -20,23 +21,24 @@ export function OrderPreviewTotalPrice({
   primaryColor: string;
   secondaryColor: string;
 }) {
+  const { t } = useTranslation();
   const coinTotal = hasCoinRate(coinsPerFiatUnit)
     ? fiatToCoins(fiatTotal, coinsPerFiatUnit)
     : fiatTotal;
   const primaryText = isCash
     ? `${fiatTotal.toFixed(2)} ${currencySymbol}`
-    : `${coinTotal.toFixed(2)} coins`;
+    : `${coinTotal.toFixed(2)}${t('orderPreviewPayment.coinsSuffix')}`;
   const secondaryText = isCash
     ? hasCoinRate(coinsPerFiatUnit)
-      ? `≈ ${coinTotal.toFixed(2)} coins`
+      ? `${t('orderPreviewPayment.approx')}${coinTotal.toFixed(2)}${t('orderPreviewPayment.coinsSuffix')}`
       : null
     : hasCoinRate(coinsPerFiatUnit)
-      ? `≈ ${fiatTotal.toFixed(2)} ${currencySymbol}`
+      ? `${t('orderPreviewPayment.approx')}${fiatTotal.toFixed(2)} ${currencySymbol}`
       : null;
 
   return (
     <View style={ui.priceRow}>
-      <Text style={[ui.totalLabel, { color: labelColor }]}>Total</Text>
+      <Text style={[ui.totalLabel, { color: labelColor }]}>{t('orderPreviewPayment.total')}</Text>
       <View style={ui.totalCol}>
         <Text style={[ui.totalValue, { color: primaryColor }]}>{primaryText}</Text>
         {secondaryText ? (
@@ -73,6 +75,7 @@ export function OrderPreviewAvailableBalance({
   };
   isDark?: boolean;
 }) {
+  const { t } = useTranslation();
   if (walletBalance === null) return null;
 
   const sym = currencySymbol?.trim() || 'TND';
@@ -101,28 +104,28 @@ export function OrderPreviewAvailableBalance({
       </View>
       <View style={ui.balanceBody}>
         <Text style={[ui.balanceLabel, { color: colors.textSecondary }]}>
-          {isCash ? 'Your wallet balance' : 'Available to spend'}
+          {isCash ? t('orderPreviewPayment.yourWalletBalance') : t('orderPreviewPayment.availableToSpend')}
         </Text>
         <Text style={[ui.balancePrimary, { color: colors.text }]}>
           {walletBalance.toFixed(2)}{' '}
-          <Text style={[ui.balanceUnit, { color: accent }]}>coins</Text>
+          <Text style={[ui.balanceUnit, { color: accent }]}>{t('common.coinsUnit')}</Text>
         </Text>
         {fiatEquiv != null ? (
           <Text style={[ui.balanceSecondary, { color: colors.textTertiary ?? colors.textSecondary }]}>
-            ≈ {fiatEquiv.toFixed(sym === 'TND' ? 3 : 2)} {sym}
+            {t('orderPreviewPayment.approx')}{fiatEquiv.toFixed(sym === 'TND' ? 3 : 2)} {sym}
           </Text>
         ) : null}
         {isCash ? (
           <Text style={[ui.balanceHint, { color: colors.textSecondary }]}>
-            This order is paid in cash to the driver at delivery.
+            {t('orderPreviewPayment.cashAtDelivery')}
           </Text>
         ) : insufficient && orderTotalCoins != null ? (
           <Text style={[ui.balanceHint, { color: accent }]}>
-            Need {(orderTotalCoins - walletBalance).toFixed(2)} more coins for wallet payment.
+            {t('orderPreviewPayment.needMoreCoinsPrefix')}{(orderTotalCoins - walletBalance).toFixed(2)}{t('orderPreviewPayment.needMoreCoinsSuffix')}
           </Text>
         ) : !isCash ? (
           <Text style={[ui.balanceHint, { color: colors.textSecondary }]}>
-            Wallet payment debits coins when the order is confirmed.
+            {t('orderPreviewPayment.walletDebitNote')}
           </Text>
         ) : null}
       </View>
@@ -162,6 +165,7 @@ export function OrderPreviewPaymentSwitch({
   };
   isDark?: boolean;
 }) {
+  const { t } = useTranslation();
   return (
     <View style={ui.switchBlock}>
       <OrderPreviewAvailableBalance
@@ -185,7 +189,7 @@ export function OrderPreviewPaymentSwitch({
           <>
             <Ionicons name="swap-horizontal" size={18} color={colors.primary} />
             <Text style={[ui.switchBtnText, { color: colors.primary }]}>
-              {isCash ? 'Switch to wallet payment' : 'Switch to cash payment'}
+              {isCash ? t('orderPreviewPayment.switchToWallet') : t('orderPreviewPayment.switchToCash')}
             </Text>
             <Ionicons name="chevron-forward" size={16} color={colors.primary} />
           </>

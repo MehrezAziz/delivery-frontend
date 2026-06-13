@@ -4,6 +4,7 @@ import {
   TextInput, ActivityIndicator, Modal, FlatList,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
@@ -32,6 +33,7 @@ const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
 export default function DriverEditProfileScreen() {
   const router = useRouter();
   const { colors } = useTheme();
+  const { t } = useTranslation();
   const [feedback, setFeedback] = useState<{
     variant: 'success' | 'error';
     title: string;
@@ -106,7 +108,7 @@ export default function DriverEditProfileScreen() {
         setCanUseBiometric(false);
       } else {
         let bioOk = false;
-        let label = 'Verify with biometrics';
+        let label = t('biometric.verifyWithBiometrics');
         const LA = await getLocalAuthentication();
         if (LA) {
           try {
@@ -142,8 +144,8 @@ export default function DriverEditProfileScreen() {
         setPreferPassword(true);
         setFeedback({
           variant: 'error',
-          title: 'Biometrics unavailable',
-          message: 'This app build doesn’t include biometric support yet. Rebuild the app, or use your password.',
+          title: t('common.error'),
+          message: t('common.tryAgain'),
           okNavigates: false,
         });
         return;
@@ -154,15 +156,15 @@ export default function DriverEditProfileScreen() {
         setPreferPassword(true);
         setFeedback({
           variant: 'error',
-          title: 'Biometrics unavailable',
-          message: 'No biometric login is set up on this device. Use your password instead.',
+          title: t('common.error'),
+          message: t('common.tryAgain'),
           okNavigates: false,
         });
         return;
       }
       const auth = await LA.authenticateAsync({
-        promptMessage: 'Confirm it’s you to edit your profile',
-        cancelLabel: 'Cancel',
+        promptMessage: t('editProfile.verifyIdentityBody'),
+        cancelLabel: t('common.cancel'),
         disableDeviceFallback: true,
       });
       if (auth.success) {
@@ -173,19 +175,16 @@ export default function DriverEditProfileScreen() {
       } else {
         setFeedback({
           variant: 'error',
-          title: 'Not verified',
-          message:
-            auth.error === 'lockout'
-              ? 'Too many attempts. Try again later or use your password.'
-              : 'Could not verify. Try again or use your password.',
+          title: t('common.error'),
+          message: t('common.tryAgain'),
           okNavigates: false,
         });
       }
     } catch (e: any) {
       setFeedback({
         variant: 'error',
-        title: 'Verification failed',
-        message: e?.message || 'Biometric verification failed.',
+        title: t('common.error'),
+        message: e?.message || t('common.tryAgain'),
         okNavigates: false,
       });
     } finally {
@@ -215,8 +214,8 @@ export default function DriverEditProfileScreen() {
     } catch (e: any) {
       setFeedback({
         variant: 'error',
-        title: 'Verification failed',
-        message: e.response?.data?.message || 'Invalid password',
+        title: t('common.error'),
+        message: e.response?.data?.message || t('auth.invalidPassword'),
         okNavigates: false,
       });
     } finally { setVerifying(false); }
@@ -226,8 +225,8 @@ export default function DriverEditProfileScreen() {
     if (!selectedPhoneCountry) {
       setFeedback({
         variant: 'error',
-        title: 'Country required',
-        message: 'Please select a country for the phone number.',
+        title: t('common.error'),
+        message: t('auth.selectCountryRequired'),
         okNavigates: false,
       });
       return;
@@ -240,7 +239,7 @@ export default function DriverEditProfileScreen() {
     if (!phoneCheck.ok) {
       setFeedback({
         variant: 'error',
-        title: 'Invalid phone',
+        title: t('common.error'),
         message: phoneCheck.message,
         okNavigates: false,
       });
@@ -269,15 +268,15 @@ export default function DriverEditProfileScreen() {
 
       setFeedback({
         variant: 'success',
-        title: 'Profile updated',
-        message: 'Your changes have been saved.',
+        title: t('editProfile.saved'),
+        message: t('editProfile.saved'),
         okNavigates: true,
       });
     } catch (e: any) {
       setFeedback({
         variant: 'error',
-        title: 'Could not save',
-        message: e.response?.data?.message || 'Failed to update profile.',
+        title: t('common.error'),
+        message: e.response?.data?.message || t('editProfile.saveFailed'),
         okNavigates: false,
       });
     } finally { setSaving(false); }
@@ -325,11 +324,9 @@ export default function DriverEditProfileScreen() {
               color={colors.primary}
             />
           </View>
-          <Text style={[s.gateTitle, { color: colors.text }]}>Verify Your Identity</Text>
+          <Text style={[s.gateTitle, { color: colors.text }]}>{t('editProfile.verifyIdentity')}</Text>
           <Text style={[s.gateSub, { color: colors.textSecondary }]}>
-            {showBiometricFirst
-              ? 'Confirm with your device to edit your profile.'
-              : 'Enter your account password to edit your profile.'}
+            {t('editProfile.verifyIdentityBody')}
           </Text>
 
           {showBiometricFirst ? (
@@ -343,7 +340,7 @@ export default function DriverEditProfileScreen() {
               />
               {showBiometricPasswordFallback ? (
                 <TouchableOpacity style={s.gateLinkBtn} onPress={() => setPreferPassword(true)} disabled={verifying}>
-                  <Text style={[s.gateLinkText, { color: colors.primary }]}>Use password instead</Text>
+                  <Text style={[s.gateLinkText, { color: colors.primary }]}>{t('auth.password')}</Text>
                 </TouchableOpacity>
               ) : null}
             </>
@@ -353,7 +350,7 @@ export default function DriverEditProfileScreen() {
                 style={[s.gateInput, { backgroundColor: colors.card, color: colors.text, borderColor: colors.border }]}
                 value={password}
                 onChangeText={setPassword}
-                placeholder="Enter your password"
+                placeholder={t('auth.password')}
                 placeholderTextColor={colors.textTertiary}
                 secureTextEntry
                 autoFocus
@@ -363,7 +360,7 @@ export default function DriverEditProfileScreen() {
                 onPress={handleVerify}
                 disabled={verifying || !password.trim()}
               >
-                {verifying ? <ActivityIndicator color="#fff" /> : <Text style={s.gateBtnText}>Verify</Text>}
+                {verifying ? <ActivityIndicator color="#fff" /> : <Text style={s.gateBtnText}>{t('forgotPassword.verify')}</Text>}
               </TouchableOpacity>
               {canUseBiometric ? (
                 <TouchableOpacity style={s.gateLinkBtn} onPress={() => setPreferPassword(false)} disabled={verifying}>
@@ -389,10 +386,10 @@ export default function DriverEditProfileScreen() {
         onOkPress={handleFeedbackOk}
       />
       <ScrollView style={{ flex: 1 }} contentContainerStyle={s.content}>
-        <Field label="First Name" value={firstName} onChange={setFirstName} colors={colors} />
-        <Field label="Last Name" value={secondName} onChange={setSecondName} colors={colors} />
+        <Field label={t('editProfile.firstName')} value={firstName} onChange={setFirstName} colors={colors} />
+        <Field label={t('editProfile.lastName')} value={secondName} onChange={setSecondName} colors={colors} />
         <View style={{ marginBottom: 16 }}>
-          <Text style={[s.fieldLabel, { color: colors.textSecondary }]}>Phone</Text>
+          <Text style={[s.fieldLabel, { color: colors.textSecondary }]}>{t('editProfile.phone')}</Text>
           <View style={[s.phoneRow, { borderColor: colors.border, backgroundColor: colors.card }]}>
             <TouchableOpacity
               style={[s.countryCodeBtn, { borderRightColor: colors.border, backgroundColor: colors.surfaceVariant }]}
@@ -412,11 +409,11 @@ export default function DriverEditProfileScreen() {
             />
           </View>
         </View>
-        <Field label="Email" value={email} onChange={setEmail} keyboardType="email-address" colors={colors} />
-        <Field label="Vehicle Type" value={vehicleType} onChange={setVehicleType} colors={colors} />
-        <Field label="Description" value={description} onChange={setDescription} multiline colors={colors} />
+        <Field label={t('editProfile.email')} value={email} onChange={setEmail} keyboardType="email-address" colors={colors} />
+        <Field label={t('auth.vehicleType')} value={vehicleType} onChange={setVehicleType} colors={colors} />
+        <Field label={t('createOrder.packageDescription')} value={description} onChange={setDescription} multiline colors={colors} />
 
-        <Text style={[s.fieldLabel, { color: colors.textSecondary }]}>Gender</Text>
+        <Text style={[s.fieldLabel, { color: colors.textSecondary }]}>{t('auth.selectGender')}</Text>
         <View style={{ flexDirection: 'row', gap: 10, marginBottom: 16 }}>
           {['MALE', 'FEMALE'].map(g => (
             <TouchableOpacity
@@ -434,14 +431,14 @@ export default function DriverEditProfileScreen() {
         </View>
 
         <TouchableOpacity style={[s.saveBtn, { backgroundColor: colors.primary }]} onPress={handleSave} disabled={saving}>
-          {saving ? <ActivityIndicator color="#fff" /> : <Text style={s.saveBtnText}>Save Changes</Text>}
+          {saving ? <ActivityIndicator color="#fff" /> : <Text style={s.saveBtnText}>{t('editProfile.save')}</Text>}
         </TouchableOpacity>
       </ScrollView>
       <Modal visible={showPhoneCountryModal} transparent animationType="slide" onRequestClose={() => setShowPhoneCountryModal(false)}>
         <View style={s.pickerOverlay}>
           <View style={[s.pickerCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <View style={[s.pickerHeader, { borderBottomColor: colors.border }]}>
-              <Text style={[s.pickerTitle, { color: colors.text }]}>Select country code</Text>
+              <Text style={[s.pickerTitle, { color: colors.text }]}>{t('auth.selectCountryCode')}</Text>
               <TouchableOpacity onPress={() => setShowPhoneCountryModal(false)} style={s.pickerCloseBtn}>
                 <Text style={[s.pickerCloseText, { color: colors.textTertiary }]}>✕</Text>
               </TouchableOpacity>
@@ -450,7 +447,7 @@ export default function DriverEditProfileScreen() {
               <Text style={s.pickerSearchIcon}>🔍</Text>
               <TextInput
                 style={[s.pickerSearchInput, { color: colors.text }]}
-                placeholder="Search country, ISO or code"
+                placeholder={t('common.search')}
                 placeholderTextColor={colors.textTertiary}
                 value={phoneCountrySearch}
                 onChangeText={setPhoneCountrySearch}

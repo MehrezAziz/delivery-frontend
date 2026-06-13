@@ -4,6 +4,7 @@ import {
   ScrollView, Alert, ActivityIndicator, Image, Modal, FlatList,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
@@ -28,6 +29,7 @@ const API_BASE = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api';
 export default function DriverRegisterStep1() {
   const router = useRouter();
   const { colors, isDark } = useTheme();
+  const { t } = useTranslation();
   const [formData, setFormData] = useState({
     phone: '', password: '', firstName: '', secondName: '',
     myEmail: '', userGender: '' as 'MALE' | 'FEMALE' | '',
@@ -75,23 +77,23 @@ export default function DriverRegisterStep1() {
 
   const pickImage = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') { Alert.alert('Permission Denied', 'We need camera roll permissions.'); return; }
+    if (status !== 'granted') { Alert.alert(t('common.permissionDenied'), t('auth.galleryPermissionBody')); return; }
     const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsEditing: true, aspect: [1, 1], quality: 0.8 });
     if (!result.canceled) setProfileImage(result.assets[0].uri);
   };
 
   const takePhoto = async () => {
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
-    if (status !== 'granted') { Alert.alert('Permission Denied', 'We need camera permissions.'); return; }
+    if (status !== 'granted') { Alert.alert(t('common.permissionDenied'), t('auth.cameraPermissionBody')); return; }
     const result = await ImagePicker.launchCameraAsync({ allowsEditing: true, aspect: [1, 1], quality: 0.8 });
     if (!result.canceled) setProfileImage(result.assets[0].uri);
   };
 
   const showImageOptions = () => {
-    Alert.alert('Profile Picture', 'Choose an option', [
-      { text: 'Take Photo', onPress: takePhoto },
-      { text: 'Choose from Library', onPress: pickImage },
-      { text: 'Cancel', style: 'cancel' },
+    Alert.alert(t('editProfile.profilePicture'), t('common.chooseAnOption'), [
+      { text: t('editProfile.takePhoto'), onPress: takePhoto },
+      { text: t('editProfile.pickFromGallery'), onPress: pickImage },
+      { text: t('common.cancel'), style: 'cancel' },
     ]);
   };
 
@@ -108,22 +110,22 @@ export default function DriverRegisterStep1() {
       await AsyncStorage.setItem('driverPendingToken', res.data.pendingToken);
       router.push('/(auth)/driver-register-step2');
     } catch (error: any) {
-      let msg = 'Failed to sign in with Google';
+      let msg = t('auth.failedSignInGoogle');
       const setupHint = describeGoogleSignInSetupError(error);
       if (setupHint) msg = setupHint;
-      else if (error.code === 'SIGN_IN_CANCELLED') msg = 'Sign-in was cancelled';
+      else if (error.code === 'SIGN_IN_CANCELLED') msg = t('auth.signInCancelled');
       else if (error.response?.data?.message) msg = Array.isArray(error.response.data.message) ? error.response.data.message.join('\n') : error.response.data.message;
       else if (error.message) msg = error.message;
-      Alert.alert('Google Sign-In Failed', msg);
+      Alert.alert(t('auth.googleSignInFailed'), msg);
     } finally { setLoading(false); }
   };
 
   const handleSubmit = async () => {
     if (!formData.phone || !formData.password) {
-      Alert.alert('Error', 'Phone and password are required'); return;
+      Alert.alert(t('common.error'), t('auth.phoneAndPasswordRequired')); return;
     }
     if (!selectedPhoneCountry) {
-      Alert.alert('Error', 'Please select a country for the phone number'); return;
+      Alert.alert(t('common.error'), t('auth.selectCountryRequired')); return;
     }
     const phoneCheck = validateNationalPhoneForCountry(
       selectedPhoneCountry.isoCode,
@@ -131,11 +133,11 @@ export default function DriverRegisterStep1() {
       formData.phone,
     );
     if (!phoneCheck.ok) {
-      Alert.alert('Invalid phone', phoneCheck.message);
+      Alert.alert(t('auth.invalidPhone'), phoneCheck.message);
       return;
     }
     if (formData.password.length < 8) {
-      Alert.alert('Error', 'Password must be at least 8 characters'); return;
+      Alert.alert(t('common.error'), t('auth.passwordMinLength')); return;
     }
 
     setLoading(true);
@@ -163,8 +165,8 @@ export default function DriverRegisterStep1() {
       router.push('/(auth)/driver-register-step2');
     } catch (error: any) {
       const rawMsg = error.response?.data?.message;
-      const msg = Array.isArray(rawMsg) ? rawMsg.join('\n') : (rawMsg || error.message || 'An error occurred');
-      Alert.alert('Registration Failed', String(msg));
+      const msg = Array.isArray(rawMsg) ? rawMsg.join('\n') : (rawMsg || error.message || t('auth.registrationFailedBody'));
+      Alert.alert(t('auth.registrationFailed'), String(msg));
     } finally { setLoading(false); }
   };
 
@@ -175,9 +177,9 @@ export default function DriverRegisterStep1() {
       keyboardShouldPersistTaps="handled"
     >
       <View style={[styles.heroCard, { backgroundColor: colors.surfaceVariant, borderColor: colors.border }]}>
-        <Text style={[styles.stepBadge, { color: colors.primary, backgroundColor: colors.primaryLight }]}>Step 1 of 3</Text>
-        <Text style={[styles.title, { color: colors.text }]}>Personal information</Text>
-        <Text style={[styles.subtitle, { color: colors.textSecondary }]}>Photo, phone, and password to create your driver account.</Text>
+        <Text style={[styles.stepBadge, { color: colors.primary, backgroundColor: colors.primaryLight }]}>{t('auth.stepOf', { current: 1, total: 3 })}</Text>
+        <Text style={[styles.title, { color: colors.text }]}>{t('auth.driverRegistrationTitle')}</Text>
+        <Text style={[styles.subtitle, { color: colors.textSecondary }]}>{t('auth.driverRegisterStep1Subtitle')}</Text>
       </View>
 
       {/* Profile Picture */}
@@ -188,7 +190,7 @@ export default function DriverRegisterStep1() {
           ) : (
             <View style={[styles.imagePlaceholder, { backgroundColor: colors.surfaceVariant, borderColor: colors.border }]}>
               <Ionicons name="camera" size={40} color={colors.textSecondary} />
-              <Text style={[styles.imageText, { color: colors.textSecondary }]}>Add Photo</Text>
+              <Text style={[styles.imageText, { color: colors.textSecondary }]}>{t('editProfile.profilePicture')}</Text>
             </View>
           )}
         </TouchableOpacity>
@@ -197,17 +199,17 @@ export default function DriverRegisterStep1() {
       {/* Google Sign-In */}
       <TouchableOpacity style={[styles.googleButton, { borderColor: colors.border, backgroundColor: colors.card }]} onPress={handleGoogleSignIn} disabled={loading}>
         <Ionicons name="logo-google" size={24} color="#DB4437" />
-        <Text style={[styles.googleButtonText, { color: colors.text }]}>Continue with Google</Text>
+        <Text style={[styles.googleButtonText, { color: colors.text }]}>{t('auth.continueWithGoogle')}</Text>
       </TouchableOpacity>
 
       <View style={styles.divider}>
         <View style={[styles.dividerLine, { backgroundColor: colors.border }]} />
-        <Text style={[styles.dividerText, { color: colors.textTertiary }]}>OR</Text>
+        <Text style={[styles.dividerText, { color: colors.textTertiary }]}>{t('auth.or')}</Text>
         <View style={[styles.dividerLine, { backgroundColor: colors.border }]} />
       </View>
 
       <View style={styles.inputGroup}>
-        <Text style={[styles.label, { color: colors.text }]}>Phone Number *</Text>
+        <Text style={[styles.label, { color: colors.text }]}>{t('auth.phoneNumber')} *</Text>
         <View style={[styles.phoneRow, { borderColor: colors.inputBorder, backgroundColor: colors.inputBg }]}>
           <TouchableOpacity
             style={[styles.countryCodeBtn, { borderRightColor: colors.inputBorder }]}
@@ -228,7 +230,7 @@ export default function DriverRegisterStep1() {
           </TouchableOpacity>
           <TextInput
             style={[styles.phoneInput, { color: colors.text }]}
-            placeholder="XX XXX XXX"
+            placeholder={t('auth.phoneNumberPlaceholder')}
             placeholderTextColor={colors.textTertiary}
             value={formData.phone}
             onChangeText={text => setFormData({ ...formData, phone: text.replace(/[^\d\s]/g, '') })}
@@ -239,45 +241,45 @@ export default function DriverRegisterStep1() {
       </View>
 
       <View style={styles.inputGroup}>
-        <Text style={[styles.label, { color: colors.text }]}>Password *</Text>
+        <Text style={[styles.label, { color: colors.text }]}>{t('auth.password')} *</Text>
         <View style={[styles.passwordContainer, { borderColor: colors.inputBorder, backgroundColor: colors.inputBg }]}>
-          <TextInput style={[styles.passwordInput, { color: colors.text }]} placeholder="Min 8 characters" placeholderTextColor={colors.textTertiary}
+          <TextInput style={[styles.passwordInput, { color: colors.text }]} placeholder={t('auth.atLeast8Chars')} placeholderTextColor={colors.textTertiary}
             value={formData.password} onChangeText={text => setFormData({ ...formData, password: text })}
             secureTextEntry={!showPassword} autoCapitalize="none" />
-          <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeIcon}>
+          <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeIcon} accessibilityLabel={showPassword ? t('common.hidePassword') : t('common.showPassword')}>
             <Ionicons name={showPassword ? 'eye-off' : 'eye'} size={24} color={colors.textSecondary} />
           </TouchableOpacity>
         </View>
       </View>
 
       <View style={styles.inputGroup}>
-        <Text style={[styles.label, { color: colors.text }]}>First Name</Text>
-        <TextInput style={[styles.input, { borderColor: colors.inputBorder, backgroundColor: colors.inputBg, color: colors.text }]} placeholder="John" placeholderTextColor={colors.textTertiary} value={formData.firstName}
+        <Text style={[styles.label, { color: colors.text }]}>{t('auth.firstName')}</Text>
+        <TextInput style={[styles.input, { borderColor: colors.inputBorder, backgroundColor: colors.inputBg, color: colors.text }]} placeholder={t('auth.enterFirstName')} placeholderTextColor={colors.textTertiary} value={formData.firstName}
           onChangeText={text => setFormData({ ...formData, firstName: text })} />
       </View>
 
       <View style={styles.inputGroup}>
-        <Text style={[styles.label, { color: colors.text }]}>Last Name</Text>
-        <TextInput style={[styles.input, { borderColor: colors.inputBorder, backgroundColor: colors.inputBg, color: colors.text }]} placeholder="Doe" placeholderTextColor={colors.textTertiary} value={formData.secondName}
+        <Text style={[styles.label, { color: colors.text }]}>{t('auth.secondName')}</Text>
+        <TextInput style={[styles.input, { borderColor: colors.inputBorder, backgroundColor: colors.inputBg, color: colors.text }]} placeholder={t('auth.enterLastName')} placeholderTextColor={colors.textTertiary} value={formData.secondName}
           onChangeText={text => setFormData({ ...formData, secondName: text })} />
       </View>
 
       <View style={styles.inputGroup}>
-        <Text style={[styles.label, { color: colors.text }]}>Email</Text>
-        <TextInput style={[styles.input, { borderColor: colors.inputBorder, backgroundColor: colors.inputBg, color: colors.text }]} placeholder="john@example.com" placeholderTextColor={colors.textTertiary} value={formData.myEmail}
+        <Text style={[styles.label, { color: colors.text }]}>{t('auth.emailOptional')}</Text>
+        <TextInput style={[styles.input, { borderColor: colors.inputBorder, backgroundColor: colors.inputBg, color: colors.text }]} placeholder={t('auth.emailPlaceholder')} placeholderTextColor={colors.textTertiary} value={formData.myEmail}
           onChangeText={text => setFormData({ ...formData, myEmail: text })}
           keyboardType="email-address" autoCapitalize="none" />
       </View>
 
       <View style={styles.inputGroup}>
-        <Text style={[styles.label, { color: colors.text }]}>Gender</Text>
+        <Text style={[styles.label, { color: colors.text }]}>{t('auth.genderOptional')}</Text>
         <View style={styles.genderContainer}>
           {(['MALE', 'FEMALE'] as const).map(g => (
             <TouchableOpacity key={g}
               style={[styles.genderButton, { borderColor: colors.inputBorder, backgroundColor: colors.inputBg }, formData.userGender === g && { backgroundColor: colors.primary, borderColor: colors.primary }]}
               onPress={() => setFormData({ ...formData, userGender: g })}>
               <Text style={[styles.genderText, { color: colors.text }, formData.userGender === g && styles.genderTextActive]}>
-                {g === 'MALE' ? 'Male' : 'Female'}
+                {g === 'MALE' ? t('auth.male') : t('auth.female')}
               </Text>
             </TouchableOpacity>
           ))}
@@ -286,12 +288,12 @@ export default function DriverRegisterStep1() {
 
       <TouchableOpacity style={[styles.submitButton, { backgroundColor: colors.primary }, loading && styles.submitButtonDisabled]}
         onPress={handleSubmit} disabled={loading}>
-        {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.submitButtonText}>Continue to Step 2</Text>}
+        {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.submitButtonText}>{t('auth.nextStep')}</Text>}
       </TouchableOpacity>
 
       <TouchableOpacity style={styles.loginLink} onPress={() => router.push('/(auth)/driver-login')}>
         <Text style={[styles.loginLinkText, { color: colors.textSecondary }]}>
-          Already have an account? <Text style={[styles.loginLinkBold, { color: colors.primary }]}>Login</Text>
+          {t('auth.alreadyHaveAccount')} <Text style={[styles.loginLinkBold, { color: colors.primary }]}>{t('auth.login')}</Text>
         </Text>
       </TouchableOpacity>
       <Modal
@@ -303,8 +305,8 @@ export default function DriverRegisterStep1() {
         <View style={styles.pickerOverlay}>
           <View style={[styles.pickerCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <View style={[styles.pickerHeader, { borderBottomColor: colors.border }]}>
-              <Text style={[styles.pickerTitle, { color: colors.text }]}>Select country code</Text>
-              <TouchableOpacity onPress={() => setShowPhoneCountryModal(false)} style={styles.pickerCloseBtn}>
+              <Text style={[styles.pickerTitle, { color: colors.text }]}>{t('auth.selectCountryCode')}</Text>
+              <TouchableOpacity onPress={() => setShowPhoneCountryModal(false)} style={styles.pickerCloseBtn} accessibilityLabel={t('common.close')}>
                 <Text style={[styles.pickerCloseText, { color: colors.textTertiary }]}>✕</Text>
               </TouchableOpacity>
             </View>
@@ -312,7 +314,7 @@ export default function DriverRegisterStep1() {
               <Text style={styles.pickerSearchIcon}>🔍</Text>
               <TextInput
                 style={[styles.pickerSearchInput, { color: colors.text }]}
-                placeholder="Search country, ISO or code"
+                placeholder={t('auth.searchCountryISO')}
                 placeholderTextColor={colors.textTertiary}
                 value={phoneCountrySearch}
                 onChangeText={setPhoneCountrySearch}

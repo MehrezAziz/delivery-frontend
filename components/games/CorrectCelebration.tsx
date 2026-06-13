@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { Animated, Dimensions, Easing, StyleSheet, Text, View } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../contexts/ThemeContext';
 
@@ -17,8 +18,10 @@ const CONFETTI_COLORS = ['#22C55E', '#EAB308', '#3B82F6', '#EC4899', '#F97316', 
  * Bursting confetti + scaling check-mark badge shown when the user answers correctly.
  * The parent controls visibility; we auto-hide via `onDone` ~1.4s after appearing.
  */
-export function CorrectCelebration({ visible, message = 'Correct!', onDone }: Props) {
+export function CorrectCelebration({ visible, message, onDone }: Props) {
+  const { t } = useTranslation();
   const { colors } = useTheme();
+  const resolvedMessage = message ?? t('correctCelebration.nice');
   const scale = useRef(new Animated.Value(0)).current;
   const fade = useRef(new Animated.Value(0)).current;
   const confetti = useRef(
@@ -125,7 +128,7 @@ export function CorrectCelebration({ visible, message = 'Correct!', onDone }: Pr
             { color: colors.text, opacity: fade, transform: [{ scale }] },
           ]}
         >
-          {message}
+          {resolvedMessage}
         </Animated.Text>
       </View>
     </Animated.View>

@@ -17,6 +17,7 @@ import * as WebBrowser from 'expo-web-browser';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useTranslation } from 'react-i18next';
 import { useTheme } from '../contexts/ThemeContext';
 import {
   coinTopupService,
@@ -71,6 +72,7 @@ function QuickPackCard({
   popularAccent,
   popularBg,
   popularBorder,
+  t,
 }: {
   pack: PackPreset;
   quote: CoinTopUpQuote;
@@ -83,6 +85,7 @@ function QuickPackCard({
   popularAccent: string;
   popularBg: string;
   popularBorder: string;
+  t: (key: string, options?: Record<string, unknown>) => string;
 }) {
   const fiatPack = pack.coins / quote.coinsPerFiatUnit;
   const accent = popular ? popularAccent : colors.primary;
@@ -118,7 +121,7 @@ function QuickPackCard({
         >
           {popular ? <Ionicons name="star" size={11} color="#fff" style={{ marginRight: 2 }} /> : null}
           <Text style={[packStyles.badgeText, { color: popular ? '#fff' : colors.primary }]}>
-            {pack.badge ?? 'Featured'}
+            {pack.badge ?? t('buyCoins.quickPacks')}
           </Text>
         </View>
       ) : null}
@@ -142,14 +145,14 @@ function QuickPackCard({
 
       <View style={[packStyles.amountBox, { backgroundColor: isDark ? 'rgba(15,23,42,0.45)' : 'rgba(255,255,255,0.72)' }]}>
         <View>
-          <Text style={[packStyles.amountLabel, { color: colors.textTertiary }]}>You receive</Text>
+          <Text style={[packStyles.amountLabel, { color: colors.textTertiary }]}>{t('buyCoins.youReceive')}</Text>
           <Text style={[packStyles.amountCoins, { color: colors.text }]}>
             {formatCoinsDisplay(pack.coins)}{' '}
-            <Text style={[packStyles.amountCoinsUnit, { color: accent }]}>coins</Text>
+            <Text style={[packStyles.amountCoinsUnit, { color: accent }]}>{t('buyCoins.coins')}</Text>
           </Text>
         </View>
         <View style={packStyles.amountRight}>
-          <Text style={[packStyles.amountLabel, { color: colors.textTertiary }]}>You pay</Text>
+          <Text style={[packStyles.amountLabel, { color: colors.textTertiary }]}>{t('buyCoins.youPay')}</Text>
           <Text style={[packStyles.amountFiat, { color: colors.text }]}>{formatFiat(fiatPack, quote)}</Text>
         </View>
       </View>
@@ -164,7 +167,7 @@ function QuickPackCard({
         ]}
       >
         <Text style={[packStyles.ctaText, { color: selected || popular ? '#fff' : colors.text }]}>
-          {selected ? 'Selected' : 'Choose this pack'}
+          {selected ? t('common.select') : t('buyCoins.buyNow')}
         </Text>
         <Ionicons name={selected ? 'checkmark-circle' : 'arrow-forward'} size={18} color={selected || popular ? '#fff' : colors.textSecondary} />
       </View>
@@ -244,6 +247,7 @@ export default function BuyCoinsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { colors, isDark } = useTheme();
+  const { t } = useTranslation();
   const role = useCoinTopupRole();
   const { buyCoinsResult: resultPath } = coinTopupRoutes(role);
 
@@ -290,12 +294,12 @@ export default function BuyCoinsScreen() {
       syncDraftFromCoins(start, q);
       await loadPending();
     } catch (e: unknown) {
-      const msg = e instanceof ApiError ? e.message : 'Unable to load rates';
+      const msg = e instanceof ApiError ? e.message : t('common.something_went_wrong');
       setLoadErr(msg);
     } finally {
       setLoadingQuote(false);
     }
-  }, [loadPending, syncDraftFromCoins]);
+  }, [loadPending, syncDraftFromCoins, t]);
 
   useEffect(() => {
     void fetchQuote();
@@ -395,7 +399,7 @@ export default function BuyCoinsScreen() {
     async (amount: number) => {
       if (!quote) return;
       if (!quote.flouciReady) {
-        Alert.alert('Unavailable', subtitle || 'Payments are not available for this wallet.');
+        Alert.alert(t('buyCoins.unavailable'), subtitle || t('buyCoins.unavailable'));
         return;
       }
       const normalized = clampInputCoins(amount, quote);
@@ -416,12 +420,12 @@ export default function BuyCoinsScreen() {
       await openFlouciCheckout(init);
     } catch (e: unknown) {
       pendingRef.current = null;
-      const msg = e instanceof ApiError ? e.message : 'Could not open checkout';
-      Alert.alert('Checkout', msg);
+      const msg = e instanceof ApiError ? e.message : t('common.something_went_wrong');
+      Alert.alert(t('buyCoins.checkout'), msg);
     } finally {
       setBusy(false);
     }
-  }, [checkoutPreview, openFlouciCheckout, quote]);
+  }, [checkoutPreview, openFlouciCheckout, quote, t]);
 
   const confirmRemovePending = useCallback(async () => {
     const row = removePendingTarget;
@@ -435,23 +439,23 @@ export default function BuyCoinsScreen() {
       setPendingList((prev) => prev.filter((p) => p.trackingId !== row.trackingId));
       setRemovePendingTarget(null);
     } catch (e: unknown) {
-      const msg = e instanceof ApiError ? e.message : 'Could not remove payment';
-      Alert.alert('Remove failed', msg);
+      const msg = e instanceof ApiError ? e.message : t('buyCoins.removeFailed');
+      Alert.alert(t('buyCoins.removeFailed'), msg);
     } finally {
       setRemovingTrackingId(null);
     }
-  }, [removePendingTarget]);
+  }, [removePendingTarget, t]);
 
   const removePendingMessage = useMemo(() => {
     if (!removePendingTarget) return '';
     const fiatDigits = quote?.currencyCode === 'TND' ? 3 : 2;
-    return `${removePendingTarget.coins.toFixed(2)} coins · ${removePendingTarget.fiatTotal.toFixed(fiatDigits)} ${removePendingTarget.currencyCode}\n\nThis cancels the checkout session. You can start a new purchase anytime.`;
-  }, [quote?.currencyCode, removePendingTarget]);
+    return `${removePendingTarget.coins.toFixed(2)} ${t('buyCoins.coins')} · ${removePendingTarget.fiatTotal.toFixed(fiatDigits)} ${removePendingTarget.currencyCode}\n\n${t('buyCoins.sessionNotResumable')}`;
+  }, [quote?.currencyCode, removePendingTarget, t]);
 
   const resumePending = useCallback(
     async (row: CoinTopUpPending) => {
       if (!row.checkoutUrl || !row.paymentId) {
-        Alert.alert('Unavailable', 'This payment session cannot be resumed. Start a new purchase.');
+        Alert.alert(t('buyCoins.unavailable'), t('buyCoins.sessionNotResumable'));
         return;
       }
       setBusy(true);
@@ -466,7 +470,7 @@ export default function BuyCoinsScreen() {
         setBusy(false);
       }
     },
-    [openFlouciCheckout],
+    [openFlouciCheckout, t],
   );
 
   const accentGlow = isDark ? 'rgba(94,234,212,0.16)' : 'rgba(14,165,233,0.22)';
@@ -480,7 +484,7 @@ export default function BuyCoinsScreen() {
     return (
       <View style={[styles.fill, styles.centered, { backgroundColor: colors.background }]}>
         <ActivityIndicator color={colors.primary} size="large" />
-        <Text style={{ marginTop: 16, color: colors.textSecondary, fontWeight: '600' }}>Loading pricing…</Text>
+        <Text style={{ marginTop: 16, color: colors.textSecondary, fontWeight: '600' }}>{t('buyCoins.loadingPricing')}</Text>
       </View>
     );
   }
@@ -490,7 +494,7 @@ export default function BuyCoinsScreen() {
       <View style={[styles.fill, styles.centerPad, { backgroundColor: colors.background, paddingTop: insets.top + 24 }]}>
         <Text style={{ color: colors.danger ?? '#dc2626', fontWeight: '600' }}>{loadErr}</Text>
         <TouchableOpacity style={[styles.secondaryBtn, { borderColor: colors.border, marginTop: 20 }]} onPress={() => void fetchQuote()}>
-          <Text style={{ color: colors.primary, fontWeight: '800' }}>Try again</Text>
+          <Text style={{ color: colors.primary, fontWeight: '800' }}>{t('buyCoins.tryAgain')}</Text>
         </TouchableOpacity>
       </View>
     );
@@ -505,21 +509,21 @@ export default function BuyCoinsScreen() {
             <View style={[styles.blob, styles.blobTwo, { backgroundColor: accentRing }]} />
           </View>
 
-          <Text style={[styles.title, { color: colors.text }]}>Buy coins</Text>
+          <Text style={[styles.title, { color: colors.text }]}>{t('buyCoins.title')}</Text>
           <Text style={[styles.lede, { color: colors.textSecondary }]}>
-            Pay in {quote.currencyCode} · pricing follows your region&apos;s{' '}
-            <Text style={{ fontWeight: '700', color: colors.text }}>country coin configuration</Text>.
+            {t('buyCoins.payInPrefix')}{quote.currencyCode}{t('buyCoins.pricingFollowsRegion')}
+            <Text style={{ fontWeight: '700', color: colors.text }}>{t('buyCoins.countryCoinConfig')}</Text>{t('buyCoins.period')}
           </Text>
 
           {pendingList.length > 0 ? (
             <View style={[styles.pendingBlock, { borderColor: colors.border, backgroundColor: colors.card }]}>
-              <Text style={[styles.pendingTitle, { color: colors.text }]}>Pending payments</Text>
+              <Text style={[styles.pendingTitle, { color: colors.text }]}>{t('buyCoins.pendingPayments')}</Text>
               {pendingList.map((row) => {
                 const removing = removingTrackingId === row.trackingId;
                 return (
                   <View key={row.trackingId} style={[styles.pendingRow, { borderTopColor: colors.border }]}>
                     <View style={{ flex: 1 }}>
-                      <Text style={[styles.pendingCoins, { color: colors.text }]}>{row.coins.toFixed(2)} coins</Text>
+                      <Text style={[styles.pendingCoins, { color: colors.text }]}>{row.coins.toFixed(2)} {t('buyCoins.coins')}</Text>
                       <Text style={[styles.pendingFiat, { color: colors.textSecondary }]}>
                         {row.fiatTotal.toFixed(quote.currencyCode === 'TND' ? 3 : 2)} {row.currencyCode}
                       </Text>
@@ -527,7 +531,7 @@ export default function BuyCoinsScreen() {
                     <View style={styles.pendingActions}>
                       <TouchableOpacity
                         accessibilityRole="button"
-                        accessibilityLabel="Remove pending payment"
+                        accessibilityLabel={t('buyCoins.removePending')}
                         disabled={busy || removing}
                         onPress={() => setRemovePendingTarget(row)}
                         style={[styles.pendingRemoveBtn, { borderColor: colors.border }]}
@@ -544,7 +548,7 @@ export default function BuyCoinsScreen() {
                         disabled={busy || removing || !row.checkoutUrl}
                         onPress={() => void resumePending(row)}
                       >
-                        <Text style={styles.pendingBtnText}>Complete payment</Text>
+                        <Text style={styles.pendingBtnText}>{t('buyCoins.completePayment')}</Text>
                       </TouchableOpacity>
                     </View>
                   </View>
@@ -583,7 +587,7 @@ export default function BuyCoinsScreen() {
               },
             ]}
           >
-            <Text style={[styles.amountLabel, { color: colors.textSecondary }]}>You receive</Text>
+            <Text style={[styles.amountLabel, { color: colors.textSecondary }]}>{t('buyCoins.youReceive')}</Text>
             <View style={styles.amountInputRow}>
               <TextInput
                 value={coinsDraft}
@@ -599,16 +603,16 @@ export default function BuyCoinsScreen() {
                 placeholder={String(quote.minCoins)}
                 placeholderTextColor={colors.textTertiary}
                 underlineColorAndroid="transparent"
-                accessibilityLabel="Coin amount to buy"
+                accessibilityLabel={t('buyCoins.coinAmountToBuy')}
                 style={[styles.amountInput, { color: colors.text }]}
               />
-              <Text style={[styles.amountUnit, { color: colors.primary }]}> coins</Text>
+              <Text style={[styles.amountUnit, { color: colors.primary }]}>{t('buyCoins.coinsSuffix')}</Text>
             </View>
             <Text style={[styles.amountHint, { color: colors.textTertiary }]}>
-              Min {quote.minCoins} coins · type any amount (e.g. 55)
+              {t('buyCoins.minimumCoins', { n: quote.minCoins })}
             </Text>
             <View style={[styles.divider, { backgroundColor: colors.border }]} />
-            <Text style={[styles.payLabel, { color: colors.textSecondary }]}>You pay approximately</Text>
+            <Text style={[styles.payLabel, { color: colors.textSecondary }]}>{t('buyCoins.youPayApprox')}</Text>
             <Text style={[styles.payValue, { color: colors.text }]}>{formatFiat(fiatNow, quote)}</Text>
 
             <View style={{ marginTop: 18 }}>
@@ -633,9 +637,9 @@ export default function BuyCoinsScreen() {
                 />
               </View>
               <View style={styles.sliderLegend}>
-                <Text style={[styles.legendText, { color: colors.textTertiary }]}>Min {quote.minCoins}</Text>
+                <Text style={[styles.legendText, { color: colors.textTertiary }]}>{t('buyCoins.minimumCoins', { n: quote.minCoins })}</Text>
                 <Text style={[styles.legendText, { color: colors.textTertiary }]}>
-                  Slider max {quote.maxCoins >= 1000 ? `${quote.maxCoins / 1000}k` : quote.maxCoins}
+                  {t('buyCoins.sliderMax', { max: quote.maxCoins >= 1000 ? `${quote.maxCoins / 1000}` : quote.maxCoins })}
                 </Text>
               </View>
 
@@ -652,15 +656,15 @@ export default function BuyCoinsScreen() {
                 ]}
                 activeOpacity={0.9}
               >
-                {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.buyNowText}>Buy now</Text>}
+                {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.buyNowText}>{t('buyCoins.buyNow')}</Text>}
               </TouchableOpacity>
             </View>
           </View>
 
           <View style={styles.packSection}>
-            <Text style={[styles.sectionTitle, { color: colors.textSecondary, marginTop: 0 }]}>Quick packs</Text>
+            <Text style={[styles.sectionTitle, { color: colors.textSecondary, marginTop: 0 }]}>{t('buyCoins.quickPacks')}</Text>
             <Text style={[styles.packSectionHint, { color: colors.textTertiary }]}>
-              Pick a ready-made bundle — amounts include live pricing for your country.
+              {t('buyCoins.quickPacksHint')}
             </Text>
             <View style={styles.packList}>
               {quote.presets.map((pack) => {
@@ -679,6 +683,7 @@ export default function BuyCoinsScreen() {
                     popularAccent={popularAccent}
                     popularBg={popularBg}
                     popularBorder={popularBorder}
+                    t={t}
                     onSelect={() => {
                       setCoinsFieldFocused(false);
                       setCoins(clampSliderCoins(pack.coins, quote));
@@ -704,7 +709,7 @@ export default function BuyCoinsScreen() {
             style={[StyleSheet.absoluteFillObject, { backgroundColor: modalOverlayTint }]}
             onPress={() => !busy && setCheckoutPreview(null)}
             accessibilityRole="button"
-            accessibilityLabel="Dismiss"
+            accessibilityLabel={t('buyCoins.dismiss')}
           />
           <View style={styles.modalAlign} pointerEvents="box-none">
             <View
@@ -718,14 +723,14 @@ export default function BuyCoinsScreen() {
               ]}
               accessibilityViewIsModal
             >
-              <Text style={[styles.modalTitle, { color: colors.text }]}>Confirm payment</Text>
+              <Text style={[styles.modalTitle, { color: colors.text }]}>{t('buyCoins.confirmPayment')}</Text>
               <Text style={[styles.modalSub, { color: colors.textSecondary }]}>
-                You will pay on Flouci (secure checkout). The amount below is sent to the payment page.
+                {t('buyCoins.continueToFlouci')}
               </Text>
               {checkoutPreview ? (
                 <>
                   <Text style={[styles.modalCoins, { color: colors.text }]}>
-                    {checkoutPreview.coins.toFixed(2)} coins
+                    {checkoutPreview.coins.toFixed(2)} {t('buyCoins.coins')}
                   </Text>
                   <Text style={[styles.modalFiat, { color: colors.primary }]}>
                     {formatFiat(checkoutPreview.fiat, quote)}
@@ -737,14 +742,14 @@ export default function BuyCoinsScreen() {
                 disabled={busy}
                 onPress={() => void confirmCheckoutPreview()}
               >
-                {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.buyNowText}>Continue to Flouci</Text>}
+                {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.buyNowText}>{t('buyCoins.continueToFlouci')}</Text>}
               </TouchableOpacity>
               <TouchableOpacity
                 style={{ marginTop: 12, paddingVertical: 10 }}
                 disabled={busy}
                 onPress={() => setCheckoutPreview(null)}
               >
-                <Text style={{ textAlign: 'center', color: colors.textSecondary, fontWeight: '700' }}>Cancel</Text>
+                <Text style={{ textAlign: 'center', color: colors.textSecondary, fontWeight: '700' }}>{t('buyCoins.cancel')}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -756,12 +761,12 @@ export default function BuyCoinsScreen() {
         onClose={() => {
           if (!removingTrackingId) setRemovePendingTarget(null);
         }}
-        title="Remove pending payment?"
+        title={t('buyCoins.removePending')}
         message={removePendingMessage}
         icon="trash-outline"
         destructive
-        confirmLabel="Remove"
-        cancelLabel="Keep"
+        confirmLabel={t('common.remove')}
+        cancelLabel={t('wallet.keep')}
         busy={removingTrackingId != null}
         onConfirm={() => void confirmRemovePending()}
       />

@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
 import { Text, StyleSheet, View, Platform } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -26,6 +27,7 @@ type Props = {
 };
 
 export function LivenessStepCoach({ action, accentColor, isDark }: Props) {
+  const { t: tr } = useTranslation();
   const t = useSharedValue(0);
 
   useEffect(() => {
@@ -102,7 +104,7 @@ export function LivenessStepCoach({ action, accentColor, isDark }: Props) {
         { borderColor: accentColor, backgroundColor: isDark ? 'rgba(15,23,42,0.5)' : 'rgba(255,255,255,0.92)' },
       ]}
     >
-      <Animated.Text style={[styles.emoji, animatedStyle]} accessibilityLabel="Liveness demo animation">
+      <Animated.Text style={[styles.emoji, animatedStyle]} accessibilityLabel={tr('biometric.livenessDemo')}>
         {EMOJI[action]}
       </Animated.Text>
     </View>

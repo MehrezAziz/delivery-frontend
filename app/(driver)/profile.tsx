@@ -20,6 +20,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import axios from 'axios';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useAppNavigation } from '../../contexts/AppNavigationContext';
 import { persistDriverIdentityFromMe } from '../../utils/persistDriverIdentity';
@@ -32,6 +33,7 @@ export default function DriverProfileScreen() {
   const router = useRouter();
   const { push } = useAppNavigation();
   const { colors, isDark } = useTheme();
+  const { t } = useTranslation();
   const [driver, setDriver] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -91,15 +93,15 @@ export default function DriverProfileScreen() {
       });
       void loadProfile('silent');
     } catch {
-      Alert.alert('Error', 'Failed to update photo');
+      Alert.alert(t('common.error'), t('editProfile.saveFailed'));
     }
   };
 
   const handleRemovePhoto = () => {
-    Alert.alert('Remove Photo', 'Are you sure?', [
-      { text: 'Cancel', style: 'cancel' },
+    Alert.alert(t('editProfile.removePhoto'), t('common.confirm'), [
+      { text: t('common.cancel'), style: 'cancel' },
       {
-        text: 'Remove',
+        text: t('common.remove'),
         style: 'destructive',
         onPress: async () => {
           try {
@@ -109,7 +111,7 @@ export default function DriverProfileScreen() {
             });
             void loadProfile('silent');
           } catch {
-            Alert.alert('Error', 'Failed to remove photo');
+            Alert.alert(t('common.error'), t('editProfile.saveFailed'));
           }
         },
       },
@@ -118,10 +120,10 @@ export default function DriverProfileScreen() {
 
   const openPhotoOptions = () => {
     if (driver?.user?.image) {
-      Alert.alert('Profile photo', 'What would you like to do?', [
-        { text: 'Change photo', onPress: handleChangePhoto },
-        { text: 'Remove photo', onPress: handleRemovePhoto, style: 'destructive' },
-        { text: 'Cancel', style: 'cancel' },
+      Alert.alert(t('editProfile.profilePicture'), t('common.chooseAnOption'), [
+        { text: t('editProfile.takePhoto'), onPress: handleChangePhoto },
+        { text: t('editProfile.removePhoto'), onPress: handleRemovePhoto, style: 'destructive' },
+        { text: t('common.cancel'), style: 'cancel' },
       ]);
     } else {
       handleChangePhoto();
@@ -160,16 +162,16 @@ export default function DriverProfileScreen() {
           style={[StyleSheet.absoluteFillObject, { backgroundColor: signOutOverlayTint }]}
           onPress={() => !signOutBusy && setSignOutModalVisible(false)}
           accessibilityRole="button"
-          accessibilityLabel="Dismiss"
+          accessibilityLabel={t('common.dismiss')}
         />
         <View style={styles.signOutModalAlign} pointerEvents="box-none">
           <View
             style={[styles.signOutDialog, { backgroundColor: colors.card, borderColor: colors.border }]}
             accessibilityViewIsModal
           >
-            <Text style={[styles.signOutDialogTitle, { color: colors.text }]}>Sign out</Text>
+            <Text style={[styles.signOutDialogTitle, { color: colors.text }]}>{t('driverProfile.signOut')}</Text>
             <Text style={[styles.signOutDialogBody, { color: colors.textSecondary }]}>
-              You will be signed out on this device. Sign in again to accept deliveries and manage your account.
+              {t('sideMenu.signOutDriverBody')}
             </Text>
             <View style={styles.signOutDialogActions}>
               <TouchableOpacity
@@ -178,7 +180,7 @@ export default function DriverProfileScreen() {
                 disabled={signOutBusy}
                 activeOpacity={0.8}
               >
-                <Text style={[styles.signOutBtnSecondaryText, { color: colors.text }]}>Cancel</Text>
+                <Text style={[styles.signOutBtnSecondaryText, { color: colors.text }]}>{t('common.cancel')}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.signOutBtnPrimary, { backgroundColor: colors.danger }]}
@@ -189,7 +191,7 @@ export default function DriverProfileScreen() {
                 {signOutBusy ? (
                   <ActivityIndicator size="small" color="#fff" />
                 ) : (
-                  <Text style={styles.signOutBtnPrimaryText}>Sign out</Text>
+                  <Text style={styles.signOutBtnPrimaryText}>{t('driverProfile.signOut')}</Text>
                 )}
               </TouchableOpacity>
             </View>
@@ -222,16 +224,16 @@ export default function DriverProfileScreen() {
           : '#6b7280';
   const statusLabel =
     driver?.status === 'VERIFIED'
-      ? 'Verified'
+      ? t('driverDocuments.statusApproved')
       : driver?.status === 'PENDING_REVIEW'
-        ? 'Pending Review'
+        ? t('driverDocuments.statusPending')
         : driver?.status === 'INCOMPLETE'
-          ? 'Incomplete'
+          ? t('common.required')
           : driver?.status === 'SUSPENDED'
-            ? 'Suspended'
+            ? t('restrictions.SUSPENSION')
             : driver?.status === 'PAUSED'
-              ? 'Paused'
-              : driver?.status || 'Unknown';
+              ? t('restrictions.WARNING')
+              : driver?.status || t('common.unknown');
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -262,7 +264,7 @@ export default function DriverProfileScreen() {
           </View>
           <TouchableOpacity onPress={openPhotoOptions} activeOpacity={0.7} style={styles.photoLinkTouch}>
             <Text style={[styles.photoLinkText, { color: colors.primary }]}>
-              {driver?.user?.image ? 'Change or remove photo' : 'Add profile photo'}
+              {driver?.user?.image ? t('editProfile.profilePicture') : t('editProfile.takePhoto')}
             </Text>
           </TouchableOpacity>
           <Text style={[styles.name, { color: colors.text }]}>
@@ -279,18 +281,18 @@ export default function DriverProfileScreen() {
               <View style={[styles.infoBlock, { backgroundColor: colors.surfaceVariant }]}>
                 <View style={styles.infoRowBetween}>
                   <View style={{ flex: 1 }}>
-                    <Text style={[styles.infoLabel, { color: colors.textTertiary }]}>Account balance</Text>
+                    <Text style={[styles.infoLabel, { color: colors.textTertiary }]}>{t('customerProfile.accountBalance')}</Text>
                     <Text
                       style={[
                         styles.infoValue,
                         { color: driver.account.balance < 0 ? colors.danger : '#16a34a' },
                       ]}
                     >
-                      {driver.account.balance.toFixed(2)} Coins
+                      {driver.account.balance.toFixed(2)}{t('common.coinsSuffix')}
                     </Text>
                   </View>
                   <View style={{ alignItems: 'flex-end' }}>
-                    <Text style={[styles.infoLabel, { color: colors.textTertiary }]}>Deliveries</Text>
+                    <Text style={[styles.infoLabel, { color: colors.textTertiary }]}>{t('driverProfile.totalDeliveries')}</Text>
                     <Text style={[styles.infoValue, { color: colors.text }]}>{driver.account.completedDeliveries}</Text>
                   </View>
                 </View>
@@ -299,7 +301,7 @@ export default function DriverProfileScreen() {
             <TouchableOpacity
               activeOpacity={0.9}
               accessibilityRole="button"
-              accessibilityLabel="Buy coins"
+              accessibilityLabel={t('wallet.buyCoins')}
               onPress={() => router.push('/(driver)/buy-coins')}
               style={[
                 styles.comingSoonBox,
@@ -308,9 +310,9 @@ export default function DriverProfileScreen() {
             >
               <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
                 <View style={{ flex: 1 }}>
-                  <Text style={[styles.comingSoonTitle, { color: colors.text }]}>Buy coins</Text>
+                  <Text style={[styles.comingSoonTitle, { color: colors.text }]}>{t('wallet.buyCoins')}</Text>
                   <Text style={[styles.comingSoonBody, { color: colors.textSecondary }]}>
-                    Top up with Flouci and keep your balance healthy.
+                    {t('buyCoins.quickPacksHint')}
                   </Text>
                 </View>
                 <Ionicons name="chevron-forward" size={22} color={colors.primary} />
@@ -329,20 +331,18 @@ export default function DriverProfileScreen() {
               >
                 {driver.account.daysRemainingToPay <= 0 ? (
                   <>
-                    <Text style={[styles.warningTitle, { color: colors.danger }]}>Account paused</Text>
+                    <Text style={[styles.warningTitle, { color: colors.danger }]}>{t('restrictions.SUSPENSION')}</Text>
                     <Text style={[styles.warningBody, { color: colors.textSecondary }]}>
-                      Your account has been paused due to unpaid fees. Please pay your balance to resume.
+                      {t('wallet.insufficientBalanceBody')}
                     </Text>
                   </>
                 ) : (
                   <>
                     <Text style={[styles.warningTitle, { color: '#ea580c' }]}>
-                      {driver.account.daysRemainingToPay} day{driver.account.daysRemainingToPay !== 1 ? 's' : ''}{' '}
-                      remaining
+                      {driver.account.daysRemainingToPay} {t('common.today')}
                     </Text>
                     <Text style={[styles.warningBody, { color: colors.textSecondary }]}>
-                      Pay your fees ({Math.abs(driver.account.balance).toFixed(2)} Coins) or your
-                      account will be paused.
+                      {t('wallet.insufficientBalanceBody')} ({Math.abs(driver.account.balance).toFixed(2)}{t('common.coinsSuffix')})
                     </Text>
                   </>
                 )}
@@ -350,13 +350,13 @@ export default function DriverProfileScreen() {
             )}
             {driver?.vehicleType && (
               <View style={[styles.infoBlock, { backgroundColor: colors.surfaceVariant }]}>
-                <Text style={[styles.infoLabel, { color: colors.textTertiary }]}>Vehicle</Text>
+                <Text style={[styles.infoLabel, { color: colors.textTertiary }]}>{t('auth.vehicleType')}</Text>
                 <Text style={[styles.infoValue, { color: colors.text, marginTop: 4 }]}>{driver.vehicleType}</Text>
               </View>
             )}
             {driver?.description && (
               <View style={[styles.infoBlock, { backgroundColor: colors.surfaceVariant }]}>
-                <Text style={[styles.infoLabel, { color: colors.textTertiary }]}>Description</Text>
+                <Text style={[styles.infoLabel, { color: colors.textTertiary }]}>{t('createOrder.packageDescription')}</Text>
                 <Text style={[styles.infoValue, { color: colors.text, marginTop: 4 }]}>{driver.description}</Text>
               </View>
             )}
@@ -364,13 +364,13 @@ export default function DriverProfileScreen() {
         </View>
 
         <View style={styles.menuContainer}>
-          <Text style={[styles.actionsSectionTitle, { color: colors.textSecondary }]}>Quick actions</Text>
+          <Text style={[styles.actionsSectionTitle, { color: colors.textSecondary }]}>{t('driverHome.quickActions')}</Text>
           {(
             [
               {
                 icon: 'cash-outline' as const,
-                title: 'Earnings',
-                subtitle: 'View payouts and delivery income',
+                title: t('driverProfile.earnings'),
+                subtitle: t('driverEarnings.breakdown'),
                 route: '/(driver)/earnings',
                 tintLight: '#fef9c3',
                 tintDark: '#422006',
@@ -378,8 +378,8 @@ export default function DriverProfileScreen() {
               },
               {
                 icon: 'swap-horizontal-outline' as const,
-                title: 'Send coins',
-                subtitle: 'P2P transfers to other users',
+                title: t('wallet.newSend'),
+                subtitle: t('sendCoins.hint'),
                 route: '/(driver)/send-coins',
                 tintLight: '#ccfbf1',
                 tintDark: '#134e4a',
@@ -387,8 +387,8 @@ export default function DriverProfileScreen() {
               },
               {
                 icon: 'receipt-outline' as const,
-                title: 'Transaction history',
-                subtitle: 'Payments, fees, and top-ups',
+                title: t('driverProfile.transactions'),
+                subtitle: t('wallet.viewTransactionHistory'),
                 route: '/(driver)/transactions',
                 tintLight: '#e0f2fe',
                 tintDark: '#0c4a6e',
@@ -396,8 +396,8 @@ export default function DriverProfileScreen() {
               },
               {
                 icon: 'star-outline' as const,
-                title: 'My ratings',
-                subtitle: 'Feedback from customers',
+                title: t('driverProfile.myRatings'),
+                subtitle: t('myRatings.breakdown'),
                 route: '/(driver)/my-ratings',
                 tintLight: '#ffedd5',
                 tintDark: '#431407',
@@ -405,8 +405,8 @@ export default function DriverProfileScreen() {
               },
               {
                 icon: 'headset-outline' as const,
-                title: 'Help & support',
-                subtitle: 'Get help or contact the team',
+                title: t('driverProfile.support'),
+                subtitle: t('support.contactSupport'),
                 route: '/(driver)/support',
                 tintLight: '#dcfce7',
                 tintDark: '#052e16',
@@ -443,7 +443,7 @@ export default function DriverProfileScreen() {
             onPress={handleLogout}
             activeOpacity={0.75}
           >
-            <Text style={[styles.signOutCompactText, { color: colors.danger }]}>Sign out</Text>
+            <Text style={[styles.signOutCompactText, { color: colors.danger }]}>{t('driverProfile.signOut')}</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>

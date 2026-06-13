@@ -9,6 +9,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
+import { useTranslation } from 'react-i18next';
 import { api } from '../../services/api/client';
 import { orderService, Order } from '../../services/api/order.service';
 import { requestNotificationBadgeRefresh, startOrderTracking } from '../../services/notifications';
@@ -65,6 +66,7 @@ interface PricePreview {
 
 export default function CreateOrderScreen() {
   const router = useRouter();
+  const { t } = useTranslation();
   const { colors, isDark } = useTheme();
   const surfaceSoft = isDark ? '#1f2937' : '#f9fafb';
   const surfaceMuted = isDark ? '#111827' : '#f3f4f6';
@@ -282,11 +284,11 @@ export default function CreateOrderScreen() {
         lat, lng,
       });
     } catch (e: any) {
-      appAlert('Error', e.message || 'Failed to save address');
+      appAlert(t('common.error'), e.message || t('common.something_went_wrong'));
     } finally {
       setResolving(false);
     }
-  }, []);
+  }, [t]);
 
   // Clean up stale picker data on mount
   useEffect(() => {
@@ -371,14 +373,14 @@ export default function CreateOrderScreen() {
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
-        appAlert('Location', 'We need your permission to use the current position.');
+        appAlert(t('common.permission'), t('common.permissionDenied'));
         return;
       }
       const pos = await Location.getCurrentPositionAsync({});
       await resolveAddress(
         pos.coords.latitude,
         pos.coords.longitude,
-        'Current location',
+        t('createOrder.now'),
         which === 'pickup' ? setPickupAddress : setDropoffAddress,
         which === 'pickup' ? setResolvingPickup : setResolvingDropoff,
       );
@@ -436,11 +438,11 @@ export default function CreateOrderScreen() {
   const handleCalculatePrice = async () => {
     if (customerStatus === 'CREATED' && !hasMainAddress) {
       appAlert(
-        'Address verification required',
-        'Please add MAIN address to be verified before creating orders.',
+        t('customerHome.addressVerificationRequired'),
+        t('customerHome.pleaseAddMain'),
         [
           {
-            text: 'OK',
+            text: t('common.ok'),
             onPress: () => router.push(`/(customer)/addresses?add=${Date.now()}` as never),
           },
         ],
@@ -448,40 +450,40 @@ export default function CreateOrderScreen() {
       return;
     }
     if (!pickupAddress || !dropoffAddress) {
-      appAlert('Missing Address', 'Please select both pickup and delivery locations on the map.');
+      appAlert(t('createOrder.chooseAddress'), t('createOrder.chooseAddress'));
       return;
     }
     if (pickupAddress.addressId === dropoffAddress.addressId) {
-      appAlert('Same Location', 'Pickup and delivery must be different locations.');
+      appAlert(t('common.error'), t('createOrder.chooseAddress'));
       return;
     }
     const w = parseFloat(weight);
     if (isNaN(w) || w <= 0) {
-      appAlert('Invalid Weight', 'Please enter a valid package weight.');
+      appAlert(t('createOrder.weight'), t('common.invalidAmount'));
       return;
     }
     if (cancelAfterMinutes > 1440) {
-      appAlert('Invalid Timer', 'Auto-cancel time must be 24 hours or less.');
+      appAlert(t('common.error'), '24h');
       return;
     }
     if (scheduleLater && publishAt.getTime() < Date.now() + 60 * 1000) {
-      appAlert('Schedule', 'Publish time must be at least one minute from now.');
+      appAlert(t('createOrder.scheduleFor'), t('createOrder.later'));
       return;
     }
     const ex = parseFloat((customerExtraAmount || '0').replace(',', '.'));
     if (Number.isNaN(ex) || ex < 0) {
-      appAlert('Amount', 'Enter a valid optional extra amount (0 or more).');
+      appAlert(t('common.enterValidAmount'), t('common.invalidAmount'));
       return;
     }
     if (ex > MAX_CUSTOMER_EXTRA) {
-      appAlert('Amount', `Optional extra cannot exceed ${MAX_CUSTOMER_EXTRA}.`);
+      appAlert(t('common.enterValidAmount'), `${t('common.invalidAmount')} (${MAX_CUSTOMER_EXTRA})`);
       return;
     }
     setLoading(true);
     try {
       const [savedPickupNickname, savedDropoffNickname] = await Promise.all([
-        autoSaveAddressForLater(pickupAddress, pickupNickSave, 'Pickup'),
-        autoSaveAddressForLater(dropoffAddress, dropoffNickSave, 'Delivery'),
+        autoSaveAddressForLater(pickupAddress, pickupNickSave, t('createOrder.pickup')),
+        autoSaveAddressForLater(dropoffAddress, dropoffNickSave, t('createOrder.delivery')),
       ]);
       if (savedPickupNickname) {
         setPickupAddress((prev) => (prev ? { ...prev, nickname: savedPickupNickname, label: savedPickupNickname } : prev));
@@ -500,7 +502,7 @@ export default function CreateOrderScreen() {
       setCustomerExtraAmount(String(result.customerExtraAmount ?? ex));
       setStep('preview');
     } catch (e: any) {
-      appAlert('Error', e.message || 'Failed to calculate price');
+      appAlert(t('common.error'), e.message || t('common.something_went_wrong'));
     } finally {
       setLoading(false);
     }
@@ -510,7 +512,7 @@ export default function CreateOrderScreen() {
     if (!pickupAddress || !dropoffAddress || !preview) return;
     const ex = parseFloat((customerExtraAmount || '0').replace(',', '.'));
     if (Number.isNaN(ex) || ex < 0 || ex > MAX_CUSTOMER_EXTRA) {
-      appAlert('Amount', `Enter a valid optional extra (0–${MAX_CUSTOMER_EXTRA}).`);
+      appAlert(t('common.enterValidAmount'), `0–${MAX_CUSTOMER_EXTRA}`);
       return;
     }
     setSubmitting(true);
@@ -532,8 +534,8 @@ export default function CreateOrderScreen() {
         await startOrderTracking(
           order.id,
           scheduled
-            ? '📅 Order scheduled — waiting to go live'
-            : '📦 Order Confirmed — Searching for a driver...',
+            ? `📅 ${t('customerHome.status.Scheduled')}`
+            : `📦 ${t('createOrder.orderPlaced')} — ${t('customerHome.status.Searching')}`,
           scheduled ? '◉———⌖———⌖———⌖———⌖———⌖———⌖' : '⛟———⌖———⌖———⌖———⌖———⌖———⌖',
           {
             orderId: order.id,
@@ -569,7 +571,7 @@ export default function CreateOrderScreen() {
       } catch {}
       router.replace(`/(customer)/order-detail?orderId=${order.id}`);
     } catch (e: any) {
-      appAlert('Error', e.message || 'Failed to create order');
+      appAlert(t('common.error'), e.message || t('createOrder.orderFailed'));
     } finally {
       setSubmitting(false);
     }
@@ -591,20 +593,20 @@ export default function CreateOrderScreen() {
     try {
       const LA = await getLocalAuthentication();
       if (!LA) {
-        appAlert('Unavailable', 'Biometric verification is not available. Rebuild the app or use password.');
+        appAlert(t('common.error'), t('common.something_went_wrong'));
         setOrderGateUi('bio_retry_hint');
         return;
       }
       const hw = await LA.hasHardwareAsync();
       const enrolled = await LA.isEnrolledAsync();
       if (!hw || !enrolled) {
-        appAlert('Biometrics', 'Set up Face ID or fingerprint on your device first.');
+        appAlert(t('common.error'), t('common.something_went_wrong'));
         setOrderGateUi('bio_retry_hint');
         return;
       }
       const auth = await LA.authenticateAsync({
-        promptMessage: 'Confirm to place this order',
-        cancelLabel: 'Cancel',
+        promptMessage: t('createOrder.confirmAndPay'),
+        cancelLabel: t('common.cancel'),
         disableDeviceFallback: true,
       });
       if (auth.success) {
@@ -621,7 +623,7 @@ export default function CreateOrderScreen() {
       }
       recordBiometricFailure();
     } catch (e: any) {
-      appAlert('Error', e?.message || 'Verification failed.');
+      appAlert(t('common.error'), e?.message || t('common.something_went_wrong'));
       recordBiometricFailure();
     } finally {
       setOrderVerifyBusy(false);
@@ -639,7 +641,7 @@ export default function CreateOrderScreen() {
       setOrderVerifyPassword('');
       await runCreateOrder();
     } catch (e: any) {
-      appAlert('Verification failed', e?.message || 'Invalid password.');
+      appAlert(t('common.error'), e?.message || t('common.something_went_wrong'));
     } finally {
       setOrderVerifyBusy(false);
     }
@@ -649,18 +651,18 @@ export default function CreateOrderScreen() {
     if (!pickupAddress || !dropoffAddress || !preview) return;
     const ex = parseFloat((customerExtraAmount || '0').replace(',', '.'));
     if (Number.isNaN(ex) || ex < 0 || ex > MAX_CUSTOMER_EXTRA) {
-      appAlert('Amount', `Enter a valid optional extra (0–${MAX_CUSTOMER_EXTRA}).`);
+      appAlert(t('common.enterValidAmount'), `0–${MAX_CUSTOMER_EXTRA}`);
       return;
     }
 
     if (customerStatus === 'CREATED') {
       Alert.alert(
-        'Sorry',
-        'Only ACTIVE customers can create orders.\n\nAdd an address to become ACTIVE.',
+        t('common.error'),
+        t('customerHome.pleaseAddMain'),
         [
-          { text: 'Cancel', style: 'cancel' },
+          { text: t('common.cancel'), style: 'cancel' },
           {
-            text: 'Add address to become ACTIVE',
+            text: t('customerHome.addMainAddress'),
             onPress: () => {
               router.push(`/(customer)/addresses?add=${Date.now()}` as never);
             },
@@ -679,11 +681,11 @@ export default function CreateOrderScreen() {
     }
 
     if (orderGateUi === 'choice_panel') {
-      appAlert('Choose an option', 'Use Face ID — Fingerprint or your password above.');
+      appAlert(t('common.chooseAnOption'), t('common.chooseAnOption'));
       return;
     }
     if (orderGateUi === 'password_mode') {
-      appAlert('Password', 'Enter your password and tap Verify password.');
+      appAlert(t('common.required'), t('common.required'));
       return;
     }
 
@@ -708,7 +710,7 @@ export default function CreateOrderScreen() {
       setPreview(result);
       setCustomerExtraAmount(String(result.customerExtraAmount ?? extraOk));
     } catch (e: any) {
-      appAlert('Error', e.message || 'Failed to recalculate price');
+      appAlert(t('common.error'), e.message || t('common.something_went_wrong'));
     } finally {
       setSwitchingPayment(false);
     }
@@ -724,16 +726,16 @@ export default function CreateOrderScreen() {
       ? overrideExtraAmount
       : parseFloat((customerExtraAmount || '0').replace(',', '.'));
     if (Number.isNaN(ex) || ex < 0) {
-      appAlert('Amount', 'Enter a valid optional extra amount (0 or more).');
+      appAlert(t('common.enterValidAmount'), t('common.invalidAmount'));
       return;
     }
     if (ex > MAX_CUSTOMER_EXTRA) {
-      appAlert('Amount', `Optional extra cannot exceed ${MAX_CUSTOMER_EXTRA}.`);
+      appAlert(t('common.enterValidAmount'), `${t('common.invalidAmount')} (${MAX_CUSTOMER_EXTRA})`);
       return;
     }
     const w = parseFloat(weight);
     if (Number.isNaN(w) || w <= 0) {
-      appAlert('Weight', 'Go back and enter a valid weight.');
+      appAlert(t('createOrder.weight'), t('common.invalidAmount'));
       return;
     }
     setLoading(true);
@@ -749,7 +751,7 @@ export default function CreateOrderScreen() {
       setPreview(result);
       setCustomerExtraAmount(String(result.customerExtraAmount ?? ex));
     } catch (e: any) {
-      appAlert('Error', e.message || 'Failed to update price');
+      appAlert(t('common.error'), e.message || t('common.something_went_wrong'));
     } finally {
       setLoading(false);
     }
@@ -789,7 +791,7 @@ export default function CreateOrderScreen() {
             activeOpacity={0.75}
           >
             <Ionicons name="chevron-back" size={20} color={colors.primary} />
-            <Text style={[s.previewEditText, { color: colors.primary }]}>Edit order details</Text>
+            <Text style={[s.previewEditText, { color: colors.primary }]}>{t('common.edit')}</Text>
           </TouchableOpacity>
 
           {/* Route card */}
@@ -802,12 +804,12 @@ export default function CreateOrderScreen() {
               </View>
               <View style={{ flex: 1 }}>
                 <View style={{ marginBottom: 20 }}>
-                  <Text style={[s.routeLabel, { color: colors.textTertiary }]}>PICKUP</Text>
+                  <Text style={[s.routeLabel, { color: colors.textTertiary }]}>{t('createOrder.pickup').toUpperCase()}</Text>
                   <Text style={[s.routeAddress, { color: colors.text }]}>{pickupAddress?.label}</Text>
                   <Text style={[s.routeSub, { color: colors.textSecondary }]}>{pickupAddress?.sublabel}</Text>
                 </View>
                 <View>
-                  <Text style={[s.routeLabel, { color: colors.textTertiary }]}>DELIVERY</Text>
+                  <Text style={[s.routeLabel, { color: colors.textTertiary }]}>{t('createOrder.delivery').toUpperCase()}</Text>
                   <Text style={[s.routeAddress, { color: colors.text }]}>{dropoffAddress?.label}</Text>
                   <Text style={[s.routeSub, { color: colors.textSecondary }]}>{dropoffAddress?.sublabel}</Text>
                 </View>
@@ -820,39 +822,37 @@ export default function CreateOrderScreen() {
             <View style={[s.chip, { backgroundColor: isCash ? successBg : infoBg }]}>
               <Text style={{ fontSize: 14 }}>{isCash ? '💵' : '💰'}</Text>
               <Text style={[s.chipText, { color: isCash ? successText : infoText }]}>
-                {isCash ? 'Cash' : 'Wallet'}
+                {isCash ? t('orderDetail.cash') : t('orderDetail.wallet')}
               </Text>
             </View>
             <View style={[s.chip, { backgroundColor: surfaceMuted }]}>
               <Text style={{ fontSize: 14 }}>📦</Text>
-              <Text style={[s.chipText, { color: colors.text }]}>{weight} kg</Text>
+              <Text style={[s.chipText, { color: colors.text }]}>{weight} {t('common.kg')}</Text>
             </View>
             <View style={[s.chip, { backgroundColor: surfaceMuted }]}>
               <Text style={{ fontSize: 14 }}>📏</Text>
-              <Text style={[s.chipText, { color: colors.text }]}>{preview.distanceKm.toFixed(1)} km</Text>
+              <Text style={[s.chipText, { color: colors.text }]}>{preview.distanceKm.toFixed(1)} {t('common.km')}</Text>
             </View>
             {preview.isNightDelivery && (
               <View style={[s.chip, { backgroundColor: isDark ? 'rgba(129,140,248,0.22)' : '#e0e7ff' }]}>
                 <Text style={{ fontSize: 14 }}>🌙</Text>
-                <Text style={[s.chipText, { color: isDark ? '#c4b5fd' : '#3730a3' }]}>Night</Text>
+                <Text style={[s.chipText, { color: isDark ? '#c4b5fd' : '#3730a3' }]}>{t('orderDetail.timeline')}</Text>
               </View>
             )}
             {scheduleLater && (
               <View style={[s.chip, { backgroundColor: isDark ? 'rgba(14,165,233,0.2)' : '#e0f2fe' }]}>
                 <Text style={{ fontSize: 14 }}>📅</Text>
                 <Text style={[s.chipText, { color: colors.primary }]}>
-                  Live {publishAt.toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })}
+                  {publishAt.toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })}
                 </Text>
               </View>
             )}
           </View>
 
-          {/* Optional extra for long errands / driver time (added to calculated delivery price) */}
           <View style={[s.card, { backgroundColor: colors.card }]}>
-            <Text style={[s.cardTitle, { color: colors.text }]}>Driver time / errand (optional)</Text>
+            <Text style={[s.cardTitle, { color: colors.text }]}>{t('common.optional')}</Text>
             <Text style={[s.inputLabel, { color: colors.textSecondary, marginBottom: 8 }]}>
-              Add an amount for long waits or services (e.g. paying a bill at an office). Max {MAX_CUSTOMER_EXTRA}{' '}
-              {preview.currencySymbol}.
+              {t('common.enterValidAmount')} (max {MAX_CUSTOMER_EXTRA} {preview.currencySymbol})
             </Text>
             <View style={s.extraStepperRow}>
               <TouchableOpacity
@@ -883,27 +883,26 @@ export default function CreateOrderScreen() {
             </View>
           </View>
 
-          {/* Price breakdown */}
           <View style={[s.card, { backgroundColor: colors.card }]}>
-            <Text style={[s.cardTitle, { color: colors.text }]}>Price Breakdown</Text>
-            <PriceRow label="Base Fee" {...line(preview.baseFee)} labelColor={colors.textSecondary} valueColor={colors.text} />
-            <PriceRow label="Distance Fee" {...line(preview.distanceFee)} labelColor={colors.textSecondary} valueColor={colors.text} />
+            <Text style={[s.cardTitle, { color: colors.text }]}>{t('orderDetail.fee')}</Text>
+            <PriceRow label={t('orderDetail.fee')} {...line(preview.baseFee)} labelColor={colors.textSecondary} valueColor={colors.text} />
+            <PriceRow label={t('orderDetail.distance')} {...line(preview.distanceFee)} labelColor={colors.textSecondary} valueColor={colors.text} />
             {preview.extraWeightFee > 0 && (
-              <PriceRow label="Extra Weight" {...line(preview.extraWeightFee)} labelColor={colors.textSecondary} valueColor={colors.text} />
+              <PriceRow label={t('createOrder.weight')} {...line(preview.extraWeightFee)} labelColor={colors.textSecondary} valueColor={colors.text} />
             )}
             {preview.nightFee > 0 && (
-              <PriceRow label="Night Fee 🌙" {...line(preview.nightFee)} labelColor={colors.textSecondary} valueColor={colors.text} />
+              <PriceRow label={t('orderDetail.fee')} {...line(preview.nightFee)} labelColor={colors.textSecondary} valueColor={colors.text} />
             )}
             <View style={[s.divider, { backgroundColor: colors.border }]} />
             <PriceRow
-              label="Delivery (calculated)"
+              label={t('createOrder.delivery')}
               {...line(preview.calculatedPrice)}
               labelColor={colors.textSecondary}
               valueColor={colors.text}
             />
             {preview.customerExtraAmount > 0 && (
               <PriceRow
-                label="Your extra (driver time / errand)"
+                label={t('common.optional')}
                 {...line(preview.customerExtraAmount)}
                 labelColor={colors.textSecondary}
                 valueColor={colors.text}
@@ -921,7 +920,7 @@ export default function CreateOrderScreen() {
             />
             {!hasCoinRate(coinsPerFiatUnit) && (
               <Text style={{ color: colors.textTertiary, fontSize: 12, marginTop: 6 }}>
-                Coin conversion rate is not configured for your country yet.
+                {t('common.something_went_wrong')}
               </Text>
             )}
           </View>
@@ -930,12 +929,11 @@ export default function CreateOrderScreen() {
             <View style={[s.walletBanner, { backgroundColor: isDark ? 'rgba(239,68,68,0.16)' : '#fef2f2' }]}>
               <Ionicons name="wallet-outline" size={18} color={colors.danger} />
               <Text style={[s.walletText, { color: colors.danger }]}>
-                Insufficient funds — you need {totalCoins.toFixed(2)} coins
+                {t('createOrder.insufficientCoins')} — {totalCoins.toFixed(2)} {t('common.coinsSuffix')}
               </Text>
             </View>
           )}
 
-          {/* Insufficient balance action buttons */}
           {insufficientWallet && (
             <View style={s.insufficientActions}>
               <TouchableOpacity
@@ -944,7 +942,7 @@ export default function CreateOrderScreen() {
                 activeOpacity={0.7}
               >
                 <Ionicons name="add-circle-outline" size={18} color={isDark ? '#93c5fd' : '#1e40af'} />
-                <Text style={[s.insufficientBtnText, { color: isDark ? '#93c5fd' : '#1e40af' }]}>Add Coins</Text>
+                <Text style={[s.insufficientBtnText, { color: isDark ? '#93c5fd' : '#1e40af' }]}>{t('common.add')}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[s.insufficientBtn, { backgroundColor: isDark ? 'rgba(34,197,94,0.2)' : '#dcfce7' }]}
@@ -952,7 +950,7 @@ export default function CreateOrderScreen() {
                 activeOpacity={0.7}
               >
                 <Ionicons name="cash-outline" size={18} color={isDark ? '#86efac' : '#166534'} />
-                <Text style={[s.insufficientBtnText, { color: isDark ? '#86efac' : '#166534' }]}>Switch to Cash</Text>
+                <Text style={[s.insufficientBtnText, { color: isDark ? '#86efac' : '#166534' }]}>{t('orderDetail.cash')}</Text>
               </TouchableOpacity>
             </View>
           )}
@@ -966,8 +964,7 @@ export default function CreateOrderScreen() {
               ]}
             >
               <Text style={{ color: colors.textSecondary, fontSize: 14, lineHeight: 20 }}>
-                Biometric verification did not complete. Tap Confirm Order to try again
-                {userHasPassword ? ', or use your password below.' : '.'}
+                {t('common.tryAgain')}
               </Text>
               {userHasPassword ? (
                 <TouchableOpacity
@@ -975,7 +972,7 @@ export default function CreateOrderScreen() {
                   disabled={orderVerifyBusy}
                   style={s.orderVerifyHintWrap}
                 >
-                  <Text style={[s.orderVerifyHint, { color: colors.primary }]}>Use password instead</Text>
+                  <Text style={[s.orderVerifyHint, { color: colors.primary }]}>{t('common.chooseAnOption')}</Text>
                 </TouchableOpacity>
               ) : null}
             </View>
@@ -988,9 +985,9 @@ export default function CreateOrderScreen() {
                 { backgroundColor: colors.card, borderColor: colors.border },
               ]}
             >
-              <Text style={[s.orderVerifyTitle, { color: colors.text }]}>How would you like to confirm?</Text>
+              <Text style={[s.orderVerifyTitle, { color: colors.text }]}>{t('common.chooseAnOption')}</Text>
               <Text style={[s.orderVerifySub, { color: colors.textSecondary }]}>
-                Choose Face ID / fingerprint or your account password.
+                {t('common.chooseAnOption')}
               </Text>
               <EditProfileBiometricVerifyButton
                 onPress={() => {
@@ -1007,7 +1004,7 @@ export default function CreateOrderScreen() {
                   disabled={orderVerifyBusy}
                   style={s.orderVerifyHintWrap}
                 >
-                  <Text style={[s.orderVerifyHint, { color: colors.primary }]}>Use password instead</Text>
+                  <Text style={[s.orderVerifyHint, { color: colors.primary }]}>{t('common.chooseAnOption')}</Text>
                 </TouchableOpacity>
               ) : null}
             </View>
@@ -1020,12 +1017,12 @@ export default function CreateOrderScreen() {
                 { backgroundColor: colors.card, borderColor: colors.border },
               ]}
             >
-              <Text style={[s.orderVerifyTitle, { color: colors.text }]}>Password</Text>
+              <Text style={[s.orderVerifyTitle, { color: colors.text }]}>{t('common.required')}</Text>
               <PasswordTextField
                 value={orderVerifyPassword}
                 onChangeText={setOrderVerifyPassword}
                 colors={colors}
-                placeholder="Account password"
+                placeholder={t('common.required')}
                 editable={!orderVerifyBusy}
                 containerStyle={{ marginBottom: 12 }}
               />
@@ -1042,7 +1039,7 @@ export default function CreateOrderScreen() {
                 {orderVerifyBusy ? (
                   <ActivityIndicator color="#fff" />
                 ) : (
-                  <Text style={s.secondaryVerifyBtnText}>Verify password</Text>
+                  <Text style={s.secondaryVerifyBtnText}>{t('common.confirm')}</Text>
                 )}
               </TouchableOpacity>
               <TouchableOpacity
@@ -1055,7 +1052,7 @@ export default function CreateOrderScreen() {
                 style={s.orderVerifyHintWrap}
               >
                 <Text style={[s.orderVerifyHint, { color: colors.primary }]}>
-                  Use Face ID / fingerprint
+                  {t('common.chooseAnOption')}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -1086,7 +1083,7 @@ export default function CreateOrderScreen() {
             ) : (
               <>
                 <Ionicons name="checkmark-circle" size={22} color="white" style={{ marginRight: 8 }} />
-                <Text style={s.primaryBtnText}>Confirm Order</Text>
+                <Text style={s.primaryBtnText}>{t('createOrder.confirmAndPay')}</Text>
               </>
             )}
           </TouchableOpacity>
@@ -1113,9 +1110,9 @@ export default function CreateOrderScreen() {
               <Ionicons name="cube-outline" size={22} color={colors.primary} />
             </View>
             <View style={{ flex: 1, minWidth: 0 }}>
-              <Text style={[s.localPickupCtaTitle, { color: colors.text }]}>Create local pickup</Text>
+              <Text style={[s.localPickupCtaTitle, { color: colors.text }]}>{t('localPickup.title')}</Text>
               <Text style={[s.localPickupCtaSub, { color: colors.textSecondary }]}>
-                Same-location pickup — quick flow for shop and carry orders
+                {t('localPickup.description')}
               </Text>
             </View>
             <Ionicons name="chevron-forward" size={20} color={colors.textTertiary} />
@@ -1124,7 +1121,7 @@ export default function CreateOrderScreen() {
           {/* ── Active Orders ── */}
           {activeOrders.length > 0 && (
             <View style={[s.activeOrdersCard, { backgroundColor: isDark ? 'rgba(180,83,9,0.18)' : '#fffbeb', borderColor: isDark ? '#92400e' : '#fde68a' }]}>
-              <Text style={[s.activeOrdersTitle, { color: isDark ? '#fcd34d' : '#92400e' }]}>📦 Active Orders ({activeOrders.length})</Text>
+              <Text style={[s.activeOrdersTitle, { color: isDark ? '#fcd34d' : '#92400e' }]}>📦 {t('customerHome.activeOrders')} ({activeOrders.length})</Text>
               {activeOrders.map(o => (
                 <TouchableOpacity
                   key={o.id}
@@ -1148,7 +1145,7 @@ export default function CreateOrderScreen() {
 
           {/* ── Addresses ── */}
           <View style={[s.card, { backgroundColor: colors.card }]}>
-            <Text style={[s.cardTitle, { color: colors.text }]}>Route</Text>
+            <Text style={[s.cardTitle, { color: colors.text }]}>{t('createOrder.pickup')} / {t('createOrder.delivery')}</Text>
 
             {/* Pickup */}
             <View
@@ -1165,29 +1162,29 @@ export default function CreateOrderScreen() {
               <View style={[s.addressDot, { backgroundColor: pickupAddress ? '#22c55e' : colors.border }]} />
               <View style={{ flex: 1 }}>
                 {resolvingPickup ? (
-                  <Text style={[s.addressFetching, { color: colors.primary }]}>Fetching your current position...</Text>
+                  <Text style={[s.addressFetching, { color: colors.primary }]}>{t('common.loading')}</Text>
                 ) : pickupAddress ? (
                   <>
                     <Text style={[s.addressMainText, { color: colors.text }]}>{pickupAddress.label}</Text>
                     <Text style={[s.addressSubText, { color: colors.textSecondary }]}>{pickupAddress.sublabel}</Text>
                   </>
                 ) : (
-                  <Text style={[s.addressPlaceholder, { color: colors.textTertiary }]}>Tap to select pickup location</Text>
+                  <Text style={[s.addressPlaceholder, { color: colors.textTertiary }]}>{t('createOrder.pickupAddress')}</Text>
                 )}
                 <View style={{ flexDirection: 'row', gap: 8, marginTop: 10 }}>
                   <TouchableOpacity style={[s.inlineActionBtn, { backgroundColor: surfaceMuted }]} onPress={() => openMapPicker('pickup')} activeOpacity={0.7}>
                     <Ionicons name="map-outline" size={16} color="#16a34a" />
-                    <Text style={[s.inlineActionTxt, { color: colors.text }]}>Map</Text>
+                    <Text style={[s.inlineActionTxt, { color: colors.text }]}>{t('createOrder.chooseAddress')}</Text>
                   </TouchableOpacity>
                   {savedAddresses.length > 0 && (
                     <TouchableOpacity style={[s.inlineActionBtn, { backgroundColor: surfaceMuted }]} onPress={() => openSavedPicker('pickup')} activeOpacity={0.7}>
                       <Ionicons name="list-outline" size={16} color="#166534" />
-                      <Text style={[s.inlineActionTxt, { color: colors.text }]}>List</Text>
+                      <Text style={[s.inlineActionTxt, { color: colors.text }]}>{t('common.showAll')}</Text>
                     </TouchableOpacity>
                   )}
                   <TouchableOpacity style={[s.inlineActionBtn, { backgroundColor: surfaceMuted }]} onPress={() => useMyLocation('pickup')} disabled={resolvingPickup} activeOpacity={0.7}>
                     <Ionicons name="locate" size={16} color="#2563eb" />
-                    <Text style={[s.inlineActionTxt, { color: colors.text }]}>My Position</Text>
+                    <Text style={[s.inlineActionTxt, { color: colors.text }]}>{t('createOrder.now')}</Text>
                   </TouchableOpacity>
                 </View>
               </View>
@@ -1211,29 +1208,29 @@ export default function CreateOrderScreen() {
               <View style={[s.addressDot, { backgroundColor: dropoffAddress ? '#ef4444' : colors.border }]} />
               <View style={{ flex: 1 }}>
                 {resolvingDropoff ? (
-                  <Text style={[s.addressFetching, { color: colors.primary }]}>Fetching your current position...</Text>
+                  <Text style={[s.addressFetching, { color: colors.primary }]}>{t('common.loading')}</Text>
                 ) : dropoffAddress ? (
                   <>
                     <Text style={[s.addressMainText, { color: colors.text }]}>{dropoffAddress.label}</Text>
                     <Text style={[s.addressSubText, { color: colors.textSecondary }]}>{dropoffAddress.sublabel}</Text>
                   </>
                 ) : (
-                  <Text style={[s.addressPlaceholder, { color: colors.textTertiary }]}>Tap to select delivery location</Text>
+                  <Text style={[s.addressPlaceholder, { color: colors.textTertiary }]}>{t('createOrder.deliveryAddress')}</Text>
                 )}
                 <View style={{ flexDirection: 'row', gap: 8, marginTop: 10 }}>
                   <TouchableOpacity style={[s.inlineActionBtn, { backgroundColor: surfaceMuted }]} onPress={() => openMapPicker('dropoff')} activeOpacity={0.7}>
                     <Ionicons name="map-outline" size={16} color="#ef4444" />
-                    <Text style={[s.inlineActionTxt, { color: colors.text }]}>Map</Text>
+                    <Text style={[s.inlineActionTxt, { color: colors.text }]}>{t('createOrder.chooseAddress')}</Text>
                   </TouchableOpacity>
                   {savedAddresses.length > 0 && (
                     <TouchableOpacity style={[s.inlineActionBtn, { backgroundColor: surfaceMuted }]} onPress={() => openSavedPicker('dropoff')} activeOpacity={0.7}>
                       <Ionicons name="list-outline" size={16} color="#b91c1c" />
-                      <Text style={[s.inlineActionTxt, { color: colors.text }]}>List</Text>
+                      <Text style={[s.inlineActionTxt, { color: colors.text }]}>{t('common.showAll')}</Text>
                     </TouchableOpacity>
                   )}
                   <TouchableOpacity style={[s.inlineActionBtn, { backgroundColor: surfaceMuted }]} onPress={() => useMyLocation('dropoff')} disabled={resolvingDropoff} activeOpacity={0.7}>
                     <Ionicons name="locate" size={16} color="#2563eb" />
-                    <Text style={[s.inlineActionTxt, { color: colors.text }]}>My Position</Text>
+                    <Text style={[s.inlineActionTxt, { color: colors.text }]}>{t('createOrder.now')}</Text>
                   </TouchableOpacity>
                 </View>
               </View>
@@ -1243,18 +1240,18 @@ export default function CreateOrderScreen() {
 
           {(pickupAddress || dropoffAddress) && (
             <View style={[s.card, { backgroundColor: colors.card }]}>
-              <Text style={[s.cardTitle, { color: colors.text }]}>Address nickname</Text>
+              <Text style={[s.cardTitle, { color: colors.text }]}>{t('common.add')}</Text>
               <Text style={[s.inputLabel, { color: colors.textSecondary, marginBottom: 8 }]}>
                 {(pickupAddress && !isAlreadySavedAddress(pickupAddress)) || (dropoffAddress && !isAlreadySavedAddress(dropoffAddress))
-                  ? 'Add a short nickname. New addresses are saved automatically when you press Calculate Price.'
-                  : 'These addresses are already saved.'}
+                  ? t('common.optional')
+                  : t('common.saved')}
               </Text>
               {pickupAddress && !isAlreadySavedAddress(pickupAddress) && (
                 <View style={{ marginBottom: 12 }}>
-                  <Text style={[s.inputLabel, { color: colors.text }]}>Pickup (new)</Text>
+                  <Text style={[s.inputLabel, { color: colors.text }]}>{t('createOrder.pickup')}</Text>
                   <TextInput
                     style={[s.descInput, { color: colors.text, borderColor: colors.inputBorder, backgroundColor: colors.inputBg }]}
-                    placeholder="e.g. Home, Office…"
+                    placeholder={t('common.optional')}
                     placeholderTextColor={colors.textTertiary}
                     value={pickupNickSave}
                     onChangeText={setPickupNickSave}
@@ -1263,10 +1260,10 @@ export default function CreateOrderScreen() {
               )}
               {dropoffAddress && !isAlreadySavedAddress(dropoffAddress) && (
                 <View>
-                  <Text style={[s.inputLabel, { color: colors.text }]}>Delivery (new)</Text>
+                  <Text style={[s.inputLabel, { color: colors.text }]}>{t('createOrder.delivery')}</Text>
                   <TextInput
                     style={[s.descInput, { color: colors.text, borderColor: colors.inputBorder, backgroundColor: colors.inputBg }]}
-                    placeholder="e.g. Father's house…"
+                    placeholder={t('common.optional')}
                     placeholderTextColor={colors.textTertiary}
                     value={dropoffNickSave}
                     onChangeText={setDropoffNickSave}
@@ -1276,9 +1273,8 @@ export default function CreateOrderScreen() {
             </View>
           )}
 
-          {/* ── Payment Method ── */}
           <View style={[s.card, { backgroundColor: colors.card }]}>
-            <Text style={[s.cardTitle, { color: colors.text }]}>Payment</Text>
+            <Text style={[s.cardTitle, { color: colors.text }]}>{t('createOrder.payment')}</Text>
             <View style={s.paymentRow}>
               <TouchableOpacity
                 style={[
@@ -1290,8 +1286,8 @@ export default function CreateOrderScreen() {
                 activeOpacity={0.7}
               >
                 <Text style={s.paymentEmoji}>💵</Text>
-                <Text style={[s.paymentLabel, { color: colors.text }, paymentType === 'COD' && { color: '#fff' }]}>Cash</Text>
-                <Text style={[s.paymentSub, { color: colors.textSecondary }, paymentType === 'COD' && { color: 'rgba(255,255,255,0.8)' }]}>Pay on delivery</Text>
+                <Text style={[s.paymentLabel, { color: colors.text }, paymentType === 'COD' && { color: '#fff' }]}>{t('orderDetail.cash')}</Text>
+                <Text style={[s.paymentSub, { color: colors.textSecondary }, paymentType === 'COD' && { color: 'rgba(255,255,255,0.8)' }]}>{t('createOrder.payCash')}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[
@@ -1303,18 +1299,17 @@ export default function CreateOrderScreen() {
                 activeOpacity={0.7}
               >
                 <Text style={s.paymentEmoji}>💰</Text>
-                <Text style={[s.paymentLabel, { color: colors.text }, paymentType === 'WALLET' && { color: '#fff' }]}>Wallet</Text>
-                <Text style={[s.paymentSub, { color: colors.textSecondary }, paymentType === 'WALLET' && { color: 'rgba(255,255,255,0.8)' }]}>Use coins</Text>
-                <Text style={[s.paymentSub, { color: colors.textSecondary }, paymentType === 'WALLET' && { color: 'rgba(255,255,255,0.8)' }]}>{walletBalance} coins</Text>
+                <Text style={[s.paymentLabel, { color: colors.text }, paymentType === 'WALLET' && { color: '#fff' }]}>{t('orderDetail.wallet')}</Text>
+                <Text style={[s.paymentSub, { color: colors.textSecondary }, paymentType === 'WALLET' && { color: 'rgba(255,255,255,0.8)' }]}>{t('createOrder.payWallet')}</Text>
+                <Text style={[s.paymentSub, { color: colors.textSecondary }, paymentType === 'WALLET' && { color: 'rgba(255,255,255,0.8)' }]}>{walletBalance} {t('common.coinsSuffix')}</Text>
               </TouchableOpacity>
             </View>
           </View>
 
-          {/* ── Package Details ── */}
           <View style={[s.card, { backgroundColor: colors.card }]}>
-            <Text style={[s.cardTitle, { color: colors.text }]}>Package Details</Text>
+            <Text style={[s.cardTitle, { color: colors.text }]}>{t('createOrder.package')}</Text>
 
-            <Text style={[s.inputLabel, { color: colors.textSecondary }]}>Weight (kg)</Text>
+            <Text style={[s.inputLabel, { color: colors.textSecondary }]}>{t('createOrder.weightKg')}</Text>
             <View style={s.weightRow}>
               <TouchableOpacity style={[s.weightBtn, { backgroundColor: surfaceMuted }]} onPress={() => {
                 const w = Math.max(0.5, parseFloat(weight || '1') - 0.5);
@@ -1337,12 +1332,12 @@ export default function CreateOrderScreen() {
               </TouchableOpacity>
             </View>
 
-            <Text style={[s.inputLabel, { marginTop: 16 }]}>Description (optional)</Text>
+            <Text style={[s.inputLabel, { marginTop: 16 }]}>{t('createOrder.packageDescription')}</Text>
             <TextInput
               style={[s.descInput, { backgroundColor: surfaceSoft, borderColor: borderSoft, color: colors.text }]}
               value={description}
               onChangeText={setDescription}
-              placeholder="What are you sending?"
+              placeholder={t('createOrder.packageDescriptionPlaceholder')}
               placeholderTextColor={colors.textTertiary}
               multiline
               numberOfLines={3}
@@ -1350,10 +1345,9 @@ export default function CreateOrderScreen() {
             />
           </View>
 
-          {/* ── Auto-Cancel Timer ── */}
           <View style={[s.card, { backgroundColor: colors.card }]}>
-            <Text style={[s.cardTitle, { color: colors.text }]}>Auto-Cancel Timer</Text>
-            <Text style={[s.inputLabel, { color: colors.textSecondary }]}>Cancel if no driver responds (minutes)</Text>
+            <Text style={[s.cardTitle, { color: colors.text }]}>{t('orderDetail.cancelOrder')}</Text>
+            <Text style={[s.inputLabel, { color: colors.textSecondary }]}>{t('orderDetail.cancelConfirm')}</Text>
             <View style={s.weightRow}>
               <TouchableOpacity style={[s.weightBtn, { backgroundColor: surfaceMuted }]} onPress={() => {
                 setCancelAfterMinutes(prev => Math.max(15, prev - 1));
@@ -1377,17 +1371,16 @@ export default function CreateOrderScreen() {
               </TouchableOpacity>
             </View>
             {cancelAfterMinutes > 1440 && (
-              <Text style={[s.validationError, { color: colors.danger }]}>Must be 1440 minutes (24h) or less</Text>
+              <Text style={[s.validationError, { color: colors.danger }]}>{t('common.invalidAmount')}</Text>
             )}
           </View>
 
-          {/* ── Publish to drivers later ── */}
           <View style={[s.card, { backgroundColor: colors.card }]}>
             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
               <View style={{ flex: 1, paddingRight: 12 }}>
-                <Text style={[s.cardTitle, { color: colors.text }]}>Publish time</Text>
+                <Text style={[s.cardTitle, { color: colors.text }]}>{t('createOrder.scheduleFor')}</Text>
                 <Text style={[s.inputLabel, { color: colors.textSecondary }]}>
-                  Drivers only see your order at this time (notifications go out then too).
+                  {t('createOrder.later')}
                 </Text>
               </View>
               <Switch
@@ -1436,7 +1429,7 @@ export default function CreateOrderScreen() {
             ) : (
               <>
                 <Ionicons name="calculator-outline" size={22} color="white" style={{ marginRight: 8 }} />
-                <Text style={s.primaryBtnText}>Calculate Price</Text>
+                <Text style={s.primaryBtnText}>{t('createOrder.estimatedPrice')}</Text>
               </>
             )}
           </TouchableOpacity>
@@ -1447,7 +1440,7 @@ export default function CreateOrderScreen() {
           <View style={[s.modalCard, { backgroundColor: colors.card }]}>
             <View style={s.modalHeadRow}>
               <Text style={[s.modalTitle, { color: colors.text }]}>
-                Select saved address for {savedPickerTarget === 'pickup' ? 'pickup' : 'delivery'}
+                {t('createOrder.chooseAddress')} — {savedPickerTarget === 'pickup' ? t('createOrder.pickup') : t('createOrder.delivery')}
               </Text>
               <TouchableOpacity onPress={() => setSavedPickerVisible(false)}>
                 <Ionicons name="close-circle" size={24} color={colors.textSecondary} />
@@ -1457,7 +1450,7 @@ export default function CreateOrderScreen() {
               <Ionicons name="search" size={16} color={colors.textTertiary} />
               <TextInput
                 style={[s.modalSearchInput, { color: colors.text }]}
-                placeholder="Search by nickname, street, area..."
+                placeholder={t('common.search')}
                 placeholderTextColor={colors.textTertiary}
                 value={savedSearch}
                 onChangeText={setSavedSearch}
@@ -1471,7 +1464,7 @@ export default function CreateOrderScreen() {
               ListHeaderComponent={
                 recentAddresses.length > 0 ? (
                   <View style={{ marginBottom: 8 }}>
-                    <Text style={[s.recentTitle, { color: colors.textSecondary }]}>Recently used</Text>
+                    <Text style={[s.recentTitle, { color: colors.textSecondary }]}>{t('common.today')}</Text>
                     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingBottom: 6 }}>
                       {recentAddresses.map((r) => (
                         <TouchableOpacity
@@ -1507,7 +1500,7 @@ export default function CreateOrderScreen() {
                   <Text style={[s.modalItemSub, { color: colors.textSecondary }]} numberOfLines={1}>{item.sublabel}</Text>
                 </TouchableOpacity>
               )}
-              ListEmptyComponent={<Text style={[s.modalEmpty, { color: colors.textTertiary }]}>No matching addresses</Text>}
+              ListEmptyComponent={<Text style={[s.modalEmpty, { color: colors.textTertiary }]}>{t('common.noResults')}</Text>}
             />
           </View>
         </View>

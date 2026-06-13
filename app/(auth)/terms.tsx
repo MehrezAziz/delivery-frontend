@@ -1,31 +1,26 @@
 import { View, Text, ScrollView, StyleSheet } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import { useTheme } from '../../contexts/ThemeContext';
 
 export default function TermsScreen() {
   const { colors } = useTheme();
+  const { t } = useTranslation();
 
   return (
     <View style={[s.wrap, { backgroundColor: colors.background }]}>
       <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 40 }}>
         <Text style={[s.p, { color: colors.text }]}>
-          By creating an account you agree to use the platform responsibly. The same text is available at{' '}
-          <Text style={{ fontWeight: '700' }}>GET /api/terms</Text> on the server.
+          {t('terms.introPrefix')}
+          <Text style={{ fontWeight: '700' }}>{t('terms.introEndpoint')}</Text>
+          {t('terms.introSuffix')}
         </Text>
-        <Text style={[s.h, { color: colors.text }]}>Prohibited & sensitive content</Text>
-        <Text style={[s.p, { color: colors.textSecondary }]}>
-          Do not request delivery of sensitive administrative documents, cash or money transfers, prohibited substances,
-          or high-value precious items without following any special rules the platform may publish.
-        </Text>
-        <Text style={[s.h, { color: colors.text }]}>Honesty & disputes</Text>
-        <Text style={[s.p, { color: colors.textSecondary }]}>
-          Do not deceive administrators or falsely accuse drivers or customers. Serious abuse may be escalated through
-          legal channels after investigation by customer service.
-        </Text>
-        <Text style={[s.h, { color: colors.text }]}>Support</Text>
-        <Text style={[s.p, { color: colors.textSecondary }]}>
-          Use in-app support for conflicts. Customer service may suspend accounts when terms are violated.
-        </Text>
-        <Text style={[s.meta, { color: colors.textTertiary }]}>Last updated: April 13, 2026</Text>
+        <Text style={[s.h, { color: colors.text }]}>{t('terms.prohibitedTitle')}</Text>
+        <Text style={[s.p, { color: colors.textSecondary }]}>{t('terms.prohibitedBody')}</Text>
+        <Text style={[s.h, { color: colors.text }]}>{t('terms.honestyTitle')}</Text>
+        <Text style={[s.p, { color: colors.textSecondary }]}>{t('terms.honestyBody')}</Text>
+        <Text style={[s.h, { color: colors.text }]}>{t('terms.supportTitle')}</Text>
+        <Text style={[s.p, { color: colors.textSecondary }]}>{t('terms.supportBody')}</Text>
+        <Text style={[s.meta, { color: colors.textTertiary }]}>{t('terms.lastUpdated')}</Text>
       </ScrollView>
     </View>
   );

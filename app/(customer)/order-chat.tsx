@@ -8,6 +8,7 @@ import { useIsFocused } from '@react-navigation/native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useTranslation } from 'react-i18next';
 import { orderService, ChatMessage, ChatRoom } from '../../services/api/order.service';
 import { notificationService } from '../../services/api/notification.service';
 import { syncNativeChatPreviewAfterThreadRead } from '../../services/notifications';
@@ -16,6 +17,7 @@ import { useActiveChatForNotifications } from '../../hooks/useActiveChatForNotif
 
 export default function OrderChatScreen() {
   const router = useRouter();
+  const { t } = useTranslation();
   const { orderId: orderIdParam } = useLocalSearchParams<{ orderId: string | string[] }>();
   const orderId = typeof orderIdParam === 'string' ? orderIdParam : orderIdParam?.[0] ?? '';
   const { colors, isDark } = useTheme();
@@ -107,7 +109,7 @@ export default function OrderChatScreen() {
 
   const handleAssistance = async () => {
     try {
-      await orderService.requestAssistance(orderId, 'I need help with this order');
+      await orderService.requestAssistance(orderId, t('support.describeIssue'));
       router.push('/(customer)/support');
     } catch (e) { console.error(e); }
   };
@@ -147,7 +149,7 @@ export default function OrderChatScreen() {
       >
       <View style={[s.chatToolbar, { backgroundColor: colors.card, borderColor: colors.border }]}>
         <View style={{ flex: 1, minWidth: 0 }}>
-          <Text style={[s.toolbarMeta, { color: colors.textTertiary }]}>Order</Text>
+          <Text style={[s.toolbarMeta, { color: colors.textTertiary }]}>{t('orderDetail.title')}</Text>
           <Text style={[s.toolbarOrderId, { color: colors.text }]} numberOfLines={1}>
             #{orderId?.slice(0, 8)}
           </Text>
@@ -155,7 +157,7 @@ export default function OrderChatScreen() {
         <TouchableOpacity
           onPress={handleAssistance}
           style={[s.assistBtn, { backgroundColor: isDark ? 'rgba(234,88,12,0.22)' : '#fff3e0' }]}
-          accessibilityLabel="Request assistance"
+          accessibilityLabel={t('support.contactSupport')}
         >
           <Ionicons name="headset-outline" size={20} color="#ea580c" />
         </TouchableOpacity>
@@ -175,8 +177,8 @@ export default function OrderChatScreen() {
         ListEmptyComponent={
           <View style={s.emptyWrap}>
             <Ionicons name="chatbubbles-outline" size={48} color={colors.border} />
-            <Text style={[s.emptyText, { color: colors.textTertiary }]}>No messages yet</Text>
-            <Text style={[s.emptySub, { color: colors.border }]}>Start the conversation</Text>
+            <Text style={[s.emptyText, { color: colors.textTertiary }]}>{t('common.noResults')}</Text>
+            <Text style={[s.emptySub, { color: colors.border }]}>{t('orderChat.typeMessage')}</Text>
           </View>
         }
       />
@@ -185,7 +187,7 @@ export default function OrderChatScreen() {
       {isClosed ? (
         <View style={[s.closedBar, { backgroundColor: colors.surfaceVariant, paddingBottom: Platform.OS === 'android' ? (keyboardHeight > 0 ? 13 : 0) : Math.max(insets.bottom, 12), marginBottom: Platform.OS === 'android' ? (keyboardHeight > 0 ? keyboardHeight : 60 + insets.bottom + 3) : 0 }]}>
           <Ionicons name="lock-closed-outline" size={16} color={colors.textTertiary} />
-          <Text style={[s.closedText, { color: colors.textTertiary }]}>chatroom closed</Text>
+          <Text style={[s.closedText, { color: colors.textTertiary }]}>{t('orderChat.youCannotChat')}</Text>
         </View>
       ) : (
         <View style={[s.inputBar, { backgroundColor: colors.card, borderTopColor: colors.border, paddingBottom: Platform.OS === 'android' ? (keyboardHeight > 0 ? 13 : 0) : Math.max(insets.bottom, 12), marginBottom: Platform.OS === 'android' ? (keyboardHeight > 0 ? keyboardHeight : 60 + insets.bottom + 3) : 0 }]}>
@@ -193,7 +195,7 @@ export default function OrderChatScreen() {
             style={[s.textInput, { backgroundColor: colors.surfaceVariant, color: colors.text }]}
             value={input}
             onChangeText={setInput}
-            placeholder="Type a message..."
+            placeholder={t('orderChat.typeMessage')}
             placeholderTextColor={colors.textTertiary}
             multiline
           />

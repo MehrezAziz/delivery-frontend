@@ -11,6 +11,7 @@ import {
   Keyboard,
 } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
@@ -26,6 +27,7 @@ import { SupportChatMessageItem } from '../../components/support/SupportChatMess
 export default function DriverSupportChatScreen() {
   const { ticketId } = useLocalSearchParams<{ ticketId: string }>();
   const { colors } = useTheme();
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const [ticket, setTicket] = useState<(SupportTicket & { messages: SupportMessage[] }) | null>(null);
   const [loading, setLoading] = useState(true);
@@ -152,7 +154,7 @@ export default function DriverSupportChatScreen() {
   if (!ticket) {
     return (
       <View style={[styles.container, { justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background }]}>
-        <Text style={{ color: colors.danger }}>Ticket not found</Text>
+        <Text style={{ color: colors.danger }}>{t('common.notFound')}</Text>
       </View>
     );
   }
@@ -191,14 +193,14 @@ export default function DriverSupportChatScreen() {
           <View style={[styles.ticketInfo, { backgroundColor: colors.surfaceVariant }]}>
             <Text style={[styles.ticketInfoText, { color: colors.text }]}>{ticket.description}</Text>
             <Text style={[styles.ticketInfoDate, { color: colors.textSecondary }]}>
-              Created {new Date(ticket.createdAt).toLocaleString()}
+              {new Date(ticket.createdAt).toLocaleString()}
             </Text>
           </View>
         }
         ListFooterComponent={
           streamingPreview ? (
             <View style={[styles.streamingBubble, { backgroundColor: colors.card, borderColor: colors.border }]}>
-              <Text style={[styles.streamingLabel, { color: colors.textSecondary }]}>Assistant</Text>
+              <Text style={[styles.streamingLabel, { color: colors.textSecondary }]}>{t('supportChat.assistant')}</Text>
               <Text style={{ color: colors.text }}>{streamingPreview}</Text>
             </View>
           ) : null
@@ -229,7 +231,7 @@ export default function DriverSupportChatScreen() {
             },
           ]}
         >
-          <Text style={[styles.closedText, { color: colors.textSecondary }]}>This ticket is closed</Text>
+          <Text style={[styles.closedText, { color: colors.textSecondary }]}>{t('support.closed')}</Text>
         </View>
       ) : (
         <View
@@ -245,7 +247,7 @@ export default function DriverSupportChatScreen() {
         >
           <TextInput
             style={[styles.input, { backgroundColor: colors.surfaceVariant, borderColor: colors.border, color: colors.text }]}
-            placeholder="Type a message..."
+            placeholder={t('orderChat.typeMessage')}
             placeholderTextColor={colors.textTertiary}
             value={message}
             onChangeText={setMessage}

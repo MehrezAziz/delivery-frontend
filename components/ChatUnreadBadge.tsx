@@ -1,9 +1,11 @@
 import { View, Text, StyleSheet } from 'react-native';
+import { useTranslation } from 'react-i18next';
 
 export function ChatUnreadBadge({ count }: { count: number }) {
+  const { t } = useTranslation();
   if (count <= 0) return null;
   return (
-    <View style={s.wrap} accessibilityLabel={`${count} unread messages`}>
+    <View style={s.wrap} accessibilityLabel={`${count}${t('chat.unreadMessagesSuffix')}`}>
       <Text style={s.txt}>{count > 99 ? '99+' : count}</Text>
     </View>
   );

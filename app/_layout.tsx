@@ -4,7 +4,9 @@ import { Stack } from 'expo-router';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useTranslation } from 'react-i18next';
 import { ThemeProvider, useTheme } from '../contexts/ThemeContext';
+import { LanguageProvider, useLanguage } from '../contexts/LanguageContext';
 import { ThemedAlertProvider } from '../components/ThemedAlert';
 import { AppNavigationProvider } from '../contexts/AppNavigationContext';
 import GlobalErrorBoundary from '../components/GlobalErrorBoundary';
@@ -30,6 +32,8 @@ registerOrderForegroundService();
 
 function RootContent() {
   const { colors, isDark } = useTheme();
+  const { ready: i18nReady } = useLanguage();
+  const { t } = useTranslation();
   const cleanupRef = useRef<(() => void) | null>(null);
   const lastErrorShownAtRef = useRef(0);
   const [friendlyError, setFriendlyError] = useState<{
@@ -70,13 +74,13 @@ function RootContent() {
     const onApiError = (error: ApiError) => {
       if (error.errorCode === 'NETWORK_ERROR' || error.statusCode === 0) {
         showFriendlyError(
-          'Connection issue 🌐',
-          'We could not reach the server right now. Please check your internet and try again in a moment.',
+          t('globalErrors.connectionIssue'),
+          t('globalErrors.connectionIssueBody'),
         );
       } else if (error.errorCode === 'UNKNOWN_ERROR' || error.statusCode >= 500) {
         showFriendlyError(
-          'Server busy 🛠️',
-          'Our service is temporarily unavailable. Please try again shortly.',
+          t('globalErrors.serverBusy'),
+          t('globalErrors.serverBusyBody'),
         );
       }
     };
@@ -84,11 +88,8 @@ function RootContent() {
 
     const prevJsHandler = (global as any).ErrorUtils?.getGlobalHandler?.();
     const jsHandler = (error: Error, isFatal?: boolean) => {
-      const title = isFatal ? 'Unexpected app error 😵‍💫' : 'Something went wrong ⚠️';
-      showFriendlyError(
-        title,
-        'An unexpected error happened. Please retry. If the issue continues, restart the app.',
-      );
+      const title = isFatal ? t('globalErrors.fatalAppError') : t('globalErrors.appError');
+      showFriendlyError(title, t('globalErrors.appErrorBody'));
       console.error('Global JS Error:', error);
     };
     (global as any).ErrorUtils?.setGlobalHandler?.(jsHandler);
@@ -96,8 +97,8 @@ function RootContent() {
     const previousUnhandledRejection = (globalThis as any).onunhandledrejection;
     (globalThis as any).onunhandledrejection = (event: any) => {
       showFriendlyError(
-        'Request failed ⚠️',
-        'A background request failed unexpectedly. Please try your action again.',
+        t('globalErrors.requestFailed'),
+        t('globalErrors.requestFailedBody'),
       );
       console.error('Unhandled promise rejection:', event?.reason || event);
       if (event?.preventDefault) event.preventDefault();
@@ -150,7 +151,11 @@ function RootContent() {
       }
       (globalThis as any).onunhandledrejection = previousUnhandledRejection;
     };
-  }, []);
+  }, [t]);
+
+  if (!i18nReady) {
+    return <View style={{ flex: 1, backgroundColor: colors.background }} />;
+  }
 
   return (
     <GlobalErrorBoundary>
@@ -171,14 +176,16 @@ function RootContent() {
 
 export default function RootLayout() {
   return (
-    <ThemeProvider>
-      <ThemedAlertProvider>
-        <SafeAreaProvider>
-          <AppNavigationProvider>
-            <RootContent />
-          </AppNavigationProvider>
-        </SafeAreaProvider>
-      </ThemedAlertProvider>
-    </ThemeProvider>
+    <LanguageProvider>
+      <ThemeProvider>
+        <ThemedAlertProvider>
+          <SafeAreaProvider>
+            <AppNavigationProvider>
+              <RootContent />
+            </AppNavigationProvider>
+          </SafeAreaProvider>
+        </ThemedAlertProvider>
+      </ThemeProvider>
+    </LanguageProvider>
   );
 }

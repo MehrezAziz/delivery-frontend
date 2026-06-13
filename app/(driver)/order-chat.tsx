@@ -7,6 +7,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useIsFocused } from '@react-navigation/native';
 import { useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { orderService, ChatMessage, ChatRoom } from '../../services/api/order.service';
 import { notificationService } from '../../services/api/notification.service';
@@ -20,6 +21,7 @@ export default function DriverOrderChatScreen() {
   const { orderId: orderIdParam } = useLocalSearchParams<{ orderId: string | string[] }>();
   const orderId = typeof orderIdParam === 'string' ? orderIdParam : orderIdParam?.[0] ?? '';
   const { colors, isDark } = useTheme();
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const isFocused = useIsFocused();
   const [chatRoom, setChatRoom] = useState<ChatRoom | null>(null);
@@ -151,7 +153,7 @@ export default function DriverOrderChatScreen() {
       >
       <View style={[s.chatToolbar, { backgroundColor: colors.card, borderColor: colors.border }]}>
         <View style={{ flex: 1, minWidth: 0 }}>
-          <Text style={[s.toolbarMeta, { color: colors.textTertiary }]}>Order</Text>
+          <Text style={[s.toolbarMeta, { color: colors.textTertiary }]}>{t('orderDetail.title')}</Text>
           <Text style={[s.toolbarOrderId, { color: colors.text }]} numberOfLines={1}>
             #{orderId?.slice(0, 8)}
           </Text>
@@ -159,7 +161,7 @@ export default function DriverOrderChatScreen() {
         <TouchableOpacity
           onPress={handleAssistance}
           style={[s.assistBtn, { backgroundColor: isDark ? 'rgba(234,88,12,0.22)' : '#fff3e0' }]}
-          accessibilityLabel="Request assistance"
+          accessibilityLabel={t('driverMyOrders.help')}
         >
           <Ionicons name="headset-outline" size={20} color="#ea580c" />
         </TouchableOpacity>
@@ -179,8 +181,8 @@ export default function DriverOrderChatScreen() {
         ListEmptyComponent={
           <View style={s.emptyWrap}>
             <Ionicons name="chatbubbles-outline" size={48} color="#d1d5db" />
-            <Text style={s.emptyText}>No messages yet</Text>
-            <Text style={s.emptySub}>Start the conversation</Text>
+            <Text style={s.emptyText}>{t('notifications.empty')}</Text>
+            <Text style={s.emptySub}>{t('orderChat.title')}</Text>
           </View>
         }
       />
@@ -189,7 +191,7 @@ export default function DriverOrderChatScreen() {
       {isClosed ? (
         <View style={[s.closedBar, { backgroundColor: colors.surfaceVariant, paddingBottom: Platform.OS === 'android' ? (keyboardHeight > 0 ? 13 : 0) : Math.max(insets.bottom, 12), marginBottom: Platform.OS === 'android' ? (keyboardHeight > 0 ? keyboardHeight : 60 + insets.bottom + 3) : 0 }]}>
           <Ionicons name="lock-closed-outline" size={16} color={colors.textTertiary} />
-          <Text style={[s.closedText, { color: colors.textTertiary }]}>chatroom closed</Text>
+          <Text style={[s.closedText, { color: colors.textTertiary }]}>{t('orderChat.youCannotChat')}</Text>
         </View>
       ) : (
         <View style={[s.inputBar, { backgroundColor: colors.card, borderTopColor: colors.border, paddingBottom: Platform.OS === 'android' ? (keyboardHeight > 0 ? 13 : 0) : Math.max(insets.bottom, 12), marginBottom: Platform.OS === 'android' ? (keyboardHeight > 0 ? keyboardHeight : 60 + insets.bottom + 3) : 0 }]}>
@@ -197,7 +199,7 @@ export default function DriverOrderChatScreen() {
             style={[s.textInput, { backgroundColor: colors.surfaceVariant, color: colors.text }]}
             value={input}
             onChangeText={setInput}
-            placeholder="Type a message..."
+            placeholder={t('orderChat.typeMessage')}
             placeholderTextColor={colors.textTertiary}
             multiline
           />

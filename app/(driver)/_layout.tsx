@@ -4,6 +4,7 @@ import { Platform, StyleSheet } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import { ensureDriverPushNotificationSetup } from '../../services/driverPushSetup';
 import { getStoredUserRole, restoreOrderTrackingForDriver } from '../../services/notifications';
 import { DriverTabsHeader } from '../../components/AppChromeHeader';
@@ -18,6 +19,7 @@ const TAB_ICONS: Record<string, { active: keyof typeof Ionicons.glyphMap; inacti
 
 export default function DriverLayout() {
   const { colors, isDark } = useTheme();
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const tabBarHeight = 60 + insets.bottom;
   const bottomOverlayClearance = tabBarHeight - 1;
@@ -80,10 +82,10 @@ export default function DriverLayout() {
         tabBarItemStyle: { paddingVertical: 2 },
       })}
     >
-      <Tabs.Screen name="home" options={{ title: 'Home' }} />
-      <Tabs.Screen name="my-orders" options={{ title: 'Deliveries' }} />
-      <Tabs.Screen name="available-orders" options={{ title: 'Explore' }} />
-      <Tabs.Screen name="profile" options={{ title: 'Profile' }} />
+      <Tabs.Screen name="home" options={{ title: t('nav.tabs.home') }} />
+      <Tabs.Screen name="my-orders" options={{ title: t('nav.tabs.deliveries') }} />
+      <Tabs.Screen name="available-orders" options={{ title: t('nav.tabs.explore') }} />
+      <Tabs.Screen name="profile" options={{ title: t('nav.tabs.profile') }} />
       <Tabs.Screen name="order-chat" options={{ href: null }} />
       <Tabs.Screen name="order-detail" options={{ href: null }} />
       <Tabs.Screen name="address-map" options={{ href: null, headerShown: false }} />

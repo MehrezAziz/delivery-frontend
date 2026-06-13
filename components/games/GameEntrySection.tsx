@@ -10,6 +10,7 @@ import {
   Animated,
   Easing,
 } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
@@ -43,15 +44,16 @@ type Props = {
   role?: 'customer' | 'driver';
 };
 
-const blockingMessages: Partial<Record<Eligibility, string>> = {
-  NOT_ACTIVE_USER: 'Your account is not eligible to play this game yet.',
-  COUNTRY_NOT_ELIGIBLE: 'This game is not available in your country.',
-  ORDER_REQUIRED: 'You need at least one delivered order to play this game.',
-};
-
 export function GameEntrySection({ placement, role }: Props) {
+  const { t } = useTranslation();
   const { colors } = useTheme();
   const router = useRouter();
+
+  const blockingMessages: Partial<Record<Eligibility, string>> = {
+    NOT_ACTIVE_USER: t('games.notEligible'),
+    COUNTRY_NOT_ELIGIBLE: t('games.notAvailableInCountry'),
+    ORDER_REQUIRED: t('games.needOneOrder'),
+  };
   const [entries, setEntries] = useState<GameEntry[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -81,12 +83,12 @@ export function GameEntrySection({ placement, role }: Props) {
 
     if (g.eligibility === 'PHONE_REQUIRED') {
       Alert.alert(
-        'Phone number required',
-        'Please add your phone number to your profile to participate in games.',
+        t('games.phoneRequired'),
+        t('games.phoneRequiredBody'),
         [
-          { text: 'Cancel', style: 'cancel' },
+          { text: t('common.cancel'), style: 'cancel' },
           {
-            text: 'Add phone',
+            text: t('games.addPhone'),
             onPress: () => {
               const target =
                 role === 'driver' ? '/(driver)/edit-profile' : '/(customer)/edit-profile';
@@ -132,6 +134,7 @@ function GameEntryCard({
   colors: Colors;
   onPress: () => void;
 }) {
+  const { t } = useTranslation();
   const comingSoon = game.status === 'COMING_SOON';
   const banners = game.bannerImageUrls;
   const [bannerIdx, setBannerIdx] = useState(0);
@@ -237,7 +240,7 @@ function GameEntryCard({
             <View style={styles.badgeWrap} pointerEvents="none">
               <View style={[styles.badge, { backgroundColor: '#F59E0B' }]}>
                 <Ionicons name="sparkles" size={12} color="#fff" />
-                <Text style={styles.badgeText}>Win valuable prizes</Text>
+                <Text style={styles.badgeText}>{t('games.winPrizes')}</Text>
               </View>
             </View>
 

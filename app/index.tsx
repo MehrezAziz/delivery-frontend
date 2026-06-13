@@ -11,6 +11,7 @@ import { useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import LottieView from 'lottie-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useTranslation } from 'react-i18next';
 import { isSessionValid, clearSession } from '../services/auth-session';
 import { resolveLaunchRouteAfterLogin, stopOrderTrackingSilently } from '../services/notifications';
 import { useTheme } from '../contexts/ThemeContext';
@@ -40,6 +41,7 @@ function replaceRouteWhenReady(
 
 export default function RoleSelectionScreen() {
   const router = useRouter();
+  const { t } = useTranslation();
   const { colors, isDark } = useTheme();
   const insets = useSafeAreaInsets();
   const [checking, setChecking] = useState(true);
@@ -176,7 +178,15 @@ export default function RoleSelectionScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <AppChromeHeader role="guest" title="Local Smart Delivery" hideBack showMenu={false} showThemeToggle={false} showProfile={false} />
+      <AppChromeHeader
+        role="guest"
+        title={t('welcome.appName')}
+        hideBack
+        showMenu={false}
+        showThemeToggle={false}
+        showProfile={false}
+        showLanguagePicker
+      />
       <ScrollView
         contentContainerStyle={[styles.content, { paddingBottom: Math.max(40, insets.bottom + 24) }]}
         showsVerticalScrollIndicator={false}
@@ -184,13 +194,13 @@ export default function RoleSelectionScreen() {
         {/* Hero card — text is always the background layer */}
         <View style={[styles.heroCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <View style={[styles.heroBadge, { backgroundColor: colors.primaryLight }]}>
-            <Text style={[styles.heroBadgeText, { color: colors.primary }]}>Fast delivery</Text>
+            <Text style={[styles.heroBadgeText, { color: colors.primary }]}>{t('welcome.badge')}</Text>
           </View>
 
           {/* Text — permanently visible underneath */}
-          <Text style={[styles.title, { color: colors.text }]}>Deliver anything, faster and smarter</Text>
+          <Text style={[styles.title, { color: colors.text }]}>{t('welcome.title')}</Text>
           <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-            Reliable pickup and delivery for customers, with earning opportunities for drivers.
+            {t('welcome.subtitle')}
           </Text>
 
           {/* Businessman Lottie — floats on top of the text */}
@@ -219,7 +229,7 @@ export default function RoleSelectionScreen() {
           </Animated.View>
         </View>
 
-        <Text style={[styles.roleHeading, { color: colors.text }]}>Choose your role</Text>
+        <Text style={[styles.roleHeading, { color: colors.text }]}>{t('welcome.chooseRole')}</Text>
         <View style={styles.cardsContainer}>
           <TouchableOpacity
             style={[
@@ -241,13 +251,13 @@ export default function RoleSelectionScreen() {
               <Text style={styles.cardIconText}>📦</Text>
             </View>
             <View style={styles.cardTextBlock}>
-              <Text style={[styles.cardTitle, { color: colors.text }]}>Customer</Text>
+              <Text style={[styles.cardTitle, { color: colors.text }]}>{t('welcome.customer')}</Text>
               <Text style={[styles.cardDescription, { color: colors.textSecondary }]}>
-                Create delivery orders, save frequent addresses, and track every step.
+                {t('welcome.customerDescription')}
               </Text>
             </View>
             <Text style={[styles.cardState, { color: colors.textTertiary }, selectedRole === 'CUSTOMER' && { color: colors.primary }]}>
-              {selectedRole === 'CUSTOMER' ? 'Continue' : 'Select'}
+              {selectedRole === 'CUSTOMER' ? t('welcome.continue') : t('welcome.select')}
             </Text>
           </TouchableOpacity>
 
@@ -271,9 +281,9 @@ export default function RoleSelectionScreen() {
               <Text style={styles.cardIconText}>🚗</Text>
             </View>
             <View style={styles.cardTextBlock}>
-              <Text style={[styles.cardTitle, { color: colors.text }]}>Driver</Text>
+              <Text style={[styles.cardTitle, { color: colors.text }]}>{t('welcome.driver')}</Text>
               <Text style={[styles.cardDescription, { color: colors.textSecondary }]}>
-                Accept nearby orders, optimize routes, and grow your daily earnings.
+                {t('welcome.driverDescription')}
               </Text>
             </View>
             <Text
@@ -283,7 +293,7 @@ export default function RoleSelectionScreen() {
                 selectedRole === 'DRIVER' && { color: isDark ? '#d8b4fe' : '#9333ea' },
               ]}
             >
-              {selectedRole === 'DRIVER' ? 'Continue' : 'Select'}
+              {selectedRole === 'DRIVER' ? t('welcome.continue') : t('welcome.select')}
             </Text>
           </TouchableOpacity>
         </View>
@@ -294,19 +304,19 @@ export default function RoleSelectionScreen() {
           activeOpacity={0.85}
         >
           <Text style={styles.continueBtnText}>
-            Continue as {selectedRole === 'CUSTOMER' ? 'Customer' : 'Driver'}
+            {selectedRole === 'CUSTOMER' ? t('welcome.continueAsCustomer') : t('welcome.continueAsDriver')}
           </Text>
         </TouchableOpacity>
 
         <View style={styles.footer}>
           <Text style={[styles.footerText, { color: colors.textSecondary }]}>
-            By continuing, you agree to our{' '}
+            {t('welcome.agreePrefix')}{' '}
             <Text style={[styles.footerLink, { color: colors.primary }]} onPress={() => router.push('/(auth)/terms')}>
-              Terms
+              {t('welcome.terms')}
             </Text>
-            {' & '}
+            {t('welcome.and')}
             <Text style={[styles.footerLink, { color: colors.primary }]} onPress={() => router.push('/(auth)/privacy')}>
-              Privacy Policy
+              {t('welcome.privacy')}
             </Text>
           </Text>
         </View>

@@ -16,6 +16,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import axios from 'axios';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
+import { useTranslation } from 'react-i18next';
+import i18n from '../../i18n';
 import { saveLoginTimestamp } from '../../services/auth-session';
 import { restoreOrderTrackingForDriver } from '../../services/notifications';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -46,7 +48,7 @@ const API_URL = RAW_API.replace(/\/$/, '').endsWith('/api')
 
 function getDriverLoginErrorMessage(error: unknown): string {
   if (!axios.isAxiosError(error)) {
-    return 'Phone number or password is incorrect';
+    return i18n.t('auth.phoneOrPasswordIncorrect');
   }
   const status = error.response?.status;
   const raw = (error.response?.data as { message?: string | string[] } | undefined)?.message;
@@ -59,9 +61,9 @@ function getDriverLoginErrorMessage(error: unknown): string {
     return serverMsg;
   }
   if (status && status >= 500) {
-    return 'Something went wrong. Please try again.';
+    return i18n.t('auth.somethingWentWrongRetry');
   }
-  return 'Phone number or password is incorrect';
+  return i18n.t('auth.phoneOrPasswordIncorrect');
 }
 
 function shouldRecordDriverLoginFailure(error: unknown): boolean {
@@ -79,6 +81,7 @@ export default function DriverLogin() {
   const router = useRouter();
   const { colors, isDark } = useTheme();
   const insets = useSafeAreaInsets();
+  const { t } = useTranslation();
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -136,11 +139,11 @@ export default function DriverLogin() {
   const handleLogin = async () => {
     // Validation
     if (!phone || !password) {
-      Alert.alert('Error', 'Please enter phone and password');
+      Alert.alert(t('common.error'), t('auth.pleaseEnterPhonePassword'));
       return;
     }
     if (!selectedPhoneCountry) {
-      Alert.alert('Error', 'Please select a country for the phone number');
+      Alert.alert(t('common.error'), t('auth.selectCountryRequired'));
       return;
     }
 
@@ -148,7 +151,7 @@ export default function DriverLogin() {
     const lock = await getLoginLockStatus('driver', e164);
     if (lock.locked) {
       setLoginLockUntil(lock.lockedUntil);
-      setLoginError('Too many failed login attempts. Please wait before trying again.');
+      setLoginError(t('auth.tooManyAttempts'));
       return;
     }
 
@@ -248,19 +251,19 @@ export default function DriverLogin() {
     } catch (error: any) {
       console.error('Google Sign-In error:', error);
 
-      let errorMessage = 'Failed to sign in with Google';
+      let errorMessage = t('auth.failedSignInGoogle');
       const setupHint = describeGoogleSignInSetupError(error);
       if (setupHint) {
         errorMessage = setupHint;
       } else if (error.code === 'SIGN_IN_CANCELLED') {
-        errorMessage = 'Sign-in was cancelled';
+        errorMessage = t('auth.signInCancelled');
       } else if (error.response?.data?.message) {
         errorMessage = error.response.data.message;
       } else if (error.message) {
         errorMessage = error.message;
       }
       
-      Alert.alert('Google Sign-In Failed', errorMessage);
+      Alert.alert(t('auth.googleSignInFailed'), errorMessage);
     } finally {
       setLoading(false);
     }
@@ -279,13 +282,13 @@ export default function DriverLogin() {
         <View style={[styles.heroIcon, { backgroundColor: '#7c3aed' }]}>
           <Ionicons name="car-sport" size={34} color="#fff" />
         </View>
-        <Text style={[styles.title, { color: colors.text }]}>Driver sign in</Text>
-        <Text style={[styles.subtitle, { color: colors.textSecondary }]}>Access deliveries, earnings, and your schedule.</Text>
+        <Text style={[styles.title, { color: colors.text }]}>{t('auth.driverLoginTitle')}</Text>
+        <Text style={[styles.subtitle, { color: colors.textSecondary }]}>{t('auth.driverSignInSubtitle')}</Text>
       </View>
 
       {/* Phone Input */}
       <View style={styles.inputGroup}>
-        <Text style={[styles.label, { color: colors.text }]}>Phone Number</Text>
+        <Text style={[styles.label, { color: colors.text }]}>{t('auth.phoneNumber')}</Text>
         <View style={[styles.phoneRow, { borderColor: colors.inputBorder, backgroundColor: colors.inputBg }]}>
           <TouchableOpacity
             style={[styles.countryCodeBtn, { borderRightColor: colors.inputBorder }]}
@@ -310,7 +313,7 @@ export default function DriverLogin() {
           </TouchableOpacity>
           <TextInput
             style={[styles.phoneInput, { color: colors.text }]}
-            placeholder="XX XXX XXX"
+            placeholder={t('auth.phoneNumberPlaceholder')}
             placeholderTextColor={colors.textTertiary}
             value={phone}
             onChangeText={(text) => {
@@ -326,11 +329,11 @@ export default function DriverLogin() {
 
       {/* Password Input */}
       <View style={styles.inputGroup}>
-        <Text style={[styles.label, { color: colors.text }]}>Password</Text>
+        <Text style={[styles.label, { color: colors.text }]}>{t('auth.password')}</Text>
         <View style={[styles.passwordContainer, { borderColor: colors.inputBorder, backgroundColor: colors.inputBg }]}>
           <TextInput
             style={[styles.passwordInput, { color: colors.text }]}
-            placeholder="Enter your password"
+            placeholder={t('auth.enterPassword')}
             placeholderTextColor={colors.textTertiary}
             value={password}
             onChangeText={(text) => {
@@ -354,11 +357,11 @@ export default function DriverLogin() {
         </View>
         {loginError ? (
           <View style={styles.loginErrorBlock} accessibilityLiveRegion="polite">
-            <Text style={[styles.loginErrorTitle, { color: colors.danger }]}>Login failed</Text>
+            <Text style={[styles.loginErrorTitle, { color: colors.danger }]}>{t('auth.loginFailed')}</Text>
             <Text style={[styles.loginErrorBody, { color: colors.danger }]}>{loginError}</Text>
             {loginLockUntil > Date.now() ? (
               <Text style={[styles.loginErrorBody, { color: colors.textSecondary, marginTop: 4 }]}>
-                Remaining wait: {'\u2212'}
+                {t('auth.remainingWait')}{'\u2212'}
                 {formatMsAsMmSs(loginLockUntil - Date.now())}
               </Text>
             ) : null}
@@ -378,7 +381,7 @@ export default function DriverLogin() {
           }
           disabled={loading}
         >
-          <Text style={[styles.forgotPasswordText, { color: colors.primary }]}>Forgot Password?</Text>
+          <Text style={[styles.forgotPasswordText, { color: colors.primary }]}>{t('auth.forgotPassword')}</Text>
         </TouchableOpacity>
       </View>
 
@@ -391,14 +394,14 @@ export default function DriverLogin() {
         {loading ? (
           <ActivityIndicator color="#fff" />
         ) : (
-          <Text style={styles.loginButtonText}>Login</Text>
+          <Text style={styles.loginButtonText}>{t('auth.login')}</Text>
         )}
       </TouchableOpacity>
 
       {/* Divider */}
       <View style={styles.divider}>
         <View style={[styles.dividerLine, { backgroundColor: colors.border }]} />
-        <Text style={[styles.dividerText, { color: colors.textTertiary }]}>OR</Text>
+        <Text style={[styles.dividerText, { color: colors.textTertiary }]}>{t('auth.or')}</Text>
         <View style={[styles.dividerLine, { backgroundColor: colors.border }]} />
       </View>
 
@@ -408,7 +411,7 @@ export default function DriverLogin() {
         onPress={handleGoogleLogin}
       >
         <Ionicons name="logo-google" size={24} color="#DB4437" />
-        <Text style={[styles.googleButtonText, { color: colors.text }]}>Continue with Google</Text>
+        <Text style={[styles.googleButtonText, { color: colors.text }]}>{t('auth.continueWithGoogle')}</Text>
       </TouchableOpacity>
 
       {/* Register Link */}
@@ -417,7 +420,7 @@ export default function DriverLogin() {
         onPress={() => router.push('/(auth)/driver-register-step1')}
       >
         <Text style={[styles.registerLinkText, { color: colors.textSecondary }]}>
-          Don't have an account? <Text style={[styles.registerLinkBold, { color: colors.primary }]}>Register</Text>
+          {t('auth.dontHaveAccount')}<Text style={[styles.registerLinkBold, { color: colors.primary }]}>{t('auth.register')}</Text>
         </Text>
       </TouchableOpacity>
 
@@ -430,7 +433,7 @@ export default function DriverLogin() {
         <View style={styles.pickerOverlay}>
           <View style={[styles.pickerCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <View style={[styles.pickerHeader, { borderBottomColor: colors.border }]}>
-              <Text style={[styles.pickerTitle, { color: colors.text }]}>Select country code</Text>
+              <Text style={[styles.pickerTitle, { color: colors.text }]}>{t('auth.selectCountryCode')}</Text>
               <TouchableOpacity onPress={() => setShowPhoneCountryModal(false)} style={styles.pickerCloseBtn}>
                 <Text style={[styles.pickerCloseText, { color: colors.textTertiary }]}>✕</Text>
               </TouchableOpacity>
@@ -439,7 +442,7 @@ export default function DriverLogin() {
               <Text style={styles.pickerSearchIcon}>🔍</Text>
               <TextInput
                 style={[styles.pickerSearchInput, { color: colors.text }]}
-                placeholder="Search country, ISO or code"
+                placeholder={t('auth.searchCountryISO')}
                 placeholderTextColor={colors.textTertiary}
                 value={phoneCountrySearch}
                 onChangeText={setPhoneCountrySearch}

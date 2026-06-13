@@ -4,6 +4,7 @@ import { Platform, StyleSheet } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import { useTheme } from '../../contexts/ThemeContext';
 import { CustomerTabsHeader } from '../../components/AppChromeHeader';
 import { registerForPushNotifications, restoreOrderTrackingForCustomer } from '../../services/notifications';
@@ -17,6 +18,7 @@ const TAB_ICON_NAMES: Record<string, { active: keyof typeof Ionicons.glyphMap; i
 
 export default function CustomerLayout() {
   const { colors, isDark } = useTheme();
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const tabBarHeight = 60 + insets.bottom;
   const bottomOverlayClearance = tabBarHeight - 1;
@@ -81,10 +83,10 @@ export default function CustomerLayout() {
         tabBarItemStyle: { paddingVertical: 2 },
       })}
     >
-      <Tabs.Screen name="home" options={{ title: 'Home' }} />
-      <Tabs.Screen name="orders" options={{ title: 'Orders' }} />
-      <Tabs.Screen name="wallet" options={{ title: 'Wallet' }} />
-      <Tabs.Screen name="profile" options={{ title: 'Profile' }} />
+      <Tabs.Screen name="home" options={{ title: t('nav.tabs.home') }} />
+      <Tabs.Screen name="orders" options={{ title: t('nav.tabs.orders') }} />
+      <Tabs.Screen name="wallet" options={{ title: t('nav.tabs.wallet') }} />
+      <Tabs.Screen name="profile" options={{ title: t('nav.tabs.profile') }} />
       <Tabs.Screen name="addresses" options={{ href: null, headerShown: true }} />
       <Tabs.Screen name="restrictions" options={{ href: null }} />
       <Tabs.Screen name="support" options={{ href: null }} />
@@ -99,7 +101,7 @@ export default function CustomerLayout() {
       <Tabs.Screen name="settings" options={{ href: null }} />
       <Tabs.Screen name="bank-details" options={{ href: null }} />
       <Tabs.Screen name="notifications" options={{ href: null }} />
-      <Tabs.Screen name="notifications-settings" options={{ href: null, title: 'Notifications' }} />
+      <Tabs.Screen name="notifications-settings" options={{ href: null, title: t('notifications.title') }} />
       <Tabs.Screen name="send-coins" options={{ href: null }} />
       <Tabs.Screen name="buy-coins" options={{ href: null }} />
       <Tabs.Screen name="buy-coins-result" options={{ href: null, headerShown: false }} />

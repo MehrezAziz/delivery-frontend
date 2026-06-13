@@ -14,6 +14,7 @@ import { useRouter } from 'expo-router';
 import { useState, useCallback, useEffect } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useTranslation } from 'react-i18next';
 import { clearPushToken } from '../../services/api/notification.service';
 import { stopOrderTrackingSilently } from '../../services/notifications';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -28,6 +29,7 @@ const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/a
 export default function CustomerProfileScreen() {
   const router = useRouter();
   const { colors, isDark } = useTheme();
+  const { t } = useTranslation();
   
   // State for user data
   const [user, setUser] = useState<any | null>(null);
@@ -65,7 +67,7 @@ export default function CustomerProfileScreen() {
       const token = await AsyncStorage.getItem('accessToken');
       
       if (!token) {
-        if (kind !== 'silent') setError('No auth token found. Please login again.');
+        if (kind !== 'silent') setError(t('common.something_went_wrong'));
         return;
       }
 
@@ -108,7 +110,7 @@ export default function CustomerProfileScreen() {
 
     } catch (err) {
       console.error('Error loading user data:', err);
-      if (kind !== 'silent') setError('Failed to load profile data');
+      if (kind !== 'silent') setError(t('common.something_went_wrong'));
     } finally {
       if (kind === 'initial') setLoading(false);
       if (kind === 'pull') setRefreshing(false);
@@ -150,16 +152,16 @@ export default function CustomerProfileScreen() {
           style={[StyleSheet.absoluteFillObject, { backgroundColor: signOutOverlayTint }]}
           onPress={() => !signOutBusy && setSignOutModalVisible(false)}
           accessibilityRole="button"
-          accessibilityLabel="Dismiss"
+          accessibilityLabel={t('common.dismiss')}
         />
         <View style={styles.signOutModalAlign} pointerEvents="box-none">
         <View
           style={[styles.signOutDialog, { backgroundColor: colors.card, borderColor: colors.border }]}
           accessibilityViewIsModal
         >
-          <Text style={[styles.signOutDialogTitle, { color: colors.text }]}>Sign out</Text>
+          <Text style={[styles.signOutDialogTitle, { color: colors.text }]}>{t('customerProfile.signOut')}</Text>
           <Text style={[styles.signOutDialogBody, { color: colors.textSecondary }]}>
-            You will be signed out on this device. Sign in again to place orders and manage your account.
+            {t('sideMenu.signOutCustomerBody')}
           </Text>
           <View style={styles.signOutDialogActions}>
             <TouchableOpacity
@@ -168,7 +170,7 @@ export default function CustomerProfileScreen() {
               disabled={signOutBusy}
               activeOpacity={0.8}
             >
-              <Text style={[styles.signOutBtnSecondaryText, { color: colors.text }]}>Cancel</Text>
+              <Text style={[styles.signOutBtnSecondaryText, { color: colors.text }]}>{t('common.cancel')}</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.signOutBtnPrimary, { backgroundColor: colors.danger }]}
@@ -179,7 +181,7 @@ export default function CustomerProfileScreen() {
               {signOutBusy ? (
                 <ActivityIndicator size="small" color="#fff" />
               ) : (
-                <Text style={styles.signOutBtnPrimaryText}>Sign out</Text>
+                <Text style={styles.signOutBtnPrimaryText}>{t('customerProfile.signOut')}</Text>
               )}
             </TouchableOpacity>
           </View>
@@ -206,7 +208,7 @@ export default function CustomerProfileScreen() {
     try {
       const token = await AsyncStorage.getItem('accessToken');
       if (!token) {
-        setError('No auth token found. Please login again.');
+        setError(t('common.something_went_wrong'));
         return;
       }
 
@@ -237,7 +239,7 @@ export default function CustomerProfileScreen() {
       if (!response.ok) {
         const errorData = await response.json();
         console.error('Update error response:', errorData);
-        throw new Error(errorData.message || 'Failed to update profile');
+        throw new Error(errorData.message || t('editProfile.saveFailed'));
       }
 
       const updatedProfile = await response.json();
@@ -256,7 +258,7 @@ export default function CustomerProfileScreen() {
       setEditValue('');
     } catch (err: any) {
       console.error('Error updating profile:', err);
-      setError(err.message || 'Failed to update profile');
+      setError(err.message || t('editProfile.saveFailed'));
     } finally {
       setIsSaving(false);
     }
@@ -280,7 +282,7 @@ export default function CustomerProfileScreen() {
   };
 
   const getFullName = () => {
-    if (!user) return 'Customer Profile';
+    if (!user) return t('customerProfile.title');
     
     const firstName = user.firstName || '';
     const secondName = user.secondName || '';
@@ -293,7 +295,7 @@ export default function CustomerProfileScreen() {
       return secondName;
     }
     
-    return 'Customer Profile';
+    return t('customerProfile.title');
   };
 
   const formatDate = (dateString: string) => {
@@ -307,11 +309,11 @@ export default function CustomerProfileScreen() {
       <View style={[styles.container, { backgroundColor: colors.background }]}>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={[styles.loadingText, { color: colors.textSecondary }]}>Loading profile...</Text>
+          <Text style={[styles.loadingText, { color: colors.textSecondary }]}>{t('common.loading')}</Text>
         </View>
         <View style={{ paddingHorizontal: 24, paddingBottom: 40 }}>
           <TouchableOpacity style={[styles.signOutCompact, { borderColor: colors.border }]} onPress={handleLogout}>
-            <Text style={[styles.signOutCompactText, { color: colors.danger }]}>Sign out</Text>
+            <Text style={[styles.signOutCompactText, { color: colors.danger }]}>{t('customerProfile.signOut')}</Text>
           </TouchableOpacity>
         </View>
         {renderSignOutModal()}
@@ -324,12 +326,12 @@ export default function CustomerProfileScreen() {
     return (
       <View style={[styles.container, { backgroundColor: colors.background }]}>
         <View style={styles.errorContainer}>
-          <Text style={[styles.errorText, { color: colors.danger }]}>{error || 'Failed to load profile'}</Text>
+          <Text style={[styles.errorText, { color: colors.danger }]}>{error || t('common.something_went_wrong')}</Text>
           <TouchableOpacity style={[styles.retryButton, { backgroundColor: colors.primary }]} onPress={() => void loadUserData('initial')}>
-            <Text style={styles.retryButtonText}>Retry</Text>
+            <Text style={styles.retryButtonText}>{t('common.retry')}</Text>
           </TouchableOpacity>
           <TouchableOpacity style={[styles.signOutCompact, { marginTop: 24, borderColor: colors.border }]} onPress={handleLogout}>
-            <Text style={[styles.signOutCompactText, { color: colors.danger }]}>Sign out</Text>
+            <Text style={[styles.signOutCompactText, { color: colors.danger }]}>{t('customerProfile.signOut')}</Text>
           </TouchableOpacity>
         </View>
         {renderSignOutModal()}
@@ -370,7 +372,7 @@ export default function CustomerProfileScreen() {
             {/* Gender Field */}
             {editingField === 'userGender' ? (
               <View style={[styles.editFieldContainer, { borderBottomColor: colors.border }]}>
-                <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>Gender</Text>
+                <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>{t('auth.genderOptional').replace(' (Optional)', '')}</Text>
                 <View style={styles.genderEditContainer}>
                   <TouchableOpacity
                     style={[
@@ -382,7 +384,7 @@ export default function CustomerProfileScreen() {
                     <Text style={[
                       styles.genderEditButtonText, { color: colors.textSecondary },
                       editValue === 'MALE' && styles.genderEditButtonTextActive
-                    ]}>Male</Text>
+                    ]}>{t('auth.male')}</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={[
@@ -394,12 +396,12 @@ export default function CustomerProfileScreen() {
                     <Text style={[
                       styles.genderEditButtonText, { color: colors.textSecondary },
                       editValue === 'FEMALE' && styles.genderEditButtonTextActive
-                    ]}>Female</Text>
+                    ]}>{t('auth.female')}</Text>
                   </TouchableOpacity>
                 </View>
                 <View style={styles.editButtonsRow}>
                   <TouchableOpacity style={[styles.cancelButton, { backgroundColor: colors.surfaceVariant }]} onPress={handleCancelEdit}>
-                    <Text style={[styles.cancelButtonText, { color: colors.textSecondary }]}>Cancel</Text>
+                    <Text style={[styles.cancelButtonText, { color: colors.textSecondary }]}>{t('common.cancel')}</Text>
                   </TouchableOpacity>
                   <TouchableOpacity 
                     style={[styles.saveButton, { backgroundColor: colors.primary }, !editValue && styles.saveButtonDisabled]} 
@@ -409,24 +411,24 @@ export default function CustomerProfileScreen() {
                     {isSaving ? (
                       <ActivityIndicator size="small" color="#ffffff" />
                     ) : (
-                      <Text style={styles.saveButtonText}>Save</Text>
+                      <Text style={styles.saveButtonText}>{t('common.save')}</Text>
                     )}
                   </TouchableOpacity>
                 </View>
               </View>
             ) : user.userGender ? (
               <View style={styles.detailRow}>
-                <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>Gender</Text>
-                <Text style={[styles.detailValue, { color: colors.text }]}>{user.userGender}</Text>
+                <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>{t('auth.genderOptional').replace(' (Optional)', '')}</Text>
+                <Text style={[styles.detailValue, { color: colors.text }]}>{user.userGender === 'MALE' ? t('auth.male') : user.userGender === 'FEMALE' ? t('auth.female') : user.userGender}</Text>
               </View>
             ) : (
               <View style={styles.detailRow}>
-                <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>Gender</Text>
+                <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>{t('auth.genderOptional').replace(' (Optional)', '')}</Text>
                 <TouchableOpacity 
                   style={[styles.addButton, { borderColor: colors.primary }]}
                   onPress={() => handleEditField('userGender')}
                 >
-                  <Text style={[styles.addButtonText, { color: colors.primary }]}>Add gender</Text>
+                  <Text style={[styles.addButtonText, { color: colors.primary }]}>{t('common.add')}</Text>
                 </TouchableOpacity>
               </View>
             )}
@@ -434,12 +436,12 @@ export default function CustomerProfileScreen() {
             {/* Email Field */}
             {editingField === 'myEmail' ? (
               <View style={[styles.editFieldContainer, { borderBottomColor: colors.border }]}>
-                <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>Email</Text>
+                <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>{t('editProfile.email')}</Text>
                 <TextInput
                   style={[styles.editInput, { backgroundColor: colors.inputBg, borderColor: colors.inputBorder, color: colors.text }]}
                   value={editValue}
                   onChangeText={setEditValue}
-                  placeholder="Enter email"
+                  placeholder={t('auth.enterEmail')}
                   placeholderTextColor={colors.textTertiary}
                   keyboardType="email-address"
                   autoCapitalize="none"
@@ -447,7 +449,7 @@ export default function CustomerProfileScreen() {
                 />
                 <View style={styles.editButtonsRow}>
                   <TouchableOpacity style={[styles.cancelButton, { backgroundColor: colors.surfaceVariant }]} onPress={handleCancelEdit}>
-                    <Text style={[styles.cancelButtonText, { color: colors.textSecondary }]}>Cancel</Text>
+                    <Text style={[styles.cancelButtonText, { color: colors.textSecondary }]}>{t('common.cancel')}</Text>
                   </TouchableOpacity>
                   <TouchableOpacity 
                     style={[styles.saveButton, { backgroundColor: colors.primary }, !editValue.trim() && styles.saveButtonDisabled]} 
@@ -457,24 +459,24 @@ export default function CustomerProfileScreen() {
                     {isSaving ? (
                       <ActivityIndicator size="small" color="#ffffff" />
                     ) : (
-                      <Text style={styles.saveButtonText}>Save</Text>
+                      <Text style={styles.saveButtonText}>{t('common.save')}</Text>
                     )}
                   </TouchableOpacity>
                 </View>
               </View>
             ) : user.myEmail ? (
               <View style={styles.detailRow}>
-                <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>Email</Text>
+                <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>{t('editProfile.email')}</Text>
                 <Text style={[styles.detailValue, { color: colors.text }]}>{user.myEmail}</Text>
               </View>
             ) : (
               <View style={styles.detailRow}>
-                <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>Email</Text>
+                <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>{t('editProfile.email')}</Text>
                 <TouchableOpacity 
                   style={[styles.addButton, { borderColor: colors.primary }]}
                   onPress={() => handleEditField('myEmail')}
                 >
-                  <Text style={[styles.addButtonText, { color: colors.primary }]}>+ Add Email</Text>
+                  <Text style={[styles.addButtonText, { color: colors.primary }]}>+ {t('editProfile.email')}</Text>
                 </TouchableOpacity>
               </View>
             )}
@@ -482,18 +484,18 @@ export default function CustomerProfileScreen() {
             {/* First Name Field */}
             {editingField === 'firstName' ? (
               <View style={[styles.editFieldContainer, { borderBottomColor: colors.border }]}>
-                <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>First Name</Text>
+                <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>{t('editProfile.firstName')}</Text>
                 <TextInput
                   style={[styles.editInput, { backgroundColor: colors.inputBg, borderColor: colors.inputBorder, color: colors.text }]}
                   value={editValue}
                   onChangeText={setEditValue}
-                  placeholder="Enter first name"
+                  placeholder={t('auth.enterFirstName')}
                   placeholderTextColor={colors.textTertiary}
                   autoFocus
                 />
                 <View style={styles.editButtonsRow}>
                   <TouchableOpacity style={[styles.cancelButton, { backgroundColor: colors.surfaceVariant }]} onPress={handleCancelEdit}>
-                    <Text style={[styles.cancelButtonText, { color: colors.textSecondary }]}>Cancel</Text>
+                    <Text style={[styles.cancelButtonText, { color: colors.textSecondary }]}>{t('common.cancel')}</Text>
                   </TouchableOpacity>
                   <TouchableOpacity 
                     style={[styles.saveButton, { backgroundColor: colors.primary }, !editValue.trim() && styles.saveButtonDisabled]} 
@@ -503,24 +505,24 @@ export default function CustomerProfileScreen() {
                     {isSaving ? (
                       <ActivityIndicator size="small" color="#ffffff" />
                     ) : (
-                      <Text style={styles.saveButtonText}>Save</Text>
+                      <Text style={styles.saveButtonText}>{t('common.save')}</Text>
                     )}
                   </TouchableOpacity>
                 </View>
               </View>
             ) : user.firstName ? (
               <View style={styles.detailRow}>
-                <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>First Name</Text>
+                <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>{t('editProfile.firstName')}</Text>
                 <Text style={[styles.detailValue, { color: colors.text }]}>{user.firstName}</Text>
               </View>
             ) : (
               <View style={styles.detailRow}>
-                <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>First Name</Text>
+                <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>{t('editProfile.firstName')}</Text>
                 <TouchableOpacity 
                   style={[styles.addButton, { borderColor: colors.primary }]}
                   onPress={() => handleEditField('firstName')}
                 >
-                  <Text style={[styles.addButtonText, { color: colors.primary }]}>+ Add First Name</Text>
+                  <Text style={[styles.addButtonText, { color: colors.primary }]}>+ {t('editProfile.firstName')}</Text>
                 </TouchableOpacity>
               </View>
             )}
@@ -528,18 +530,18 @@ export default function CustomerProfileScreen() {
             {/* Last Name Field */}
             {editingField === 'secondName' ? (
               <View style={[styles.editFieldContainer, { borderBottomColor: colors.border }]}>
-                <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>Last Name</Text>
+                <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>{t('editProfile.lastName')}</Text>
                 <TextInput
                   style={[styles.editInput, { backgroundColor: colors.inputBg, borderColor: colors.inputBorder, color: colors.text }]}
                   value={editValue}
                   onChangeText={setEditValue}
-                  placeholder="Enter last name"
+                  placeholder={t('auth.enterLastName')}
                   placeholderTextColor={colors.textTertiary}
                   autoFocus
                 />
                 <View style={styles.editButtonsRow}>
                   <TouchableOpacity style={[styles.cancelButton, { backgroundColor: colors.surfaceVariant }]} onPress={handleCancelEdit}>
-                    <Text style={[styles.cancelButtonText, { color: colors.textSecondary }]}>Cancel</Text>
+                    <Text style={[styles.cancelButtonText, { color: colors.textSecondary }]}>{t('common.cancel')}</Text>
                   </TouchableOpacity>
                   <TouchableOpacity 
                     style={[styles.saveButton, { backgroundColor: colors.primary }, !editValue.trim() && styles.saveButtonDisabled]} 
@@ -549,34 +551,34 @@ export default function CustomerProfileScreen() {
                     {isSaving ? (
                       <ActivityIndicator size="small" color="#ffffff" />
                     ) : (
-                      <Text style={styles.saveButtonText}>Save</Text>
+                      <Text style={styles.saveButtonText}>{t('common.save')}</Text>
                     )}
                   </TouchableOpacity>
                 </View>
               </View>
             ) : user.secondName ? (
               <View style={styles.detailRow}>
-                <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>Last Name</Text>
+                <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>{t('editProfile.lastName')}</Text>
                 <Text style={[styles.detailValue, { color: colors.text }]}>{user.secondName}</Text>
               </View>
             ) : (
               <View style={styles.detailRow}>
-                <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>Last Name</Text>
+                <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>{t('editProfile.lastName')}</Text>
                 <TouchableOpacity 
                   style={[styles.addButton, { borderColor: colors.primary }]}
                   onPress={() => handleEditField('secondName')}
                 >
-                  <Text style={[styles.addButtonText, { color: colors.primary }]}>+ Add Last Name</Text>
+                  <Text style={[styles.addButtonText, { color: colors.primary }]}>+ {t('editProfile.lastName')}</Text>
                 </TouchableOpacity>
               </View>
             )}
             
             <View style={styles.detailRow}>
-              <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>Role</Text>
+              <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>{t('common.account')}</Text>
               <Text style={[styles.detailValue, { color: colors.text }]}>{user.role}</Text>
             </View>
             <View style={styles.detailRow}>
-              <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>Status</Text>
+              <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>{t('customerProfile.status')}</Text>
               <Text
                 style={[
                   styles.detailValue,
@@ -587,12 +589,12 @@ export default function CustomerProfileScreen() {
               </Text>
             </View>
             <View style={styles.detailRow}>
-              <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>Completed Orders</Text>
+              <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>{t('customerProfile.completedOrders')}</Text>
               <Text style={[styles.detailValue, { color: colors.text }]}>{customer.completedOrders}</Text>
             </View>
             {user.createdAt && (
               <View style={styles.detailRow}>
-                <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>Member Since</Text>
+                <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>{t('customerProfile.memberSince')}</Text>
                 <Text style={[styles.detailValue, { color: colors.text }]}>{formatDate(user.createdAt)}</Text>
               </View>
             )}
@@ -605,7 +607,7 @@ export default function CustomerProfileScreen() {
             onPress={() => router.push('/(customer)/support')}
             activeOpacity={0.75}
           >
-            <Text style={[styles.textLinkLabel, { color: colors.text }]}>Help & support</Text>
+            <Text style={[styles.textLinkLabel, { color: colors.text }]}>{t('customerProfile.support')}</Text>
             <Text style={[styles.textLinkChevron, { color: colors.textTertiary }]}>›</Text>
           </TouchableOpacity>
 
@@ -614,7 +616,7 @@ export default function CustomerProfileScreen() {
             onPress={handleLogout}
             activeOpacity={0.75}
           >
-            <Text style={[styles.signOutCompactText, { color: colors.danger }]}>Sign out</Text>
+            <Text style={[styles.signOutCompactText, { color: colors.danger }]}>{t('customerProfile.signOut')}</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>

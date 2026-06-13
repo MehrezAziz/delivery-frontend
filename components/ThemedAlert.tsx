@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import { useTheme } from '../contexts/ThemeContext';
 import { setAppAlertImplementation, type AppAlertButton } from '../utils/appAlert';
+import i18n from '../i18n';
 
 export type ThemedAlertButton = AppAlertButton;
 
@@ -23,7 +24,7 @@ const defaultState: AlertState = {
   visible: false,
   title: '',
   message: undefined,
-  buttons: [{ text: 'OK' }],
+  buttons: [{ text: i18n.t('themedAlert.ok') }],
 };
 
 const AlertContext = createContext<(opts: Omit<AlertState, 'visible'> & { visible?: boolean }) => void>(() => {});
@@ -36,7 +37,7 @@ export function ThemedAlertProvider({ children }: { children: ReactNode }) {
       visible: true,
       title: opts.title,
       message: opts.message,
-      buttons: opts.buttons?.length ? opts.buttons : [{ text: 'OK' }],
+      buttons: opts.buttons?.length ? opts.buttons : [{ text: i18n.t('themedAlert.ok') }],
     });
   }, []);
 
@@ -49,7 +50,7 @@ export function ThemedAlertProvider({ children }: { children: ReactNode }) {
       show({
         title,
         message,
-        buttons: buttons?.length ? buttons : [{ text: 'OK' }],
+        buttons: buttons?.length ? buttons : [{ text: i18n.t('themedAlert.ok') }],
       });
     });
     return () => setAppAlertImplementation(null);

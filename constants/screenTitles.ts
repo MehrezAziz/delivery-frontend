@@ -1,4 +1,12 @@
-/** Route segment (expo file name) → human-readable title */
+/** Route segment (expo file name) → human-readable title.
+ *
+ * NOTE: These English values are kept as fallbacks. Components should use the
+ * `getAuthRouteTitle`, `getCustomerRouteTitle`, `getDriverRouteTitle` helpers
+ * (or read translations via `useTranslation` with key `nav.auth.<segment>` etc.)
+ * to get a localized title.
+ */
+
+import i18n from '../i18n';
 
 export const AUTH_ROUTE_TITLES: Record<string, string> = {
   'customer-login': 'Customer sign in',
@@ -64,3 +72,25 @@ export const DRIVER_ROUTE_TITLES: Record<string, string> = {
   security: 'Security',
   'transfer-pin': 'Transfer PIN',
 };
+
+/** Translate an auth route segment using the active i18n language. */
+export function getAuthRouteTitle(segment: string): string {
+  const key = `nav.auth.${segment}`;
+  const tr = i18n.t(key);
+  if (tr && tr !== key) return tr;
+  return AUTH_ROUTE_TITLES[segment] || segment.replace(/-/g, ' ');
+}
+
+export function getCustomerRouteTitle(segment: string): string {
+  const key = `nav.customer.${segment}`;
+  const tr = i18n.t(key);
+  if (tr && tr !== key) return tr;
+  return CUSTOMER_ROUTE_TITLES[segment] || segment.replace(/-/g, ' ');
+}
+
+export function getDriverRouteTitle(segment: string): string {
+  const key = `nav.driver.${segment}`;
+  const tr = i18n.t(key);
+  if (tr && tr !== key) return tr;
+  return DRIVER_ROUTE_TITLES[segment] || segment.replace(/-/g, ' ');
+}

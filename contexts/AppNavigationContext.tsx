@@ -9,6 +9,7 @@ import React, {
 } from 'react';
 import { ActivityIndicator, Modal, StyleSheet, Text, View } from 'react-native';
 import { usePathname, useRouter } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import { useTheme } from './ThemeContext';
 import { isSameAppRoute } from '../utils/appRoutes';
 
@@ -34,6 +35,7 @@ export function useAppNavigation() {
 
 function NavigationOverlay({ visible }: { visible: boolean }) {
   const { colors, isDark } = useTheme();
+  const { t } = useTranslation();
   return (
     <Modal visible={visible} transparent animationType="fade" statusBarTranslucent>
       <View style={styles.overlayRoot} pointerEvents="box-none">
@@ -50,8 +52,8 @@ function NavigationOverlay({ visible }: { visible: boolean }) {
           <View style={[styles.ring, { borderColor: colors.primary + '55' }]}>
             <ActivityIndicator size="large" color={colors.primary} />
           </View>
-          <Text style={[styles.title, { color: colors.text }]}>Loading</Text>
-          <Text style={[styles.sub, { color: colors.textSecondary }]}>Preparing your screen…</Text>
+          <Text style={[styles.title, { color: colors.text }]}>{t('appNavigation.loading')}</Text>
+          <Text style={[styles.sub, { color: colors.textSecondary }]}>{t('appNavigation.preparingScreen')}</Text>
         </View>
       </View>
     </Modal>

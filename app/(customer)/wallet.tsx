@@ -7,6 +7,7 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import { useFocusEffect, useRouter, useLocalSearchParams } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { walletService, coinsService } from '../../services/api';
 import type { Wallet, WalletTransaction, WithdrawalRequest, WithdrawalQuote, CoinTransferDto } from '../../services/api';
@@ -59,6 +60,25 @@ function decodeURIComponentSafe(s: string): string {
 export default function WalletScreen() {
   const router = useRouter();
   const { colors, isDark } = useTheme();
+  const { t } = useTranslation();
+
+  const localizeTxType = (type: string): string => {
+    const map: Record<string, string> = {
+      TOP_UP: t('wallet.txTypes.TOP_UP'),
+      ORDER_PAYMENT: t('wallet.txTypes.ORDER_PAYMENT'),
+      REFUND: t('wallet.txTypes.REFUND'),
+      WITHDRAWAL_REQUEST: t('wallet.txTypes.WITHDRAWAL_REQUEST'),
+      WITHDRAWAL_APPROVED: t('wallet.txTypes.WITHDRAWAL_APPROVED'),
+      WITHDRAWAL_REJECTED: t('wallet.txTypes.WITHDRAWAL_REJECTED'),
+      BONUS: t('wallet.txTypes.BONUS'),
+      REFERRAL_REWARD: t('wallet.txTypes.REFERRAL_REWARD'),
+      ADJUSTMENT: t('wallet.txTypes.ADJUSTMENT'),
+      COIN_TRANSFER_SENT: t('wallet.txTypes.COIN_SEND'),
+      COIN_TRANSFER_RECEIVED: t('wallet.txTypes.COIN_RECEIVED'),
+      GAME_PRIZE: t('wallet.txTypes.GAME_PRIZE'),
+    };
+    return map[type] ?? type;
+  };
   const [activeTab, setActiveTab] = useState<Tab>('overview');
   const [wallet, setWallet] = useState<Wallet | null>(null);
   const [transactions, setTransactions] = useState<WalletTransaction[]>([]);
@@ -142,11 +162,11 @@ export default function WalletScreen() {
       const w = await walletService.getWallet();
       setWallet(w);
     } catch (e: any) {
-      setError(e.message || 'Failed to load wallet');
+      setError(e.message || t('common.something_went_wrong'));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [t]);
 
   const loadTransactions = useCallback(async () => {
     try {
@@ -254,9 +274,9 @@ export default function WalletScreen() {
     if (!referralCode) return;
     try {
       await Clipboard.setStringAsync(referralCode);
-      Alert.alert('Copied', 'Referral code copied to clipboard');
+      Alert.alert(t('common.copied'), t('wallet.copiedReferral'));
     } catch {
-      Alert.alert('Error', 'Failed to copy referral code');
+      Alert.alert(t('common.error'), t('customerSettings.failedToCopyReferral'));
     }
   };
 
@@ -287,21 +307,21 @@ export default function WalletScreen() {
   const validateWithdrawForm = (): number | null => {
     const amount = parseFloat(withdrawAmount);
     if (!amount || amount <= 0) {
-      Alert.alert('Invalid amount', 'Please enter a valid amount.');
+      Alert.alert(t('common.invalidAmount'), t('common.enterValidAmount'));
       return null;
     }
     const cap = wallet?.spendable ?? wallet?.balance ?? 0;
     const totalDebit = withdrawQuote?.totalCoins ?? amount;
     if (wallet && totalDebit > cap) {
       Alert.alert(
-        'Insufficient balance',
-        'This amount exceeds your available balance (coins reserved for pending sends are excluded).',
+        t('wallet.insufficientBalance'),
+        t('wallet.insufficientBalanceBody'),
       );
       return null;
     }
     if (withdrawPayout === 'BANK_TRANSFER') {
       if (!bankHolder.trim() || !bankName.trim() || !bankRef.trim()) {
-        Alert.alert('Bank details', 'Please enter account holder, bank name, and IBAN/RIB/account number.');
+        Alert.alert(t('wallet.bankDetails'), t('wallet.bankDetailsBody'));
         return null;
       }
     }
@@ -316,19 +336,19 @@ export default function WalletScreen() {
       const q = await walletService.getWithdrawalQuote(amount);
       if (q.totalCoins > q.spendableCoins) {
         Alert.alert(
-          'Insufficient balance',
-          `You need ${q.totalCoins.toFixed(2)} coins in your wallet but only ${q.spendableCoins.toFixed(2)} are available.`,
+          t('wallet.insufficientBalance'),
+          t('wallet.insufficientBalanceBody'),
         );
         return;
       }
       if (q.netPayoutCoins <= 0) {
-        Alert.alert('Amount too small', 'The amount after the withdrawal fee must be greater than zero.');
+        Alert.alert(t('wallet.amountTooSmall'), t('wallet.amountTooSmall'));
         return;
       }
       setWithdrawQuote(q);
       setWithdrawStep('preview');
     } catch (e: unknown) {
-      Alert.alert('Error', e instanceof Error ? e.message : 'Could not load withdrawal quote.');
+      Alert.alert(t('common.error'), e instanceof Error ? e.message : t('common.something_went_wrong'));
     } finally {
       setQuoteLoading(false);
     }
@@ -357,10 +377,10 @@ export default function WalletScreen() {
       setBankRef('');
       setSaveBankProfile(false);
       setWithdrawQuote(null);
-      Alert.alert('Request submitted', 'Your withdrawal request has been submitted.');
+      Alert.alert(t('wallet.requestSubmitted'), t('wallet.withdrawalSubmitted'));
       loadWithdrawals();
     } catch (e: any) {
-      Alert.alert('Error', e.message || 'Failed to submit withdrawal request.');
+      Alert.alert(t('common.error'), e.message || t('common.operationFailed'));
     } finally {
       setWithdrawing(false);
     }
@@ -368,12 +388,12 @@ export default function WalletScreen() {
 
   const cancelWithdrawalRequest = (requestId: string) => {
     Alert.alert(
-      'Cancel withdrawal?',
-      'This will cancel your pending request. You can submit a new one later.',
+      t('wallet.cancelWithdrawal'),
+      t('wallet.cancelWithdrawal'),
       [
-        { text: 'Keep', style: 'cancel' },
+        { text: t('wallet.keep'), style: 'cancel' },
         {
-          text: 'Cancel request',
+          text: t('wallet.cancelRequest'),
           style: 'destructive',
           onPress: async () => {
             setCancellingId(requestId);
@@ -382,7 +402,7 @@ export default function WalletScreen() {
               await loadWithdrawals();
               await loadWallet();
             } catch (e: unknown) {
-              Alert.alert('Error', e instanceof Error ? e.message : 'Could not cancel');
+              Alert.alert(t('common.error'), e instanceof Error ? e.message : t('common.operationFailed'));
             } finally {
               setCancellingId(null);
             }
@@ -426,7 +446,7 @@ export default function WalletScreen() {
     if (!rescheduleTargetId) return;
     const min = new Date(Date.now() + 60_000);
     if (rescheduleAt.getTime() <= min.getTime()) {
-      Alert.alert('Invalid time', 'Choose a date and time at least one minute from now.');
+      Alert.alert(t('wallet.invalidTime'), t('wallet.invalidTimeBody'));
       return;
     }
     setRescheduleSaving(true);
@@ -436,7 +456,7 @@ export default function WalletScreen() {
       setRescheduleIosOpen(false);
       await loadCoinTransfers();
     } catch (e: unknown) {
-      Alert.alert('Error', e instanceof Error ? e.message : 'Could not update schedule');
+      Alert.alert(t('common.error'), e instanceof Error ? e.message : t('common.operationFailed'));
     } finally {
       setRescheduleSaving(false);
     }
@@ -470,9 +490,9 @@ export default function WalletScreen() {
     return (
       <View style={[styles.container, { backgroundColor: colors.background }]}>
         <View style={styles.center}>
-          <Text style={[styles.errorText, { color: colors.textSecondary }]}>Wallet not found</Text>
+          <Text style={[styles.errorText, { color: colors.textSecondary }]}>{t('common.something_went_wrong')}</Text>
           <TouchableOpacity style={styles.setupBtn} onPress={() => router.push('/(auth)/customer-setup')}>
-            <Text style={styles.setupBtnText}>Add address to get a wallet</Text>
+            <Text style={styles.setupBtnText}>{t('auth.addAddress')}</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -483,18 +503,18 @@ export default function WalletScreen() {
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       {/* Balance card */}
       <View style={[styles.balanceCard, { backgroundColor: colors.primary }]}>
-        <Text style={styles.balanceLabel}>Available balance</Text>
+        <Text style={styles.balanceLabel}>{t('wallet.available')}</Text>
         <Text style={styles.balanceAmount}>
           {(wallet.spendable ?? wallet.balance).toFixed(2)}{' '}
-          <Text style={styles.currency}>Coins</Text>
+          <Text style={styles.currency}>{t('wallet.coins')}</Text>
         </Text>
         {(wallet.lockedForTransfers ?? 0) > 0 && (
           <Text style={[styles.lockedHint, { color: 'rgba(255,255,255,0.85)' }]}>
-            {wallet.lockedForTransfers!.toFixed(2)} Coins reserved for pending sends
+            {t('wallet.reservedForSends', { amount: wallet.lockedForTransfers!.toFixed(2) })}
           </Text>
         )}
         {wallet.discount > 0 && (
-          <Text style={styles.discountText}>🎁 {wallet.discount.toFixed(2)} Coins discount available</Text>
+          <Text style={styles.discountText}>🎁 {wallet.discount.toFixed(2)} {t('wallet.coins')}</Text>
         )}
         <View style={styles.walletQuickWrap}>
           <View style={styles.walletQuickRow}>
@@ -506,7 +526,7 @@ export default function WalletScreen() {
               <View style={styles.walletQuickCircle}>
                 <Text style={styles.walletQuickGlyph}>+</Text>
               </View>
-              <Text style={styles.walletQuickLabel}>Deposit</Text>
+              <Text style={styles.walletQuickLabel}>{t('wallet.buyCoins')}</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.walletQuickItem}
@@ -516,17 +536,17 @@ export default function WalletScreen() {
               <View style={styles.walletQuickCircle}>
                 <Ionicons name="arrow-forward" size={22} color="rgba(255,255,255,0.95)" />
               </View>
-              <Text style={styles.walletQuickLabel}>Send</Text>
+              <Text style={styles.walletQuickLabel}>{t('sendCoins.send')}</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.walletQuickItem}
-              onPress={() => Alert.alert('Scan', 'QR scanning is coming soon.')}
+              onPress={() => Alert.alert(t('wallet.scan'), t('wallet.scanComingSoon'))}
               activeOpacity={0.85}
             >
               <View style={styles.walletQuickCircle}>
                 <Ionicons name="scan-outline" size={22} color="rgba(255,255,255,0.95)" />
               </View>
-              <Text style={styles.walletQuickLabel}>Scan</Text>
+              <Text style={styles.walletQuickLabel}>{t('wallet.scan')}</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.walletQuickItem}
@@ -536,7 +556,7 @@ export default function WalletScreen() {
               <View style={styles.walletQuickCircle}>
                 <Text style={styles.walletQuickGlyph}>···</Text>
               </View>
-              <Text style={styles.walletQuickLabel}>More</Text>
+              <Text style={styles.walletQuickLabel}>{t('common.menu')}</Text>
             </TouchableOpacity>
           </View>
           {walletQuickMore && (
@@ -553,7 +573,7 @@ export default function WalletScreen() {
                 <View style={styles.walletQuickCircle}>
                   <Text style={styles.walletQuickGlyph}>−</Text>
                 </View>
-                <Text style={styles.walletQuickLabel}>Withdraw</Text>
+                <Text style={styles.walletQuickLabel}>{t('wallet.requestWithdrawal')}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.walletQuickItem}
@@ -566,20 +586,20 @@ export default function WalletScreen() {
                 <View style={styles.walletQuickCircle}>
                   <Text style={styles.walletQuickGlyph}>?</Text>
                 </View>
-                <Text style={styles.walletQuickLabel}>Help</Text>
+                <Text style={styles.walletQuickLabel}>{t('customerProfile.support')}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.walletQuickItem}
                 onPress={() => {
                   setWalletQuickMore(false);
-                  Alert.alert('News', 'Updates and announcements are coming soon.');
+                  Alert.alert(t('wallet.news'), t('wallet.newsComingSoon'));
                 }}
                 activeOpacity={0.85}
               >
                 <View style={styles.walletQuickCircle}>
                   <Ionicons name="newspaper-outline" size={20} color="rgba(255,255,255,0.95)" />
                 </View>
-                <Text style={styles.walletQuickLabel}>News</Text>
+                <Text style={styles.walletQuickLabel}>{t('wallet.news')}</Text>
               </TouchableOpacity>
               <View style={styles.walletQuickItem} />
             </View>
@@ -590,13 +610,13 @@ export default function WalletScreen() {
       <TouchableOpacity
         activeOpacity={0.92}
         accessibilityRole="button"
-        accessibilityLabel="Buy coins"
+        accessibilityLabel={t('wallet.buyCoins')}
         onPress={() => router.push('/(customer)/buy-coins')}
         style={[styles.comingSoonBanner, { backgroundColor: colors.card, borderColor: colors.border }]}
       >
-        <Text style={[styles.comingSoonTitle, { color: colors.text }]}>Buy coins</Text>
+        <Text style={[styles.comingSoonTitle, { color: colors.text }]}>{t('wallet.buyCoins')}</Text>
         <Text style={[styles.comingSoonText, { color: colors.textSecondary }]}>
-          Top up securely with Flouci. <Text style={{ fontWeight: '700', color: colors.primary }}>Tap to add coins.</Text>
+          {t('buyCoins.title')}. <Text style={{ fontWeight: '700', color: colors.primary }}>{t('wallet.buyCoins')}.</Text>
         </Text>
       </TouchableOpacity>
 
@@ -606,20 +626,20 @@ export default function WalletScreen() {
 
       {/* Tabs */}
       <View style={[styles.tabs, { backgroundColor: colors.card }]}>
-        {(['overview', 'transactions', 'withdrawals', 'coin'] as Tab[]).map((t) => (
+        {(['overview', 'transactions', 'withdrawals', 'coin'] as Tab[]).map((tab) => (
           <TouchableOpacity
-            key={t}
-            style={[styles.tab, activeTab === t && [styles.tabActive, { backgroundColor: colors.primary }]]}
-            onPress={() => setActiveTab(t)}
+            key={tab}
+            style={[styles.tab, activeTab === tab && [styles.tabActive, { backgroundColor: colors.primary }]]}
+            onPress={() => setActiveTab(tab)}
           >
-            <Text style={[styles.tabText, { color: colors.textSecondary }, activeTab === t && styles.tabTextActive]}>
-              {t === 'overview'
-                ? 'Overview'
-                : t === 'transactions'
-                  ? 'Ledger'
-                  : t === 'withdrawals'
-                    ? 'Payouts'
-                    : 'Sends'}
+            <Text style={[styles.tabText, { color: colors.textSecondary }, activeTab === tab && styles.tabTextActive]}>
+              {tab === 'overview'
+                ? t('driverProfile.overview')
+                : tab === 'transactions'
+                  ? t('driverTransactions.title')
+                  : tab === 'withdrawals'
+                    ? t('driverEarnings.pendingPayout')
+                    : t('sendCoins.send')}
             </Text>
           </TouchableOpacity>
         ))}
@@ -632,9 +652,9 @@ export default function WalletScreen() {
             { backgroundColor: colors.card, borderColor: colors.border },
           ]}
         >
-          <Text style={[styles.sendsOnlyBannerText, { color: colors.text }]}>Showing your sends</Text>
+          <Text style={[styles.sendsOnlyBannerText, { color: colors.text }]}>{t('wallet.showingYourSends')}</Text>
           <TouchableOpacity onPress={() => setSendsOnlyFilter(false)} hitSlop={12}>
-            <Text style={{ color: colors.primary, fontWeight: '800' }}>Show all</Text>
+            <Text style={{ color: colors.primary, fontWeight: '800' }}>{t('common.showAll')}</Text>
           </TouchableOpacity>
         </View>
       )}
@@ -653,16 +673,16 @@ export default function WalletScreen() {
                 if (wallet.coinsToLocalFiat) setShowCoinFiatModal(true);
                 else {
                   Alert.alert(
-                    'Cash equivalent',
-                    'No active coin rate is set for your country yet. Your balance is shown in coins only.',
+                    t('wallet.cashEquivalent'),
+                    t('wallet.cashEquivalent'),
                   );
                 }
               }}
             >
               <View style={{ flex: 1 }}>
-                <Text style={[styles.infoLabel, { color: colors.textSecondary }]}>Currency</Text>
+                <Text style={[styles.infoLabel, { color: colors.textSecondary }]}>{t('wallet.currency')}</Text>
                 <Text style={{ color: colors.textTertiary, fontSize: 12, marginTop: 4 }}>
-                  Tap for estimated value in local money
+                  {t('wallet.tapForEstimate')}
                 </Text>
               </View>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
@@ -671,15 +691,15 @@ export default function WalletScreen() {
               </View>
             </TouchableOpacity>
             <View style={[styles.infoCard, { backgroundColor: colors.card }]}>
-              <Text style={[styles.infoLabel, { color: colors.textSecondary }]}>Last updated</Text>
+              <Text style={[styles.infoLabel, { color: colors.textSecondary }]}>{t('common.refresh')}</Text>
               <Text style={[styles.infoValue, { color: colors.text }]}>{formatDate(wallet.updatedAt)}</Text>
             </View>
             <TouchableOpacity style={[styles.navCard, { backgroundColor: colors.card }]} onPress={() => setActiveTab('transactions')}>
-              <Text style={[styles.navCardText, { color: colors.text }]}>📋  View Transaction History</Text>
+              <Text style={[styles.navCardText, { color: colors.text }]}>📋  {t('wallet.viewTransactionHistory')}</Text>
               <Text style={[styles.navArrow, { color: colors.primary }]}>→</Text>
             </TouchableOpacity>
             <TouchableOpacity style={[styles.navCard, { backgroundColor: colors.card }]} onPress={() => setActiveTab('withdrawals')}>
-              <Text style={[styles.navCardText, { color: colors.text }]}>💸  View Withdrawal Requests</Text>
+              <Text style={[styles.navCardText, { color: colors.text }]}>💸  {t('wallet.requestWithdrawal')}</Text>
               <Text style={[styles.navArrow, { color: colors.primary }]}>→</Text>
             </TouchableOpacity>
           </View>
@@ -692,13 +712,13 @@ export default function WalletScreen() {
           ) : transactions.length === 0 ? (
             <View style={styles.empty}>
               <Text style={styles.emptyIcon}>📋</Text>
-              <Text style={[styles.emptyText, { color: colors.textTertiary }]}>No transactions yet</Text>
+              <Text style={[styles.emptyText, { color: colors.textTertiary }]}>{t('wallet.noTransactions')}</Text>
             </View>
           ) : (
             transactions.map((tx) => (
               <View key={tx.id} style={[styles.txCard, { backgroundColor: colors.card }]}>
                 <View style={styles.txLeft}>
-                  <Text style={[styles.txType, { color: colors.text }]}>{TRANSACTION_TYPE_LABELS[tx.type] ?? tx.type}</Text>
+                  <Text style={[styles.txType, { color: colors.text }]}>{localizeTxType(tx.type)}</Text>
                   <Text style={[styles.txDate, { color: colors.textTertiary }]}>{formatDate(tx.createdAt)}</Text>
                 </View>
                 <View style={styles.txRight}>
@@ -707,7 +727,7 @@ export default function WalletScreen() {
                     ['TOP_UP','REFUND','BONUS','REFERRAL_REWARD','COIN_TRANSFER_RECEIVED'].includes(tx.type)
                       ? styles.txCredit : styles.txDebit,
                   ]}>
-                    {formatAmount(tx.amount, tx.type)} Coins
+                    {formatAmount(tx.amount, tx.type)} {t('wallet.coins')}
                   </Text>
                   <View style={[styles.statusBadge, { backgroundColor: STATUS_COLORS[tx.status] + '22' }]}>
                     <Text style={[styles.statusText, { color: STATUS_COLORS[tx.status] }]}>{tx.status}</Text>
@@ -725,7 +745,7 @@ export default function WalletScreen() {
           ) : withdrawals.length === 0 ? (
             <View style={styles.empty}>
               <Text style={styles.emptyIcon}>💸</Text>
-              <Text style={[styles.emptyText, { color: colors.textTertiary }]}>No withdrawal requests yet</Text>
+              <Text style={[styles.emptyText, { color: colors.textTertiary }]}>{t('wallet.noTransactions')}</Text>
               <TouchableOpacity
                 style={styles.newWithdrawBtn}
                 onPress={() => {
@@ -733,7 +753,7 @@ export default function WalletScreen() {
                   setShowWithdrawModal(true);
                 }}
               >
-                <Text style={styles.newWithdrawBtnText}>Request Withdrawal</Text>
+                <Text style={styles.newWithdrawBtnText}>{t('wallet.requestWithdrawal')}</Text>
               </TouchableOpacity>
             </View>
           ) : (
@@ -742,12 +762,12 @@ export default function WalletScreen() {
                 <View key={wd.id} style={[styles.txCard, { backgroundColor: colors.card }]}>
                   <View style={styles.txLeft}>
                     <Text style={[styles.wdAmountLine, { color: colors.text }]}>
-                      {wd.amount.toFixed(2)} <Text style={styles.wdAmountCurrency}>Coins</Text>
+                      {wd.amount.toFixed(2)} <Text style={styles.wdAmountCurrency}>{t('wallet.coins')}</Text>
                     </Text>
                     <Text style={[styles.txDate, { color: colors.textTertiary }]}>{formatDate(wd.requestedAt)}</Text>
                     {wd.payoutMethod && (
                       <Text style={[styles.txDate, { color: colors.textSecondary }]}>
-                        {wd.payoutMethod === 'CASH' ? 'Cash pickup' : 'Bank transfer'}
+                        {wd.payoutMethod === 'CASH' ? t('wallet.cash') : t('wallet.bank')}
                       </Text>
                     )}
                     {wd.payoutMethod === 'BANK_TRANSFER' && (wd.payoutBankName || wd.payoutBankAccountRef) && (
@@ -761,14 +781,14 @@ export default function WalletScreen() {
                     )}
                     {(wd.feeAmount ?? 0) > 0 && (
                       <Text style={[styles.txNote, { color: colors.textTertiary }]}>
-                        Fee: {(wd.feeAmount ?? 0).toFixed(2)} coins
+                        {t('sendCoins.fee')}: {(wd.feeAmount ?? 0).toFixed(2)} {t('wallet.coins')}
                       </Text>
                     )}
                     {wd.descriptionOfAdmin ? (
-                      <Text style={styles.txAdminNote}>Note from support: {wd.descriptionOfAdmin}</Text>
+                      <Text style={styles.txAdminNote}>{t('customerProfile.support')}: {wd.descriptionOfAdmin}</Text>
                     ) : null}
                     {wd.status === 'REJECTED' && wd.rejectionReason ? (
-                      <Text style={[styles.txAdminNote, { color: '#b91c1c' }]}>Rejected: {wd.rejectionReason}</Text>
+                      <Text style={[styles.txAdminNote, { color: '#b91c1c' }]}>{t('driverDocuments.statusRejected')}: {wd.rejectionReason}</Text>
                     ) : null}
                   </View>
                   <View style={styles.wdRightCol}>
@@ -784,7 +804,7 @@ export default function WalletScreen() {
                           style={styles.cancelWdBtn}
                           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                         >
-                          <Text style={styles.cancelWdText}>Cancel</Text>
+                          <Text style={styles.cancelWdText}>{t('common.cancel')}</Text>
                         </TouchableOpacity>
                       )
                     ) : null}
@@ -798,7 +818,7 @@ export default function WalletScreen() {
                   setShowWithdrawModal(true);
                 }}
               >
-                <Text style={styles.newWithdrawBtnText}>+ New Request</Text>
+                <Text style={styles.newWithdrawBtnText}>+ {t('wallet.requestWithdrawal')}</Text>
               </TouchableOpacity>
             </>
           )
@@ -811,33 +831,33 @@ export default function WalletScreen() {
             <View style={styles.empty}>
               <Text style={styles.emptyIcon}>↗️</Text>
               <Text style={[styles.emptyText, { color: colors.textTertiary }]}>
-                {sendsOnlyFilter ? 'No outgoing sends in recent history' : 'No coin sends yet'}
+                {sendsOnlyFilter ? t('wallet.noTransactions') : t('wallet.noTransactions')}
               </Text>
               {!sendsOnlyFilter ? (
                 <TouchableOpacity style={styles.newWithdrawBtn} onPress={() => router.push('/(customer)/send-coins')}>
-                  <Text style={styles.newWithdrawBtnText}>Send coins</Text>
+                  <Text style={styles.newWithdrawBtnText}>{t('sendCoins.send')}</Text>
                 </TouchableOpacity>
               ) : (
                 <TouchableOpacity style={styles.newWithdrawBtn} onPress={() => setSendsOnlyFilter(false)}>
-                  <Text style={styles.newWithdrawBtnText}>Show all transfers</Text>
+                  <Text style={styles.newWithdrawBtnText}>{t('common.showAll')}</Text>
                 </TouchableOpacity>
               )}
             </View>
           ) : (
             <>
-              {coinListFiltered.map((t) => {
+              {coinListFiltered.map((tx) => {
                 const isRecipientRow = !!(
                   myUserId &&
-                  t.recipientUserId === myUserId &&
-                  t.senderUserId !== myUserId
+                  tx.recipientUserId === myUserId &&
+                  tx.senderUserId !== myUserId
                 );
-                const isSentRow = !!myUserId && t.senderUserId === myUserId;
-                const showFeeBreakdownRow = !isRecipientRow || t.showFeeBreakdown === true;
-                const statusStyle = coinTransferStatusMeta(t.status);
-                const directionLabel = isSentRow ? 'Sent' : isRecipientRow ? 'Received' : null;
-                const senderLine = isRecipientRow ? formatCoinSenderLine(t) : null;
+                const isSentRow = !!myUserId && tx.senderUserId === myUserId;
+                const showFeeBreakdownRow = !isRecipientRow || tx.showFeeBreakdown === true;
+                const statusStyle = coinTransferStatusMeta(tx.status);
+                const directionLabel = isSentRow ? t('sendCoins.sent') : isRecipientRow ? t('sendCoins.received') : null;
+                const senderLine = isRecipientRow ? formatCoinSenderLine(tx) : null;
                 return (
-                <View key={t.id} style={[styles.txCard, { backgroundColor: colors.card }]}>
+                <View key={tx.id} style={[styles.txCard, { backgroundColor: colors.card }]}>
                   <View style={styles.txLeft}>
                     <View style={styles.coinTxTitleRow}>
                       <View style={[styles.coinStatusBadge, { backgroundColor: statusStyle.bg }]}>
@@ -854,72 +874,72 @@ export default function WalletScreen() {
                     </View>
                     {senderLine ? (
                       <Text style={[styles.coinSenderLine, { color: colors.text }]}>
-                        From {senderLine}
+                        {t('sendCoins.from')} {senderLine}
                       </Text>
                     ) : null}
-                    <Text style={[styles.txDate, { color: colors.textTertiary }]}>{formatDate(t.createdAt)}</Text>
+                    <Text style={[styles.txDate, { color: colors.textTertiary }]}>{formatDate(tx.createdAt)}</Text>
                     {showFeeBreakdownRow ? (
                       <Text style={[styles.txDate, { color: colors.textSecondary }]}>
-                        Gross {t.grossCoins.toFixed(2)} · Fee {t.feeCoins.toFixed(2)} · Net {t.netCoins.toFixed(2)}
+                        {t('sendCoins.gross')} {tx.grossCoins.toFixed(2)} · {t('sendCoins.fee')} {tx.feeCoins.toFixed(2)} · {t('sendCoins.theyReceive')} {tx.netCoins.toFixed(2)}
                       </Text>
                     ) : (
                       <Text style={[styles.txDate, { color: colors.textSecondary }]}>
-                        You received {t.netCoins.toFixed(2)} coins
+                        {t('sendCoins.received')} {tx.netCoins.toFixed(2)} {t('wallet.coins')}
                       </Text>
                     )}
-                    {t.giftMessage ? (
+                    {tx.giftMessage ? (
                       <Text style={[styles.txNote, { color: colors.textSecondary }]} numberOfLines={2}>
-                        “{t.giftMessage}”
+                        “{tx.giftMessage}”
                       </Text>
                     ) : null}
-                    {t.status === 'SCHEDULED' && t.scheduledAt && isSentRow ? (
+                    {tx.status === 'SCHEDULED' && tx.scheduledAt && isSentRow ? (
                       <Text style={[styles.txScheduled, { color: colors.primary }]}>
-                        Sends at {formatDateTimeLocal(t.scheduledAt)}
+                        {t('sendCoins.scheduleSend')} {formatDateTimeLocal(tx.scheduledAt)}
                       </Text>
                     ) : null}
-                    {t.status === 'PENDING' && t.pendingUntil ? (
+                    {tx.status === 'PENDING' && tx.pendingUntil ? (
                       <Text style={[styles.txDate, { color: colors.textSecondary, marginTop: 2 }]}>
-                        Activates after {formatDateTimeLocal(t.pendingUntil)}
+                        {formatDateTimeLocal(tx.pendingUntil)}
                       </Text>
                     ) : null}
-                    {t.status === 'FAILED' && t.failedReason ? (
+                    {tx.status === 'FAILED' && tx.failedReason ? (
                       <Text style={[styles.txDate, { color: colors.danger ?? '#dc2626', marginTop: 2 }]}>
-                        {t.failedReason}
+                        {tx.failedReason}
                       </Text>
                     ) : null}
                   </View>
                   <View style={[styles.txRight, { gap: 10 }]}>
-                    {t.status === 'SCHEDULED' && t.senderUserId === myUserId ? (
+                    {tx.status === 'SCHEDULED' && tx.senderUserId === myUserId ? (
                       <TouchableOpacity
-                        onPress={() => openRescheduleModal(t)}
-                        disabled={cancellingCoinId === t.id || rescheduleSaving}
+                        onPress={() => openRescheduleModal(tx)}
+                        disabled={cancellingCoinId === tx.id || rescheduleSaving}
                         hitSlop={{ top: 6, bottom: 6, left: 8, right: 8 }}
                       >
-                        <Text style={{ color: colors.primary, fontWeight: '700' }}>Edit time</Text>
+                        <Text style={{ color: colors.primary, fontWeight: '700' }}>{t('sendCoins.editTime')}</Text>
                       </TouchableOpacity>
                     ) : null}
-                    {t.status === 'SCHEDULED' && t.senderUserId === myUserId ? (
-                      cancellingCoinId === t.id ? (
+                    {tx.status === 'SCHEDULED' && tx.senderUserId === myUserId ? (
+                      cancellingCoinId === tx.id ? (
                         <ActivityIndicator color={colors.primary} />
                       ) : (
                         <TouchableOpacity
                           onPress={() => {
                             Alert.alert(
-                              'Cancel scheduled send?',
-                              'This send will not happen. Coins are not locked until the scheduled time.',
+                              t('wallet.cancelScheduledSend'),
+                              t('wallet.cancelScheduledSend'),
                               [
-                                { text: 'No', style: 'cancel' },
+                                { text: t('common.no'), style: 'cancel' },
                                 {
-                                  text: 'Cancel send',
+                                  text: t('wallet.cancelSend'),
                                   style: 'destructive',
                                   onPress: async () => {
-                                    setCancellingCoinId(t.id);
+                                    setCancellingCoinId(tx.id);
                                     try {
-                                      await coinsService.cancelTransfer(t.id);
+                                      await coinsService.cancelTransfer(tx.id);
                                       await loadCoinTransfers();
                                       await loadWallet();
                                     } catch (e: unknown) {
-                                      Alert.alert('Error', e instanceof Error ? e.message : 'Failed');
+                                      Alert.alert(t('common.error'), e instanceof Error ? e.message : t('common.operationFailed'));
                                     } finally {
                                       setCancellingCoinId(null);
                                     }
@@ -929,7 +949,7 @@ export default function WalletScreen() {
                             );
                           }}
                         >
-                          <Text style={{ color: colors.danger, fontWeight: '700' }}>Cancel</Text>
+                          <Text style={{ color: colors.danger, fontWeight: '700' }}>{t('common.cancel')}</Text>
                         </TouchableOpacity>
                       )
                     ) : null}
@@ -938,7 +958,7 @@ export default function WalletScreen() {
               );
               })}
               <TouchableOpacity style={styles.newWithdrawBtn} onPress={() => router.push('/(customer)/send-coins')}>
-                <Text style={styles.newWithdrawBtnText}>+ New send</Text>
+                <Text style={styles.newWithdrawBtnText}>{t('wallet.newSend')}</Text>
               </TouchableOpacity>
             </>
           )
@@ -956,15 +976,15 @@ export default function WalletScreen() {
             <View style={[styles.modalCard, { backgroundColor: colors.card }]}>
               {withdrawStep === 'edit' ? (
                 <>
-                  <Text style={[styles.modalTitle, { color: colors.text }]}>Request withdrawal</Text>
+                  <Text style={[styles.modalTitle, { color: colors.text }]}>{t('wallet.requestWithdrawal')}</Text>
                   <Text style={[styles.modalBalanceMuted, { color: colors.textTertiary }]}>
-                    Available {(wallet.spendable ?? wallet.balance).toFixed(2)} Coins
+                    {t('wallet.available')} {(wallet.spendable ?? wallet.balance).toFixed(2)} {t('wallet.coins')}
                     {(wallet.lockedForTransfers ?? 0) > 0
-                      ? ` · ${wallet.lockedForTransfers!.toFixed(2)} reserved for sends`
+                      ? ` ${t('wallet.reservedForSends', { amount: wallet.lockedForTransfers!.toFixed(2) })}`
                       : ''}
                   </Text>
 
-                  <Text style={[styles.modalLabel, { color: colors.text }]}>Amount (Coins)</Text>
+                  <Text style={[styles.modalLabel, { color: colors.text }]}>{t('wallet.amountCoins')}</Text>
                   <TextInput
                     style={[styles.modalInput, { backgroundColor: colors.inputBg, borderColor: colors.inputBorder, color: colors.text }]}
                     placeholder="0.00"
@@ -974,63 +994,63 @@ export default function WalletScreen() {
                     onChangeText={setWithdrawAmount}
                   />
 
-                  <Text style={[styles.modalLabel, { color: colors.text }]}>Receive as</Text>
+                  <Text style={[styles.modalLabel, { color: colors.text }]}>{t('wallet.receiveAs')}</Text>
                   <View style={styles.payoutRow}>
                     <TouchableOpacity
                       style={[styles.chip, { borderColor: colors.border }, withdrawPayout === 'BANK_TRANSFER' && { backgroundColor: colors.primary, borderColor: colors.primary }]}
                       onPress={() => setWithdrawPayout('BANK_TRANSFER')}
                     >
-                      <Text style={{ color: withdrawPayout === 'BANK_TRANSFER' ? '#fff' : colors.text, fontWeight: '700' }}>Bank</Text>
+                      <Text style={{ color: withdrawPayout === 'BANK_TRANSFER' ? '#fff' : colors.text, fontWeight: '700' }}>{t('wallet.bank')}</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
                       style={[styles.chip, { borderColor: colors.border }, withdrawPayout === 'CASH' && { backgroundColor: colors.primary, borderColor: colors.primary }]}
                       onPress={() => setWithdrawPayout('CASH')}
                     >
-                      <Text style={{ color: withdrawPayout === 'CASH' ? '#fff' : colors.text, fontWeight: '700' }}>Cash</Text>
+                      <Text style={{ color: withdrawPayout === 'CASH' ? '#fff' : colors.text, fontWeight: '700' }}>{t('wallet.cash')}</Text>
                     </TouchableOpacity>
                   </View>
 
                   {withdrawPayout === 'BANK_TRANSFER' && (
                     <>
                       <Text style={[styles.modalHint, { color: colors.textSecondary }]}>
-                        Bank transfers may take a few business days to reach your account after we send them.
+                        {t('wallet.bankDetailsBody')}
                       </Text>
-                      <Text style={[styles.modalLabel, { color: colors.text }]}>Account holder name</Text>
+                      <Text style={[styles.modalLabel, { color: colors.text }]}>{t('bankDetails.accountHolder')}</Text>
                       <TextInput
                         style={[styles.modalInput, { backgroundColor: colors.inputBg, borderColor: colors.inputBorder, color: colors.text }]}
-                        placeholder="Full name as on the account"
+                        placeholder={t('bankDetails.accountHolder')}
                         placeholderTextColor={colors.textTertiary}
                         value={bankHolder}
                         onChangeText={setBankHolder}
                       />
-                      <Text style={[styles.modalLabel, { color: colors.text }]}>Bank name</Text>
+                      <Text style={[styles.modalLabel, { color: colors.text }]}>{t('bankDetails.bankName')}</Text>
                       <TextInput
                         style={[styles.modalInput, { backgroundColor: colors.inputBg, borderColor: colors.inputBorder, color: colors.text }]}
-                        placeholder="e.g. STB, BIAT"
+                        placeholder={t('bankDetails.bankName')}
                         placeholderTextColor={colors.textTertiary}
                         value={bankName}
                         onChangeText={setBankName}
                       />
-                      <Text style={[styles.modalLabel, { color: colors.text }]}>IBAN / RIB / account number</Text>
+                      <Text style={[styles.modalLabel, { color: colors.text }]}>{t('bankDetails.iban')} / {t('bankDetails.rib')}</Text>
                       <TextInput
                         style={[styles.modalInput, { backgroundColor: colors.inputBg, borderColor: colors.inputBorder, color: colors.text }]}
-                        placeholder="Your payout reference"
+                        placeholder={t('bankDetails.iban')}
                         placeholderTextColor={colors.textTertiary}
                         value={bankRef}
                         onChangeText={setBankRef}
                         autoCapitalize="characters"
                       />
                       <View style={styles.saveBankRow}>
-                        <Text style={[styles.modalLabel, { flex: 1, marginBottom: 0 }]}>Save bank details for next time</Text>
+                        <Text style={[styles.modalLabel, { flex: 1, marginBottom: 0 }]}>{t('bankDetails.save')}</Text>
                         <Switch value={saveBankProfile} onValueChange={setSaveBankProfile} />
                       </View>
                     </>
                   )}
 
-                  <Text style={[styles.modalLabel, { color: colors.text }]}>Note (optional)</Text>
+                  <Text style={[styles.modalLabel, { color: colors.text }]}>{t('bankDetails.notes')} ({t('common.optional')})</Text>
                   <TextInput
                     style={[styles.modalInput, { height: 80, textAlignVertical: 'top', backgroundColor: colors.inputBg, borderColor: colors.inputBorder, color: colors.text }]}
-                    placeholder="Reason for withdrawal..."
+                    placeholder={t('wallet.reasonPlaceholder')}
                     placeholderTextColor={colors.textTertiary}
                     multiline
                     value={withdrawNote}
@@ -1053,7 +1073,7 @@ export default function WalletScreen() {
                         setSaveBankProfile(false);
                       }}
                     >
-                      <Text style={styles.modalCancelText}>Cancel</Text>
+                      <Text style={styles.modalCancelText}>{t('common.cancel')}</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
                       style={[styles.modalSubmit, quoteLoading && styles.btnDisabled]}
@@ -1063,29 +1083,29 @@ export default function WalletScreen() {
                       {quoteLoading ? (
                         <ActivityIndicator color="#fff" />
                       ) : (
-                        <Text style={styles.modalSubmitText}>Review request</Text>
+                        <Text style={styles.modalSubmitText}>{t('sendCoins.previewFees')}</Text>
                       )}
                     </TouchableOpacity>
                   </View>
                 </>
               ) : (
                 <>
-                  <Text style={[styles.modalTitle, { color: colors.text }]}>Confirm withdrawal</Text>
-                  <Text style={[styles.previewHint, { color: colors.textSecondary }]}>From your wallet</Text>
+                  <Text style={[styles.modalTitle, { color: colors.text }]}>{t('common.confirm')}</Text>
+                  <Text style={[styles.previewHint, { color: colors.textSecondary }]}>{t('wallet.title')}</Text>
                   <Text style={[styles.previewAmount, { color: colors.text }]}>
                     {parseFloat(withdrawAmount || '0').toFixed(2)}{' '}
-                    <Text style={[styles.previewCurrency, { color: colors.textSecondary }]}>Coins</Text>
+                    <Text style={[styles.previewCurrency, { color: colors.textSecondary }]}>{t('wallet.coins')}</Text>
                   </Text>
                   {withdrawQuote && withdrawQuote.feeCoins > 0 ? (
                     <Text style={[styles.previewMeta, { color: colors.textSecondary, marginTop: 6 }]}>
-                      Fee: {withdrawQuote.feeCoins.toFixed(2)} coins
+                      {t('sendCoins.fee')}: {withdrawQuote.feeCoins.toFixed(2)} {t('wallet.coins')}
                       {withdrawQuote.feeBps > 0 ? ` (${withdrawQuote.feeBps / 100}%)` : ''}
                     </Text>
                   ) : null}
-                  <Text style={[styles.previewHint, { color: colors.textSecondary, marginTop: 10 }]}>You receive</Text>
+                  <Text style={[styles.previewHint, { color: colors.textSecondary, marginTop: 10 }]}>{t('buyCoins.youReceive')}</Text>
                   <Text style={[styles.previewAmount, { color: colors.text, fontSize: 28 }]}>
                     {(withdrawQuote?.netPayoutCoins ?? parseFloat(withdrawAmount || '0')).toFixed(2)}{' '}
-                    <Text style={[styles.previewCurrency, { color: colors.textSecondary, fontSize: 16 }]}>Coins</Text>
+                    <Text style={[styles.previewCurrency, { color: colors.textSecondary, fontSize: 16 }]}>{t('wallet.coins')}</Text>
                   </Text>
                   {withdrawQuote?.amountFiat != null ? (
                     <Text style={[styles.previewFiat, { color: colors.textTertiary }]}>
@@ -1094,19 +1114,19 @@ export default function WalletScreen() {
                     </Text>
                   ) : null}
                   <Text style={[styles.modalBalanceMuted, { color: colors.textTertiary }]}>
-                    Available {(wallet.spendable ?? wallet.balance).toFixed(2)} Coins
+                    {t('wallet.available')} {(wallet.spendable ?? wallet.balance).toFixed(2)} {t('wallet.coins')}
                     {(wallet.lockedForTransfers ?? 0) > 0
-                      ? ` · ${wallet.lockedForTransfers!.toFixed(2)} reserved for sends`
+                      ? ` ${t('wallet.reservedForSends', { amount: wallet.lockedForTransfers!.toFixed(2) })}`
                       : ''}
                   </Text>
                   <Text style={[styles.previewMeta, { color: colors.textSecondary }]}>
-                    {withdrawPayout === 'CASH' ? 'Cash pickup' : 'Bank transfer'}
+                    {withdrawPayout === 'CASH' ? t('wallet.cash') : t('wallet.bank')}
                     {withdrawPayout === 'BANK_TRANSFER' && bankName.trim()
                       ? ` · ${bankName.trim()}`
                       : ''}
                   </Text>
                   {withdrawNote.trim() ? (
-                    <Text style={[styles.previewMeta, { color: colors.textTertiary }]}>Note: {withdrawNote.trim()}</Text>
+                    <Text style={[styles.previewMeta, { color: colors.textTertiary }]}>{t('bankDetails.notes')}: {withdrawNote.trim()}</Text>
                   ) : null}
 
                   <View style={styles.modalButtons}>
@@ -1118,7 +1138,7 @@ export default function WalletScreen() {
                       }}
                       disabled={withdrawing}
                     >
-                      <Text style={styles.modalCancelText}>Back</Text>
+                      <Text style={styles.modalCancelText}>{t('common.back')}</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
                       style={[styles.modalSubmit, withdrawing && styles.btnDisabled]}
@@ -1127,7 +1147,7 @@ export default function WalletScreen() {
                     >
                       {withdrawing
                         ? <ActivityIndicator color="#fff" />
-                        : <Text style={styles.modalSubmitText}>Confirm request</Text>}
+                        : <Text style={styles.modalSubmitText}>{t('common.confirm')}</Text>}
                     </TouchableOpacity>
                   </View>
                 </>
@@ -1148,9 +1168,9 @@ export default function WalletScreen() {
       >
         <View style={styles.modalOverlay}>
           <View style={[styles.rescheduleModalCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-            <Text style={[styles.modalTitle, { color: colors.text }]}>Reschedule send</Text>
+            <Text style={[styles.modalTitle, { color: colors.text }]}>{t('sendCoins.rescheduleTitle')}</Text>
             <Text style={{ color: colors.textSecondary, marginBottom: 14, fontSize: 14 }}>
-              Choose a new date and time. It must be at least one minute from now.
+              {t('sendCoins.rescheduleBody')}
             </Text>
             <TouchableOpacity
               style={[styles.reschedulePickRow, { borderColor: colors.border, backgroundColor: colors.inputBg }]}
@@ -1180,7 +1200,7 @@ export default function WalletScreen() {
                 }}
                 disabled={rescheduleSaving}
               >
-                <Text style={styles.modalCancelText}>Close</Text>
+                <Text style={styles.modalCancelText}>{t('common.close')}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.modalSubmit, rescheduleSaving && styles.btnDisabled]}
@@ -1190,7 +1210,7 @@ export default function WalletScreen() {
                 {rescheduleSaving ? (
                   <ActivityIndicator color="#fff" />
                 ) : (
-                  <Text style={styles.modalSubmitText}>Save</Text>
+                  <Text style={styles.modalSubmitText}>{t('common.save')}</Text>
                 )}
               </TouchableOpacity>
             </View>
@@ -1201,17 +1221,17 @@ export default function WalletScreen() {
       <Modal visible={showCoinFiatModal} transparent animationType="fade" onRequestClose={() => setShowCoinFiatModal(false)}>
         <View style={styles.modalOverlay}>
           <View style={[styles.celebrateCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-            <Text style={[styles.modalTitle, { color: colors.text, marginBottom: 8 }]}>Coins in your currency</Text>
+            <Text style={[styles.modalTitle, { color: colors.text, marginBottom: 8 }]}>{t('wallet.cashEquivalent')}</Text>
             {wallet?.coinsToLocalFiat ? (
               <>
                 <Text style={{ color: colors.textSecondary, fontSize: 14, lineHeight: 20, marginBottom: 16 }}>
-                  Using your country&apos;s active coin configuration:{' '}
+                  {t('buyCoins.countryCoinConfig')}:{' '}
                   <Text style={{ fontWeight: '700', color: colors.text }}>
                     1.00 {wallet.coinsToLocalFiat.currencyCode} ={' '}
                     {wallet.coinsToLocalFiat.coinsPerFiatUnit % 1 === 0
                       ? wallet.coinsToLocalFiat.coinsPerFiatUnit
                       : Number(wallet.coinsToLocalFiat.coinsPerFiatUnit.toFixed(4))}{' '}
-                    coins
+                    {t('wallet.coins')}
                   </Text>
                   .
                 </Text>
@@ -1225,14 +1245,14 @@ export default function WalletScreen() {
                       borderBottomColor: colors.border,
                     }}
                   >
-                    <Text style={{ color: colors.textSecondary, fontSize: 15 }}>Total balance</Text>
+                    <Text style={{ color: colors.textSecondary, fontSize: 15 }}>{t('orderPreviewPayment.yourWalletBalance')}</Text>
                     <Text style={{ color: colors.text, fontWeight: '800', fontSize: 16 }}>
                       {wallet.coinsToLocalFiat.currencySymbol} {wallet.coinsToLocalFiat.balanceAsLocalFiat.toFixed(2)}{' '}
                       {wallet.coinsToLocalFiat.currencyCode}
                     </Text>
                   </View>
                   <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 4 }}>
-                    <Text style={{ color: colors.textSecondary, fontSize: 15 }}>Available to spend</Text>
+                    <Text style={{ color: colors.textSecondary, fontSize: 15 }}>{t('orderPreviewPayment.availableToSpend')}</Text>
                     <Text style={{ color: colors.text, fontWeight: '700', fontSize: 15 }}>
                       {wallet.coinsToLocalFiat.currencySymbol}{' '}
                       {wallet.coinsToLocalFiat.spendableAsLocalFiat.toFixed(2)} {wallet.coinsToLocalFiat.currencyCode}
@@ -1240,8 +1260,7 @@ export default function WalletScreen() {
                   </View>
                 </View>
                 <Text style={{ color: colors.textTertiary, fontSize: 12, lineHeight: 18, marginBottom: 16 }}>
-                  Reference only (same rate as when cash is converted to coins). Actual order or payout amounts may
-                  differ.
+                  {t('wallet.tapForEstimate')}
                 </Text>
               </>
             ) : null}
@@ -1249,7 +1268,7 @@ export default function WalletScreen() {
               style={[styles.celebrateBtn, { backgroundColor: colors.primary }]}
               onPress={() => setShowCoinFiatModal(false)}
             >
-              <Text style={styles.celebrateBtnText}>Close</Text>
+              <Text style={styles.celebrateBtnText}>{t('common.close')}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -1260,15 +1279,15 @@ export default function WalletScreen() {
           <View style={[styles.celebrateCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <Text style={styles.celebrateEmoji}>🎉</Text>
             <Text style={[styles.celebrateTitle, { color: colors.text }]}>
-              {celebrateGift.trim() ? 'You received a gift!' : 'Coins received'}
+              {celebrateGift.trim() ? t('sendCoins.receivedCoinsTitle') : t('sendCoins.receivedCoinsTitle')}
             </Text>
             {celebrateSender.trim() ? (
               <Text style={[styles.celebrateFrom, { color: colors.textSecondary }]}>
-                From <Text style={{ fontWeight: '800', color: colors.text }}>{celebrateSender.trim()}</Text>
+                {t('sendCoins.from')} <Text style={{ fontWeight: '800', color: colors.text }}>{celebrateSender.trim()}</Text>
               </Text>
             ) : null}
             {celebrateAmount.trim() ? (
-              <Text style={[styles.celebrateAmount, { color: '#16a34a' }]}>+{celebrateAmount.trim()} coins</Text>
+              <Text style={[styles.celebrateAmount, { color: '#16a34a' }]}>+{celebrateAmount.trim()} {t('wallet.coins')}</Text>
             ) : null}
             {celebrateGift.trim() ? (
               <Text style={[styles.celebrateGift, { color: colors.textSecondary }]}>“{celebrateGift.trim()}”</Text>
@@ -1277,7 +1296,7 @@ export default function WalletScreen() {
               style={[styles.celebrateBtn, { backgroundColor: colors.primary }]}
               onPress={() => setCelebrateVisible(false)}
             >
-              <Text style={styles.celebrateBtnText}>Awesome</Text>
+              <Text style={styles.celebrateBtnText}>{t('sendCoins.awesome')}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -1293,19 +1312,19 @@ export default function WalletScreen() {
               <Ionicons name="close" size={22} color={colors.textSecondary} />
             </TouchableOpacity>
             <Text style={styles.celebrateEmoji}>🎉</Text>
-            <Text style={[styles.celebrateTitle, { color: colors.text }]}>Congratulations!</Text>
+            <Text style={[styles.celebrateTitle, { color: colors.text }]}>{t('gameCongrats.title')}</Text>
             <Text style={[styles.referralBonusSub, { color: colors.textSecondary }]}>
-              You earned a referral bonus
+              {t('customerSettings.referrals')}
             </Text>
             {referralBonusAmount.trim() ? (
               <Text style={[styles.celebrateAmount, { color: '#16a34a' }]}>
                 +{referralBonusAmount.trim().match(/coins/i)
                   ? referralBonusAmount.trim()
-                  : `${referralBonusAmount.trim()} coins`}
+                  : `${referralBonusAmount.trim()} ${t('wallet.coins')}`}
               </Text>
             ) : null}
             <Text style={[styles.referralBonusHint, { color: colors.textSecondary }]}>
-              Share your code with friends so they can join — you earn when they complete deliveries!
+              {t('customerSettings.referralShareHint')}
             </Text>
             {referralCode ? (
               <View style={[styles.referralCodeRow, { borderColor: colors.border, backgroundColor: colors.background }]}>

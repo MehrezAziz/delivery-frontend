@@ -9,6 +9,7 @@ import {
   Alert,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import { useCallback, useEffect, useState } from 'react';
 import { useTheme } from '../../contexts/ThemeContext';
 import { driverPayoutService } from '../../services/api/driver-payout.service';
@@ -16,6 +17,7 @@ import { driverPayoutService } from '../../services/api/driver-payout.service';
 export default function DriverBankDetailsScreen() {
   const router = useRouter();
   const { colors } = useTheme();
+  const { t } = useTranslation();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [holder, setHolder] = useState('');
@@ -51,7 +53,7 @@ export default function DriverBankDetailsScreen() {
     const b = bankName.trim();
     const r = accountRef.trim();
     if (!h || !b || !r) {
-      Alert.alert('Missing fields', 'Please fill account holder, bank name, and account reference.');
+      Alert.alert(t('common.error'), t('bankDetails.required'));
       return;
     }
     setSaving(true);
@@ -62,9 +64,9 @@ export default function DriverBankDetailsScreen() {
         accountReference: r,
       });
       setHasSaved(true);
-      Alert.alert('Saved', 'Your payout bank details were updated.');
+      Alert.alert(t('bankDetails.saved'), t('bankDetails.saved'));
     } catch (e: unknown) {
-      Alert.alert('Error', e instanceof Error ? e.message : 'Failed to save');
+      Alert.alert(t('common.error'), e instanceof Error ? e.message : t('bankDetails.saveFailed'));
     } finally {
       setSaving(false);
     }
@@ -72,12 +74,12 @@ export default function DriverBankDetailsScreen() {
 
   const remove = () => {
     Alert.alert(
-      'Remove bank details',
-      'Clear saved payout bank information from your profile?',
+      t('common.remove'),
+      t('common.confirm'),
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: t('common.cancel'), style: 'cancel' },
         {
-          text: 'Remove',
+          text: t('common.remove'),
           style: 'destructive',
           onPress: async () => {
             setSaving(true);
@@ -87,9 +89,9 @@ export default function DriverBankDetailsScreen() {
               setBankName('');
               setAccountRef('');
               setHasSaved(false);
-              Alert.alert('Removed', 'Saved bank details were cleared.');
+              Alert.alert(t('common.success'), t('common.success'));
             } catch (e: unknown) {
-              Alert.alert('Error', e instanceof Error ? e.message : 'Failed');
+              Alert.alert(t('common.error'), e instanceof Error ? e.message : t('bankDetails.saveFailed'));
             } finally {
               setSaving(false);
             }
@@ -114,33 +116,33 @@ export default function DriverBankDetailsScreen() {
       keyboardShouldPersistTaps="handled"
     >
       <Text style={[styles.lead, { color: colors.textSecondary }]}>
-        Saved details pre-fill when you request a bank payout from earnings. You can update or delete them here.
+        {t('wallet.bankDetailsBody')}
       </Text>
 
-      <Text style={[styles.label, { color: colors.text }]}>Account holder name</Text>
+      <Text style={[styles.label, { color: colors.text }]}>{t('bankDetails.accountHolder')}</Text>
       <TextInput
         style={[styles.input, { color: colors.text, borderColor: colors.border, backgroundColor: colors.inputBg }]}
         value={holder}
         onChangeText={setHolder}
-        placeholder="Full name as on the account"
+        placeholder={t('bankDetails.accountHolder')}
         placeholderTextColor={colors.textTertiary}
       />
 
-      <Text style={[styles.label, { color: colors.text }]}>Bank name</Text>
+      <Text style={[styles.label, { color: colors.text }]}>{t('bankDetails.bankName')}</Text>
       <TextInput
         style={[styles.input, { color: colors.text, borderColor: colors.border, backgroundColor: colors.inputBg }]}
         value={bankName}
         onChangeText={setBankName}
-        placeholder="e.g. STB, BIAT"
+        placeholder={t('bankDetails.bankName')}
         placeholderTextColor={colors.textTertiary}
       />
 
-      <Text style={[styles.label, { color: colors.text }]}>IBAN / RIB / account number</Text>
+      <Text style={[styles.label, { color: colors.text }]}>{t('bankDetails.iban')} / {t('bankDetails.rib')}</Text>
       <TextInput
         style={[styles.input, { color: colors.text, borderColor: colors.border, backgroundColor: colors.inputBg }]}
         value={accountRef}
         onChangeText={setAccountRef}
-        placeholder="Your payout reference"
+        placeholder={t('bankDetails.iban')}
         placeholderTextColor={colors.textTertiary}
         autoCapitalize="characters"
       />
@@ -150,17 +152,17 @@ export default function DriverBankDetailsScreen() {
         onPress={() => void save()}
         disabled={saving}
       >
-        {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryText}>Save</Text>}
+        {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryText}>{t('bankDetails.save')}</Text>}
       </TouchableOpacity>
 
       {hasSaved ? (
         <TouchableOpacity style={[styles.danger, { borderColor: colors.border }]} onPress={remove} disabled={saving}>
-          <Text style={[styles.dangerText, { color: '#b91c1c' }]}>Delete saved bank details</Text>
+          <Text style={[styles.dangerText, { color: '#b91c1c' }]}>{t('common.delete')}</Text>
         </TouchableOpacity>
       ) : null}
 
       <TouchableOpacity onPress={() => router.back()} style={styles.back}>
-        <Text style={{ color: colors.primary, fontWeight: '600' }}>Back</Text>
+        <Text style={{ color: colors.primary, fontWeight: '600' }}>{t('common.back')}</Text>
       </TouchableOpacity>
     </ScrollView>
   );

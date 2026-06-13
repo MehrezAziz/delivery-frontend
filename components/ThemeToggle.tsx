@@ -1,6 +1,7 @@
 import React from 'react';
 import { TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import { useTheme } from '../contexts/ThemeContext';
 
 interface ThemeToggleProps {
@@ -10,7 +11,8 @@ interface ThemeToggleProps {
 }
 
 export function ThemeToggle({ size = 22, color, style }: ThemeToggleProps) {
-  const { isDark, toggleTheme, colors } = useTheme();
+  const { isDark, toggleTheme } = useTheme();
+  const { t } = useTranslation();
   const iconColor = color || (isDark ? '#fbbf24' : '#6b7280');
 
   return (
@@ -18,7 +20,7 @@ export function ThemeToggle({ size = 22, color, style }: ThemeToggleProps) {
       onPress={toggleTheme}
       style={[s.btn, { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)' }, style]}
       activeOpacity={0.7}
-      accessibilityLabel="Toggle dark mode"
+      accessibilityLabel={t('themeToggle.toggleDarkMode')}
       accessibilityRole="button"
     >
       <Ionicons name={isDark ? 'sunny' : 'moon'} size={size} color={iconColor} />

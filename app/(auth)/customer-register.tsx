@@ -3,6 +3,7 @@ import { useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useTranslation } from 'react-i18next';
 import { useGoogleAuth } from '../../hooks/useGoogleAuth';
 import { saveLoginTimestamp } from '../../services/auth-session';
 import { restoreOrderTrackingForCustomer } from '../../services/notifications';
@@ -32,6 +33,7 @@ export default function CustomerRegisterScreen() {
   const router = useRouter();
   const { colors, isDark } = useTheme();
   const insets = useSafeAreaInsets();
+  const { t } = useTranslation();
   const [phoneCountries, setPhoneCountries] = useState<PhoneCountry[]>([]);
   const [selectedPhoneCountry, setSelectedPhoneCountry] = useState<PhoneCountry | null>(null);
   const [showPhoneCountryModal, setShowPhoneCountryModal] = useState(false);
@@ -154,7 +156,7 @@ export default function CustomerRegisterScreen() {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.message || 'Invalid referral code');
+        throw new Error(data.message || t('auth.invalidReferralCode'));
       }
 
       setReferralValidation({
@@ -168,7 +170,7 @@ export default function CustomerRegisterScreen() {
         isValidating: false,
         isValid: false,
         validatedCode: null,
-        error: error.message || 'Invalid referral code',
+        error: error.message || t('auth.invalidReferralCode'),
       });
     }
   };
@@ -179,11 +181,11 @@ export default function CustomerRegisterScreen() {
 
     // Basic validation
     if (!formData.phone || !formData.password) {
-      setSubmitError('Phone and password are required');
+      setSubmitError(t('auth.phoneAndPasswordRequired'));
       return;
     }
     if (!selectedPhoneCountry) {
-      setSubmitError('Please select a country for the phone number');
+      setSubmitError(t('auth.selectCountryRequired'));
       return;
     }
     const phoneCheck = validateNationalPhoneForCountry(
@@ -197,17 +199,17 @@ export default function CustomerRegisterScreen() {
     }
 
     if (formData.password !== formData.confirmPassword) {
-      setSubmitError('Passwords do not match');
+      setSubmitError(t('auth.passwordsDoNotMatch'));
       return;
     }
 
     if (formData.password.length < 8) {
-      setSubmitError('Password must be at least 8 characters');
+      setSubmitError(t('auth.passwordMinLength'));
       return;
     }
 
     if (!acceptTerms) {
-      setSubmitError('You must read and accept the application terms');
+      setSubmitError(t('auth.mustAcceptApplicationTerms'));
       return;
     }
 
@@ -241,30 +243,30 @@ export default function CustomerRegisterScreen() {
 
       if (!response.ok) {
         // Handle error response
-        let errorMessage = data.message || 'Registration failed. Please try again.';
+        let errorMessage = data.message || t('auth.registrationFailedRetry');
         
         // Check if account already exists (phone conflict)
         if (response.status === 409) {
-          errorMessage = 'An account with this phone number already exists.';
+          errorMessage = t('auth.phoneAlreadyExists');
         }
         
         // Map error codes to user-friendly messages
         if (data.errorCode) {
           switch (data.errorCode) {
             case 'INVALID_REFERRAL_CODE':
-              errorMessage = 'The referral code is invalid or has expired';
+              errorMessage = t('auth.referralExpired');
               break;
             case 'USAGE_LIMIT_EXCEEDED':
-              errorMessage = 'This referral code has reached its usage limit';
+              errorMessage = t('auth.referralUsageLimit');
               break;
             case 'CANNOT_USE_OWN_CODE':
-              errorMessage = 'You cannot use your own referral code';
+              errorMessage = t('auth.cannotUseOwnReferral');
               break;
             case 'REFERRAL_CODE_EXPIRED':
-              errorMessage = 'This referral code has expired';
+              errorMessage = t('auth.referralCodeExpired');
               break;
             case 'REFERRAL_CODE_NOT_YET_VALID':
-              errorMessage = 'This referral code is not yet valid';
+              errorMessage = t('auth.referralNotYetValid');
               break;
           }
         }
@@ -288,7 +290,7 @@ export default function CustomerRegisterScreen() {
       router.replace('/(customer)/home');
     } catch (error: any) {
       console.error('Registration error:', error);
-      setSubmitError(error.message || 'Registration failed. Please try again.');
+      setSubmitError(error.message || t('auth.registrationFailedRetry'));
     } finally {
       setIsSubmitting(false);
     }
@@ -297,7 +299,7 @@ export default function CustomerRegisterScreen() {
   const handleGoogleRegister = async () => {
     setSubmitError(null);
     if (!acceptTerms) {
-      setSubmitError('You must read and accept the application terms');
+      setSubmitError(t('auth.mustAcceptApplicationTerms'));
       return;
     }
     const result = await handleGoogleSignIn();
@@ -325,16 +327,16 @@ export default function CustomerRegisterScreen() {
       >
         <View style={styles.modalOverlay}>
           <View style={[styles.modalCard, { backgroundColor: colors.card }]}>
-            <Text style={[styles.modalTitle, { color: colors.text }]}>Account already exists</Text>
+            <Text style={[styles.modalTitle, { color: colors.text }]}>{t('auth.accountExists')}</Text>
             <Text style={[styles.modalBody, { color: colors.textSecondary }]}>
-              A customer account is already linked to this Google account. Would you like to log in instead?
+              {t('auth.accountExistsCustomerBody')}
             </Text>
             <View style={styles.modalActions}>
               <TouchableOpacity
                 style={[styles.modalBtnSecondary, { backgroundColor: colors.surfaceVariant }]}
                 onPress={() => setShowAccountExistsModal(false)}
               >
-                <Text style={[styles.modalBtnSecondaryText, { color: colors.text }]}>Cancel</Text>
+                <Text style={[styles.modalBtnSecondaryText, { color: colors.text }]}>{t('common.cancel')}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.modalBtnPrimary, { backgroundColor: colors.primary }]}
@@ -343,7 +345,7 @@ export default function CustomerRegisterScreen() {
                   router.replace('/(auth)/customer-login');
                 }}
               >
-                <Text style={styles.modalBtnPrimaryText}>Go to Login</Text>
+                <Text style={styles.modalBtnPrimaryText}>{t('auth.goToLogin')}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -359,17 +361,17 @@ export default function CustomerRegisterScreen() {
             <View style={[styles.iconContainer, { backgroundColor: colors.primary }]}>
               <Text style={styles.iconText}>📦</Text>
             </View>
-            <Text style={[styles.title, { color: colors.text }]}>Create account</Text>
-            <Text style={[styles.subtitle, { color: colors.textSecondary }]}>Join to send packages and track every delivery.</Text>
+            <Text style={[styles.title, { color: colors.text }]}>{t('auth.createAccount')}</Text>
+            <Text style={[styles.subtitle, { color: colors.textSecondary }]}>{t('auth.customerRegisterSubtitle')}</Text>
           </View>
 
           {/* Form */}
           <View style={styles.form}>
             <View style={styles.inputGroup}>
-              <Text style={[styles.label, { color: colors.text }]}>First Name</Text>
+              <Text style={[styles.label, { color: colors.text }]}>{t('auth.firstName')}</Text>
               <TextInput
                 style={[styles.input, { backgroundColor: colors.inputBg, borderColor: colors.inputBorder, color: colors.text }]}
-                placeholder="Enter your first name"
+                placeholder={t('auth.enterFirstName')}
                 placeholderTextColor={colors.textTertiary}
                 value={formData.firstName}
                 onChangeText={(text) => setFormData({...formData, firstName: text})}
@@ -377,10 +379,10 @@ export default function CustomerRegisterScreen() {
             </View>
 
             <View style={styles.inputGroup}>
-              <Text style={[styles.label, { color: colors.text }]}>Last Name</Text>
+              <Text style={[styles.label, { color: colors.text }]}>{t('auth.secondName')}</Text>
               <TextInput
                 style={[styles.input, { backgroundColor: colors.inputBg, borderColor: colors.inputBorder, color: colors.text }]}
-                placeholder="Enter your last name"
+                placeholder={t('auth.enterLastName')}
                 placeholderTextColor={colors.textTertiary}
                 value={formData.secondName}
                 onChangeText={(text) => setFormData({...formData, secondName: text})}
@@ -388,7 +390,7 @@ export default function CustomerRegisterScreen() {
             </View>
 
             <View style={styles.inputGroup}>
-              <Text style={[styles.label, { color: colors.text }]}>Phone Number</Text>
+              <Text style={[styles.label, { color: colors.text }]}>{t('auth.phoneNumber')}</Text>
               <View style={[styles.phoneRow, { backgroundColor: colors.inputBg, borderColor: colors.inputBorder }]}>
                 <TouchableOpacity
                   style={[styles.countryCodeBtn, { borderRightColor: colors.inputBorder }]}
@@ -410,7 +412,7 @@ export default function CustomerRegisterScreen() {
 
                 <TextInput
                   style={[styles.phoneInput, { color: colors.text }]}
-                  placeholder="XX XXX XXX"
+                  placeholder={t('auth.phoneNumberPlaceholder')}
                   placeholderTextColor={colors.textTertiary}
                   keyboardType="phone-pad"
                   value={formData.phone}
@@ -418,15 +420,15 @@ export default function CustomerRegisterScreen() {
                 />
               </View>
               <Text style={[styles.phoneHint, { color: colors.textTertiary }]}>
-                International calling code is added automatically.
+                {t('auth.phoneHint')}
               </Text>
             </View>
 
             <View style={styles.inputGroup}>
-              <Text style={[styles.label, { color: colors.text }]}>Email (Optional)</Text>
+              <Text style={[styles.label, { color: colors.text }]}>{t('auth.emailOptional')}</Text>
               <TextInput
                 style={[styles.input, { backgroundColor: colors.inputBg, borderColor: colors.inputBorder, color: colors.text }]}
-                placeholder="your@email.com"
+                placeholder={t('auth.emailPlaceholder')}
                 placeholderTextColor={colors.textTertiary}
                 keyboardType="email-address"
                 autoCapitalize="none"
@@ -436,7 +438,7 @@ export default function CustomerRegisterScreen() {
             </View>
 
             <View style={styles.inputGroup}>
-              <Text style={[styles.label, { color: colors.text }]}>Gender (Optional)</Text>
+              <Text style={[styles.label, { color: colors.text }]}>{t('auth.genderOptional')}</Text>
               <View style={styles.genderContainer}>
                 <TouchableOpacity
                   style={[
@@ -451,7 +453,7 @@ export default function CustomerRegisterScreen() {
                     styles.genderButtonText,
                     { color: colors.textSecondary },
                     formData.userGender === 'MALE' && styles.genderButtonTextActive
-                  ]}>Male</Text>
+                  ]}>{t('auth.male')}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={[
@@ -466,17 +468,17 @@ export default function CustomerRegisterScreen() {
                     styles.genderButtonText,
                     { color: colors.textSecondary },
                     formData.userGender === 'FEMALE' && styles.genderButtonTextActive
-                  ]}>Female</Text>
+                  ]}>{t('auth.female')}</Text>
                 </TouchableOpacity>
               </View>
             </View>
 
             <View style={styles.inputGroup}>
-              <Text style={[styles.label, { color: colors.text }]}>Referral Code (Optional)</Text>
+              <Text style={[styles.label, { color: colors.text }]}>{t('auth.referralCodeOptional')}</Text>
               <View style={styles.referralCodeContainer}>
                 <TextInput
                   style={[styles.input, styles.referralCodeInput, { backgroundColor: colors.inputBg, borderColor: colors.inputBorder, color: colors.text }]}
-                  placeholder="Enter referral code"
+                  placeholder={t('auth.enterReferralCode')}
                   placeholderTextColor={colors.textTertiary}
                   autoCapitalize="characters"
                   value={formData.referralCode}
@@ -504,7 +506,7 @@ export default function CustomerRegisterScreen() {
                   {referralValidation.isValidating ? (
                     <ActivityIndicator size="small" color="#ffffff" />
                   ) : (
-                    <Text style={styles.validateButtonText}>Validate</Text>
+                    <Text style={styles.validateButtonText}>{t('auth.validate')}</Text>
                   )}
                 </TouchableOpacity>
               </View>
@@ -514,13 +516,13 @@ export default function CustomerRegisterScreen() {
                 <View style={styles.validationSuccess}>
                   <Text style={styles.validationSuccessIcon}>✓</Text>
                   <View style={styles.validationSuccessContent}>
-                    <Text style={styles.validationSuccessTitle}>Valid Code!</Text>
+                    <Text style={styles.validationSuccessTitle}>{t('auth.validCode')}</Text>
                     <Text style={styles.validationSuccessText}>
-                      {referralValidation.validatedCode.type === 'PERCENTAGE' 
-                        ? `Get ${referralValidation.validatedCode.value}% discount`
-                        : `Get ${referralValidation.validatedCode.value} off`}
-                      {referralValidation.validatedCode.minOrderAmount && 
-                        ` on orders over ${referralValidation.validatedCode.minOrderAmount}`}
+                      {referralValidation.validatedCode.type === 'PERCENTAGE'
+                        ? t('auth.getDiscountPct', { value: referralValidation.validatedCode.value })
+                        : t('auth.getDiscountAmount', { value: referralValidation.validatedCode.value })}
+                      {referralValidation.validatedCode.minOrderAmount &&
+                        t('auth.onOrdersOver', { amount: referralValidation.validatedCode.minOrderAmount })}
                     </Text>
                   </View>
                 </View>
@@ -530,17 +532,17 @@ export default function CustomerRegisterScreen() {
                 <View style={styles.validationError}>
                   <Text style={styles.validationErrorIcon}>✕</Text>
                   <Text style={styles.validationErrorText}>
-                    {referralValidation.error || 'Invalid referral code'}
+                    {referralValidation.error || t('auth.invalidReferralCode')}
                   </Text>
                 </View>
               )}
             </View>
 
             <View style={styles.inputGroup}>
-              <Text style={[styles.label, { color: colors.text }]}>Password</Text>
+              <Text style={[styles.label, { color: colors.text }]}>{t('auth.password')}</Text>
               <TextInput
                 style={[styles.input, { backgroundColor: colors.inputBg, borderColor: colors.inputBorder, color: colors.text }]}
-                placeholder="Create a password"
+                placeholder={t('auth.createPassword')}
                 placeholderTextColor={colors.textTertiary}
                 secureTextEntry
                 value={formData.password}
@@ -549,10 +551,10 @@ export default function CustomerRegisterScreen() {
             </View>
 
             <View style={styles.inputGroup}>
-              <Text style={[styles.label, { color: colors.text }]}>Confirm Password</Text>
+              <Text style={[styles.label, { color: colors.text }]}>{t('auth.confirmPassword')}</Text>
               <TextInput
                 style={[styles.input, { backgroundColor: colors.inputBg, borderColor: colors.inputBorder, color: colors.text }]}
-                placeholder="Confirm your password"
+                placeholder={t('auth.confirmYourPassword')}
                 placeholderTextColor={colors.textTertiary}
                 secureTextEntry
                 value={formData.confirmPassword}
@@ -570,14 +572,14 @@ export default function CustomerRegisterScreen() {
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={[styles.termsText, { color: colors.text }]}>
-                  I agree to the{' '}
+                  {t('auth.iAgreeTerms')}{' '}
                   <Text
                     style={{ color: colors.primary, fontWeight: '700' }}
                     onPress={() => router.push('/(auth)/terms')}
                   >
-                    application terms
+                    {t('auth.applicationTerms')}
                   </Text>
-                  , including rules on prohibited items and honest use of support.
+                  {t('auth.iAgreeTermsSuffix')}
                 </Text>
               </View>
             </TouchableOpacity>
@@ -603,17 +605,17 @@ export default function CustomerRegisterScreen() {
               {isSubmitting ? (
                 <View style={styles.registerButtonContent}>
                   <ActivityIndicator size="small" color="#ffffff" />
-                  <Text style={styles.registerButtonText}>Creating Account...</Text>
+                  <Text style={styles.registerButtonText}>{t('auth.creatingAccount')}</Text>
                 </View>
               ) : (
-                <Text style={styles.registerButtonText}>Create Account</Text>
+                <Text style={styles.registerButtonText}>{t('auth.createAccount')}</Text>
               )}
             </TouchableOpacity>
 
             {/* Divider */}
             <View style={styles.dividerContainer}>
               <View style={[styles.dividerLine, { backgroundColor: colors.border }]} />
-              <Text style={[styles.dividerText, { color: colors.textTertiary }]}>OR</Text>
+              <Text style={[styles.dividerText, { color: colors.textTertiary }]}>{t('auth.or')}</Text>
               <View style={[styles.dividerLine, { backgroundColor: colors.border }]} />
             </View>
 
@@ -631,21 +633,21 @@ export default function CustomerRegisterScreen() {
               {isGoogleLoading ? (
                 <View style={styles.googleButtonContent}>
                   <ActivityIndicator size="small" color={colors.text} />
-                  <Text style={[styles.googleButtonText, { color: colors.text }]}>Signing in...</Text>
+                  <Text style={[styles.googleButtonText, { color: colors.text }]}>{t('auth.signingInWithGoogle')}</Text>
                 </View>
               ) : (
                 <View style={styles.googleButtonContent}>
                   <Text style={styles.googleIcon}>G</Text>
-                  <Text style={[styles.googleButtonText, { color: colors.text }]}>Continue with Google</Text>
+                  <Text style={[styles.googleButtonText, { color: colors.text }]}>{t('auth.continueWithGoogle')}</Text>
                 </View>
               )}
             </TouchableOpacity>
 
             {/* Login Link */}
             <View style={styles.loginContainer}>
-              <Text style={[styles.loginText, { color: colors.textSecondary }]}>Already have an account? </Text>
+              <Text style={[styles.loginText, { color: colors.textSecondary }]}>{t('auth.alreadyHaveAccount')} </Text>
               <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace('/')}>
-                <Text style={[styles.loginLink, { color: colors.primary }]}>Login</Text>
+                <Text style={[styles.loginLink, { color: colors.primary }]}>{t('auth.login')}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -661,7 +663,7 @@ export default function CustomerRegisterScreen() {
         <View style={styles.pickerOverlay}>
           <View style={[styles.pickerCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <View style={[styles.pickerHeader, { borderBottomColor: colors.border }]}>
-              <Text style={[styles.pickerTitle, { color: colors.text }]}>Select country code</Text>
+              <Text style={[styles.pickerTitle, { color: colors.text }]}>{t('auth.selectCountryCode')}</Text>
               <TouchableOpacity onPress={() => setShowPhoneCountryModal(false)} style={styles.pickerCloseBtn}>
                 <Text style={[styles.pickerCloseText, { color: colors.textTertiary }]}>✕</Text>
               </TouchableOpacity>
@@ -671,7 +673,7 @@ export default function CustomerRegisterScreen() {
               <Text style={styles.pickerSearchIcon}>🔍</Text>
               <TextInput
                 style={[styles.pickerSearchInput, { color: colors.text }]}
-                placeholder="Search country, ISO or code"
+                placeholder={t('auth.searchCountryISO')}
                 placeholderTextColor={colors.textTertiary}
                 value={phoneCountrySearch}
                 onChangeText={setPhoneCountrySearch}
@@ -704,7 +706,7 @@ export default function CustomerRegisterScreen() {
                   </View>
                 </TouchableOpacity>
               )}
-              ListEmptyComponent={<Text style={[styles.pickerEmpty, { color: colors.textTertiary }]}>No matching countries</Text>}
+              ListEmptyComponent={<Text style={[styles.pickerEmpty, { color: colors.textTertiary }]}>{t('auth.noMatchingCountries')}</Text>}
             />
           </View>
         </View>

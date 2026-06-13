@@ -1,8 +1,10 @@
 import { Stack } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import { useTheme } from '../../contexts/ThemeContext';
 
 export default function GamesLayout() {
   const { colors } = useTheme();
+  const { t } = useTranslation();
   return (
     <Stack
       screenOptions={{
@@ -13,7 +15,7 @@ export default function GamesLayout() {
         contentStyle: { backgroundColor: colors.background },
       }}
     >
-      <Stack.Screen name="[id]" options={{ title: 'Game' }} />
+      <Stack.Screen name="[id]" options={{ title: t('games.play') }} />
     </Stack>
   );
 }

@@ -8,6 +8,7 @@ import { Ionicons } from '@expo/vector-icons';
 import MapView, { Marker, Region } from 'react-native-maps';
 import * as Location from 'expo-location';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useTranslation } from 'react-i18next';
 import { useTheme } from '../../contexts/ThemeContext';
 import { GOOGLE_MAPS_DARK_STYLE } from '../../constants/googleMapsDarkStyle';
 
@@ -24,6 +25,7 @@ export default function PickLocationScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ type: string; returnTo?: string }>();
   const { colors, isDark } = useTheme();
+  const { t } = useTranslation();
   const isPickup = params.type === 'pickup';
   const mapRef = useRef<MapView>(null);
 
@@ -182,7 +184,7 @@ export default function PickLocationScreen() {
   };
 
   const accentColor = isPickup ? '#22c55e' : '#ef4444';
-  const title = isPickup ? 'Pickup Location' : 'Delivery Location';
+  const title = isPickup ? t('createOrder.pickup') : t('createOrder.dropoff');
 
   return (
     <View style={styles.container}>
@@ -196,7 +198,7 @@ export default function PickLocationScreen() {
         customMapStyle={isDark ? GOOGLE_MAPS_DARK_STYLE : undefined}
       >
         {userGps && (
-          <Marker coordinate={userGps} title="Your location" pinColor="#3b82f6" opacity={0.9} />
+          <Marker coordinate={userGps} title={t('pickLocation.movePin')} pinColor="#3b82f6" opacity={0.9} />
         )}
         {marker && (
           <Marker coordinate={marker} pinColor={accentColor} />
@@ -219,7 +221,7 @@ export default function PickLocationScreen() {
             style={[styles.searchInput, { color: colors.text }]}
             value={searchQuery}
             onChangeText={handleSearch}
-            placeholder="Search for a place..."
+            placeholder={t('common.search')}
             placeholderTextColor={colors.textTertiary}
             returnKeyType="search"
           />
@@ -273,8 +275,8 @@ export default function PickLocationScreen() {
           <View style={styles.addressRow}>
             <View style={[styles.dot, { backgroundColor: accentColor }]} />
             <View style={{ flex: 1 }}>
-              <Text style={[styles.addressLabel, { color: colors.textSecondary }]}>{isPickup ? 'Pickup from' : 'Deliver to'}</Text>
-              <Text style={[styles.addressText, { color: colors.text }]} numberOfLines={2}>{address || 'Loading address...'}</Text>
+              <Text style={[styles.addressLabel, { color: colors.textSecondary }]}>{isPickup ? t('createOrder.pickup') : t('createOrder.dropoff')}</Text>
+              <Text style={[styles.addressText, { color: colors.text }]} numberOfLines={2}>{address || t('common.loading')}</Text>
             </View>
           </View>
           <TouchableOpacity
@@ -285,7 +287,7 @@ export default function PickLocationScreen() {
             {loading ? (
               <ActivityIndicator color="white" />
             ) : (
-              <Text style={styles.confirmBtnText}>Confirm {isPickup ? 'Pickup' : 'Delivery'} Location</Text>
+              <Text style={styles.confirmBtnText}>{t('pickLocation.confirm')}</Text>
             )}
           </TouchableOpacity>
         </View>
@@ -295,14 +297,14 @@ export default function PickLocationScreen() {
       {!marker && !gettingLocation && (
         <View style={[styles.hintCard, { backgroundColor: colors.card }]}>
           <Ionicons name="hand-left-outline" size={20} color={colors.textSecondary} />
-          <Text style={[styles.hintText, { color: colors.textSecondary }]}>Tap on the map or search to select a location</Text>
+          <Text style={[styles.hintText, { color: colors.textSecondary }]}>{t('pickLocation.movePin')}</Text>
         </View>
       )}
 
       {gettingLocation && (
         <View style={styles.loadingOverlay}>
           <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={{ color: colors.textSecondary, marginTop: 8 }}>Getting your location...</Text>
+          <Text style={{ color: colors.textSecondary, marginTop: 8 }}>{t('common.loading')}</Text>
         </View>
       )}
     </View>

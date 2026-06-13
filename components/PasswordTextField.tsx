@@ -8,6 +8,7 @@ import {
   type ViewStyle,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import type { ThemeColors } from '../contexts/ThemeContext';
 
 type Props = {
@@ -24,12 +25,14 @@ export function PasswordTextField({
   value,
   onChangeText,
   colors,
-  placeholder = 'Password',
+  placeholder,
   autoFocus,
   editable = true,
   containerStyle,
 }: Props) {
   const [visible, setVisible] = useState(false);
+  const { t } = useTranslation();
+  const resolvedPlaceholder = placeholder ?? t('auth.password');
 
   return (
     <View
@@ -43,7 +46,7 @@ export function PasswordTextField({
         style={[styles.input, { color: colors.text }]}
         value={value}
         onChangeText={onChangeText}
-        placeholder={placeholder}
+        placeholder={resolvedPlaceholder}
         placeholderTextColor={colors.textTertiary}
         secureTextEntry={!visible}
         autoFocus={autoFocus}
@@ -55,7 +58,7 @@ export function PasswordTextField({
         onPress={() => setVisible((v) => !v)}
         hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
         accessibilityRole="button"
-        accessibilityLabel={visible ? 'Hide password' : 'Show password'}
+        accessibilityLabel={visible ? t('passwordField.hidePassword') : t('passwordField.showPassword')}
       >
         <Ionicons
           name={visible ? 'eye-off-outline' : 'eye-outline'}

@@ -4,6 +4,7 @@ import {
   ActivityIndicator, RefreshControl,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
+import { useTranslation } from 'react-i18next';
 import { Ionicons } from '@expo/vector-icons';
 import { notificationService, Notification } from '../../services/api/notification.service';
 import { syncNativeChatPreviewAfterThreadRead } from '../../services/notifications';
@@ -49,6 +50,7 @@ const TYPE_ICONS: Record<string, string> = {
 export default function DriverNotifications() {
   const { push } = useAppNavigation();
   const { colors, isDark } = useTheme();
+  const { t } = useTranslation();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -131,12 +133,12 @@ export default function DriverNotifications() {
   const formatTime = (dateStr: string) => {
     const date = new Date(dateStr);
     const diffMin = Math.floor((Date.now() - date.getTime()) / 60000);
-    if (diffMin < 1) return 'Just now';
-    if (diffMin < 60) return `${diffMin}m ago`;
+    if (diffMin < 1) return t('common.justNow');
+    if (diffMin < 60) return `${diffMin}${t('common.minutesAgo')}`;
     const diffHr = Math.floor(diffMin / 60);
-    if (diffHr < 24) return `${diffHr}h ago`;
+    if (diffHr < 24) return `${diffHr}${t('common.hoursAgo')}`;
     const diffDay = Math.floor(diffHr / 24);
-    if (diffDay < 7) return `${diffDay}d ago`;
+    if (diffDay < 7) return `${diffDay}d`;
     return date.toLocaleDateString();
   };
 
@@ -166,7 +168,7 @@ export default function DriverNotifications() {
           <Text style={[s.notifBody, { color: colors.textSecondary }]} numberOfLines={2}>{item.body}</Text>
           <Text style={[s.notifTime, { color: colors.textTertiary }]}>
             {formatTime(item.sentAt)}
-            {g.itemCount > 1 ? ` · ${g.itemCount} in thread` : ''}
+            {g.itemCount > 1 ? ` · ${g.itemCount}` : ''}
           </Text>
         </View>
         {unread && g.unreadCount > 1 ? (
@@ -192,7 +194,7 @@ export default function DriverNotifications() {
     <View style={[s.container, { backgroundColor: colors.background }]}>
       <View style={[s.notifToolbar, { backgroundColor: colors.card, borderColor: colors.border }]}>
         <Text style={[s.toolbarHint, { color: colors.textSecondary }]} numberOfLines={2}>
-          Grouped by chat, order, ticket…
+          {t('notifications.groupedHint')}
         </Text>
         <TouchableOpacity
           onPress={() => {
@@ -201,23 +203,23 @@ export default function DriverNotifications() {
           }}
           hitSlop={8}
         >
-          <Text style={[s.markAllText, { color: colors.primary }]}>Make all as read</Text>
+          <Text style={[s.markAllText, { color: colors.primary }]}>{t('notifications.markAllRead')}</Text>
         </TouchableOpacity>
       </View>
 
       <View style={[s.sortRow, { borderBottomColor: colors.border, backgroundColor: colors.card }]}>
-        <Text style={[s.sortLabel, { color: colors.textSecondary }]}>Sort</Text>
+        <Text style={[s.sortLabel, { color: colors.textSecondary }]}>{t('notifications.sort')}</Text>
         <TouchableOpacity
           style={[s.sortChip, sortBy === 'sentAt' && { backgroundColor: colors.primary + '22' }]}
           onPress={() => setSortBy('sentAt')}
         >
-          <Text style={[s.sortChipText, { color: sortBy === 'sentAt' ? colors.primary : colors.text }]}>Time</Text>
+          <Text style={[s.sortChipText, { color: sortBy === 'sentAt' ? colors.primary : colors.text }]}>{t('notifications.time')}</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[s.sortChip, sortBy === 'type' && { backgroundColor: colors.primary + '22' }]}
           onPress={() => setSortBy('type')}
         >
-          <Text style={[s.sortChipText, { color: sortBy === 'type' ? colors.primary : colors.text }]}>Type</Text>
+          <Text style={[s.sortChipText, { color: sortBy === 'type' ? colors.primary : colors.text }]}>{t('notifications.type')}</Text>
         </TouchableOpacity>
       </View>
 
@@ -236,7 +238,7 @@ export default function DriverNotifications() {
         ListEmptyComponent={
           <View style={s.emptyState}>
             <Ionicons name="notifications-off-outline" size={64} color={colors.border} />
-            <Text style={[s.emptyText, { color: colors.textTertiary }]}>No notifications yet</Text>
+            <Text style={[s.emptyText, { color: colors.textTertiary }]}>{t('notifications.empty')}</Text>
           </View>
         }
       />

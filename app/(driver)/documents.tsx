@@ -11,6 +11,7 @@ import {
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import axios from 'axios';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useAppNavigation } from '../../contexts/AppNavigationContext';
@@ -39,6 +40,7 @@ export default function DriverDocumentsScreen() {
   const router = useRouter();
   const { push } = useAppNavigation();
   const { colors, isDark } = useTheme();
+  const { t } = useTranslation();
   const [data, setData] = useState<VerificationData | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -59,7 +61,7 @@ export default function DriverDocumentsScreen() {
       });
       setData(res.data);
     } catch (err: any) {
-      Alert.alert('Error', err.response?.data?.message || 'Failed to load documents');
+      Alert.alert(t('common.error'), err.response?.data?.message || t('driverDocuments.failedLoad'));
     } finally {
       setLoading(false);
     }
@@ -96,7 +98,7 @@ export default function DriverDocumentsScreen() {
   const formatDate = (d: string | null) =>
     d
       ? new Date(d).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
-      : 'N/A';
+      : '—';
 
   const canUploadNew =
     data?.documents.some((d) => d.verificationStatus === 'REJECTED') || data?.status === 'REJECTED';
@@ -126,22 +128,22 @@ export default function DriverDocumentsScreen() {
               },
             ]}
           >
-            <Text style={[styles.statusLabel, { color: colors.textSecondary }]}>Verification status</Text>
+            <Text style={[styles.statusLabel, { color: colors.textSecondary }]}>{t('driverDocuments.verificationStatus')}</Text>
             <View style={styles.statusRow}>
               <Ionicons name={getStatusIcon(data.status) as any} size={24} color={getStatusColor(data.status)} />
               <Text style={[styles.statusValue, { color: getStatusColor(data.status) }]}>{data.status}</Text>
             </View>
             {data.documentType && (
               <Text style={[styles.infoText, { color: colors.text }]}>
-                Document type: {data.documentType.replace('_', ' ')}
+                {t('driverDocuments.documentType')}{data.documentType.replace('_', ' ')}
               </Text>
             )}
             <Text style={[styles.infoText, { color: colors.textSecondary }]}>
-              Submitted: {formatDate(data.submittedAt)}
+              {t('driverDocuments.submitted')}{formatDate(data.submittedAt)}
             </Text>
             {data.verifiedAt ? (
               <Text style={[styles.infoText, { color: colors.textSecondary }]}>
-                Verified: {formatDate(data.verifiedAt)}
+                {t('driverDocuments.verified')}{formatDate(data.verifiedAt)}
               </Text>
             ) : null}
           </View>
@@ -160,7 +162,7 @@ export default function DriverDocumentsScreen() {
             ]}
           >
             <View style={styles.docHeader}>
-              <Text style={[styles.docTitle, { color: colors.text }]}>Document #{index + 1}</Text>
+              <Text style={[styles.docTitle, { color: colors.text }]}>{t('driverDocuments.documentNo')}{index + 1}</Text>
               <View style={[styles.docBadge, { backgroundColor: getStatusColor(doc.verificationStatus) + '28' }]}>
                 <Text style={[styles.docBadgeText, { color: getStatusColor(doc.verificationStatus) }]}>
                   {doc.verificationStatus}
@@ -170,7 +172,7 @@ export default function DriverDocumentsScreen() {
 
             {doc.selfieImage && (
               <View style={styles.imageSection}>
-                <Text style={[styles.imageLabel, { color: colors.textSecondary }]}>Selfie</Text>
+                <Text style={[styles.imageLabel, { color: colors.textSecondary }]}>{t('driverDocuments.selfie')}</Text>
                 <View
                   style={[
                     styles.imagePlaceholder,
@@ -178,14 +180,14 @@ export default function DriverDocumentsScreen() {
                   ]}
                 >
                   <Ionicons name="person" size={28} color={colors.primary} />
-                  <Text style={[styles.imagePlaceholderText, { color: colors.primary }]}>Selfie uploaded</Text>
+                  <Text style={[styles.imagePlaceholderText, { color: colors.primary }]}>{t('driverDocuments.selfieUploaded')}</Text>
                 </View>
               </View>
             )}
 
             {doc.docImageTop && (
               <View style={styles.imageSection}>
-                <Text style={[styles.imageLabel, { color: colors.textSecondary }]}>Document front</Text>
+                <Text style={[styles.imageLabel, { color: colors.textSecondary }]}>{t('driverDocuments.documentFront')}</Text>
                 <View
                   style={[
                     styles.imagePlaceholder,
@@ -193,14 +195,14 @@ export default function DriverDocumentsScreen() {
                   ]}
                 >
                   <Ionicons name="document-text" size={28} color={colors.primary} />
-                  <Text style={[styles.imagePlaceholderText, { color: colors.primary }]}>Front side uploaded</Text>
+                  <Text style={[styles.imagePlaceholderText, { color: colors.primary }]}>{t('driverDocuments.frontUploaded')}</Text>
                 </View>
               </View>
             )}
 
             {doc.docImageBottom && (
               <View style={styles.imageSection}>
-                <Text style={[styles.imageLabel, { color: colors.textSecondary }]}>Document back</Text>
+                <Text style={[styles.imageLabel, { color: colors.textSecondary }]}>{t('driverDocuments.documentBack')}</Text>
                 <View
                   style={[
                     styles.imagePlaceholder,
@@ -208,7 +210,7 @@ export default function DriverDocumentsScreen() {
                   ]}
                 >
                   <Ionicons name="document-text" size={28} color={colors.primary} />
-                  <Text style={[styles.imagePlaceholderText, { color: colors.primary }]}>Back side uploaded</Text>
+                  <Text style={[styles.imagePlaceholderText, { color: colors.primary }]}>{t('driverDocuments.backUploaded')}</Text>
                 </View>
               </View>
             )}
@@ -218,9 +220,9 @@ export default function DriverDocumentsScreen() {
         {(!data || data.documents.length === 0) && (
           <View style={styles.emptyBox}>
             <Ionicons name="document-text-outline" size={48} color={colors.textTertiary} />
-            <Text style={[styles.emptyTitle, { color: colors.text }]}>No documents</Text>
+            <Text style={[styles.emptyTitle, { color: colors.text }]}>{t('driverDocuments.noDocuments')}</Text>
             <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
-              Submit your documents for verification.
+              {t('driverDocuments.submitYourDocuments')}
             </Text>
           </View>
         )}
@@ -232,7 +234,7 @@ export default function DriverDocumentsScreen() {
             activeOpacity={0.85}
           >
             <Ionicons name="cloud-upload-outline" size={20} color="#fff" />
-            <Text style={styles.uploadBtnText}>Upload new documents</Text>
+            <Text style={styles.uploadBtnText}>{t('driverDocuments.uploadNew')}</Text>
           </TouchableOpacity>
         )}
 
@@ -245,7 +247,7 @@ export default function DriverDocumentsScreen() {
           >
             <Ionicons name="information-circle-outline" size={20} color={colors.textSecondary} />
             <Text style={[styles.noteText, { color: colors.textSecondary }]}>
-              Documents cannot be modified after submission. If rejected, you can upload new documents.
+              {t('driverDocuments.cannotModifyHint')}
             </Text>
           </View>
         )}

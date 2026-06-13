@@ -5,10 +5,12 @@ import {
 import { useLocalSearchParams } from 'expo-router';
 import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import { orderService } from '../../services/api/order.service';
 
 export default function PublicTrackScreen() {
   const { token: paramToken } = useLocalSearchParams<{ token?: string }>();
+  const { t } = useTranslation();
   const [inputToken, setInputToken] = useState(paramToken || '');
   const [loading, setLoading] = useState(false);
   const [tracking, setTracking] = useState<{
@@ -26,7 +28,7 @@ export default function PublicTrackScreen() {
     } catch (e: any) {
       setTracking(null);
       if (intervalRef.current) clearInterval(intervalRef.current);
-      Alert.alert('Error', e.message || 'Invalid or expired tracking code');
+      Alert.alert(t('common.error'), e.message || t('publicTrack.invalidCodeBody'));
     }
   };
 
@@ -59,14 +61,14 @@ export default function PublicTrackScreen() {
     <View style={s.container}>
       {/* Token input */}
       <View style={s.inputCard}>
-        <Text style={s.title}>Track a Delivery</Text>
-        <Text style={s.subtitle}>Enter the tracking code shared with you</Text>
+        <Text style={s.title}>{t('publicTrack.title')}</Text>
+        <Text style={s.subtitle}>{t('publicTrack.enterCode')}</Text>
         <View style={s.row}>
           <TextInput
             style={s.input}
             value={inputToken}
             onChangeText={setInputToken}
-            placeholder="e.g. TRK-A3F9X2"
+            placeholder={t('publicTrack.placeholder')}
             placeholderTextColor="#9ca3af"
             autoCapitalize="characters"
             autoCorrect={false}
@@ -88,7 +90,7 @@ export default function PublicTrackScreen() {
               : { latitude: 36.8, longitude: 10.18, latitudeDelta: 0.04, longitudeDelta: 0.04 }}
           >
             {driverCoord && (
-              <Marker coordinate={driverCoord} title="Driver">
+              <Marker coordinate={driverCoord} title={t('publicTrack.driver')}>
                 <View style={s.driverMarker}>
                   <Ionicons name="car" size={20} color="#fff" />
                 </View>
@@ -109,7 +111,7 @@ export default function PublicTrackScreen() {
               </Text>
             )}
             {!driverCoord && (
-              <Text style={s.waitText}>Waiting for driver location...</Text>
+              <Text style={s.waitText}>{t('publicTrack.waitingLocation')}</Text>
             )}
           </View>
         </>

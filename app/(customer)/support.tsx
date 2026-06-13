@@ -1,6 +1,7 @@
 import { View, Text, TouchableOpacity, StyleSheet, FlatList, ActivityIndicator, Modal, TextInput, ScrollView } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useState, useEffect, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { supportService, SupportTicket } from '../../services/api/support.service';
 import { useTheme } from '../../contexts/ThemeContext';
 import { GameEntrySection } from '../../components/games/GameEntrySection';
@@ -17,6 +18,7 @@ const STATUS_COLORS: Record<string, string> = {
 
 export default function CustomerSupportScreen() {
   const router = useRouter();
+  const { t } = useTranslation();
   const { colors, isDark } = useTheme();
   const [tickets, setTickets] = useState<SupportTicket[]>([]);
   const [loading, setLoading] = useState(true);
@@ -47,7 +49,7 @@ export default function CustomerSupportScreen() {
   }, [loadTickets]);
 
   async function handleCreate() {
-    if (!description.trim()) { setError('Description is required'); return; }
+    if (!description.trim()) { setError(t('common.required')); return; }
     setCreating(true);
     setError('');
     try {
@@ -59,7 +61,7 @@ export default function CustomerSupportScreen() {
       setLoading(true);
       loadTickets();
     } catch (e: any) {
-      setError(e.message || 'Failed to create ticket');
+      setError(e.message || t('support.failed'));
     } finally {
       setCreating(false);
     }
@@ -68,7 +70,7 @@ export default function CustomerSupportScreen() {
   function getLastMessage(ticket: SupportTicket) {
     if (ticket.messages && ticket.messages.length > 0) {
       const msg = ticket.messages[0];
-      const prefix = msg.senderType === 'CUSTOMER_SERVICE' ? 'CS: ' : 'You: ';
+      const prefix = msg.senderType === 'CUSTOMER_SERVICE' ? `${t('supportChat.customerService')}: ` : '';
       return prefix + (msg.content.length > 40 ? msg.content.slice(0, 40) + '...' : msg.content);
     }
     return ticket.description.length > 50 ? ticket.description.slice(0, 50) + '...' : ticket.description;
@@ -77,9 +79,9 @@ export default function CustomerSupportScreen() {
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <View style={[styles.supportToolbar, { backgroundColor: colors.card, borderColor: colors.border }]}>
-        <Text style={[styles.toolbarHint, { color: colors.textSecondary }]}>Your tickets</Text>
+        <Text style={[styles.toolbarHint, { color: colors.textSecondary }]}>{t('support.title')}</Text>
         <TouchableOpacity onPress={() => setShowCreate(true)} style={[styles.newBtn, { backgroundColor: colors.primary }]}>
-          <Text style={styles.newBtnText}>+ New</Text>
+          <Text style={styles.newBtnText}>+ {t('support.newTicket')}</Text>
         </TouchableOpacity>
       </View>
 
@@ -90,14 +92,14 @@ export default function CustomerSupportScreen() {
           <GameEntrySection placement="CUSTOMER_SUPPORT" role="customer" />
           <View style={styles.empty}>
             <Text style={styles.emptyIcon}>💬</Text>
-            <Text style={[styles.emptyText, { color: colors.text }]}>No support tickets yet</Text>
-            <Text style={[styles.emptySubtext, { color: colors.textTertiary }]}>Tap "+ New" to create one</Text>
+            <Text style={[styles.emptyText, { color: colors.text }]}>{t('support.empty')}</Text>
+            <Text style={[styles.emptySubtext, { color: colors.textTertiary }]}>{t('support.newTicket')}</Text>
           </View>
         </ScrollView>
       ) : (
         <FlatList
           data={tickets}
-          keyExtractor={t => t.id}
+          keyExtractor={(ticket) => ticket.id}
           contentContainerStyle={{ padding: 16 }}
           ListHeaderComponent={
             <GameEntrySection placement="CUSTOMER_SUPPORT" role="customer" />
@@ -117,7 +119,7 @@ export default function CustomerSupportScreen() {
               <View style={styles.ticketFooter}>
                 <Text style={styles.ticketDate}>{new Date(item.createdAt).toLocaleDateString()}</Text>
                 {item.customerService && (
-                  <Text style={styles.ticketAssigned}>Assigned: {item.customerService.superUser.pseudo}</Text>
+                  <Text style={styles.ticketAssigned}>{item.customerService.superUser.pseudo}</Text>
                 )}
               </View>
             </TouchableOpacity>
@@ -129,30 +131,33 @@ export default function CustomerSupportScreen() {
       <Modal visible={showCreate} transparent animationType="slide">
         <View style={styles.modalOverlay}>
           <View style={[styles.modalCard, { backgroundColor: colors.card }]}>
-            <Text style={[styles.modalTitle, { color: colors.text }]}>New Support Ticket</Text>
+            <Text style={[styles.modalTitle, { color: colors.text }]}>{t('support.newTicket')}</Text>
             <ScrollView>
-              <Text style={styles.label}>Category</Text>
+              <Text style={styles.label}>{t('support.chooseCategory')}</Text>
               <View style={styles.chipRow}>
-                {CATEGORIES.map(c => (
-                  <TouchableOpacity key={c} style={[styles.chip, category === c && styles.chipActive]} onPress={() => setCategory(c)}>
-                    <Text style={[styles.chipText, category === c && styles.chipTextActive]}>{c.replace('_', ' ')}</Text>
-                  </TouchableOpacity>
-                ))}
+                {CATEGORIES.map(c => {
+                  const catKey = c === 'ORDER_ISSUE' ? 'ORDER' : c === 'TECHNICAL' ? 'OTHER' : c;
+                  return (
+                    <TouchableOpacity key={c} style={[styles.chip, category === c && styles.chipActive]} onPress={() => setCategory(c)}>
+                      <Text style={[styles.chipText, category === c && styles.chipTextActive]}>{t(`support.categories.${catKey}`)}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
               </View>
-              <Text style={styles.label}>Priority</Text>
+              <Text style={styles.label}>{t('support.priority')}</Text>
               <View style={styles.chipRow}>
                 {PRIORITIES.map(p => (
                   <TouchableOpacity key={p} style={[styles.chip, priority === p && styles.chipActive]} onPress={() => setPriority(p)}>
-                    <Text style={[styles.chipText, priority === p && styles.chipTextActive]}>{p}</Text>
+                    <Text style={[styles.chipText, priority === p && styles.chipTextActive]}>{t(`support.priorities.${p}`)}</Text>
                   </TouchableOpacity>
                 ))}
               </View>
-              <Text style={styles.label}>Description</Text>
+              <Text style={styles.label}>{t('support.describeIssue')}</Text>
               <TextInput
                 style={[styles.textArea, { backgroundColor: colors.inputBg, borderColor: colors.inputBorder, color: colors.text }]}
                 multiline
                 numberOfLines={4}
-                placeholder="Describe your issue..."
+                placeholder={t('support.messagePlaceholder')}
                 placeholderTextColor={colors.textTertiary}
                 value={description}
                 onChangeText={setDescription}
@@ -161,10 +166,10 @@ export default function CustomerSupportScreen() {
             </ScrollView>
             <View style={styles.modalActions}>
               <TouchableOpacity style={styles.cancelBtn} onPress={() => { setShowCreate(false); setError(''); }}>
-                <Text style={styles.cancelBtnText}>Cancel</Text>
+                <Text style={styles.cancelBtnText}>{t('common.cancel')}</Text>
               </TouchableOpacity>
               <TouchableOpacity style={[styles.submitBtn, creating && { opacity: 0.6 }]} onPress={handleCreate} disabled={creating}>
-                <Text style={styles.submitBtnText}>{creating ? 'Creating...' : 'Create'}</Text>
+                <Text style={styles.submitBtnText}>{creating ? t('support.submitting') : t('support.submitTicket')}</Text>
               </TouchableOpacity>
             </View>
           </View>

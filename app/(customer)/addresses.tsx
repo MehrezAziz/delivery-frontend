@@ -16,6 +16,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import axios from 'axios';
 import { geographyService, Country, Governorate, Delegation } from '../../services/api/geography.service';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -46,6 +47,7 @@ export default function CustomerAddressesScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ add?: string }>();
   const { colors, isDark } = useTheme();
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const pickerSheetBottomPad = Math.max(insets.bottom, 12) + 56;
   const [addresses, setAddresses] = useState<Address[]>([]);
@@ -95,7 +97,7 @@ export default function CustomerAddressesScreen() {
       });
       setAddresses(res.data);
     } catch (err: any) {
-      Alert.alert('Error', getErrMsg(err, 'Failed to load addresses'));
+      Alert.alert(t('common.error'), getErrMsg(err, t('common.something_went_wrong')));
     } finally { setLoading(false); }
   };
 
@@ -173,7 +175,7 @@ export default function CustomerAddressesScreen() {
   };
 
   const saveEdit = async (addressId: string) => {
-    if (!selectedDelegationId) { Alert.alert('Error', 'Please select a delegation'); return; }
+    if (!selectedDelegationId) { Alert.alert(t('common.error'), t('addresses.delegation')); return; }
     setSaving(true);
     try {
       const token = await AsyncStorage.getItem('accessToken');
@@ -189,12 +191,12 @@ export default function CustomerAddressesScreen() {
       markCustomerProfileNeedsRefresh();
       loadAddresses();
     } catch (err: any) {
-      Alert.alert('Error', getErrMsg(err, 'Failed to update address'));
+      Alert.alert(t('common.error'), getErrMsg(err, t('addresses.saveFailed')));
     } finally { setSaving(false); }
   };
 
   const saveNewAddress = async () => {
-    if (!selectedDelegationId) { Alert.alert('Error', 'Please select a delegation'); return; }
+    if (!selectedDelegationId) { Alert.alert(t('common.error'), t('addresses.delegation')); return; }
     setSaving(true);
     try {
       const token = await AsyncStorage.getItem('accessToken');
@@ -209,20 +211,20 @@ export default function CustomerAddressesScreen() {
       markCustomerProfileNeedsRefresh();
       loadAddresses();
     } catch (err: any) {
-      Alert.alert('Error', getErrMsg(err, 'Failed to add address'));
+      Alert.alert(t('common.error'), getErrMsg(err, t('addresses.saveFailed')));
     } finally { setSaving(false); }
   };
 
   const deleteAddress = (addressId: string) => {
     const addr = addresses.find((a) => a.id === addressId);
     if (addr?.nickname === MAIN_NICKNAME) {
-      Alert.alert('Protected address', 'MAIN address cannot be deleted. Set another address as MAIN first.');
+      Alert.alert(t('addresses.main'), t('addresses.main'));
       return;
     }
-    Alert.alert('Delete Address', 'Are you sure?', [
-      { text: 'Cancel', style: 'cancel' },
+    Alert.alert(t('addresses.delete'), t('addresses.deleteConfirm'), [
+      { text: t('common.cancel'), style: 'cancel' },
       {
-        text: 'Delete', style: 'destructive', onPress: async () => {
+        text: t('common.delete'), style: 'destructive', onPress: async () => {
           try {
             const token = await AsyncStorage.getItem('accessToken');
             await axios.delete(`${API_URL}/addresses/${addressId}`, {
@@ -230,7 +232,7 @@ export default function CustomerAddressesScreen() {
             });
             loadAddresses();
           } catch (err: any) {
-            Alert.alert('Error', getErrMsg(err, 'Failed to delete'));
+            Alert.alert(t('common.error'), getErrMsg(err, t('addresses.deleteFailed')));
           }
         },
       },
@@ -248,7 +250,7 @@ export default function CustomerAddressesScreen() {
       markCustomerProfileNeedsRefresh();
       loadAddresses();
     } catch (err: any) {
-      Alert.alert('Error', getErrMsg(err, 'Failed to set MAIN address'));
+      Alert.alert(t('common.error'), getErrMsg(err, t('addresses.saveFailed')));
     }
   };
 
@@ -287,11 +289,11 @@ export default function CustomerAddressesScreen() {
 
   const getSelectedLabel = (type: 'country' | 'governorate' | 'delegation'): string => {
     if (type === 'country') {
-      return countries.find(c => c.id === selectedCountryId)?.name || 'Select Country';
+      return countries.find(c => c.id === selectedCountryId)?.name || t('addresses.country');
     } else if (type === 'governorate') {
-      return governorates.find(g => g.id === selectedGovernorateId)?.nameGovernorate || 'Select Governorate';
+      return governorates.find(g => g.id === selectedGovernorateId)?.nameGovernorate || t('addresses.governorate');
     } else {
-      return delegations.find(d => d.id === selectedDelegationId)?.nameDelegation || 'Select Delegation';
+      return delegations.find(d => d.id === selectedDelegationId)?.nameDelegation || t('addresses.delegation');
     }
   };
 
@@ -302,7 +304,7 @@ export default function CustomerAddressesScreen() {
 
   const renderGeoPickers = () => (
     <>
-      <Text style={[s.fieldLabel, { color: colors.textSecondary }]}>Country</Text>
+      <Text style={[s.fieldLabel, { color: colors.textSecondary }]}>{t('addresses.country')}</Text>
       <TouchableOpacity style={[s.pickerBtn, { backgroundColor: colors.inputBg, borderColor: colors.inputBorder }]} onPress={() => openPicker('country')}>
         <Text style={selectedCountryId ? [s.pickerBtnText, { color: colors.text }] : [s.pickerBtnPlaceholder, { color: colors.textTertiary }]}>
           {getSelectedLabel('country')}
@@ -310,7 +312,7 @@ export default function CustomerAddressesScreen() {
         <Ionicons name="chevron-down" size={18} color={colors.textSecondary} />
       </TouchableOpacity>
 
-      <Text style={[s.fieldLabel, { color: colors.textSecondary }]}>Governorate</Text>
+      <Text style={[s.fieldLabel, { color: colors.textSecondary }]}>{t('addresses.governorate')}</Text>
       <TouchableOpacity
         style={[s.pickerBtn, { backgroundColor: colors.inputBg, borderColor: colors.inputBorder }, !selectedCountryId && s.pickerBtnDisabled]}
         onPress={() => selectedCountryId && openPicker('governorate')}
@@ -322,7 +324,7 @@ export default function CustomerAddressesScreen() {
         <Ionicons name="chevron-down" size={18} color={colors.textSecondary} />
       </TouchableOpacity>
 
-      <Text style={[s.fieldLabel, { color: colors.textSecondary }]}>Delegation</Text>
+      <Text style={[s.fieldLabel, { color: colors.textSecondary }]}>{t('addresses.delegation')}</Text>
       <TouchableOpacity
         style={[s.pickerBtn, { backgroundColor: colors.inputBg, borderColor: colors.inputBorder }, !selectedGovernorateId && s.pickerBtnDisabled]}
         onPress={() => selectedGovernorateId && openPicker('delegation')}
@@ -346,33 +348,33 @@ export default function CustomerAddressesScreen() {
           <View style={[s.card, { backgroundColor: colors.card, borderColor: colors.primary, borderWidth: 1.5 }]}>
             <View style={s.cardTop}>
               <Ionicons name="add-circle" size={20} color={colors.primary} />
-              <Text style={[s.locationText, { color: colors.text }]}>New Address</Text>
+              <Text style={[s.locationText, { color: colors.text }]}>{t('addresses.addNew')}</Text>
             </View>
             <View style={s.editContainer}>
               {renderGeoPickers()}
-              <Text style={[s.fieldLabel, { color: colors.textSecondary }]}>Your name for this address (optional)</Text>
+              <Text style={[s.fieldLabel, { color: colors.textSecondary }]}>{t('addresses.label')}</Text>
               <TextInput
                 style={[s.editInput, { backgroundColor: colors.inputBg, borderColor: colors.inputBorder, color: colors.text }]}
                 value={editNickname}
                 onChangeText={setEditNickname}
-                placeholder={addresses.length === 0 ? 'First address will be MAIN automatically' : "e.g. Father's house"}
+                placeholder={addresses.length === 0 ? t('addresses.main') : t('addresses.labelPlaceholder')}
                 placeholderTextColor={colors.textTertiary}
                 editable={addresses.length > 0}
               />
-              <Text style={[s.fieldLabel, { color: colors.textSecondary }]}>Street (optional)</Text>
+              <Text style={[s.fieldLabel, { color: colors.textSecondary }]}>{t('addresses.street')}</Text>
               <TextInput
                 style={[s.editInput, { backgroundColor: colors.inputBg, borderColor: colors.inputBorder, color: colors.text }]}
                 value={editStreet}
                 onChangeText={setEditStreet}
-                placeholder="Street address"
+                placeholder={t('addresses.streetPlaceholder')}
                 placeholderTextColor={colors.textTertiary}
               />
               <View style={s.editActions}>
                 <TouchableOpacity style={[s.cancelBtn, { backgroundColor: colors.surfaceVariant }]} onPress={resetForm}>
-                  <Text style={[s.cancelBtnText, { color: colors.textSecondary }]}>Cancel</Text>
+                  <Text style={[s.cancelBtnText, { color: colors.textSecondary }]}>{t('common.cancel')}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={[s.saveBtn, { backgroundColor: colors.primary }]} onPress={saveNewAddress} disabled={saving}>
-                  {saving ? <ActivityIndicator size="small" color="#fff" /> : <Text style={s.saveBtnText}>Add</Text>}
+                  {saving ? <ActivityIndicator size="small" color="#fff" /> : <Text style={s.saveBtnText}>{t('common.add')}</Text>}
                 </TouchableOpacity>
               </View>
             </View>
@@ -382,8 +384,8 @@ export default function CustomerAddressesScreen() {
         {addresses.length === 0 && !showAddForm && (
           <View style={s.emptyBox}>
             <Ionicons name="location-outline" size={48} color={colors.textTertiary} />
-            <Text style={[s.emptyTitle, { color: colors.text }]}>No Addresses</Text>
-            <Text style={[s.emptyText, { color: colors.textSecondary }]}>Tap the add button in the header to create your first address.</Text>
+            <Text style={[s.emptyTitle, { color: colors.text }]}>{t('addresses.empty')}</Text>
+            <Text style={[s.emptyText, { color: colors.textSecondary }]}>{t('addresses.empty')}</Text>
           </View>
         )}
         {addresses.map((addr) => (
@@ -397,30 +399,30 @@ export default function CustomerAddressesScreen() {
             {editingId === addr.id ? (
               <View style={s.editContainer}>
                 {renderGeoPickers()}
-                <Text style={[s.fieldLabel, { color: colors.textSecondary }]}>Your name for this address</Text>
+                <Text style={[s.fieldLabel, { color: colors.textSecondary }]}>{t('addresses.label')}</Text>
                 <TextInput
                   style={[s.editInput, { backgroundColor: colors.inputBg, borderColor: colors.inputBorder, color: colors.text }]}
                   value={isEditingMainAddress ? MAIN_NICKNAME : editNickname}
                   onChangeText={setEditNickname}
-                  placeholder={isEditingMainAddress ? MAIN_NICKNAME : "e.g. Father's house"}
+                  placeholder={isEditingMainAddress ? MAIN_NICKNAME : t('addresses.labelPlaceholder')}
                   placeholderTextColor={colors.textTertiary}
                   editable={!isEditingMainAddress}
                 />
                 {/* Street Input */}
-                <Text style={[s.fieldLabel, { color: colors.textSecondary }]}>Street (optional)</Text>
+                <Text style={[s.fieldLabel, { color: colors.textSecondary }]}>{t('addresses.street')}</Text>
                 <TextInput
                   style={[s.editInput, { backgroundColor: colors.inputBg, borderColor: colors.inputBorder, color: colors.text }]}
                   value={editStreet}
                   onChangeText={setEditStreet}
-                  placeholder="Street address"
+                  placeholder={t('addresses.streetPlaceholder')}
                   placeholderTextColor={colors.textTertiary}
                 />
                 <View style={s.editActions}>
                   <TouchableOpacity style={[s.cancelBtn, { backgroundColor: colors.surfaceVariant }]} onPress={resetForm}>
-                    <Text style={[s.cancelBtnText, { color: colors.textSecondary }]}>Cancel</Text>
+                    <Text style={[s.cancelBtnText, { color: colors.textSecondary }]}>{t('common.cancel')}</Text>
                   </TouchableOpacity>
                   <TouchableOpacity style={[s.saveBtn, { backgroundColor: colors.primary }]} onPress={() => saveEdit(addr.id)} disabled={saving}>
-                    {saving ? <ActivityIndicator size="small" color="#fff" /> : <Text style={s.saveBtnText}>Save</Text>}
+                    {saving ? <ActivityIndicator size="small" color="#fff" /> : <Text style={s.saveBtnText}>{t('common.save')}</Text>}
                   </TouchableOpacity>
                 </View>
               </View>
@@ -428,10 +430,10 @@ export default function CustomerAddressesScreen() {
               <>
                 {addr.nickname ? (
                   <Text style={{ fontWeight: '700', color: colors.text, marginBottom: 4 }}>
-                    {addr.nickname === MAIN_NICKNAME ? 'MAIN' : addr.nickname}
+                    {addr.nickname === MAIN_NICKNAME ? t('addresses.main') : addr.nickname}
                   </Text>
                 ) : null}
-                <Text style={[s.streetText, { color: colors.textSecondary }]}>{addr.street || 'No street specified'}</Text>
+                <Text style={[s.streetText, { color: colors.textSecondary }]}>{addr.street || t('addresses.streetPlaceholder')}</Text>
                 {addr.latitude && addr.longitude && (
                   <Text style={[s.coordText, { color: colors.textTertiary }]}>📍 {addr.latitude.toFixed(4)}, {addr.longitude.toFixed(4)}</Text>
                 )}
@@ -439,17 +441,17 @@ export default function CustomerAddressesScreen() {
                   {addr.nickname !== MAIN_NICKNAME && (
                     <TouchableOpacity style={s.editBtn} onPress={() => setAsMainAddress(addr.id)}>
                       <Ionicons name="star" size={16} color="#0f766e" />
-                      <Text style={[s.editBtnText, { color: '#0f766e' }]}>Set as MAIN</Text>
+                      <Text style={[s.editBtnText, { color: '#0f766e' }]}>{t('addresses.setMain')}</Text>
                     </TouchableOpacity>
                   )}
                   <TouchableOpacity style={s.editBtn} onPress={() => startEdit(addr)}>
                     <Ionicons name="pencil" size={16} color="#0284c7" />
-                    <Text style={s.editBtnText}>Edit</Text>
+                    <Text style={s.editBtnText}>{t('addresses.edit')}</Text>
                   </TouchableOpacity>
                   {addr.nickname !== MAIN_NICKNAME && (
                     <TouchableOpacity style={s.deleteBtn} onPress={() => deleteAddress(addr.id)}>
                       <Ionicons name="trash" size={16} color="#dc2626" />
-                      <Text style={s.deleteBtnText}>Delete</Text>
+                      <Text style={s.deleteBtnText}>{t('addresses.delete')}</Text>
                     </TouchableOpacity>
                   )}
                 </View>
@@ -462,11 +464,11 @@ export default function CustomerAddressesScreen() {
       {/* Picker Modal */}
       <Modal visible={pickerVisible} transparent animationType="slide" onRequestClose={() => setPickerVisible(false)}>
         <View style={s.modalRoot}>
-          <Pressable style={s.modalBackdrop} onPress={() => setPickerVisible(false)} accessibilityRole="button" accessibilityLabel="Close picker" />
+          <Pressable style={s.modalBackdrop} onPress={() => setPickerVisible(false)} accessibilityRole="button" accessibilityLabel={t('common.close')} />
           <View style={[s.modalContent, { backgroundColor: colors.card, paddingBottom: pickerSheetBottomPad }]}>
             <View style={[s.modalHeader, { borderBottomColor: colors.border }]}>
               <Text style={[s.modalTitle, { color: colors.text }]}>
-                {pickerType === 'country' ? 'Select Country' : pickerType === 'governorate' ? 'Select Governorate' : 'Select Delegation'}
+                {pickerType === 'country' ? t('addresses.country') : pickerType === 'governorate' ? t('addresses.governorate') : t('addresses.delegation')}
               </Text>
               <TouchableOpacity onPress={() => setPickerVisible(false)} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
                 <Ionicons name="close" size={24} color={colors.textSecondary} />
@@ -477,7 +479,7 @@ export default function CustomerAddressesScreen() {
                 <Ionicons name="search" size={16} color={colors.textTertiary} />
                 <TextInput
                   style={[s.pickerSearchInput, { color: colors.text }]}
-                  placeholder="Search country..."
+                  placeholder={t('common.search')}
                   placeholderTextColor={colors.textTertiary}
                   value={pickerSearch}
                   onChangeText={setPickerSearch}
@@ -504,7 +506,7 @@ export default function CustomerAddressesScreen() {
                 )}
                 ListEmptyComponent={
                   pickerType === 'country'
-                    ? <Text style={[s.modalEmptyText, { color: colors.textTertiary }]}>No matching countries</Text>
+                    ? <Text style={[s.modalEmptyText, { color: colors.textTertiary }]}>{t('common.noResults')}</Text>
                     : null
                 }
               />

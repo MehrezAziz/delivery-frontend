@@ -16,6 +16,7 @@ import * as LocalAuthentication from 'expo-local-authentication';
 import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useTranslation } from 'react-i18next';
 import { coinsService, type CoinTransferDto, type CoinTransferPreview } from '../../services/api/coins.service';
 import { securityService } from '../../services/api/security.service';
 import { ApiError, api } from '../../services/api/client';
@@ -76,6 +77,7 @@ export default function SendCoinsScreen() {
     sendsOnly?: string;
   }>();
   const { colors } = useTheme();
+  const { t } = useTranslation();
   const [recipientMode, setRecipientMode] = useState<'id' | 'phone'>('id');
   const [recipientId, setRecipientId] = useState('');
   const [recipientPhone, setRecipientPhone] = useState('');
@@ -194,10 +196,10 @@ export default function SendCoinsScreen() {
     }, [loadTransfers, loadAvailableBalance]),
   );
 
-  const displayTransfers = transfers.filter((t) => {
+  const displayTransfers = transfers.filter((tx) => {
     if (!myUserId || transferFilter === 'all') return true;
-    if (transferFilter === 'sent') return t.senderUserId === myUserId;
-    return t.recipientUserId === myUserId && t.senderUserId !== myUserId;
+    if (transferFilter === 'sent') return tx.senderUserId === myUserId;
+    return tx.recipientUserId === myUserId && tx.senderUserId !== myUserId;
   });
 
   const scheduleTimeInvalid = scheduleOn && !isValidSchedule(scheduleAt);
@@ -206,29 +208,29 @@ export default function SendCoinsScreen() {
     const gross = parseFloat(grossStr.replace(',', '.'));
     if (recipientMode === 'id') {
       if (!recipientId.trim()) {
-        appAlert('Recipient', 'Enter the other user’s ID (from Settings).');
+        appAlert(t('sendCoins.invalidRecipient'), t('sendCoins.invalidRecipient'));
         return;
       }
     } else {
       const ph = recipientPhone.trim();
       if (!ph) {
-        appAlert('Recipient', 'Enter the recipient’s phone number with country code (e.g. +21655664488).');
+        appAlert(t('sendCoins.invalidRecipient'), t('sendCoins.invalidRecipient'));
         return;
       }
       if (!E164_PHONE.test(ph)) {
         appAlert(
-          'Phone format',
-          'Use international E.164 format: + then country code and number (8–15 digits after +), e.g. +21655664488.',
+          t('auth.invalidPhone'),
+          t('auth.invalidPhoneBody'),
         );
         return;
       }
     }
     if (!Number.isFinite(gross) || gross <= 0) {
-      appAlert('Amount', 'Enter a valid gross amount.');
+      appAlert(t('common.invalidAmount'), t('common.enterValidAmount'));
       return;
     }
     if (scheduleOn && !isValidSchedule(scheduleAt)) {
-      appAlert('Invalid time', 'Scheduled send time must be at least one minute from now.');
+      appAlert(t('sendCoins.invalidTime'), t('wallet.invalidTimeBody'));
       return;
     }
     setPreviewLoading(true);
@@ -241,7 +243,7 @@ export default function SendCoinsScreen() {
       const p = await coinsService.preview(previewBody);
       setPreview(p);
     } catch (e) {
-      appAlert('Preview failed', errMsg(e));
+      appAlert(t('sendCoins.previewFailed'), errMsg(e));
     } finally {
       setPreviewLoading(false);
     }
@@ -250,7 +252,7 @@ export default function SendCoinsScreen() {
   const executeTransferAfterChallenge = async (opts?: { transferPin?: string; accountPassword?: string }) => {
     if (!preview) return;
     if (scheduleOn && !isValidSchedule(scheduleAt)) {
-      appAlert('Invalid time', 'Scheduled send time must be at least one minute from now.');
+      appAlert(t('sendCoins.invalidTime'), t('wallet.invalidTimeBody'));
       return;
     }
     const gross = preview.grossCoins;
@@ -281,10 +283,10 @@ export default function SendCoinsScreen() {
       setStepUpSummary(null);
       setAccountPassword('');
       appAlert(
-        scheduledIso ? 'Send scheduled' : 'Transfer started',
+        scheduledIso ? t('sendCoins.scheduleSend') : t('common.success'),
         scheduledIso
-          ? `Coins will be sent on ${scheduleAt.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}.`
-          : 'Coins are pending until the security delay completes.',
+          ? `${t('sendCoins.scheduleSend')} ${scheduleAt.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}.`
+          : t('common.success'),
       );
       setPreview(null);
       setGrossStr('');
@@ -296,7 +298,7 @@ export default function SendCoinsScreen() {
       await loadTransfers();
       void loadAvailableBalance();
     } catch (e) {
-      appAlert('Send failed', errMsg(e));
+      appAlert(t('sendCoins.sendFailed'), errMsg(e));
     } finally {
       setSending(false);
     }
@@ -308,8 +310,8 @@ export default function SendCoinsScreen() {
     const enrolled = await LocalAuthentication.isEnrolledAsync();
     if (has && enrolled) {
       const auth = await LocalAuthentication.authenticateAsync({
-        promptMessage: 'Confirm coin transfer',
-        cancelLabel: 'Cancel',
+        promptMessage: t('sendCoins.confirmSend'),
+        cancelLabel: t('common.cancel'),
         disableDeviceFallback: false,
       });
       if (!auth.success) return;
@@ -324,7 +326,7 @@ export default function SendCoinsScreen() {
           await executeTransferAfterChallenge();
         }
       } catch (e) {
-        appAlert('Error', errMsg(e));
+        appAlert(t('common.error'), errMsg(e));
       }
       return;
     }
@@ -333,8 +335,8 @@ export default function SendCoinsScreen() {
       const summary = await securityService.getSummary();
       if (!summary.hasTransferPin && !summary.hasPassword) {
         appAlert(
-          'Cannot confirm send',
-          'This device has no Face ID or fingerprint enrolled. Set an account password or an 8-digit transfer PIN in Settings → Security, then try again.',
+          t('sendCoins.verificationFailed'),
+          t('security.noPinOrPassword'),
         );
         return;
       }
@@ -350,7 +352,7 @@ export default function SendCoinsScreen() {
       setAccountPassword('');
       setStepUpModalVisible(true);
     } catch (e) {
-      appAlert('Error', errMsg(e));
+      appAlert(t('common.error'), errMsg(e));
     }
   };
 
@@ -366,7 +368,7 @@ export default function SendCoinsScreen() {
     if (stepUpAuthMethod === 'pin') {
       const pinTrim = pin.trim();
       if (pinTrim.length !== 8 || !/^\d{8}$/.test(pinTrim)) {
-        appAlert('PIN', 'Enter your 8-digit transfer PIN (Settings → Security).');
+        appAlert(t('sendCoins.pinRequired'), t('security.eightDigitPin'));
         return;
       }
       await executeTransferAfterChallenge({ transferPin: pinTrim });
@@ -374,7 +376,7 @@ export default function SendCoinsScreen() {
     }
     const pw = accountPassword.trim();
     if (pw.length < 8) {
-      appAlert('Password', 'Enter your account password (at least 8 characters).');
+      appAlert(t('sendCoins.passwordRequired'), t('auth.passwordMinLength'));
       return;
     }
     await executeTransferAfterChallenge({ accountPassword: pw });
@@ -384,7 +386,7 @@ export default function SendCoinsScreen() {
     if (needsPinForSend) {
       const pinTrim = pin.trim();
       if (pinTrim.length !== 8 || !/^\d{8}$/.test(pinTrim)) {
-        appAlert('PIN', 'Enter your 8-digit transfer PIN (set in Settings → Security).');
+        appAlert(t('sendCoins.pinRequired'), t('security.eightDigitPin'));
         return;
       }
       await executeTransferAfterChallenge({ transferPin: pinTrim });
@@ -399,7 +401,7 @@ export default function SendCoinsScreen() {
       setCancelTarget(null);
       await loadTransfers();
     } catch (e) {
-      appAlert('Error', errMsg(e));
+      appAlert(t('common.error'), errMsg(e));
     } finally {
       setCancelBusy(false);
     }
@@ -411,11 +413,11 @@ export default function SendCoinsScreen() {
     return d.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
   };
 
-  const openRescheduleModal = (t: CoinTransferDto) => {
-    if (!t.scheduledAt) return;
-    const d = new Date(t.scheduledAt);
+  const openRescheduleModal = (tx: CoinTransferDto) => {
+    if (!tx.scheduledAt) return;
+    const d = new Date(tx.scheduledAt);
     setRescheduleAt(Number.isNaN(d.getTime()) ? new Date(Date.now() + 3600_000) : d);
-    setRescheduleTargetId(t.id);
+    setRescheduleTargetId(tx.id);
     setRescheduleIosOpen(Platform.OS === 'ios');
   };
 
@@ -435,7 +437,7 @@ export default function SendCoinsScreen() {
   const submitReschedule = async () => {
     if (!rescheduleTargetId) return;
     if (!isValidSchedule(rescheduleAt)) {
-      appAlert('Invalid time', 'Choose a date and time at least one minute from now.');
+      appAlert(t('sendCoins.invalidTime'), t('wallet.invalidTimeBody'));
       return;
     }
     setRescheduleSaving(true);
@@ -445,7 +447,7 @@ export default function SendCoinsScreen() {
       setRescheduleIosOpen(false);
       await loadTransfers();
     } catch (e: unknown) {
-      appAlert('Error', e instanceof Error ? e.message : 'Could not update schedule');
+      appAlert(t('common.error'), e instanceof Error ? e.message : t('common.operationFailed'));
     } finally {
       setRescheduleSaving(false);
     }
@@ -468,12 +470,10 @@ export default function SendCoinsScreen() {
     <View style={[styles.root, { backgroundColor: colors.background }]}>
       <ScrollView contentContainerStyle={styles.pad} keyboardShouldPersistTaps="handled">
         <Text style={[styles.hint, { color: colors.textSecondary }]}>
-          Send by the recipient’s user ID (Settings) or by the phone number on their account. Phone must be in
-          international format with + and country code (e.g. +21655664488). You pay the gross amount; they receive the net
-          after the platform fee. Sends to users in other countries are allowed when both sides support wallet coins.
+          {t('sendCoins.hint')}
         </Text>
 
-        <Text style={[styles.label, { color: colors.textSecondary }]}>Find recipient by</Text>
+        <Text style={[styles.label, { color: colors.textSecondary }]}>{t('sendCoins.findBy')}</Text>
         <View style={styles.segmentRow}>
           <TouchableOpacity
             style={[
@@ -493,7 +493,7 @@ export default function SendCoinsScreen() {
                 recipientMode === 'id' && { color: '#fff', fontWeight: '800' },
               ]}
             >
-              User ID
+              {t('sendCoins.userId')}
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
@@ -514,17 +514,17 @@ export default function SendCoinsScreen() {
                 recipientMode === 'phone' && { color: '#fff', fontWeight: '800' },
               ]}
             >
-              Phone (E.164)
+              {t('sendCoins.phoneE164')}
             </Text>
           </TouchableOpacity>
         </View>
 
         {recipientMode === 'id' ? (
           <>
-            <Text style={[styles.label, { color: colors.textSecondary }]}>Recipient user ID</Text>
+            <Text style={[styles.label, { color: colors.textSecondary }]}>{t('sendCoins.recipientUserId')}</Text>
             <TextInput
               style={[styles.input, { color: colors.text, borderColor: colors.border, backgroundColor: colors.card }]}
-              placeholder="UUID"
+              placeholder={t('sendCoins.uuidPlaceholder')}
               placeholderTextColor={colors.textTertiary}
               value={recipientId}
               onChangeText={setRecipientId}
@@ -534,7 +534,7 @@ export default function SendCoinsScreen() {
           </>
         ) : (
           <>
-            <Text style={[styles.label, { color: colors.textSecondary }]}>Recipient phone</Text>
+            <Text style={[styles.label, { color: colors.textSecondary }]}>{t('sendCoins.recipientPhone')}</Text>
             <TextInput
               style={[styles.input, { color: colors.text, borderColor: colors.border, backgroundColor: colors.card }]}
               placeholder="+21655664488"
@@ -548,30 +548,30 @@ export default function SendCoinsScreen() {
           </>
         )}
 
-        <Text style={[styles.label, { color: colors.textSecondary }]}>Gross coins (you pay)</Text>
-        <Text style={[styles.fieldHint, { color: colors.textTertiary }]}>Minimum 25 coins</Text>
+        <Text style={[styles.label, { color: colors.textSecondary }]}>{t('sendCoins.grossCoins')}</Text>
+        <Text style={[styles.fieldHint, { color: colors.textTertiary }]}>{t('sendCoins.minimumNote')}</Text>
         <TextInput
           style={[styles.input, { color: colors.text, borderColor: colors.border, backgroundColor: colors.card }]}
-          placeholder="e.g. 100 (min 25)"
+          placeholder={t('sendCoins.examplePlaceholder')}
           placeholderTextColor={colors.textTertiary}
           value={grossStr}
           onChangeText={setGrossStr}
           keyboardType="decimal-pad"
         />
         {availableLoading ? (
-          <Text style={[styles.availableLine, { color: colors.textTertiary }]}>Loading available balance…</Text>
+          <Text style={[styles.availableLine, { color: colors.textTertiary }]}>{t('sendCoins.loadingAvailable')}</Text>
         ) : availableCoins != null ? (
           <Text style={[styles.availableLine, { color: colors.textSecondary }]}>
-            Available: <Text style={{ fontWeight: '700', color: colors.text }}>{availableCoins.toFixed(2)}</Text> coins
+            {t('sendCoins.available')} <Text style={{ fontWeight: '700', color: colors.text }}>{availableCoins.toFixed(2)}</Text> {t('wallet.coins')}
           </Text>
         ) : availableTouched ? (
-          <Text style={[styles.availableLine, { color: colors.textTertiary }]}>Available balance could not be loaded.</Text>
+          <Text style={[styles.availableLine, { color: colors.textTertiary }]}>{t('sendCoins.availableNotLoaded')}</Text>
         ) : null}
 
-        <Text style={[styles.label, { color: colors.textSecondary }]}>Gift message (optional)</Text>
+        <Text style={[styles.label, { color: colors.textSecondary }]}>{t('sendCoins.giftMessageOptional')}</Text>
         <TextInput
           style={[styles.input, styles.multiline, { color: colors.text, borderColor: colors.border, backgroundColor: colors.card }]}
-          placeholder="Short note to recipient"
+          placeholder={t('sendCoins.shortNote')}
           placeholderTextColor={colors.textTertiary}
           value={gift}
           onChangeText={setGift}
@@ -580,7 +580,7 @@ export default function SendCoinsScreen() {
         />
 
         <View style={[styles.row, { marginTop: 8 }]}>
-          <Text style={{ color: colors.text, flex: 1 }}>Schedule send</Text>
+          <Text style={{ color: colors.text, flex: 1 }}>{t('sendCoins.scheduleSend')}</Text>
           <Switch value={scheduleOn} onValueChange={setScheduleOn} />
         </View>
         {scheduleOn && (
@@ -606,7 +606,7 @@ export default function SendCoinsScreen() {
             )}
             {scheduleTimeInvalid ? (
               <Text style={[styles.scheduleWarn, { color: colors.danger ?? '#dc2626' }]}>
-                Pick a time at least one minute from now.
+                {t('wallet.invalidTimeBody')}
               </Text>
             ) : null}
           </>
@@ -620,21 +620,21 @@ export default function SendCoinsScreen() {
           {previewLoading ? (
             <ActivityIndicator color="#fff" />
           ) : (
-            <Text style={styles.primaryBtnText}>Preview fees</Text>
+            <Text style={styles.primaryBtnText}>{t('sendCoins.previewFees')}</Text>
           )}
         </TouchableOpacity>
 
         {preview && (
           <View style={[styles.previewCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-            <Text style={[styles.previewTitle, { color: colors.text }]}>Summary</Text>
-            <Text style={{ color: colors.textSecondary }}>To: {preview.recipientPreview.displayName}</Text>
+            <Text style={[styles.previewTitle, { color: colors.text }]}>{t('sendCoins.summary')}</Text>
+            <Text style={{ color: colors.textSecondary }}>{t('sendCoins.to')} {preview.recipientPreview.displayName}</Text>
             <Text style={{ color: colors.text, marginTop: 8 }}>
-              Gross <Text style={{ fontWeight: '800' }}>{preview.grossCoins.toFixed(2)}</Text> · Fee{' '}
-              {preview.feeCoins.toFixed(2)} ({preview.feeBps / 100}%) · Recipient gets{' '}
+              {t('sendCoins.gross')} <Text style={{ fontWeight: '800' }}>{preview.grossCoins.toFixed(2)}</Text> {t('sendCoins.fee')}{' '}
+              {preview.feeCoins.toFixed(2)} ({preview.feeBps / 100}%) {t('sendCoins.theyReceive')}{' '}
               <Text style={{ fontWeight: '800', color: '#16a34a' }}>{preview.netCoins.toFixed(2)}</Text>
             </Text>
             <Text style={{ color: colors.textTertiary, marginTop: 6 }}>
-              Pending delay after activation: ~{preview.pendingDelayMinutes} min
+              {preview.pendingDelayMinutes} min
             </Text>
             <TouchableOpacity
               style={[styles.primaryBtn, { backgroundColor: '#16a34a', marginTop: 14 }]}
@@ -644,7 +644,7 @@ export default function SendCoinsScreen() {
               {sending ? (
                 <ActivityIndicator color="#fff" />
               ) : (
-                <Text style={styles.primaryBtnText}>Authenticate & send</Text>
+                <Text style={styles.primaryBtnText}>{t('sendCoins.authenticate')}</Text>
               )}
             </TouchableOpacity>
           </View>
@@ -652,12 +652,12 @@ export default function SendCoinsScreen() {
 
         <View style={styles.sectionHeader}>
           <Text style={[styles.sectionTitle, { color: colors.text, marginTop: 0, marginBottom: 0 }]}>
-            Recent transfers
+            {t('sendCoins.recentSends')}
           </Text>
           <View style={styles.filterChips}>
             {(['all', 'sent', 'received'] as TransferFilter[]).map((key) => {
               const active = transferFilter === key;
-              const label = key === 'all' ? 'All' : key === 'sent' ? 'Sent' : 'Received';
+              const label = key === 'all' ? t('sendCoins.all') : key === 'sent' ? t('sendCoins.sent') : t('sendCoins.received');
               return (
                 <TouchableOpacity
                   key={key}
@@ -688,26 +688,22 @@ export default function SendCoinsScreen() {
           <ActivityIndicator color={colors.primary} style={{ marginVertical: 16 }} />
         ) : displayTransfers.length === 0 ? (
           <Text style={{ color: colors.textTertiary }}>
-            {transferFilter === 'sent'
-              ? 'No outgoing sends yet.'
-              : transferFilter === 'received'
-                ? 'No received transfers yet.'
-                : 'No transfers yet.'}
+            {t('wallet.noTransactions')}
           </Text>
         ) : (
-          displayTransfers.map((t) => {
+          displayTransfers.map((tx) => {
             const isRecipientRow = !!(
               myUserId &&
-              t.recipientUserId === myUserId &&
-              t.senderUserId !== myUserId
+              tx.recipientUserId === myUserId &&
+              tx.senderUserId !== myUserId
             );
-            const isSentRow = !!myUserId && t.senderUserId === myUserId;
-            const showFeeBreakdownRow = !isRecipientRow || t.showFeeBreakdown === true;
-            const canCancel = t.status === 'SCHEDULED' && isSentRow;
-            const status = coinTransferStatusMeta(t.status);
-            const senderLine = isRecipientRow ? formatCoinSenderLine(t) : null;
+            const isSentRow = !!myUserId && tx.senderUserId === myUserId;
+            const showFeeBreakdownRow = !isRecipientRow || tx.showFeeBreakdown === true;
+            const canCancel = tx.status === 'SCHEDULED' && isSentRow;
+            const status = coinTransferStatusMeta(tx.status);
+            const senderLine = isRecipientRow ? formatCoinSenderLine(tx) : null;
             return (
-              <View key={t.id} style={[styles.txRow, { backgroundColor: colors.card, borderColor: colors.border }]}>
+              <View key={tx.id} style={[styles.txRow, { backgroundColor: colors.card, borderColor: colors.border }]}>
                 <View style={{ flex: 1, paddingRight: 8 }}>
                   <View style={styles.txTitleRow}>
                     <View style={[styles.statusBadge, { backgroundColor: status.bg }]}>
@@ -715,45 +711,45 @@ export default function SendCoinsScreen() {
                       <Text style={[styles.statusBadgeText, { color: status.fg }]}>{status.label}</Text>
                     </View>
                     <Text style={[styles.txDirection, { color: colors.textTertiary }]}>
-                      {isSentRow ? 'Sent' : isRecipientRow ? 'Received' : 'Transfer'}
+                      {isSentRow ? t('sendCoins.sent') : isRecipientRow ? t('sendCoins.received') : t('wallet.txTypes.COIN_SEND')}
                     </Text>
                   </View>
                   {senderLine ? (
                     <Text style={{ color: colors.text, fontSize: 13, fontWeight: '600', marginTop: 6 }}>
-                      From {senderLine}
+                      {t('sendCoins.from')} {senderLine}
                     </Text>
                   ) : null}
                   <Text style={{ color: colors.textTertiary, fontSize: 12, marginTop: 6 }}>
-                    {new Date(t.createdAt).toLocaleString()}
+                    {new Date(tx.createdAt).toLocaleString()}
                     {showFeeBreakdownRow
-                      ? ` · Gross ${t.grossCoins.toFixed(2)}`
-                      : ` · +${t.netCoins.toFixed(2)} coins`}
+                      ? ` · ${t('sendCoins.gross')} ${tx.grossCoins.toFixed(2)}`
+                      : ` · +${tx.netCoins.toFixed(2)}${t('common.coinsSuffix')}`}
                   </Text>
-                  {t.status === 'SCHEDULED' && t.scheduledAt && isSentRow ? (
+                  {tx.status === 'SCHEDULED' && tx.scheduledAt && isSentRow ? (
                     <Text style={{ color: colors.primary, fontWeight: '700', fontSize: 12, marginTop: 4 }}>
-                      Sends at {formatDateTimeLocal(t.scheduledAt)}
+                      {t('sendCoins.scheduleSend')} {formatDateTimeLocal(tx.scheduledAt)}
                     </Text>
                   ) : null}
-                  {t.status === 'PENDING' && t.pendingUntil ? (
+                  {tx.status === 'PENDING' && tx.pendingUntil ? (
                     <Text style={{ color: colors.textSecondary, fontSize: 12, marginTop: 4 }}>
-                      Activates after {formatDateTimeLocal(t.pendingUntil)}
+                      {formatDateTimeLocal(tx.pendingUntil)}
                     </Text>
                   ) : null}
-                  {t.status === 'FAILED' && t.failedReason ? (
+                  {tx.status === 'FAILED' && tx.failedReason ? (
                     <Text style={{ color: colors.danger ?? '#dc2626', fontSize: 12, marginTop: 4 }}>
-                      {t.failedReason}
+                      {tx.failedReason}
                     </Text>
                   ) : null}
                 </View>
                 <View style={{ alignItems: 'flex-end', gap: 10 }}>
-                  {t.status === 'SCHEDULED' && isSentRow ? (
-                    <TouchableOpacity onPress={() => openRescheduleModal(t)} disabled={rescheduleSaving} hitSlop={12}>
-                      <Text style={{ color: colors.primary, fontWeight: '700' }}>Edit time</Text>
+                  {tx.status === 'SCHEDULED' && isSentRow ? (
+                    <TouchableOpacity onPress={() => openRescheduleModal(tx)} disabled={rescheduleSaving} hitSlop={12}>
+                      <Text style={{ color: colors.primary, fontWeight: '700' }}>{t('sendCoins.editTime')}</Text>
                     </TouchableOpacity>
                   ) : null}
                   {canCancel ? (
-                    <TouchableOpacity onPress={() => setCancelTarget(t)} hitSlop={12}>
-                      <Text style={{ color: colors.danger, fontWeight: '700' }}>Cancel</Text>
+                    <TouchableOpacity onPress={() => setCancelTarget(tx)} hitSlop={12}>
+                      <Text style={{ color: colors.danger, fontWeight: '700' }}>{t('common.cancel')}</Text>
                     </TouchableOpacity>
                   ) : null}
                 </View>
@@ -763,16 +759,16 @@ export default function SendCoinsScreen() {
         )}
 
         <TouchableOpacity style={{ marginTop: 24, marginBottom: 40 }} onPress={() => router.back()}>
-          <Text style={{ color: colors.primary, textAlign: 'center', fontWeight: '600' }}>Close</Text>
+          <Text style={{ color: colors.primary, textAlign: 'center', fontWeight: '600' }}>{t('common.close')}</Text>
         </TouchableOpacity>
       </ScrollView>
 
       <Modal visible={pinModal} transparent animationType="fade">
         <View style={styles.modalOverlay}>
           <View style={[styles.modalBox, { backgroundColor: colors.card }]}>
-            <Text style={[styles.modalTitle, { color: colors.text }]}>Transfer PIN</Text>
+            <Text style={[styles.modalTitle, { color: colors.text }]}>{t('sendCoins.transferPin')}</Text>
             <Text style={{ color: colors.textSecondary, marginBottom: 12 }}>
-              Enter your 8-digit PIN from Settings → Security.
+              {t('sendCoins.transferPinEnter')}
             </Text>
             <EightDigitPinInput value={pin} onChange={setPin} colors={colors} disabled={sending} />
             <View style={styles.modalActions}>
@@ -784,7 +780,7 @@ export default function SendCoinsScreen() {
                 }}
                 style={styles.modalBtn}
               >
-                <Text style={{ color: colors.textSecondary }}>Back</Text>
+                <Text style={{ color: colors.textSecondary }}>{t('common.back')}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 onPress={() => void submitWithPin()}
@@ -794,7 +790,7 @@ export default function SendCoinsScreen() {
                 {sending ? (
                   <ActivityIndicator color="#fff" />
                 ) : (
-                  <Text style={{ color: '#fff', fontWeight: '700' }}>Send</Text>
+                  <Text style={{ color: '#fff', fontWeight: '700' }}>{t('sendCoins.send')}</Text>
                 )}
               </TouchableOpacity>
             </View>
@@ -805,9 +801,9 @@ export default function SendCoinsScreen() {
       <Modal visible={stepUpModalVisible} transparent animationType="fade" onRequestClose={cancelStepUpModal}>
         <View style={styles.modalOverlay}>
           <View style={[styles.modalBox, { backgroundColor: colors.card }]}>
-            <Text style={[styles.modalTitle, { color: colors.text }]}>Confirm send</Text>
+            <Text style={[styles.modalTitle, { color: colors.text }]}>{t('sendCoins.confirmSend')}</Text>
             <Text style={{ color: colors.textSecondary, marginBottom: 12 }}>
-              No Face ID or fingerprint on this device. Use your 8-digit transfer PIN or your account password.
+              {t('sendCoins.transferPinEnter')}
             </Text>
             {stepUpSummary?.hasPin && stepUpSummary?.hasPassword ? (
               <View style={[styles.segmentRow, { marginBottom: 14 }]}>
@@ -829,7 +825,7 @@ export default function SendCoinsScreen() {
                       stepUpAuthMethod === 'pin' && { color: '#fff', fontWeight: '800' },
                     ]}
                   >
-                    Transfer PIN
+                    {t('sendCoins.transferPin')}
                   </Text>
                 </TouchableOpacity>
                 <TouchableOpacity
@@ -850,7 +846,7 @@ export default function SendCoinsScreen() {
                       stepUpAuthMethod === 'password' && { color: '#fff', fontWeight: '800' },
                     ]}
                   >
-                    Password
+                    {t('security.passwordTitle')}
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -864,7 +860,7 @@ export default function SendCoinsScreen() {
                   styles.input,
                   { color: colors.text, borderColor: colors.border, backgroundColor: colors.inputBg ?? colors.card },
                 ]}
-                placeholder="Account password"
+                placeholder={t('sendCoins.accountPassword')}
                 placeholderTextColor={colors.textTertiary}
                 value={accountPassword}
                 onChangeText={setAccountPassword}
@@ -876,7 +872,7 @@ export default function SendCoinsScreen() {
             ) : null}
             <View style={styles.modalActions}>
               <TouchableOpacity onPress={cancelStepUpModal} style={styles.modalBtn} disabled={sending}>
-                <Text style={{ color: colors.textSecondary }}>Cancel</Text>
+                <Text style={{ color: colors.textSecondary }}>{t('common.cancel')}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 onPress={() => void submitStepUpModal()}
@@ -886,7 +882,7 @@ export default function SendCoinsScreen() {
                 {sending ? (
                   <ActivityIndicator color="#fff" />
                 ) : (
-                  <Text style={{ color: '#fff', fontWeight: '700' }}>Send</Text>
+                  <Text style={{ color: '#fff', fontWeight: '700' }}>{t('sendCoins.send')}</Text>
                 )}
               </TouchableOpacity>
             </View>
@@ -905,9 +901,9 @@ export default function SendCoinsScreen() {
       >
         <View style={styles.modalOverlay}>
           <View style={[styles.rescheduleModalCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-            <Text style={[styles.modalTitle, { color: colors.text }]}>Reschedule send</Text>
+            <Text style={[styles.modalTitle, { color: colors.text }]}>{t('sendCoins.rescheduleTitle')}</Text>
             <Text style={{ color: colors.textSecondary, marginBottom: 14, fontSize: 14 }}>
-              Choose a new date and time. It must be at least one minute from now.
+              {t('sendCoins.rescheduleBody')}
             </Text>
             <TouchableOpacity
               style={[styles.reschedulePickRow, { borderColor: colors.border, backgroundColor: colors.inputBg }]}
@@ -937,7 +933,7 @@ export default function SendCoinsScreen() {
                 style={styles.modalBtn}
                 disabled={rescheduleSaving}
               >
-                <Text style={{ color: colors.textSecondary }}>Close</Text>
+                <Text style={{ color: colors.textSecondary }}>{t('common.close')}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 onPress={() => void submitReschedule()}
@@ -947,7 +943,7 @@ export default function SendCoinsScreen() {
                 {rescheduleSaving ? (
                   <ActivityIndicator color="#fff" />
                 ) : (
-                  <Text style={{ color: '#fff', fontWeight: '700' }}>Save</Text>
+                  <Text style={{ color: '#fff', fontWeight: '700' }}>{t('common.save')}</Text>
                 )}
               </TouchableOpacity>
             </View>
@@ -960,12 +956,12 @@ export default function SendCoinsScreen() {
         onClose={() => {
           if (!cancelBusy) setCancelTarget(null);
         }}
-        title="Cancel scheduled send?"
-        message="This send will not happen. Coins are not locked until the scheduled time."
+        title={t('wallet.cancelScheduledSend')}
+        message={t('wallet.cancelWithdrawal')}
         icon="calendar-outline"
         destructive
-        confirmLabel="Cancel send"
-        cancelLabel="Keep"
+        confirmLabel={t('wallet.cancelSend')}
+        cancelLabel={t('wallet.keep')}
         busy={cancelBusy}
         onConfirm={() => void confirmCancelTransfer()}
       />
@@ -975,15 +971,15 @@ export default function SendCoinsScreen() {
           <View style={[styles.celebrateCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <Text style={styles.celebrateEmoji}>🎉</Text>
             <Text style={[styles.celebrateTitle, { color: colors.text }]}>
-              {celebrateGift.trim() ? 'You received a gift!' : 'Coins received'}
+              {celebrateGift.trim() ? t('sendCoins.receivedCoinsTitle') : t('wallet.txTypes.COIN_RECEIVED')}
             </Text>
             {celebrateSender.trim() ? (
               <Text style={[styles.celebrateFrom, { color: colors.textSecondary }]}>
-                From <Text style={{ fontWeight: '800', color: colors.text }}>{celebrateSender.trim()}</Text>
+                {t('sendCoins.from')} <Text style={{ fontWeight: '800', color: colors.text }}>{celebrateSender.trim()}</Text>
               </Text>
             ) : null}
             {celebrateAmount.trim() ? (
-              <Text style={[styles.celebrateAmount, { color: '#16a34a' }]}>+{celebrateAmount.trim()} coins</Text>
+              <Text style={[styles.celebrateAmount, { color: '#16a34a' }]}>+{celebrateAmount.trim()}{t('common.coinsSuffix')}</Text>
             ) : null}
             {celebrateGift.trim() ? (
               <Text style={[styles.celebrateGift, { color: colors.textSecondary }]}>“{celebrateGift.trim()}”</Text>
@@ -992,7 +988,7 @@ export default function SendCoinsScreen() {
               style={[styles.celebrateBtn, { backgroundColor: colors.primary }]}
               onPress={() => setCelebrateVisible(false)}
             >
-              <Text style={styles.celebrateBtnText}>Awesome</Text>
+              <Text style={styles.celebrateBtnText}>{t('sendCoins.awesome')}</Text>
             </TouchableOpacity>
           </View>
         </View>

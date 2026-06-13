@@ -9,6 +9,7 @@ import {
   Alert,
   TextInput,
 } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import { useRouter } from 'expo-router';
 import * as LocalAuthentication from 'expo-local-authentication';
 import * as ImagePicker from 'expo-image-picker';
@@ -30,6 +31,7 @@ type Phase = 'bio' | 'credential' | 'content';
 export type SecurityScreenVariant = 'customer' | 'driver';
 
 export default function SecurityScreen({ variant }: { variant: SecurityScreenVariant }) {
+  const { t } = useTranslation();
   const router = useRouter();
   const { colors } = useTheme();
   const supportPath = variant === 'customer' ? '/(customer)/support' : '/(driver)/support';
@@ -136,8 +138,8 @@ export default function SecurityScreen({ variant }: { variant: SecurityScreenVar
         return;
       }
       const r = await LocalAuthentication.authenticateAsync({
-        promptMessage: 'Unlock Security',
-        cancelLabel: 'Cancel',
+        promptMessage: t('security.title'),
+        cancelLabel: t('common.cancel'),
         disableDeviceFallback: true,
       });
       if (!r.success) return;
@@ -146,11 +148,11 @@ export default function SecurityScreen({ variant }: { variant: SecurityScreenVar
       if (!mountedRef.current) return;
       enterCredentialFromSummary(s, { preferPinAfterBio: true });
     } catch (e) {
-      Alert.alert('Error', errMsg(e));
+      Alert.alert(t('common.error'), errMsg(e));
     } finally {
       setBioBusy(false);
     }
-  }, [loadSummary, enterCredentialFromSummary]);
+  }, [loadSummary, enterCredentialFromSummary, t]);
 
   useEffect(() => {
     let cancelled = false;
@@ -175,7 +177,7 @@ export default function SecurityScreen({ variant }: { variant: SecurityScreenVar
           const enrolled2 = await LocalAuthentication.isEnrolledAsync();
           if (has2 && enrolled2) {
             setSkippedBiometrics(false);
-            Alert.alert('Error', errMsg(e));
+            Alert.alert(t('common.error'), errMsg(e));
             return;
           }
         } catch {
@@ -186,7 +188,7 @@ export default function SecurityScreen({ variant }: { variant: SecurityScreenVar
           const s = await loadSummary();
           if (!cancelled) enterCredentialFromSummary(s);
         } catch (err) {
-          Alert.alert('Error', errMsg(err));
+          Alert.alert(t('common.error'), errMsg(err));
         }
       } finally {
         if (!cancelled) setGateBootstrapping(false);
@@ -205,7 +207,7 @@ export default function SecurityScreen({ variant }: { variant: SecurityScreenVar
       try {
         const s = summary ?? (await loadSummary());
         if (!s.hasTransferPin) {
-          Alert.alert('Security', 'No transfer PIN is configured.');
+          Alert.alert(t('security.title'), t('security.noTransferPin'));
           return;
         }
         await coinsService.establishTransferPinSecuritySession(normalized);
@@ -215,7 +217,7 @@ export default function SecurityScreen({ variant }: { variant: SecurityScreenVar
           finalizeToContent(fresh);
         }
       } catch (e) {
-        Alert.alert('Could not unlock', errMsg(e));
+        Alert.alert(t('security.couldNotUnlock'), errMsg(e));
         if (mountedRef.current) {
           setGatePin('');
           setGatePinFocusNonce((n) => n + 1);
@@ -224,7 +226,7 @@ export default function SecurityScreen({ variant }: { variant: SecurityScreenVar
         if (mountedRef.current) setCredBusy(false);
       }
     },
-    [summary, loadSummary, finalizeToContent],
+    [summary, loadSummary, finalizeToContent, t],
   );
 
   const submitCredential = async () => {
@@ -235,13 +237,13 @@ export default function SecurityScreen({ variant }: { variant: SecurityScreenVar
         (s.hasPassword && !s.hasTransferPin ? 'password' : !s.hasPassword && s.hasTransferPin ? 'pin' : null);
       if (mode === null) {
         if (skippedBiometrics) {
-          Alert.alert('Choose a method', 'Select account password or transfer PIN to continue.');
+          Alert.alert(t('security.chooseMethodTitle'), t('security.chooseMethodBody'));
         }
         return;
       }
       if (mode === 'pin' && s.hasTransferPin) {
         if (gatePin.length !== 8) {
-          Alert.alert('PIN', 'Enter your 8-digit transfer PIN.');
+          Alert.alert(t('security.pinTitle'), t('security.pinBody'));
           return;
         }
         await unlockWithPin(gatePin);
@@ -249,7 +251,7 @@ export default function SecurityScreen({ variant }: { variant: SecurityScreenVar
       }
       if (mode === 'password' && s.hasPassword) {
         if (!password.trim()) {
-          Alert.alert('Password', 'Enter your account password.');
+          Alert.alert(t('security.passwordTitle'), t('security.passwordBody'));
           return;
         }
         setCredBusy(true);
@@ -261,25 +263,25 @@ export default function SecurityScreen({ variant }: { variant: SecurityScreenVar
             finalizeToContent(fresh);
           }
         } catch (e) {
-          Alert.alert('Could not unlock', errMsg(e));
+          Alert.alert(t('security.couldNotUnlock'), errMsg(e));
         } finally {
           if (mountedRef.current) setCredBusy(false);
         }
         return;
       }
-      Alert.alert('Security', 'No password or PIN is configured.');
+      Alert.alert(t('security.title'), t('security.noPinOrPassword'));
     } catch (e) {
-      Alert.alert('Could not unlock', errMsg(e));
+      Alert.alert(t('security.couldNotUnlock'), errMsg(e));
     }
   };
 
   const savePin = async () => {
     if (newPin.length !== 8 || !/^\d{8}$/.test(newPin)) {
-      Alert.alert('PIN', 'New PIN must be exactly 8 digits.');
+      Alert.alert(t('security.pinTitle'), t('security.newPinLength'));
       return;
     }
     if (newPin !== confirmPin) {
-      Alert.alert('PIN', 'Confirmation does not match.');
+      Alert.alert(t('security.pinTitle'), t('security.confirmationMismatch'));
       return;
     }
     setPinSaving(true);
@@ -289,19 +291,19 @@ export default function SecurityScreen({ variant }: { variant: SecurityScreenVar
       setConfirmPin('');
       await loadSummary();
       setShowPinChange(false);
-      Alert.alert('Saved', 'Your transfer PIN has been updated.');
+      Alert.alert(t('security.saved'), t('security.pinUpdated'));
     } catch (e) {
-      Alert.alert('Could not save PIN', errMsg(e));
+      Alert.alert(t('security.couldNotSavePin'), errMsg(e));
     } finally {
       setPinSaving(false);
     }
   };
 
   const removePin = () => {
-    Alert.alert('Remove transfer PIN?', 'Coin sends will only use biometrics until you set a PIN again.', [
-      { text: 'Cancel', style: 'cancel' },
+    Alert.alert(t('security.removePinTitle'), t('security.removePinBody'), [
+      { text: t('common.cancel'), style: 'cancel' },
       {
-        text: 'Remove',
+        text: t('common.remove'),
         style: 'destructive',
         onPress: async () => {
           setPinSaving(true);
@@ -309,9 +311,9 @@ export default function SecurityScreen({ variant }: { variant: SecurityScreenVar
             await coinsService.clearTransferPin();
             await loadSummary();
             setShowPinChange(false);
-            Alert.alert('Removed', 'Transfer PIN cleared.');
+            Alert.alert(t('security.removed'), t('security.pinCleared'));
           } catch (e) {
-            Alert.alert('Error', errMsg(e));
+            Alert.alert(t('common.error'), errMsg(e));
           } finally {
             setPinSaving(false);
           }
@@ -322,11 +324,11 @@ export default function SecurityScreen({ variant }: { variant: SecurityScreenVar
 
   const savePassword = async () => {
     if (nextPwd.length < 8) {
-      Alert.alert('Password', 'New password must be at least 8 characters.');
+      Alert.alert(t('security.passwordTitle'), t('security.newPasswordLength'));
       return;
     }
     if (nextPwd !== nextPwd2) {
-      Alert.alert('Password', 'New password and confirmation do not match.');
+      Alert.alert(t('security.passwordTitle'), t('security.newPasswordMismatch'));
       return;
     }
     setPwdSaving(true);
@@ -336,9 +338,9 @@ export default function SecurityScreen({ variant }: { variant: SecurityScreenVar
       setNextPwd2('');
       setShowPasswordChange(false);
       await loadSummary();
-      Alert.alert('Saved', 'Your password has been changed.');
+      Alert.alert(t('security.saved'), t('security.passwordChanged'));
     } catch (e) {
-      Alert.alert('Could not change password', errMsg(e));
+      Alert.alert(t('security.couldNotChangePassword'), errMsg(e));
     } finally {
       setPwdSaving(false);
     }
@@ -347,7 +349,7 @@ export default function SecurityScreen({ variant }: { variant: SecurityScreenVar
   const pickDocument = async () => {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!perm.granted) {
-      Alert.alert('Permission', 'Allow photo library access to attach a document.');
+      Alert.alert(t('common.permission'), t('security.allowPhotoLibrary'));
       return;
     }
     const res = await ImagePicker.launchImageLibraryAsync({
@@ -365,9 +367,9 @@ export default function SecurityScreen({ variant }: { variant: SecurityScreenVar
       await securityService.setVerificationDocument(dataUrl);
       await loadSummary();
       setShowDocPanel(false);
-      Alert.alert('Uploaded', 'Your verification document was saved.');
+      Alert.alert(t('security.uploaded'), t('security.documentSaved'));
     } catch (e) {
-      Alert.alert('Upload failed', errMsg(e));
+      Alert.alert(t('security.uploadFailed'), errMsg(e));
     } finally {
       setDocBusy(false);
     }
@@ -376,16 +378,22 @@ export default function SecurityScreen({ variant }: { variant: SecurityScreenVar
   const tierLabel = summary?.securityTier ?? 'LOW';
   const tierHint =
     tierLabel === 'HIGH'
-      ? 'Password, transfer PIN, and verification document are set.'
+      ? t('security.tierExplanationHigh')
       : tierLabel === 'MEDIUM'
-        ? 'Add PIN or a verification document (with password) to reach High.'
-        : 'Add a transfer PIN and/or verification document to raise your tier.';
+        ? t('security.tierExplanationMedium')
+        : t('security.tierExplanationLow');
+  const tierLabelText =
+    tierLabel === 'HIGH'
+      ? t('security.tierHigh')
+      : tierLabel === 'MEDIUM'
+        ? t('security.tierMedium')
+        : t('security.tierLow');
 
   if (gateBootstrapping) {
     return (
       <View style={[styles.root, styles.bootstrap, { backgroundColor: colors.background }]}>
         <ActivityIndicator size="large" color={colors.primary} />
-        <Text style={[styles.bootstrapHint, { color: colors.textSecondary }]}>Preparing secure access…</Text>
+        <Text style={[styles.bootstrapHint, { color: colors.textSecondary }]}>{t('appNavigation.preparingScreen')}</Text>
       </View>
     );
   }
@@ -398,25 +406,25 @@ export default function SecurityScreen({ variant }: { variant: SecurityScreenVar
     >
       {phase === 'bio' && !skippedBiometrics && (
         <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          <Text style={[styles.title, { color: colors.text }]}>Security</Text>
+          <Text style={[styles.title, { color: colors.text }]}>{t('security.title')}</Text>
           {bioBusy ? (
             <>
               <Text style={[styles.p, { color: colors.textSecondary }]}>
-                Follow the Face ID or fingerprint prompt on your device.
+                {t('security.passwordBody')}
               </Text>
               <ActivityIndicator style={{ marginTop: 16 }} size="large" color={colors.primary} />
             </>
           ) : (
             <>
               <Text style={[styles.p, { color: colors.textSecondary }]}>
-                We could not verify with Face ID or fingerprint. You can try again or go back.
+                {t('security.biometricFailed')}
               </Text>
               <TouchableOpacity
                 style={[styles.primary, { backgroundColor: colors.primary, marginTop: 8 }]}
                 onPress={() => void performBiometricUnlock()}
                 activeOpacity={0.88}
               >
-                <Text style={styles.primaryText}>Try Face ID / fingerprint again</Text>
+                <Text style={styles.primaryText}>{t('common.tryAgain')}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[
@@ -427,7 +435,7 @@ export default function SecurityScreen({ variant }: { variant: SecurityScreenVar
                 activeOpacity={0.85}
               >
                 <Ionicons name="close-outline" size={20} color={colors.text} />
-                <Text style={[styles.gateFooterBtnText, { color: colors.text }]}>Close</Text>
+                <Text style={[styles.gateFooterBtnText, { color: colors.text }]}>{t('common.close')}</Text>
               </TouchableOpacity>
             </>
           )}
@@ -436,17 +444,17 @@ export default function SecurityScreen({ variant }: { variant: SecurityScreenVar
 
       {phase === 'credential' && summary && (
         <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          <Text style={[styles.title, { color: colors.text }]}>Confirm it’s you</Text>
+          <Text style={[styles.title, { color: colors.text }]}>{t('security.chooseMethodTitle')}</Text>
           <Text style={[styles.p, { color: colors.textSecondary, marginBottom: 4 }]}>
             {skippedBiometrics
               ? summary.hasPassword && summary.hasTransferPin && credentialMode === null
-                ? 'This device has no Face ID or fingerprint (or none is set up). Choose your account password or your 8-digit transfer PIN.'
-                : 'This device has no Face ID or fingerprint (or none is set up). Enter your account password or transfer PIN below.'
+                ? t('security.chooseMethodBody')
+                : t('security.chooseMethodBody')
               : summary.hasPassword && summary.hasTransferPin && credentialMode === null
-                ? 'Choose how to confirm.'
+                ? t('security.chooseMethodBody')
                 : summary.hasTransferPin && credentialMode === 'pin'
-                  ? 'Enter your 8-digit transfer PIN to open Security settings.'
-                  : 'Enter your account password to open Security settings.'}
+                  ? t('security.pinBody')
+                  : t('security.passwordBody')}
           </Text>
 
           {skippedBiometrics && summary.hasPassword && summary.hasTransferPin && credentialMode === null && (
@@ -463,9 +471,9 @@ export default function SecurityScreen({ variant }: { variant: SecurityScreenVar
                 activeOpacity={0.85}
               >
                 <Ionicons name="key-outline" size={28} color={colors.primary} />
-                <Text style={[styles.methodChoiceTitle, { color: colors.text }]}>Account password</Text>
+                <Text style={[styles.methodChoiceTitle, { color: colors.text }]}>{t('security.passwordTitle')}</Text>
                 <Text style={[styles.methodChoiceSub, { color: colors.textSecondary }]}>
-                  Use the password you sign in with
+                  {t('security.passwordBody')}
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity
@@ -481,8 +489,8 @@ export default function SecurityScreen({ variant }: { variant: SecurityScreenVar
                 activeOpacity={0.85}
               >
                 <Ionicons name="keypad-outline" size={28} color={colors.primary} />
-                <Text style={[styles.methodChoiceTitle, { color: colors.text }]}>Transfer PIN</Text>
-                <Text style={[styles.methodChoiceSub, { color: colors.textSecondary }]}>8 digits for coin sends</Text>
+                <Text style={[styles.methodChoiceTitle, { color: colors.text }]}>{t('security.setTransferPin')}</Text>
+                <Text style={[styles.methodChoiceSub, { color: colors.textSecondary }]}>{t('security.pinBody')}</Text>
               </TouchableOpacity>
             </View>
           )}
@@ -505,16 +513,16 @@ export default function SecurityScreen({ variant }: { variant: SecurityScreenVar
                   activeOpacity={0.85}
                 >
                   <Ionicons name="swap-horizontal-outline" size={18} color={colors.primary} />
-                  <Text style={[styles.methodChangeBtnText, { color: colors.primary }]}>Change method</Text>
+                  <Text style={[styles.methodChangeBtnText, { color: colors.primary }]}>{t('security.chooseMethodTitle')}</Text>
                 </TouchableOpacity>
               )}
-              <Text style={[styles.label, { color: colors.textSecondary }]}>Account password</Text>
+              <Text style={[styles.label, { color: colors.textSecondary }]}>{t('security.passwordTitle')}</Text>
               <TextInput
                 style={[styles.input, { color: colors.text, borderColor: colors.border, backgroundColor: colors.background }]}
                 secureTextEntry
                 value={password}
                 onChangeText={setPassword}
-                placeholder="••••••••"
+                placeholder={t('security.pinPlaceholder')}
                 placeholderTextColor={colors.textTertiary}
               />
               {!skippedBiometrics && summary.hasTransferPin && (
@@ -527,7 +535,7 @@ export default function SecurityScreen({ variant }: { variant: SecurityScreenVar
                   }}
                   hitSlop={{ top: 8, bottom: 8, left: 12, right: 12 }}
                 >
-                  <Text style={{ color: colors.primary, fontWeight: '600', fontSize: 13 }}>Use transfer PIN instead</Text>
+                  <Text style={{ color: colors.primary, fontWeight: '600', fontSize: 13 }}>{t('security.setTransferPin')}</Text>
                 </TouchableOpacity>
               )}
             </>
@@ -551,7 +559,7 @@ export default function SecurityScreen({ variant }: { variant: SecurityScreenVar
                   activeOpacity={0.85}
                 >
                   <Ionicons name="swap-horizontal-outline" size={18} color={colors.primary} />
-                  <Text style={[styles.methodChangeBtnText, { color: colors.primary }]}>Change method</Text>
+                  <Text style={[styles.methodChangeBtnText, { color: colors.primary }]}>{t('security.chooseMethodTitle')}</Text>
                 </TouchableOpacity>
               )}
               {!skippedBiometrics &&
@@ -570,18 +578,18 @@ export default function SecurityScreen({ variant }: { variant: SecurityScreenVar
                     }}
                     activeOpacity={0.85}
                     accessibilityRole="button"
-                    accessibilityLabel="Complete with account password instead of transfer PIN"
+                    accessibilityLabel={t('security.useAccountPasswordInstead')}
                   >
                     <Ionicons name="key-outline" size={16} color={colors.primary} />
-                    <Text style={[styles.altMethodPillText, { color: colors.primary }]}>Complete with password instead</Text>
+                    <Text style={[styles.altMethodPillText, { color: colors.primary }]}>{t('security.useAccountPasswordInstead')}</Text>
                   </TouchableOpacity>
                 ) : (
                   <View style={[styles.noPasswordHint, { backgroundColor: colors.surfaceVariant ?? colors.card, borderColor: colors.border }]}>
                     <Ionicons name="information-circle-outline" size={18} color={colors.textSecondary} />
-                    <Text style={[styles.noPasswordHintText, { color: colors.textSecondary }]}>No password exists</Text>
+                    <Text style={[styles.noPasswordHintText, { color: colors.textSecondary }]}>{t('security.noPinOrPassword')}</Text>
                   </View>
                 ))}
-              <Text style={[styles.label, { color: colors.textSecondary }]}>Transfer PIN (8 digits)</Text>
+              <Text style={[styles.label, { color: colors.textSecondary }]}>{t('security.eightDigitPin')}</Text>
               <EightDigitPinInput
                 value={gatePin}
                 onChange={setGatePin}
@@ -600,7 +608,7 @@ export default function SecurityScreen({ variant }: { variant: SecurityScreenVar
               onPress={() => void submitCredential()}
               disabled={credBusy}
             >
-              {credBusy ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryText}>Unlock</Text>}
+              {credBusy ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryText}>{t('common.continue')}</Text>}
             </TouchableOpacity>
           )}
           <TouchableOpacity
@@ -623,7 +631,7 @@ export default function SecurityScreen({ variant }: { variant: SecurityScreenVar
           >
             <Ionicons name={skippedBiometrics ? 'close-outline' : 'arrow-back-outline'} size={20} color={colors.text} />
             <Text style={[styles.gateFooterBtnText, { color: colors.text }]}>
-              {skippedBiometrics ? 'Close' : 'Back'}
+              {skippedBiometrics ? t('common.close') : t('common.back')}
             </Text>
           </TouchableOpacity>
         </View>
@@ -632,10 +640,10 @@ export default function SecurityScreen({ variant }: { variant: SecurityScreenVar
       {phase === 'content' && summary && (
         <>
           <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
-            <Text style={[styles.title, { color: colors.text }]}>Security level</Text>
+            <Text style={[styles.title, { color: colors.text }]}>{t('security.securityTier')}</Text>
             <View style={styles.tierRow}>
               <View style={[styles.tierBadge, { backgroundColor: colors.surfaceVariant }]}>
-                <Text style={[styles.tierText, { color: colors.primary }]}>{tierLabel}</Text>
+                <Text style={[styles.tierText, { color: colors.primary }]}>{tierLabelText}</Text>
               </View>
             </View>
             <Text style={[styles.p, { color: colors.textSecondary }]}>{tierHint}</Text>
@@ -670,16 +678,15 @@ export default function SecurityScreen({ variant }: { variant: SecurityScreenVar
               }}
             >
               <Ionicons name="lock-closed-outline" size={18} color={colors.text} />
-              <Text style={[styles.outlineBtnText, { color: colors.text }]}>Lock Security</Text>
+              <Text style={[styles.outlineBtnText, { color: colors.text }]}>{t('security.title')}</Text>
             </TouchableOpacity>
           </View>
 
           {summary.hasPassword ? (
             <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
-              <Text style={[styles.title, { color: colors.text }]}>Account password</Text>
+              <Text style={[styles.title, { color: colors.text }]}>{t('security.passwordTitle')}</Text>
               <Text style={[styles.p, { color: colors.textSecondary }]}>
-                You already unlocked this screen. To change your password, use the fields below — you do not need to
-                enter your current password again here.
+                {t('security.passwordBody')}
               </Text>
               {!showPasswordChange ? (
                 <TouchableOpacity
@@ -687,12 +694,12 @@ export default function SecurityScreen({ variant }: { variant: SecurityScreenVar
                   onPress={() => setShowPasswordChange(true)}
                   activeOpacity={0.88}
                 >
-                  <Text style={[styles.sectionCtaText, { color: colors.text, flex: 1 }]}>Change password</Text>
+                  <Text style={[styles.sectionCtaText, { color: colors.text, flex: 1 }]}>{t('security.changePassword')}</Text>
                   <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
                 </TouchableOpacity>
               ) : (
                 <>
-                  <Text style={[styles.label, { color: colors.textSecondary }]}>New password (min 8)</Text>
+                  <Text style={[styles.label, { color: colors.textSecondary }]}>{t('security.newPassword')}</Text>
                   <TextInput
                     style={[
                       styles.input,
@@ -701,10 +708,10 @@ export default function SecurityScreen({ variant }: { variant: SecurityScreenVar
                     secureTextEntry
                     value={nextPwd}
                     onChangeText={setNextPwd}
-                    placeholder="New"
+                    placeholder={t('security.newPlaceholder')}
                     placeholderTextColor={colors.textTertiary}
                   />
-                  <Text style={[styles.label, { color: colors.textSecondary }]}>Confirm new password</Text>
+                  <Text style={[styles.label, { color: colors.textSecondary }]}>{t('security.confirmNewPassword')}</Text>
                   <TextInput
                     style={[
                       styles.input,
@@ -713,7 +720,7 @@ export default function SecurityScreen({ variant }: { variant: SecurityScreenVar
                     secureTextEntry
                     value={nextPwd2}
                     onChangeText={setNextPwd2}
-                    placeholder="Repeat"
+                    placeholder={t('security.repeatPlaceholder')}
                     placeholderTextColor={colors.textTertiary}
                   />
                   <TouchableOpacity
@@ -724,7 +731,7 @@ export default function SecurityScreen({ variant }: { variant: SecurityScreenVar
                     {pwdSaving ? (
                       <ActivityIndicator color="#fff" />
                     ) : (
-                      <Text style={styles.primaryText}>Update password</Text>
+                      <Text style={styles.primaryText}>{t('security.changePassword')}</Text>
                     )}
                   </TouchableOpacity>
                   <TouchableOpacity
@@ -735,24 +742,24 @@ export default function SecurityScreen({ variant }: { variant: SecurityScreenVar
                       setNextPwd2('');
                     }}
                   >
-                    <Text style={{ color: colors.textSecondary, fontWeight: '600' }}>Cancel</Text>
+                    <Text style={{ color: colors.textSecondary, fontWeight: '600' }}>{t('common.cancel')}</Text>
                   </TouchableOpacity>
                 </>
               )}
             </View>
           ) : (
             <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
-              <Text style={[styles.title, { color: colors.text }]}>Account password</Text>
+              <Text style={[styles.title, { color: colors.text }]}>{t('security.passwordTitle')}</Text>
               <Text style={[styles.p, { color: colors.textSecondary }]}>
-                You signed in without a password. Use “Forgot password” on the sign-in screen if you want to add one.
+                {t('security.noPinOrPassword')}
               </Text>
             </View>
           )}
 
           <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
-            <Text style={[styles.title, { color: colors.text }]}>Transfer PIN (optional)</Text>
+            <Text style={[styles.title, { color: colors.text }]}>{t('security.setTransferPin')}</Text>
             <Text style={[styles.p, { color: colors.textSecondary }]}>
-              Exactly 8 digits. If set, you’ll enter it when sending coins (after biometrics). You can remove it anytime.
+              {t('security.pinBody')}
             </Text>
             {!showPinChange ? (
               <TouchableOpacity
@@ -761,15 +768,15 @@ export default function SecurityScreen({ variant }: { variant: SecurityScreenVar
                 activeOpacity={0.88}
               >
                 <Text style={[styles.sectionCtaText, { color: colors.text, flex: 1 }]}>
-                  {summary.hasTransferPin ? 'Change transfer PIN' : 'Set transfer PIN'}
+                  {summary.hasTransferPin ? t('security.updateTransferPin') : t('security.setTransferPin')}
                 </Text>
                 <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
               </TouchableOpacity>
             ) : (
               <>
-                <Text style={[styles.label, { color: colors.textSecondary }]}>New PIN</Text>
+                <Text style={[styles.label, { color: colors.textSecondary }]}>{t('security.newPlaceholder')}</Text>
                 <EightDigitPinInput value={newPin} onChange={setNewPin} colors={colors} disabled={pinSaving} />
-                <Text style={[styles.label, { color: colors.textSecondary }]}>Confirm new PIN</Text>
+                <Text style={[styles.label, { color: colors.textSecondary }]}>{t('security.repeatPlaceholder')}</Text>
                 <EightDigitPinInput value={confirmPin} onChange={setConfirmPin} colors={colors} disabled={pinSaving} />
                 <TouchableOpacity
                   style={[styles.primary, { backgroundColor: colors.primary, marginTop: 12 }]}
@@ -779,12 +786,12 @@ export default function SecurityScreen({ variant }: { variant: SecurityScreenVar
                   {pinSaving ? (
                     <ActivityIndicator color="#fff" />
                   ) : (
-                    <Text style={styles.primaryText}>Save transfer PIN</Text>
+                    <Text style={styles.primaryText}>{t('common.save')}</Text>
                   )}
                 </TouchableOpacity>
                 {summary.hasTransferPin ? (
                   <TouchableOpacity style={{ marginTop: 14 }} onPress={() => removePin()} disabled={pinSaving}>
-                    <Text style={{ color: colors.danger, fontWeight: '700', textAlign: 'center' }}>Remove transfer PIN</Text>
+                    <Text style={{ color: colors.danger, fontWeight: '700', textAlign: 'center' }}>{t('security.removeTransferPin')}</Text>
                   </TouchableOpacity>
                 ) : null}
                 <TouchableOpacity
@@ -795,17 +802,17 @@ export default function SecurityScreen({ variant }: { variant: SecurityScreenVar
                     setConfirmPin('');
                   }}
                 >
-                  <Text style={{ color: colors.textSecondary, fontWeight: '600' }}>Cancel</Text>
+                  <Text style={{ color: colors.textSecondary, fontWeight: '600' }}>{t('common.cancel')}</Text>
                 </TouchableOpacity>
               </>
             )}
           </View>
 
           <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
-            <Text style={[styles.title, { color: colors.text }]}>Verification document</Text>
+            <Text style={[styles.title, { color: colors.text }]}>{t('security.documentSaved')}</Text>
             {summary.hasVerificationDocument && !showDocPanel ? (
               <>
-                <Text style={{ color: colors.success, fontWeight: '600', marginBottom: 10 }}>Document on file</Text>
+                <Text style={{ color: colors.success, fontWeight: '600', marginBottom: 10 }}>{t('security.documentSaved')}</Text>
                 <TouchableOpacity
                   style={[styles.sectionCta, { borderColor: colors.primary, backgroundColor: colors.surfaceVariant ?? colors.card }]}
                   onPress={() => setShowDocPanel(true)}
@@ -813,7 +820,7 @@ export default function SecurityScreen({ variant }: { variant: SecurityScreenVar
                 >
                   <View style={styles.sectionCtaLeading}>
                     <Ionicons name="create-outline" size={20} color={colors.primary} />
-                    <Text style={[styles.sectionCtaText, { color: colors.primary, flex: 1 }]}>Update document</Text>
+                    <Text style={[styles.sectionCtaText, { color: colors.primary, flex: 1 }]}>{t('common.update')}</Text>
                   </View>
                   <Ionicons name="chevron-forward" size={20} color={colors.primary} />
                 </TouchableOpacity>
@@ -826,14 +833,14 @@ export default function SecurityScreen({ variant }: { variant: SecurityScreenVar
               >
                 <View style={styles.sectionCtaLeading}>
                   <Ionicons name="document-attach-outline" size={20} color={colors.primary} />
-                  <Text style={[styles.sectionCtaText, { color: colors.text, flex: 1 }]}>Add verification document</Text>
+                  <Text style={[styles.sectionCtaText, { color: colors.text, flex: 1 }]}>{t('common.add')}</Text>
                 </View>
                 <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
               </TouchableOpacity>
             ) : (
               <>
                 <Text style={[styles.p, { color: colors.textSecondary }]}>
-                  Upload a photo of an ID or other document for account verification (stored on the server).
+                  {t('security.allowPhotoLibrary')}
                 </Text>
                 <TouchableOpacity
                   style={[styles.outlineBtn, { borderColor: colors.border }]}
@@ -845,7 +852,7 @@ export default function SecurityScreen({ variant }: { variant: SecurityScreenVar
                   ) : (
                     <>
                       <Ionicons name="image-outline" size={20} color={colors.primary} />
-                      <Text style={[styles.outlineBtnText, { color: colors.primary }]}>Choose document image</Text>
+                      <Text style={[styles.outlineBtnText, { color: colors.primary }]}>{t('common.select')}</Text>
                     </>
                   )}
                 </TouchableOpacity>
@@ -853,7 +860,7 @@ export default function SecurityScreen({ variant }: { variant: SecurityScreenVar
                   style={{ marginTop: 12, alignSelf: 'center', paddingVertical: 8, paddingHorizontal: 12 }}
                   onPress={() => setShowDocPanel(false)}
                 >
-                  <Text style={{ color: colors.textSecondary, fontWeight: '600' }}>Cancel</Text>
+                  <Text style={{ color: colors.textSecondary, fontWeight: '600' }}>{t('common.cancel')}</Text>
                 </TouchableOpacity>
               </>
             )}
@@ -861,7 +868,7 @@ export default function SecurityScreen({ variant }: { variant: SecurityScreenVar
 
           <TouchableOpacity style={[styles.outlineBtn, { borderColor: colors.border, marginBottom: 8 }]} onPress={() => router.push(supportPath as never)}>
             <Ionicons name="help-circle-outline" size={20} color={colors.text} />
-            <Text style={[styles.outlineBtnText, { color: colors.text }]}>Help & support</Text>
+            <Text style={[styles.outlineBtnText, { color: colors.text }]}>{t('support.title')}</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -882,7 +889,7 @@ export default function SecurityScreen({ variant }: { variant: SecurityScreenVar
             activeOpacity={0.85}
           >
             <Ionicons name="close-outline" size={22} color={colors.text} />
-            <Text style={[styles.gateFooterBtnText, { color: colors.text }]}>Close</Text>
+            <Text style={[styles.gateFooterBtnText, { color: colors.text }]}>{t('common.close')}</Text>
           </TouchableOpacity>
         </>
       )}

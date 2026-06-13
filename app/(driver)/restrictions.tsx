@@ -8,6 +8,7 @@ import {
   TouchableOpacity,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import axios from 'axios';
@@ -27,6 +28,7 @@ interface Restriction {
 export default function DriverRestrictionsScreen() {
   const router = useRouter();
   const { colors } = useTheme();
+  const { t } = useTranslation();
   const [restrictions, setRestrictions] = useState<Restriction[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -43,7 +45,7 @@ export default function DriverRestrictionsScreen() {
       });
       setRestrictions(response.data);
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Failed to load restrictions');
+      setError(err.response?.data?.message || t('restrictions.failedLoad'));
     } finally { setLoading(false); }
   };
 
@@ -66,27 +68,27 @@ export default function DriverRestrictionsScreen() {
         {error && (
           <View style={s.errorBox}>
             <Text style={s.errorText}>{error}</Text>
-            <TouchableOpacity onPress={loadRestrictions}><Text style={s.retryText}>Retry</Text></TouchableOpacity>
+            <TouchableOpacity onPress={loadRestrictions}><Text style={s.retryText}>{t('common.retry')}</Text></TouchableOpacity>
           </View>
         )}
         {restrictions.length === 0 && !error && (
           <View style={s.emptyBox}>
             <Ionicons name="checkmark-circle" size={48} color="#34C759" />
-            <Text style={[s.emptyTitle, { color: colors.text }]}>No Active Restrictions</Text>
-            <Text style={[s.emptyText, { color: colors.textSecondary }]}>Your account is in good standing.</Text>
+            <Text style={[s.emptyTitle, { color: colors.text }]}>{t('restrictions.noActive')}</Text>
+            <Text style={[s.emptyText, { color: colors.textSecondary }]}>{t('restrictions.goodStanding')}</Text>
           </View>
         )}
         {restrictions.map((r) => (
           <View key={r.id} style={[s.card, { backgroundColor: colors.card }]}>
             <View style={[s.typeBadge, { backgroundColor: getTypeColor(r.type) + '20' }]}>
-              <Text style={[s.typeText, { color: getTypeColor(r.type) }]}>{r.type}</Text>
+              <Text style={[s.typeText, { color: getTypeColor(r.type) }]}>{t(`restrictions.${r.type}`)}</Text>
             </View>
-            <Text style={[s.reasonLabel, { color: colors.textSecondary }]}>Reason:</Text>
+            <Text style={[s.reasonLabel, { color: colors.textSecondary }]}>{t('restrictions.reason')}</Text>
             <Text style={[s.reasonText, { color: colors.text }]}>{r.reason}</Text>
             <View style={s.dateRow}>
-              <Text style={[s.dateLabel, { color: colors.textSecondary }]}>Since: {formatDate(r.startDate)}</Text>
-              {r.endDate && <Text style={[s.dateLabel, { color: colors.textSecondary }]}>Until: {formatDate(r.endDate)}</Text>}
-              {!r.endDate && r.type === 'BLOCK' && <Text style={[s.dateLabel, { color: '#dc2626' }]}>Permanent</Text>}
+              <Text style={[s.dateLabel, { color: colors.textSecondary }]}>{t('restrictions.since')}{formatDate(r.startDate)}</Text>
+              {r.endDate && <Text style={[s.dateLabel, { color: colors.textSecondary }]}>{t('restrictions.until')}{formatDate(r.endDate)}</Text>}
+              {!r.endDate && r.type === 'BLOCK' && <Text style={[s.dateLabel, { color: '#dc2626' }]}>{t('restrictions.permanent')}</Text>}
             </View>
           </View>
         ))}

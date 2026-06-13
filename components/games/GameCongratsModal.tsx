@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   Image,
 } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -38,6 +39,7 @@ function formatAnnouncementDate(iso: string | null | undefined): string {
 }
 
 export function GameCongratsModal() {
+  const { t } = useTranslation();
   const { colors } = useTheme();
   const [data, setData] = useState<Congrats | null>(null);
 
@@ -82,28 +84,28 @@ export function GameCongratsModal() {
               <Ionicons name="trophy" size={56} color="#fff" />
             </View>
           )}
-          <Text style={[styles.title, { color: colors.text }]}>Congratulations!</Text>
+          <Text style={[styles.title, { color: colors.text }]}>{t('gameCongrats.title')}</Text>
           <Text style={[styles.sub, { color: colors.textSecondary }]}>
-            You won {data.prizeLabel} in {data.gameName}.
+            {t('gameCongrats.bodyPrefix')}{data.prizeLabel}{t('gameCongrats.bodyMiddle')}{data.gameName}{t('gameCongrats.bodyEnd')}
           </Text>
           {announcedOn ? (
             <View style={[styles.dateRow, { backgroundColor: colors.primary + '15' }]}>
               <Ionicons name="calendar-outline" size={16} color={colors.primary} />
               <Text style={[styles.dateText, { color: colors.text }]}>
-                Announced on <Text style={{ fontWeight: '800' }}>{announcedOn}</Text>
+                {t('gameCongrats.announcedOn')}<Text style={{ fontWeight: '800' }}>{announcedOn}</Text>
               </Text>
             </View>
           ) : null}
           {data.prizeType === 'PHYSICAL' && (
             <Text style={[styles.hint, { color: colors.textSecondary }]}>
-              Our team will contact you to arrange your prize.
+              {t('gameCongrats.teamWillContact')}
             </Text>
           )}
           <TouchableOpacity
             style={[styles.btn, { backgroundColor: colors.primary }]}
             onPress={() => void dismiss()}
           >
-            <Text style={styles.btnText}>Awesome!</Text>
+            <Text style={styles.btnText}>{t('gameCongrats.awesome')}</Text>
           </TouchableOpacity>
         </View>
       </View>

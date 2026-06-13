@@ -8,6 +8,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import axios from 'axios';
+import { useTranslation } from 'react-i18next';
 import { orderService, Order } from '../../services/api/order.service';
 import { clearPushToken } from '../../services/api/notification.service';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -31,18 +32,19 @@ function safePrice(v: unknown): string {
   return Number.isFinite(n) ? n.toFixed(2) : '—';
 }
 
-const STATUS_META: Record<string, { icon: string; color: string; bg: string; label: string }> = {
-  PENDING_CUSTOMER_APPROVAL: { icon: 'hourglass-outline', color: '#ea580c', bg: '#ffedd5', label: 'Awaiting customer' },
-  DRIVER_ASSIGNED: { icon: 'person-outline', color: '#2563eb', bg: '#dbeafe', label: 'Assigned' },
-  DRIVER_ARRIVED:  { icon: 'flag-outline',   color: '#7c3aed', bg: '#ede9fe', label: 'Arrived' },
-  PICKED_UP:       { icon: 'cube-outline',   color: '#ea580c', bg: '#ffedd5', label: 'Picked Up' },
-  DELIVERING:      { icon: 'bicycle-outline', color: '#4f46e5', bg: '#e0e7ff', label: 'Delivering' },
+const STATUS_META: Record<string, { icon: string; color: string; bg: string; labelKey: string }> = {
+  PENDING_CUSTOMER_APPROVAL: { icon: 'hourglass-outline', color: '#ea580c', bg: '#ffedd5', labelKey: 'driverHome.status.AwaitingCustomer' },
+  DRIVER_ASSIGNED: { icon: 'person-outline', color: '#2563eb', bg: '#dbeafe', labelKey: 'driverHome.status.Assigned' },
+  DRIVER_ARRIVED:  { icon: 'flag-outline',   color: '#7c3aed', bg: '#ede9fe', labelKey: 'driverHome.status.Arrived' },
+  PICKED_UP:       { icon: 'cube-outline',   color: '#ea580c', bg: '#ffedd5', labelKey: 'driverHome.status.PickedUp' },
+  DELIVERING:      { icon: 'bicycle-outline', color: '#4f46e5', bg: '#e0e7ff', labelKey: 'driverHome.status.Delivering' },
 };
 
 export default function DriverHome() {
   const router = useRouter();
   const { push } = useAppNavigation();
   const { colors, isDark } = useTheme();
+  const { t } = useTranslation();
   const [driver, setDriver] = useState<any>(null);
   const [activeOrders, setActiveOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
@@ -118,8 +120,8 @@ export default function DriverHome() {
               <Ionicons name="warning" size={22} color="#ca8a04" />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={[s.alertTitle, { color: colors.text }]}>Complete Verification</Text>
-              <Text style={[s.alertSub, { color: colors.textSecondary }]}>Upload your documents to start delivering</Text>
+              <Text style={[s.alertTitle, { color: colors.text }]}>{t('driverHome.completeVerification')}</Text>
+              <Text style={[s.alertSub, { color: colors.textSecondary }]}>{t('driverHome.completeVerificationBody')}</Text>
             </View>
             <Ionicons name="chevron-forward" size={18} color="#ca8a04" />
           </TouchableOpacity>
@@ -130,8 +132,8 @@ export default function DriverHome() {
               <Ionicons name="time" size={22} color="#ca8a04" />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={[s.alertTitle, { color: colors.text }]}>Under Review</Text>
-              <Text style={[s.alertSub, { color: colors.textSecondary }]}>Your documents are being reviewed</Text>
+              <Text style={[s.alertTitle, { color: colors.text }]}>{t('driverHome.underReview')}</Text>
+              <Text style={[s.alertSub, { color: colors.textSecondary }]}>{t('driverHome.underReviewBody')}</Text>
             </View>
           </View>
         )}
@@ -142,8 +144,8 @@ export default function DriverHome() {
               <Ionicons name="alert-circle" size={22} color="#dc2626" />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={[s.alertTitle, { color: '#dc2626' }]}>Account {driver.status.toLowerCase()}</Text>
-              <Text style={[s.alertSub, { color: colors.textSecondary }]}>Tap to see the reason</Text>
+              <Text style={[s.alertTitle, { color: '#dc2626' }]}>{t('driverHome.account')} {driver.status.toLowerCase()}</Text>
+              <Text style={[s.alertSub, { color: colors.textSecondary }]}>{t('driverHome.tapToSeeReason')}</Text>
             </View>
             <Ionicons name="chevron-forward" size={18} color="#dc2626" />
           </TouchableOpacity>
@@ -168,7 +170,7 @@ export default function DriverHome() {
                 <View style={s.heroTileBody}>
                   <View style={s.heroTileTitleRow}>
                     <Text style={[s.heroTileTitle, { color: colors.text }]} numberOfLines={1}>
-                      Available
+                      {t('driverHome.available')}
                     </Text>
                     <View
                       style={[
@@ -178,7 +180,7 @@ export default function DriverHome() {
                     />
                   </View>
                   <Text style={[s.heroTileSub, { color: colors.textSecondary }]} numberOfLines={1}>
-                    Find orders
+                    {t('driverHome.findOrders')}
                   </Text>
                 </View>
                 <Ionicons name="chevron-forward" size={20} color={colors.textTertiary} />
@@ -193,10 +195,10 @@ export default function DriverHome() {
                 </View>
                 <View style={s.heroTileBody}>
                   <Text style={[s.heroTileTitle, { color: colors.text }]} numberOfLines={1}>
-                    My Orders
+                    {t('driverHome.myOrders')}
                   </Text>
                   <Text style={[s.heroTileSub, { color: colors.textSecondary }]} numberOfLines={1}>
-                    Track deliveries
+                    {t('driverHome.trackDeliveries')}
                   </Text>
                 </View>
                 <Ionicons name="chevron-forward" size={20} color={colors.textTertiary} />
@@ -207,7 +209,7 @@ export default function DriverHome() {
 
         {/* Quick Actions — same 2×2 pattern as customer home (above Active Deliveries) */}
         <View style={s.section}>
-          <Text style={[s.sectionTitle, { color: colors.text }]}>Quick Actions</Text>
+          <Text style={[s.sectionTitle, { color: colors.text }]}>{t('driverHome.quickActions')}</Text>
           <View style={s.actionsGrid}>
             <TouchableOpacity
               style={[s.actionCard, { backgroundColor: colors.card }]}
@@ -217,7 +219,7 @@ export default function DriverHome() {
               <View style={[s.actionIconWrap, { backgroundColor: isDark ? '#3b1f5c' : '#ede9fe' }]}>
                 <Ionicons name="calendar-outline" size={22} color="#7c3aed" />
               </View>
-              <Text style={[s.actionLabel, { color: colors.text }]}>Availability</Text>
+              <Text style={[s.actionLabel, { color: colors.text }]}>{t('driverHome.availability')}</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[s.actionCard, { backgroundColor: colors.card }]}
@@ -227,7 +229,7 @@ export default function DriverHome() {
               <View style={[s.actionIconWrap, { backgroundColor: isDark ? '#052e16' : '#dcfce7' }]}>
                 <Ionicons name="location-outline" size={22} color="#16a34a" />
               </View>
-              <Text style={[s.actionLabel, { color: colors.text }]}>Addresses</Text>
+              <Text style={[s.actionLabel, { color: colors.text }]}>{t('driverHome.addresses')}</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[s.actionCard, { backgroundColor: colors.card }]}
@@ -237,7 +239,7 @@ export default function DriverHome() {
               <View style={[s.actionIconWrap, { backgroundColor: isDark ? '#422006' : '#fef9c3' }]}>
                 <Ionicons name="cash-outline" size={22} color="#ca8a04" />
               </View>
-              <Text style={[s.actionLabel, { color: colors.text }]}>Earnings</Text>
+              <Text style={[s.actionLabel, { color: colors.text }]}>{t('driverHome.earnings')}</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[s.actionCard, { backgroundColor: colors.card }]}
@@ -247,7 +249,7 @@ export default function DriverHome() {
               <View style={[s.actionIconWrap, { backgroundColor: isDark ? '#1e293b' : '#f1f5f9' }]}>
                 <Ionicons name="settings-outline" size={22} color={colors.primary} />
               </View>
-              <Text style={[s.actionLabel, { color: colors.text }]}>Settings</Text>
+              <Text style={[s.actionLabel, { color: colors.text }]}>{t('driverHome.settings')}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -255,10 +257,10 @@ export default function DriverHome() {
         {/* Active Deliveries — after Quick Actions; empty state matches customer home */}
         <View style={s.section}>
           <View style={s.sectionHeader}>
-            <Text style={[s.sectionTitle, { color: colors.text }]}>Active Deliveries</Text>
+            <Text style={[s.sectionTitle, { color: colors.text }]}>{t('driverHome.activeDeliveries')}</Text>
             {activeOrders.length > 0 && (
               <TouchableOpacity onPress={() => push('/(driver)/my-orders')}>
-                <Text style={[s.seeAll, { color: colors.primary }]}>See All</Text>
+                <Text style={[s.seeAll, { color: colors.primary }]}>{t('driverHome.seeAll')}</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -266,8 +268,8 @@ export default function DriverHome() {
           {activeOrders.length === 0 ? (
             <View style={[s.emptyCard, { backgroundColor: colors.card }]}>
               <Ionicons name="cube-outline" size={40} color={colors.textTertiary} />
-              <Text style={[s.emptyText, { color: colors.textSecondary }]}>No active orders</Text>
-              <Text style={[s.emptySub, { color: colors.textTertiary }]}>Create an order to get started</Text>
+              <Text style={[s.emptyText, { color: colors.textSecondary }]}>{t('driverHome.noActiveOrders')}</Text>
+              <Text style={[s.emptySub, { color: colors.textTertiary }]}>{t('customerHome.createOrderHint')}</Text>
             </View>
           ) : (
             activeOrders.slice(0, 3).map((order) => {
@@ -283,9 +285,9 @@ export default function DriverHome() {
                   <View style={s.orderTop}>
                     <View style={[s.orderBadge, { backgroundColor: meta.bg }]}>
                       <Ionicons name={meta.icon as any} size={14} color={meta.color} />
-                      <Text style={[s.orderBadgeText, { color: meta.color }]}>{meta.label}</Text>
+                      <Text style={[s.orderBadgeText, { color: meta.color }]}>{t(meta.labelKey)}</Text>
                     </View>
-                    <Text style={[s.orderPrice, { color: colors.text }]}>{safePrice(order.price)} TND</Text>
+                    <Text style={[s.orderPrice, { color: colors.text }]}>{safePrice(order.price)} {t('common.currencyTND')}</Text>
                   </View>
                   <View style={s.orderRoute}>
                     <View style={s.routeIcons}>
@@ -295,10 +297,10 @@ export default function DriverHome() {
                     </View>
                     <View style={{ flex: 1 }}>
                       <Text style={[s.routeAddr, { color: colors.textSecondary }]} numberOfLines={1}>
-                        {order.pickupAddress?.street || order.pickupAddress?.delegation?.nameDelegation || 'Pickup'}
+                        {order.pickupAddress?.street || order.pickupAddress?.delegation?.nameDelegation || t('customerHome.pickup')}
                       </Text>
                       <Text style={[s.routeAddr, { color: colors.textSecondary }]} numberOfLines={1}>
-                        {order.dropoffAddress?.street || order.dropoffAddress?.delegation?.nameDelegation || 'Delivery'}
+                        {order.dropoffAddress?.street || order.dropoffAddress?.delegation?.nameDelegation || t('customerHome.delivery')}
                       </Text>
                     </View>
                   </View>

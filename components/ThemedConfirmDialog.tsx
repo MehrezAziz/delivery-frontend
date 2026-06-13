@@ -9,6 +9,7 @@ import {
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import { useTheme } from '../contexts/ThemeContext';
 
 type IconName = ComponentProps<typeof Ionicons>['name'];
@@ -34,13 +35,16 @@ export function ThemedConfirmDialog({
   message,
   icon = 'help-circle-outline',
   iconColor,
-  confirmLabel = 'Confirm',
-  cancelLabel = 'Cancel',
+  confirmLabel,
+  cancelLabel,
   destructive = false,
   busy = false,
   onConfirm,
 }: Props) {
   const { colors, isDark } = useTheme();
+  const { t } = useTranslation();
+  const resolvedConfirm = confirmLabel ?? t('themedConfirm.confirm');
+  const resolvedCancel = cancelLabel ?? t('themedConfirm.cancel');
   const overlayTint = isDark ? 'rgba(0,0,0,0.68)' : 'rgba(15,23,42,0.48)';
   const accent = iconColor ?? (destructive ? colors.danger ?? '#dc2626' : colors.primary);
   const confirmBg = destructive ? colors.danger ?? '#dc2626' : colors.primary;
@@ -58,7 +62,7 @@ export function ThemedConfirmDialog({
           style={[StyleSheet.absoluteFillObject, { backgroundColor: overlayTint }]}
           onPress={() => !busy && onClose()}
           accessibilityRole="button"
-          accessibilityLabel="Dismiss dialog"
+          accessibilityLabel={t('themedConfirm.dismiss')}
         />
         <View style={styles.align} pointerEvents="box-none">
           <View
@@ -84,7 +88,7 @@ export function ThemedConfirmDialog({
                 disabled={busy}
                 activeOpacity={0.85}
               >
-                <Text style={[styles.btnSecondaryText, { color: colors.text }]}>{cancelLabel}</Text>
+                <Text style={[styles.btnSecondaryText, { color: colors.text }]}>{resolvedCancel}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.btnPrimary, { backgroundColor: confirmBg }]}
@@ -95,7 +99,7 @@ export function ThemedConfirmDialog({
                 {busy ? (
                   <ActivityIndicator size="small" color="#fff" />
                 ) : (
-                  <Text style={styles.btnPrimaryText}>{confirmLabel}</Text>
+                  <Text style={styles.btnPrimaryText}>{resolvedConfirm}</Text>
                 )}
               </TouchableOpacity>
             </View>

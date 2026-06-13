@@ -8,6 +8,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -97,6 +98,7 @@ type Props = {
 };
 
 export function NotificationPreviewModal({ visible, onClose, variant, onOpenFullInbox, onMarkAllRead }: Props) {
+  const { t } = useTranslation();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { colors, isDark } = useTheme();
@@ -122,10 +124,10 @@ export function NotificationPreviewModal({ visible, onClose, variant, onOpenFull
   const formatTime = (dateStr: string) => {
     const date = new Date(dateStr);
     const diffMin = Math.floor((Date.now() - date.getTime()) / 60000);
-    if (diffMin < 1) return 'Just now';
-    if (diffMin < 60) return `${diffMin}m ago`;
+    if (diffMin < 1) return t('common.justNow');
+    if (diffMin < 60) return `${diffMin}${t('common.minutesAgo')}`;
     const diffHr = Math.floor(diffMin / 60);
-    if (diffHr < 24) return `${diffHr}h ago`;
+    if (diffHr < 24) return `${diffHr}${t('common.hoursAgo')}`;
     return date.toLocaleDateString();
   };
 
@@ -168,7 +170,7 @@ export function NotificationPreviewModal({ visible, onClose, variant, onOpenFull
             <View style={[s.grabber, { backgroundColor: colors.border }]} />
           </View>
           <View style={s.sheetHeader}>
-            <Text style={[s.sheetTitle, { color: colors.text }]}>Recent activity</Text>
+            <Text style={[s.sheetTitle, { color: colors.text }]}>{t('notificationPreview.recentActivity')}</Text>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
               <TouchableOpacity
                 onPress={async () => {
@@ -189,7 +191,7 @@ export function NotificationPreviewModal({ visible, onClose, variant, onOpenFull
                 }}
                 hitSlop={12}
               >
-                <Text style={{ fontSize: 13, color: colors.primary, fontWeight: '600' }}>Mark all read</Text>
+                <Text style={{ fontSize: 13, color: colors.primary, fontWeight: '600' }}>{t('notificationPreview.markAllRead')}</Text>
               </TouchableOpacity>
               <TouchableOpacity onPress={onClose} hitSlop={12}>
                 <Ionicons name="close" size={26} color={colors.textSecondary} />
@@ -197,7 +199,7 @@ export function NotificationPreviewModal({ visible, onClose, variant, onOpenFull
             </View>
           </View>
           <Text style={[s.sheetHint, { color: colors.textSecondary }]}>
-            Grouped by conversation & order. Open the full inbox for your complete history.
+            {t('notificationPreview.grouped')}
           </Text>
 
           {loading ? (
@@ -210,7 +212,7 @@ export function NotificationPreviewModal({ visible, onClose, variant, onOpenFull
               keyExtractor={(g) => g.groupKey}
               style={{ maxHeight: 360 }}
               ListEmptyComponent={
-                <Text style={[s.empty, { color: colors.textTertiary }]}>{"You're all caught up."}</Text>
+                <Text style={[s.empty, { color: colors.textTertiary }]}>{t('notificationPreview.allCaughtUp')}</Text>
               }
               renderItem={({ item: g }) => {
                 const unread = g.unreadCount > 0;
@@ -231,7 +233,7 @@ export function NotificationPreviewModal({ visible, onClose, variant, onOpenFull
                       </Text>
                       <Text style={[s.rowMeta, { color: colors.textTertiary }]}>
                         {formatTime(g.latest.sentAt)}
-                        {g.itemCount > 1 ? ` · ${g.itemCount} updates` : ''}
+                        {g.itemCount > 1 ? `${t('notificationPreview.separator')}${g.itemCount}${t('notificationPreview.updates')}` : ''}
                       </Text>
                     </View>
                     {unread ? (
@@ -252,7 +254,7 @@ export function NotificationPreviewModal({ visible, onClose, variant, onOpenFull
               onOpenFullInbox();
             }}
           >
-            <Text style={s.ctaText}>View all notifications</Text>
+            <Text style={s.ctaText}>{t('notificationPreview.viewAll')}</Text>
             <Ionicons name="chevron-forward" size={18} color="#fff" />
           </TouchableOpacity>
         </TouchableOpacity>

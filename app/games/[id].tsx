@@ -13,9 +13,11 @@ import {
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import { useTheme } from '../../contexts/ThemeContext';
 import { api, resolveImageUrl } from '../../services/api/client';
 import { CorrectCelebration } from '../../components/games/CorrectCelebration';
+import i18n from '../../i18n';
 
 type GameDetail = {
   id: string;
@@ -60,15 +62,17 @@ type QuestionPayload = {
 function formatCountdown(targetIso: string | null): string {
   if (!targetIso) return '';
   const ms = new Date(targetIso).getTime() - Date.now();
-  if (ms <= 0) return 'any moment now';
+  if (ms <= 0) return i18n.t('games.countdownNow');
   const days = Math.floor(ms / (24 * 3600 * 1000));
   const hours = Math.floor((ms % (24 * 3600 * 1000)) / (3600 * 1000));
   const mins = Math.floor((ms % (3600 * 1000)) / 60000);
   const parts: string[] = [];
-  if (days > 0) parts.push(`${days} day${days === 1 ? '' : 's'}`);
-  if (hours > 0) parts.push(`${hours} hour${hours === 1 ? '' : 's'}`);
-  if (days === 0 && mins > 0) parts.push(`${mins} min`);
-  return parts.length ? parts.join(' & ') : 'less than a minute';
+  if (days > 0)
+    parts.push(`${days} ${days === 1 ? i18n.t('games.dayShort') : i18n.t('games.daysShort')}`);
+  if (hours > 0)
+    parts.push(`${hours} ${hours === 1 ? i18n.t('games.hourShort') : i18n.t('games.hoursShort')}`);
+  if (days === 0 && mins > 0) parts.push(`${mins} ${i18n.t('games.minShort')}`);
+  return parts.length ? parts.join(' & ') : i18n.t('games.countdownLessThanMinute');
 }
 
 function formatDate(iso: string): string {
@@ -88,6 +92,7 @@ export default function GameScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const { colors } = useTheme();
+  const { t } = useTranslation();
   const [loading, setLoading] = useState(true);
   const [game, setGame] = useState<GameDetail | null>(null);
   const [code, setCode] = useState('');
@@ -105,12 +110,12 @@ export default function GameScreen() {
       const data = await api.get<GameDetail>(`/games/${id}`);
       setGame(data);
     } catch (e: unknown) {
-      Alert.alert('Error', e instanceof Error ? e.message : 'Could not load game');
+      Alert.alert(t('common.error'), e instanceof Error ? e.message : t('games.couldNotLoad'));
       router.back();
     } finally {
       setLoading(false);
     }
-  }, [id, router]);
+  }, [id, router, t]);
 
   useFocusEffect(
     useCallback(() => {
@@ -119,8 +124,8 @@ export default function GameScreen() {
   );
 
   useEffect(() => {
-    const t = setInterval(() => setTick((x) => x + 1), 60000);
-    return () => clearInterval(t);
+    const tickInterval = setInterval(() => setTick((x) => x + 1), 60000);
+    return () => clearInterval(tickInterval);
   }, []);
 
   const unlock = async () => {
@@ -131,7 +136,7 @@ export default function GameScreen() {
       setCode('');
       await load();
     } catch (e: unknown) {
-      Alert.alert('Invalid code', e instanceof Error ? e.message : 'Try again');
+      Alert.alert(t('games.invalidCode'), e instanceof Error ? e.message : t('games.tryAgain'));
     } finally {
       setUnlocking(false);
     }
@@ -145,7 +150,7 @@ export default function GameScreen() {
       const q = await api.get<QuestionPayload>(`/games/${id}/next-question`);
       setQuestion(q);
     } catch (e: unknown) {
-      Alert.alert('Quiz', e instanceof Error ? e.message : 'No question available');
+      Alert.alert(t('games.quiz'), e instanceof Error ? e.message : t('games.noQuestionAvailable'));
     } finally {
       setLoadingQ(false);
     }
@@ -163,14 +168,14 @@ export default function GameScreen() {
         setFeedback(null);
         setCelebrating(true);
       } else {
-        setFeedback({ type: 'wrong', text: 'Not quite — keep playing for better odds.' });
+        setFeedback({ type: 'wrong', text: t('games.notQuiteKeepPlaying') });
       }
       await load();
       if (res.remainingToday > 0 && !res.isCorrect) {
         setTimeout(() => void loadQuestion(), 700);
       }
     } catch (e: unknown) {
-      Alert.alert('Error', e instanceof Error ? e.message : 'Could not submit');
+      Alert.alert(t('common.error'), e instanceof Error ? e.message : t('games.couldNotSubmit'));
     }
   };
 
@@ -195,13 +200,13 @@ export default function GameScreen() {
   const needsCode = game.eligibility === 'CODE_REQUIRED' || game.eligibility === 'CODE_VERSION_STALE';
   const blockedMessage =
     game.eligibility === 'PHONE_REQUIRED'
-      ? 'Please add your phone number to your profile to participate in this game.'
+      ? t('games.blockedPhoneRequired')
       : game.eligibility === 'NOT_ACTIVE_USER'
-        ? 'Your account is not eligible to play this game.'
+        ? t('games.blockedNotActive')
         : game.eligibility === 'COUNTRY_NOT_ELIGIBLE'
-          ? 'This game is not available in your country yet.'
+          ? t('games.blockedCountry')
           : game.eligibility === 'ORDER_REQUIRED'
-            ? 'You need at least one delivered order to play this game.'
+            ? t('games.blockedOrderRequired')
             : null;
 
   return (
@@ -214,7 +219,9 @@ export default function GameScreen() {
         <Text style={[styles.title, { color: colors.text }]}>{game.name}</Text>
         {comingSoon && (
           <View style={[styles.pill, { backgroundColor: colors.border }]}>
-            <Text style={{ color: colors.textSecondary, fontWeight: '700' }}>Coming soon</Text>
+            <Text style={{ color: colors.textSecondary, fontWeight: '700' }}>
+              {t('games.comingSoon')}
+            </Text>
           </View>
         )}
         {game.description ? (
@@ -232,16 +239,18 @@ export default function GameScreen() {
           <View style={[styles.codeBox, { backgroundColor: colors.primary + '12', borderColor: colors.primary }]}>
             <View style={styles.codeHeader}>
               <Ionicons name="key" size={22} color={colors.primary} />
-              <Text style={[styles.codeTitle, { color: colors.text }]}>Join with code</Text>
+              <Text style={[styles.codeTitle, { color: colors.text }]}>
+                {t('games.joinWithCode')}
+              </Text>
             </View>
             <Text style={[styles.codeLabel, { color: colors.textSecondary }]}>
               {game.eligibility === 'CODE_VERSION_STALE'
-                ? 'The code was updated. Enter the new 6-digit code from our social media to play again.'
-                : 'Enter the 6-digit code we shared on social media to join this game.'}
+                ? t('games.enterCodeNew')
+                : t('games.enterCode')}
             </Text>
             <TextInput
               value={code}
-              onChangeText={(t) => setCode(t.replace(/\D/g, '').slice(0, 6))}
+              onChangeText={(val) => setCode(val.replace(/\D/g, '').slice(0, 6))}
               keyboardType="number-pad"
               maxLength={6}
               style={[styles.codeInput, { color: colors.text, borderColor: colors.primary, backgroundColor: colors.card }]}
@@ -254,7 +263,9 @@ export default function GameScreen() {
               onPress={() => void unlock()}
               disabled={unlocking || code.length !== 6}
             >
-              <Text style={styles.primaryBtnText}>{unlocking ? 'Checking…' : 'Join the game'}</Text>
+              <Text style={styles.primaryBtnText}>
+                {unlocking ? t('games.checking') : t('games.joinTheGame')}
+              </Text>
             </TouchableOpacity>
           </View>
         )}
@@ -269,11 +280,15 @@ export default function GameScreen() {
                     /{game.questionsPerDay}
                   </Text>
                 </Text>
-                <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Answered today</Text>
+                <Text style={[styles.statLabel, { color: colors.textSecondary }]}>
+                  {t('games.answeredToday')}
+                </Text>
               </View>
               <View style={[styles.statBlock, { borderColor: colors.border }]}>
                 <Text style={[styles.statNum, { color: colors.primary }]}>{game.correctToday}</Text>
-                <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Correct today</Text>
+                <Text style={[styles.statLabel, { color: colors.textSecondary }]}>
+                  {t('games.correctToday')}
+                </Text>
               </View>
             </View>
           </View>
@@ -286,17 +301,18 @@ export default function GameScreen() {
               <Ionicons name="checkmark-done" size={32} color="#fff" />
             </View>
             <Text style={[styles.doneTitle, { color: colors.text }]}>
-              You're done for today!
+              {t('games.doneForToday')}
             </Text>
             <Text style={[styles.doneSub, { color: colors.textSecondary }]}>
-              You answered {game.answeredToday} question{game.answeredToday === 1 ? '' : 's'} ({game.correctToday} correct).
+              {t('games.answeredSummary', { count: game.answeredToday, correct: game.correctToday })}
             </Text>
 
             {game.nextDayResetUtc && (
               <View style={[styles.countdownRow, { backgroundColor: colors.background, borderColor: colors.border }]}>
                 <Ionicons name="time-outline" size={18} color={colors.primary} />
                 <Text style={[styles.countdownText, { color: colors.text }]}>
-                  More questions in <Text style={{ fontWeight: '800' }}>{nextDayCountdown}</Text>
+                  {t('games.moreQuestionsIn')}{' '}
+                  <Text style={{ fontWeight: '800' }}>{nextDayCountdown}</Text>
                 </Text>
               </View>
             )}
@@ -304,7 +320,8 @@ export default function GameScreen() {
               <View style={[styles.countdownRow, { backgroundColor: colors.background, borderColor: colors.border }]}>
                 <Ionicons name="trophy-outline" size={18} color={colors.primary} />
                 <Text style={[styles.countdownText, { color: colors.text }]}>
-                  Next draw in <Text style={{ fontWeight: '800' }}>{drawCountdown}</Text>
+                  {t('games.nextDrawIn')}{' '}
+                  <Text style={{ fontWeight: '800' }}>{drawCountdown}</Text>
                 </Text>
               </View>
             )}
@@ -314,7 +331,7 @@ export default function GameScreen() {
               onPress={() => router.back()}
             >
               <Ionicons name="close" size={20} color="#fff" />
-              <Text style={styles.closeBtnText}>Close</Text>
+              <Text style={styles.closeBtnText}>{t('common.close')}</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -333,7 +350,11 @@ export default function GameScreen() {
             disabled={loadingQ}
           >
             <Text style={styles.primaryBtnText}>
-              {loadingQ ? 'Loading…' : question ? 'Next question' : 'Start / continue quiz'}
+              {loadingQ
+                ? t('games.loadingDots')
+                : question
+                  ? t('games.nextQuestion')
+                  : t('games.startContinueQuiz')}
             </Text>
           </TouchableOpacity>
         )}
@@ -363,7 +384,7 @@ export default function GameScreen() {
                 {o.imageUrl ? (
                   <Image source={{ uri: resolveImageUrl(o.imageUrl) }} style={styles.optImage} resizeMode="contain" />
                 ) : null}
-                <Text style={{ color: colors.text, flex: 1 }}>{o.text || 'Option'}</Text>
+                <Text style={{ color: colors.text, flex: 1 }}>{o.text || t('games.option')}</Text>
               </TouchableOpacity>
             ))}
           </View>
@@ -372,7 +393,7 @@ export default function GameScreen() {
         {game.recentWinners.length > 0 && (
           <View style={styles.winners}>
             <Text style={[styles.sectionTitle, { color: colors.text }]}>
-              <Ionicons name="trophy" size={18} color={colors.primary} />  Winners
+              <Ionicons name="trophy" size={18} color={colors.primary} />  {t('games.winners')}
             </Text>
             {game.recentWinners.map((w, i) => (
               <View
@@ -402,7 +423,7 @@ export default function GameScreen() {
                     <Text style={{ color: colors.text, fontWeight: '700' }}>{w.displayName}</Text>
                     {i === 0 && (
                       <View style={[styles.latestPill, { backgroundColor: colors.primary }]}>
-                        <Text style={styles.latestPillText}>Latest</Text>
+                        <Text style={styles.latestPillText}>{t('games.latest')}</Text>
                       </View>
                     )}
                   </View>
@@ -418,7 +439,7 @@ export default function GameScreen() {
       </ScrollView>
       <CorrectCelebration
         visible={celebrating}
-        message="Correct!"
+        message={t('games.correctBang')}
         onDone={() => {
           setCelebrating(false);
           if (game && game.remainingToday > 0) {

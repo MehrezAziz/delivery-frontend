@@ -1,4 +1,5 @@
 import { Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useTranslation } from 'react-i18next';
 
 type FriendlyErrorModalProps = {
   visible: boolean;
@@ -13,6 +14,7 @@ export default function FriendlyErrorModal({
   message,
   onClose,
 }: FriendlyErrorModalProps) {
+  const { t } = useTranslation();
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <View style={s.backdrop}>
@@ -21,7 +23,7 @@ export default function FriendlyErrorModal({
           <Text style={s.title}>{title}</Text>
           <Text style={s.message}>{message}</Text>
           <TouchableOpacity style={s.button} onPress={onClose} activeOpacity={0.85}>
-            <Text style={s.buttonText}>OK, got it</Text>
+            <Text style={s.buttonText}>{t('friendlyError.okGotIt')}</Text>
           </TouchableOpacity>
         </View>
       </View>

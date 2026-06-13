@@ -11,6 +11,7 @@ import {
   ScrollView,
 } from 'react-native';
 import { useState, useEffect, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { supportService, SupportTicket } from '../../services/api/support.service';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -30,6 +31,7 @@ const STATUS_COLORS: Record<string, string> = {
 export default function DriverSupportScreen() {
   const { push } = useAppNavigation();
   const { colors, isDark } = useTheme();
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const [tickets, setTickets] = useState<SupportTicket[]>([]);
   const [loading, setLoading] = useState(true);
@@ -65,7 +67,7 @@ export default function DriverSupportScreen() {
   }
 
   async function handleCreate() {
-    if (!description.trim()) { setError('Description is required'); return; }
+    if (!description.trim()) { setError(t('support.describeIssue')); return; }
     setCreating(true);
     setError('');
     try {
@@ -77,7 +79,7 @@ export default function DriverSupportScreen() {
       setLoading(true);
       loadTickets();
     } catch (e: any) {
-      setError(e.message || 'Failed to create ticket');
+      setError(e.message || t('support.failed'));
     } finally {
       setCreating(false);
     }
@@ -86,7 +88,7 @@ export default function DriverSupportScreen() {
   function getLastMessage(ticket: SupportTicket) {
     if (ticket.messages && ticket.messages.length > 0) {
       const msg = ticket.messages[0];
-      const prefix = msg.senderType === 'CUSTOMER_SERVICE' ? 'CS: ' : 'You: ';
+      const prefix = msg.senderType === 'CUSTOMER_SERVICE' ? `${t('supportChat.customerService')}: ` : '';
       return prefix + (msg.content.length > 40 ? msg.content.slice(0, 40) + '...' : msg.content);
     }
     return ticket.description.length > 50 ? ticket.description.slice(0, 50) + '...' : ticket.description;
@@ -95,9 +97,9 @@ export default function DriverSupportScreen() {
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <View style={[styles.supportToolbar, { backgroundColor: colors.card, borderColor: colors.border }]}>
-        <Text style={[styles.toolbarHint, { color: colors.textSecondary }]}>Your tickets</Text>
+        <Text style={[styles.toolbarHint, { color: colors.textSecondary }]}>{t('support.title')}</Text>
         <TouchableOpacity onPress={() => setShowCreate(true)} style={[styles.newBtn, { backgroundColor: '#c026d3' }]}>
-          <Text style={styles.newBtnText}>+ New</Text>
+          <Text style={styles.newBtnText}>{`+ ${t('support.newTicket')}`}</Text>
         </TouchableOpacity>
       </View>
 
@@ -108,8 +110,8 @@ export default function DriverSupportScreen() {
           <GameEntrySection placement="DRIVER_SUPPORT" role="driver" />
           <View style={styles.empty}>
             <Text style={styles.emptyIcon}>💬</Text>
-            <Text style={[styles.emptyText, { color: colors.text }]}>No support tickets yet</Text>
-            <Text style={[styles.emptySubtext, { color: colors.textTertiary }]}>Tap "+ New" to create one</Text>
+            <Text style={[styles.emptyText, { color: colors.text }]}>{t('support.empty')}</Text>
+            <Text style={[styles.emptySubtext, { color: colors.textTertiary }]}>{t('support.newTicket')}</Text>
           </View>
         </ScrollView>
       ) : (
@@ -135,7 +137,7 @@ export default function DriverSupportScreen() {
               <View style={styles.ticketFooter}>
                 <Text style={[styles.ticketDate, { color: colors.textTertiary }]}>{new Date(item.createdAt).toLocaleDateString()}</Text>
                 {item.customerService && (
-                  <Text style={[styles.ticketAssigned, { color: colors.textSecondary }]}>Assigned: {item.customerService.superUser.pseudo}</Text>
+                  <Text style={[styles.ticketAssigned, { color: colors.textSecondary }]}>{t('supportChat.customerService')}: {item.customerService.superUser.pseudo}</Text>
                 )}
               </View>
             </TouchableOpacity>
@@ -158,9 +160,9 @@ export default function DriverSupportScreen() {
                   { backgroundColor: colors.card, marginBottom: Math.max(insets.bottom, 20) },
                 ]}
               >
-                <Text style={[styles.modalTitle, { color: colors.text }]}>New Support Ticket</Text>
+                <Text style={[styles.modalTitle, { color: colors.text }]}>{t('support.newTicket')}</Text>
                 <ScrollView>
-                  <Text style={[styles.label, { color: colors.text }]}>Category</Text>
+                  <Text style={[styles.label, { color: colors.text }]}>{t('support.chooseCategory')}</Text>
                   <View style={styles.chipRow}>
                     {CATEGORIES.map(c => (
                       <TouchableOpacity key={c} style={[styles.chip, { backgroundColor: colors.surfaceVariant, borderColor: colors.border }, category === c && styles.chipActive]} onPress={() => setCategory(c)}>
@@ -168,7 +170,7 @@ export default function DriverSupportScreen() {
                       </TouchableOpacity>
                     ))}
                   </View>
-                  <Text style={[styles.label, { color: colors.text }]}>Priority</Text>
+                  <Text style={[styles.label, { color: colors.text }]}>{t('common.priority')}</Text>
                   <View style={styles.chipRow}>
                     {PRIORITIES.map(p => (
                       <TouchableOpacity key={p} style={[styles.chip, { backgroundColor: colors.surfaceVariant, borderColor: colors.border }, priority === p && styles.chipActive]} onPress={() => setPriority(p)}>
@@ -176,12 +178,12 @@ export default function DriverSupportScreen() {
                       </TouchableOpacity>
                     ))}
                   </View>
-                  <Text style={[styles.label, { color: colors.text }]}>Description</Text>
+                  <Text style={[styles.label, { color: colors.text }]}>{t('support.describeIssue')}</Text>
                   <TextInput
                     style={[styles.textArea, { backgroundColor: colors.surfaceVariant, borderColor: colors.border, color: colors.text }]}
                     multiline
                     numberOfLines={4}
-                    placeholder="Describe your issue..."
+                    placeholder={t('support.messagePlaceholder')}
                     placeholderTextColor={colors.textTertiary}
                     value={description}
                     onChangeText={setDescription}
@@ -190,10 +192,10 @@ export default function DriverSupportScreen() {
                 </ScrollView>
                 <View style={styles.modalActions}>
                   <TouchableOpacity style={styles.cancelBtn} onPress={closeCreateModal}>
-                    <Text style={styles.cancelBtnText}>Cancel</Text>
+                    <Text style={styles.cancelBtnText}>{t('common.cancel')}</Text>
                   </TouchableOpacity>
                   <TouchableOpacity style={[styles.submitBtn, creating && { opacity: 0.6 }]} onPress={handleCreate} disabled={creating}>
-                    <Text style={styles.submitBtnText}>{creating ? 'Creating...' : 'Create'}</Text>
+                    <Text style={styles.submitBtnText}>{creating ? t('support.submitting') : t('support.submitTicket')}</Text>
                   </TouchableOpacity>
                 </View>
               </View>

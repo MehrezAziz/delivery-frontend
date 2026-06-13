@@ -7,6 +7,7 @@ import {
 import { useRouter, useFocusEffect } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import { orderService, Order } from '../../services/api/order.service';
 import { useTheme } from '../../contexts/ThemeContext';
 import { fetchChatUnreadMapForOrders } from '../../hooks/useOrderChatUnread';
@@ -39,6 +40,22 @@ const STATUS_CONFIG: Record<string, { bg: string; text: string; label: string }>
 export default function CustomerOrdersScreen() {
   const router = useRouter();
   const { colors, isDark } = useTheme();
+  const { t } = useTranslation();
+
+  const localizeStatus = (status: string, fallback: string): string => {
+    const map: Record<string, string> = {
+      SEARCHING_DRIVER: t('customerHome.status.Searching'),
+      DRIVER_ASSIGNED: t('customerHome.status.Assigned'),
+      DRIVER_ARRIVED: t('customerHome.status.Arrived'),
+      PICKED_UP: t('customerHome.status.PickedUp'),
+      DELIVERING: t('driverMyOrders.status.Delivering'),
+      DELIVERED: t('driverMyOrders.status.Delivered'),
+      CANCELLED: t('driverMyOrders.status.Cancelled'),
+      REFUNDED: t('orderDetail.refunded'),
+      FAILED: t('coinTransferStatus.FAILED'),
+    };
+    return map[status] || fallback;
+  };
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -123,7 +140,7 @@ export default function CustomerOrdersScreen() {
       await orderService.changePaymentMethod(order.id, newType);
       setOrders(prev => prev.map(o => o.id === order.id ? { ...o, paymentType: newType } : o));
     } catch (e: any) {
-      Alert.alert('Error', e.message || 'Failed to change payment method');
+      Alert.alert(t('common.error'), e.message || t('common.something_went_wrong'));
     } finally {
       setTogglingPayment(null);
     }
@@ -141,11 +158,11 @@ export default function CustomerOrdersScreen() {
     <View style={[st.container, { backgroundColor: colors.background }]}>
       <StatusBar style={isDark ? 'light' : 'dark'} />
       <View style={[st.toolbar, { backgroundColor: colors.card, borderColor: colors.border }]}>
-        <Text style={[st.headerCount, { color: colors.textTertiary }]}>{orders.length} total</Text>
+        <Text style={[st.headerCount, { color: colors.textTertiary }]}>{orders.length} {t('customerOrders.all').toLowerCase()}</Text>
         <View style={{ flexDirection: 'row', gap: 10, alignItems: 'center' }}>
           <TouchableOpacity style={[st.trackBtn, { backgroundColor: '#0284c7' }]} onPress={() => setTrackModalOpen(true)} activeOpacity={0.8}>
             <Ionicons name="location-outline" size={16} color="#fff" />
-            <Text style={st.trackBtnText}>Track</Text>
+            <Text style={st.trackBtnText}>{t('publicTrack.title')}</Text>
           </TouchableOpacity>
           <TouchableOpacity style={[st.filterBtn, { backgroundColor: colors.surfaceVariant }, filter !== 'ALL' && { backgroundColor: colors.primary }]} onPress={openSidebar} activeOpacity={0.7}>
             <Ionicons name="filter" size={20} color={filter !== 'ALL' ? '#fff' : colors.text} />
@@ -160,17 +177,17 @@ export default function CustomerOrdersScreen() {
           <Pressable style={st.modalOverlay} onPress={() => setTrackModalOpen(false)}>
             <Pressable style={[st.modalBox, { backgroundColor: colors.card }]} onPress={() => {}}>
               <View style={st.modalHeader}>
-                <Text style={[st.modalTitle, { color: colors.text }]}>Track a Delivery</Text>
+                <Text style={[st.modalTitle, { color: colors.text }]}>{t('publicTrack.title')}</Text>
                 <TouchableOpacity onPress={() => setTrackModalOpen(false)} style={st.modalClose}>
                   <Ionicons name="close" size={22} color={colors.textSecondary} />
                 </TouchableOpacity>
               </View>
-              <Text style={[st.modalSubtitle, { color: colors.textSecondary }]}>Enter the code shared with you</Text>
+              <Text style={[st.modalSubtitle, { color: colors.textSecondary }]}>{t('publicTrack.enterCode')}</Text>
               <TextInput
                 style={[st.modalInput, { borderColor: colors.border, color: colors.text, backgroundColor: colors.background }]}
                 value={trackCode}
                 onChangeText={setTrackCode}
-                placeholder="e.g. TRK-A3F9X2"
+                placeholder={t('publicTrack.placeholder')}
                 placeholderTextColor={colors.textTertiary}
                 autoCapitalize="characters"
                 autoCorrect={false}
@@ -185,7 +202,7 @@ export default function CustomerOrdersScreen() {
                 }}
                 activeOpacity={0.8}
               >
-                <Text style={st.modalBtnText}>Start Tracking</Text>
+                <Text style={st.modalBtnText}>{t('publicTrack.title')}</Text>
               </TouchableOpacity>
             </Pressable>
           </Pressable>
@@ -199,7 +216,7 @@ export default function CustomerOrdersScreen() {
         {filteredOrders.length === 0 ? (
           <View style={st.empty}>
             <Ionicons name="receipt-outline" size={48} color={colors.border} />
-            <Text style={[st.emptyText, { color: colors.textTertiary }]}>No orders found</Text>
+            <Text style={[st.emptyText, { color: colors.textTertiary }]}>{t('customerOrders.empty')}</Text>
           </View>
         ) : filteredOrders.map((order) => {
           const cfg = STATUS_CONFIG[order.status] || { bg: '#f3f4f6', text: '#374151', label: order.status };
@@ -213,7 +230,7 @@ export default function CustomerOrdersScreen() {
               <View style={st.cardTopRow}>
                 <Text style={[st.orderId, { color: colors.text }]}>#{order.id.slice(0, 8)}</Text>
                 <View style={[st.statusBadge, { backgroundColor: cfg.bg }]}>
-                  <Text style={[st.statusText, { color: cfg.text }]}>{cfg.label}</Text>
+                  <Text style={[st.statusText, { color: cfg.text }]}>{localizeStatus(order.status, cfg.label)}</Text>
                 </View>
               </View>
 
@@ -222,20 +239,20 @@ export default function CustomerOrdersScreen() {
                 <View style={st.routeItem}>
                   <View style={[st.routeDot, { backgroundColor: '#22c55e' }]} />
                   <Text style={[st.routeText, { color: colors.text }]} numberOfLines={1}>
-                    {order.pickupAddress?.delegation?.nameDelegation || 'Pickup'}
+                    {order.pickupAddress?.delegation?.nameDelegation || t('createOrder.pickup')}
                   </Text>
                 </View>
                 <View style={st.routeItem}>
                   <View style={[st.routeDot, { backgroundColor: '#ef4444' }]} />
                   <Text style={[st.routeText, { color: colors.text }]} numberOfLines={1}>
-                    {order.dropoffAddress?.delegation?.nameDelegation || 'Dropoff'}
+                    {order.dropoffAddress?.delegation?.nameDelegation || t('driverMyOrders.dropoff')}
                   </Text>
                 </View>
               </View>
 
               {/* Bottom row: price + payment */}
               <View style={st.cardBottomRow}>
-                <Text style={[st.price, { color: colors.primary }]}>{order.price.toFixed(2)} TND</Text>
+                <Text style={[st.price, { color: colors.primary }]}>{order.price.toFixed(2)} {t('common.tnd')}</Text>
 
                 {canEditPayment ? (
                   <TouchableOpacity
@@ -248,14 +265,14 @@ export default function CustomerOrdersScreen() {
                       <ActivityIndicator size="small" color="#fff" />
                     ) : (
                       <Text style={st.paymentToggleText}>
-                        {order.paymentType === 'COD' ? '💵 Cash' : '💰 Wallet'} ✎
+                        {order.paymentType === 'COD' ? `💵 ${t('orderDetail.cash')}` : `💰 ${t('orderDetail.wallet')}`} ✎
                       </Text>
                     )}
                   </TouchableOpacity>
                 ) : (
                   <View style={[st.paymentBadge, order.paymentType === 'COD' ? st.paymentCODBadge : st.paymentWalletBadge]}>
                     <Text style={st.paymentBadgeText}>
-                      {order.paymentType === 'COD' ? '💵 Cash' : '💰 Wallet'}
+                      {order.paymentType === 'COD' ? `💵 ${t('orderDetail.cash')}` : `💰 ${t('orderDetail.wallet')}`}
                     </Text>
                   </View>
                 )}
@@ -283,7 +300,7 @@ export default function CustomerOrdersScreen() {
                       activeOpacity={0.75}
                     >
                       <Ionicons name="chatbubbles" size={16} color="#2563eb" />
-                      <Text style={st.chatQuickBtnText}>Chat</Text>
+                      <Text style={st.chatQuickBtnText}>{t('orderDetail.chat')}</Text>
                     </TouchableOpacity>
                     <ChatUnreadBadge count={chatUnreadMap[order.id] ?? 0} />
                   </View>
@@ -301,12 +318,12 @@ export default function CustomerOrdersScreen() {
             <Pressable style={StyleSheet.absoluteFill} onPress={closeSidebar} />
           </Animated.View>
           <Animated.View style={[st.sidebar, { transform: [{ translateX: slideAnim }], backgroundColor: colors.card }]}>
-            <Text style={[st.sidebarTitle, { color: colors.text }]}>Filter by Status</Text>
+            <Text style={[st.sidebarTitle, { color: colors.text }]}>{t('driverAvailableOrders.filters')}</Text>
             <ScrollView showsVerticalScrollIndicator={false}>
               {ALL_STATUSES.map(s => {
                 const active = filter === s;
                 const cfg = STATUS_CONFIG[s];
-                const label = s === 'ALL' ? 'All Orders' : (cfg?.label || s.replace(/_/g, ' '));
+                const label = s === 'ALL' ? t('customerOrders.all') : localizeStatus(s, cfg?.label || s.replace(/_/g, ' '));
                 const count = s === 'ALL' ? orders.length : orders.filter(o => o.status === s).length;
                 return (
                   <TouchableOpacity key={s} style={[st.sidebarItem, active && st.sidebarItemActive]}

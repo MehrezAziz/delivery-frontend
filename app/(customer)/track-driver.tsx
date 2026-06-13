@@ -5,6 +5,7 @@ import {
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
+import { useTranslation } from 'react-i18next';
 import { orderService, Order } from '../../services/api/order.service';
 import { useTheme } from '../../contexts/ThemeContext';
 import { GOOGLE_MAPS_DARK_STYLE } from '../../constants/googleMapsDarkStyle';
@@ -29,6 +30,7 @@ function normalizeDriverLocationPayload(loc: unknown): { latitude: number; longi
 
 export default function TrackDriverScreen() {
   const router = useRouter();
+  const { t } = useTranslation();
   const { orderId } = useLocalSearchParams<{ orderId: string }>();
   const { colors, isDark } = useTheme();
   const [order, setOrder] = useState<Order | null>(null);
@@ -44,11 +46,11 @@ export default function TrackDriverScreen() {
       setTrackingToken(token);
       const webLink = `http://localhost:3001/track/${token}`;
       await Share.share({
-        message: `Track my delivery live!\n\n📦 Code: ${token}\n🔗 Link: ${webLink}\n\nOpen the app → Orders → "Track" button → enter the code.\nOr tap the link to track in your browser.`,
-        title: 'Track My Delivery',
+        message: `${t('trackDriver.title')}\n\n📦 ${token}\n🔗 ${webLink}`,
+        title: t('trackDriver.title'),
       });
     } catch (e: any) {
-      appAlert('Error', e.message || 'Could not get tracking token');
+      appAlert(t('common.error'), e.message || t('common.something_went_wrong'));
     }
   }, [orderId]);
   const loadData = useCallback(async () => {
@@ -61,7 +63,7 @@ export default function TrackDriverScreen() {
       const coords = normalizeDriverLocationPayload(loc);
       if (coords) setDriverLoc(coords);
     } catch (e: any) {
-      appAlert('Error', e.message || 'Failed to load tracking data');
+      appAlert(t('common.error'), e.message || t('common.something_went_wrong'));
     } finally {
       setLoading(false);
     }
@@ -108,7 +110,7 @@ export default function TrackDriverScreen() {
 
   const driverName = order?.driverAssignment?.driver
     ? `${order.driverAssignment.driver.user.firstName || ''} ${order.driverAssignment.driver.user.secondName || ''}`.trim()
-    : 'Driver';
+    : t('orderDetail.driver');
 
   return (
     <View style={s.container}>
@@ -127,7 +129,7 @@ export default function TrackDriverScreen() {
           <Marker
             coordinate={driverLoc}
             title={driverName}
-            description="Live driver position"
+            description={t('trackDriver.locating')}
             tracksViewChanges={false}
           >
             <View style={s.driverMarker}>
@@ -136,14 +138,14 @@ export default function TrackDriverScreen() {
           </Marker>
         )}
         {pickupCoord && (
-          <Marker coordinate={pickupCoord} title="Pickup" tracksViewChanges={false}>
+          <Marker coordinate={pickupCoord} title={t('createOrder.pickup')} tracksViewChanges={false}>
             <View style={s.pickupMarker}>
               <Ionicons name="flag" size={18} color="#fff" />
             </View>
           </Marker>
         )}
         {dropoffCoord && (
-          <Marker coordinate={dropoffCoord} title="Delivery" description="Drop-off" tracksViewChanges={false}>
+          <Marker coordinate={dropoffCoord} title={t('createOrder.delivery')} description={t('createOrder.delivery')} tracksViewChanges={false}>
             <View style={s.deliveryMarker}>
               <Ionicons name="cube" size={20} color="#fff" />
             </View>
@@ -156,7 +158,7 @@ export default function TrackDriverScreen() {
         <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace('/(customer)/home')} style={[s.headerBtn, { backgroundColor: colors.surfaceVariant }]}>
           <Ionicons name="chevron-back" size={22} color={colors.text} />
         </TouchableOpacity>
-        <Text style={[s.headerTitle, { color: colors.text }]}>Track Driver</Text>
+        <Text style={[s.headerTitle, { color: colors.text }]}>{t('trackDriver.title')}</Text>
         <View style={{ flexDirection: 'row', gap: 8 }}>
           <TouchableOpacity onPress={handleShare} style={[s.headerBtn, { backgroundColor: colors.surfaceVariant }]}>
             <Ionicons name="share-outline" size={20} color={colors.text} />
@@ -204,10 +206,10 @@ export default function TrackDriverScreen() {
           </View>
           <View style={{ flex: 1 }}>
             <Text style={[s.routeAddr, { color: colors.textSecondary }]} numberOfLines={1}>
-              {order?.pickupAddress?.street || order?.pickupAddress?.delegation?.nameDelegation || 'Pickup'}
+              {order?.pickupAddress?.street || order?.pickupAddress?.delegation?.nameDelegation || t('createOrder.pickup')}
             </Text>
             <Text style={[s.routeAddr, { color: colors.textSecondary }]} numberOfLines={1}>
-              {order?.dropoffAddress?.street || order?.dropoffAddress?.delegation?.nameDelegation || 'Delivery'}
+              {order?.dropoffAddress?.street || order?.dropoffAddress?.delegation?.nameDelegation || t('createOrder.delivery')}
             </Text>
           </View>
         </View>
@@ -215,7 +217,7 @@ export default function TrackDriverScreen() {
         {!driverLoc && (
           <View style={s.noLocCard}>
             <Ionicons name="location-outline" size={20} color="#ca8a04" />
-            <Text style={s.noLocText}>Waiting for driver location update...</Text>
+            <Text style={s.noLocText}>{t('trackDriver.locating')}</Text>
           </View>
         )}
       </View>

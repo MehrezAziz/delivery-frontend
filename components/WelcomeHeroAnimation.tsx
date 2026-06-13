@@ -22,6 +22,7 @@ import {
   Easing,
   StyleSheet,
 } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 
 interface Props {
@@ -30,6 +31,7 @@ interface Props {
 }
 
 export function WelcomeHeroAnimation({ primaryColor, isDark }: Props) {
+  const { t } = useTranslation();
   // ── Animated values ──────────────────────────────────────────────────────
   const sceneOpacity  = useRef(new Animated.Value(0)).current;
   const driverX       = useRef(new Animated.Value(60)).current; // approaches from right
@@ -213,7 +215,7 @@ export function WelcomeHeroAnimation({ primaryColor, isDark }: Props) {
           </Animated.Text>
         </Animated.View>
 
-        <Text style={[s.charLabel, { color: textColor }]}>Customer</Text>
+        <Text style={[s.charLabel, { color: textColor }]}>{t('welcomeHero.customer')}</Text>
       </Animated.View>
 
       {/* ── BOX 📦 (slides from customer → driver) ────────────────── */}
@@ -257,7 +259,7 @@ export function WelcomeHeroAnimation({ primaryColor, isDark }: Props) {
           <View style={[s.arm, s.armR, { transform: [{ rotate: '10deg' }] }]} />
         </View>
 
-        <Text style={[s.charLabel, { color: textColor }]}>Driver</Text>
+        <Text style={[s.charLabel, { color: textColor }]}>{t('welcomeHero.driver')}</Text>
       </Animated.View>
 
       {/* ── ✨ sparkle (centre, phase 6) ──────────────────────────── */}

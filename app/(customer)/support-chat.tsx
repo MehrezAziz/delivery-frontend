@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   supportService,
@@ -25,6 +26,7 @@ import { SupportChatMessageItem } from '../../components/support/SupportChatMess
 
 export default function SupportChatScreen() {
   const router = useRouter();
+  const { t } = useTranslation();
   const { ticketId } = useLocalSearchParams<{ ticketId: string }>();
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
@@ -105,7 +107,7 @@ export default function SupportChatScreen() {
     setMessage('');
     try {
       await sendSupportMessageStream(ticketId, text, {
-        onChunk: (t) => setStreamingPreview((p) => p + t),
+        onChunk: (chunk) => setStreamingPreview((p) => p + chunk),
         onDone: () => {
           setStreamingPreview('');
           loadTicket();
@@ -159,7 +161,7 @@ export default function SupportChatScreen() {
   if (!ticket) {
     return (
       <View style={[styles.container, { justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background }]}>
-        <Text style={{ color: colors.danger }}>Ticket not found</Text>
+        <Text style={{ color: colors.danger }}>{t('support.empty')}</Text>
       </View>
     );
   }
@@ -197,13 +199,13 @@ export default function SupportChatScreen() {
         ListHeaderComponent={
           <View style={styles.ticketInfo}>
             <Text style={styles.ticketInfoText}>{ticket.description}</Text>
-            <Text style={styles.ticketInfoDate}>Created {new Date(ticket.createdAt).toLocaleString()}</Text>
+            <Text style={styles.ticketInfoDate}>{new Date(ticket.createdAt).toLocaleString()}</Text>
           </View>
         }
         ListFooterComponent={
           streamingPreview ? (
             <View style={[styles.streamingBubble, { backgroundColor: colors.card, borderColor: colors.border }]}>
-              <Text style={[styles.streamingLabel, { color: colors.textSecondary }]}>Assistant</Text>
+              <Text style={[styles.streamingLabel, { color: colors.textSecondary }]}>{t('supportChat.assistant')}</Text>
               <Text style={{ color: colors.text }}>{streamingPreview}</Text>
             </View>
           ) : null
@@ -235,7 +237,7 @@ export default function SupportChatScreen() {
             },
           ]}
         >
-          <Text style={[styles.closedText, { color: colors.textSecondary }]}>This ticket is closed</Text>
+          <Text style={[styles.closedText, { color: colors.textSecondary }]}>{t('support.closed')}</Text>
         </View>
       ) : (
         <View
@@ -251,7 +253,7 @@ export default function SupportChatScreen() {
         >
           <TextInput
             style={[styles.input, { backgroundColor: colors.inputBg, borderColor: colors.inputBorder, color: colors.text }]}
-            placeholder="Type a message..."
+            placeholder={t('supportChat.typeMessage')}
             placeholderTextColor={colors.textTertiary}
             value={message}
             onChangeText={setMessage}

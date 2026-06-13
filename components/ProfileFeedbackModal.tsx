@@ -1,4 +1,5 @@
 import { Modal, View, Text, TouchableOpacity, Pressable, StyleSheet, type ViewStyle } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../contexts/ThemeContext';
 
@@ -24,6 +25,7 @@ export function ProfileFeedbackModal({
   onBackdropPress,
   onOkPress,
 }: Props) {
+  const { t } = useTranslation();
   const { colors } = useTheme();
   const isSuccess = variant === 'success';
   const iconName = isSuccess ? 'checkmark-circle' : 'alert-circle';
@@ -42,7 +44,7 @@ export function ProfileFeedbackModal({
         <Pressable
           style={[styles.dim, { backgroundColor: 'rgba(2, 6, 23, 0.58)' }]}
           onPress={onBackdropPress}
-          accessibilityLabel="Dismiss"
+          accessibilityLabel={t('profileFeedback.dismiss')}
         />
         <View style={styles.centerWrap} pointerEvents="box-none">
           <View
@@ -65,12 +67,12 @@ export function ProfileFeedbackModal({
               onPress={onOkPress}
               activeOpacity={0.85}
             >
-              <Text style={styles.okBtnText}>OK</Text>
+              <Text style={styles.okBtnText}>{t('profileFeedback.ok')}</Text>
             </TouchableOpacity>
             <Text style={[styles.hint, { color: colors.textTertiary }]}>
               {okNavigatesOnPress
-                ? 'Tap OK to open Profile. Tap outside to stay here.'
-                : 'Tap outside to close.'}
+                ? t('profileFeedback.tapOkOpenProfile')
+                : t('profileFeedback.tapOutsideClose')}
             </Text>
           </View>
         </View>

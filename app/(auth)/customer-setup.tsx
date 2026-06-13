@@ -4,6 +4,7 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useState, useEffect, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { geographyService, walletService } from '../../services/api';
 import type { Country, Governorate, Delegation } from '../../services/api';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -13,6 +14,7 @@ type Step = 'country' | 'governorate' | 'delegation' | 'street';
 export default function CustomerSetupScreen() {
   const router = useRouter();
   const { colors, isDark } = useTheme();
+  const { t } = useTranslation();
   const [step, setStep] = useState<Step>('country');
 
   const [countries, setCountries] = useState<Country[]>([]);
@@ -34,9 +36,9 @@ export default function CustomerSetupScreen() {
     setLoadingList(true);
     geographyService.getCountries()
       .then(setCountries)
-      .catch(() => setError('Failed to load countries'))
+      .catch(() => setError(t('auth.failedLoadCountries')))
       .finally(() => setLoadingList(false));
-  }, []);
+  }, [t]);
 
   const loadGovernorates = async (country: Country) => {
     setLoadingList(true);
@@ -45,7 +47,7 @@ export default function CustomerSetupScreen() {
       const govs = await geographyService.getGovernorates(country.id);
       setGovernorates(govs);
     } catch {
-      setError('Failed to load governorates');
+      setError(t('auth.failedLoadGovernorates'));
     } finally {
       setLoadingList(false);
     }
@@ -58,7 +60,7 @@ export default function CustomerSetupScreen() {
       const dels = await geographyService.getDelegations(gov.id);
       setDelegations(dels);
     } catch {
-      setError('Failed to load delegations');
+      setError(t('auth.failedLoadDelegations'));
     } finally {
       setLoadingList(false);
     }
@@ -111,7 +113,7 @@ export default function CustomerSetupScreen() {
       });
       router.canGoBack() ? router.back() : router.replace('/');
     } catch (e: any) {
-      setError(e.message || 'Setup failed. Please try again.');
+      setError(e.message || t('auth.setupFailed'));
     } finally {
       setSubmitting(false);
     }
@@ -137,9 +139,9 @@ export default function CustomerSetupScreen() {
   // ── Step config ─────────────────────────────────────────────────────────────
   const stepConfig = {
     country: {
-      title: 'Choose your country',
-      subtitle: 'Sets your wallet currency and delivery zone.',
-      placeholder: 'Search country or code...',
+      title: t('auth.chooseCountry'),
+      subtitle: t('auth.chooseCountrySubtitle'),
+      placeholder: t('auth.searchCountry'),
       data: filteredCountries,
       selected: selectedCountry,
       onSelect: handleSelectCountry,
@@ -148,9 +150,9 @@ export default function CustomerSetupScreen() {
       nextDisabled: !selectedCountry,
     },
     governorate: {
-      title: 'Choose your governorate',
+      title: t('auth.chooseGovernorate'),
       subtitle: selectedCountry?.name ?? '',
-      placeholder: 'Search governorate...',
+      placeholder: t('auth.searchGovernorate'),
       data: filteredGovernorates,
       selected: selectedGovernorate,
       onSelect: handleSelectGovernorate,
@@ -159,9 +161,9 @@ export default function CustomerSetupScreen() {
       nextDisabled: !selectedGovernorate,
     },
     delegation: {
-      title: 'Choose your delegation',
+      title: t('auth.chooseDelegation'),
       subtitle: `${selectedCountry?.name} › ${selectedGovernorate?.nameGovernorate}`,
-      placeholder: 'Search delegation...',
+      placeholder: t('auth.searchDelegation'),
       data: filteredDelegations,
       selected: selectedDelegation,
       onSelect: setSelectedDelegation,
@@ -177,9 +179,9 @@ export default function CustomerSetupScreen() {
       <View style={[styles.container, { backgroundColor: colors.background }]}>
         <View style={[styles.header, { backgroundColor: colors.card, borderBottomColor: colors.border }]}>
           <TouchableOpacity onPress={handleBack} style={styles.backRow}>
-            <Text style={[styles.backText, { color: colors.primary }]}>← Back</Text>
+            <Text style={[styles.backText, { color: colors.primary }]}>{t('auth.back')}</Text>
           </TouchableOpacity>
-          <Text style={[styles.title, { color: colors.text }]}>Street (optional)</Text>
+          <Text style={[styles.title, { color: colors.text }]}>{t('auth.streetOptional')}</Text>
           <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
             {selectedCountry?.name} › {selectedGovernorate?.nameGovernorate} › {selectedDelegation?.nameDelegation}
           </Text>
@@ -188,13 +190,13 @@ export default function CustomerSetupScreen() {
         <View style={styles.streetContainer}>
           <TextInput
             style={[styles.streetInput, { backgroundColor: colors.inputBg, borderColor: colors.inputBorder, color: colors.text }]}
-            placeholder="e.g. 12 Avenue Habib Bourguiba"
+            placeholder={t('auth.streetPlaceholder')}
             placeholderTextColor={colors.textTertiary}
             value={street}
             onChangeText={setStreet}
             autoFocus
           />
-          <Text style={[styles.streetHint, { color: colors.textTertiary }]}>You can leave this empty and add it later.</Text>
+          <Text style={[styles.streetHint, { color: colors.textTertiary }]}>{t('auth.streetHint')}</Text>
         </View>
 
         {error && <Text style={styles.errorText}>{error}</Text>}
@@ -208,7 +210,7 @@ export default function CustomerSetupScreen() {
           >
             {submitting
               ? <ActivityIndicator color="#fff" />
-              : <Text style={styles.btnText}>Finish Setup</Text>}
+              : <Text style={styles.btnText}>{t('common.finishSetup')}</Text>}
           </TouchableOpacity>
         </View>
       </View>
@@ -222,7 +224,7 @@ export default function CustomerSetupScreen() {
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <View style={[styles.header, { backgroundColor: colors.card, borderBottomColor: colors.border }]}>
         <TouchableOpacity onPress={handleBack} style={styles.backRow}>
-          <Text style={[styles.backText, { color: colors.primary }]}>← Back</Text>
+          <Text style={[styles.backText, { color: colors.primary }]}>{t('auth.back')}</Text>
         </TouchableOpacity>
         <Text style={[styles.title, { color: colors.text }]}>{cfg.title}</Text>
         {cfg.subtitle ? <Text style={[styles.subtitle, { color: colors.textSecondary }]}>{cfg.subtitle}</Text> : null}
@@ -257,7 +259,7 @@ export default function CustomerSetupScreen() {
           keyboardShouldPersistTaps="handled"
           ListEmptyComponent={
             <View style={styles.center}>
-              <Text style={[styles.emptyText, { color: colors.textTertiary }]}>No results</Text>
+              <Text style={[styles.emptyText, { color: colors.textTertiary }]}>{t('common.noResults')}</Text>
             </View>
           }
           renderItem={({ item }) => {
@@ -288,7 +290,7 @@ export default function CustomerSetupScreen() {
           disabled={cfg.nextDisabled}
           activeOpacity={0.8}
         >
-          <Text style={styles.btnText}>Next →</Text>
+          <Text style={styles.btnText}>{t('auth.nextStep')}</Text>
         </TouchableOpacity>
       </View>
     </View>

@@ -15,6 +15,7 @@ import {
   Platform,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import axios from 'axios';
@@ -23,7 +24,7 @@ import { useTheme } from '../../contexts/ThemeContext';
 const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
 
 const DAYS = ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY', 'SUNDAY'];
-const DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+const DAY_LABEL_KEYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 const HOURS = Array.from({ length: 24 }, (_, i) => i);
 
 const DAY_COL_WIDTH = 52;
@@ -58,6 +59,7 @@ function serializeAvailabilityCells(cells: { [key: string]: boolean }): string {
 export default function DriverAvailability() {
   const router = useRouter();
   const { colors } = useTheme();
+  const { t } = useTranslation();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [selectedCells, setSelectedCells] = useState<{ [key: string]: boolean }>({});
@@ -150,7 +152,7 @@ export default function DriverAvailability() {
         setLastSavedSerialized(serializeAvailabilityCells({}));
         setAvailabilityStatus('ACTIVE');
       } else {
-        Alert.alert('Error', 'Failed to load availability');
+        Alert.alert(t('common.error'), t('driverAvailability.failedLoad'));
       }
     } finally {
       setLoading(false);
@@ -224,7 +226,7 @@ export default function DriverAvailability() {
     });
 
     if (days.length === 0) {
-      Alert.alert('Error', 'Please select at least one time slot');
+      Alert.alert(t('common.error'), t('driverAvailability.pleaseSelectSlot'));
       return;
     }
 
@@ -242,7 +244,7 @@ export default function DriverAvailability() {
       setSavedModalVisible(true);
     } catch (error: any) {
       console.error('Save availability error:', error);
-      Alert.alert('Error', error.response?.data?.message || 'Failed to save availability');
+      Alert.alert(t('common.error'), error.response?.data?.message || t('driverAvailability.failedSave'));
     } finally {
       setSaving(false);
     }
@@ -259,12 +261,12 @@ export default function DriverAvailability() {
 
       setAvailabilityStatus(response.data.status);
       Alert.alert(
-        'Status Updated',
-        `Availability is now ${response.data.status === 'ACTIVE' ? 'active' : 'inactive'}`
+        t('driverAvailability.statusUpdated'),
+        response.data.status === 'ACTIVE' ? t('driverAvailability.nowActive') : t('driverAvailability.nowInactive')
       );
     } catch (error: any) {
       console.error('Toggle status error:', error);
-      Alert.alert('Error', 'Failed to toggle status');
+      Alert.alert(t('common.error'), t('driverAvailability.failedToggle'));
     }
   };
 
@@ -284,7 +286,7 @@ export default function DriverAvailability() {
           { backgroundColor: availabilityStatus === 'ACTIVE' ? '#e8f5e9' : '#ffebee' },
         ]}
       >
-        <TouchableOpacity onPress={toggleStatus} style={styles.statusToggleBtn} accessibilityLabel="Toggle availability status">
+        <TouchableOpacity onPress={toggleStatus} style={styles.statusToggleBtn} accessibilityLabel={t('driverAvailability.toggleStatus')}>
           <Ionicons
             name={availabilityStatus === 'ACTIVE' ? 'checkmark-circle' : 'close-circle'}
             size={28}
@@ -297,7 +299,7 @@ export default function DriverAvailability() {
             { color: availabilityStatus === 'ACTIVE' ? '#2e7d32' : '#c62828' },
           ]}
         >
-          Status: {availabilityStatus}
+          {t('driverAvailability.statusPrefix')}{availabilityStatus === 'ACTIVE' ? t('driverAvailability.statusActive') : t('driverAvailability.statusInactive')}
         </Text>
       </View>
 
@@ -305,7 +307,7 @@ export default function DriverAvailability() {
       <View style={[styles.instructions, { backgroundColor: colors.surfaceVariant }]}>
         <Ionicons name="information-circle" size={20} color={colors.textSecondary} />
         <Text style={[styles.instructionsText, { color: colors.textSecondary }]}>
-          Tap cells to select hours. Tap day name to select/deselect full day.
+          {t('driverAvailability.selectHoursHint')}
         </Text>
       </View>
 
@@ -367,7 +369,7 @@ export default function DriverAvailability() {
                 onPress={() => selectFullDay(day)}
                 activeOpacity={0.7}
               >
-                <Text style={[styles.dayLabel, { color: colors.text }]}>{DAY_LABELS[dayIndex]}</Text>
+                <Text style={[styles.dayLabel, { color: colors.text }]}>{t(`driverAvailability.days.${DAY_LABEL_KEYS[dayIndex]}`)}</Text>
               </TouchableOpacity>
             ))}
           </ScrollView>
@@ -445,7 +447,7 @@ export default function DriverAvailability() {
       {/* Action Buttons */}
       <View style={[styles.actions, { borderTopColor: gridLine }]}>
         <TouchableOpacity style={styles.clearButton} onPress={() => setClearModalVisible(true)}>
-          <Text style={styles.clearButtonText}>Clear All</Text>
+          <Text style={styles.clearButtonText}>{t('driverAvailability.clearAll')}</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -461,7 +463,7 @@ export default function DriverAvailability() {
           ) : (
             <>
               <Ionicons name="save" size={20} color="#fff" />
-              <Text style={styles.saveButtonText}>Save</Text>
+              <Text style={styles.saveButtonText}>{t('driverAvailability.save')}</Text>
             </>
           )}
         </TouchableOpacity>
@@ -492,20 +494,20 @@ export default function DriverAvailability() {
                     <Ionicons name="checkmark" size={28} color="#fff" />
                   </View>
                 </View>
-                <Text style={[styles.savedTitle, { color: colors.text }]}>Saved</Text>
+                <Text style={[styles.savedTitle, { color: colors.text }]}>{t('driverAvailability.saved')}</Text>
                 <Text style={[styles.savedMessage, { color: colors.textSecondary }]}>
-                  Your availability schedule was updated successfully.
+                  {t('driverAvailability.savedBody')}
                 </Text>
                 <TouchableOpacity
                   style={[styles.savedOkButton, { backgroundColor: colors.primary }]}
                   onPress={() => setSavedModalVisible(false)}
                   activeOpacity={0.85}
                   accessibilityRole="button"
-                  accessibilityLabel="OK"
+                  accessibilityLabel={t('common.ok')}
                 >
-                  <Text style={styles.savedOkButtonText}>OK</Text>
+                  <Text style={styles.savedOkButtonText}>{t('common.ok')}</Text>
                 </TouchableOpacity>
-                <Text style={[styles.savedHint, { color: colors.textTertiary }]}>Tap outside to close</Text>
+                <Text style={[styles.savedHint, { color: colors.textTertiary }]}>{t('driverAvailability.tapOutsideClose')}</Text>
               </View>
             </TouchableWithoutFeedback>
           </View>
@@ -535,10 +537,9 @@ export default function DriverAvailability() {
                 <View style={[styles.clearDialogIconWrap, { backgroundColor: colors.dangerBg }]}>
                   <Ionicons name="trash-outline" size={26} color={colors.danger} />
                 </View>
-                <Text style={[styles.dialogTitle, { color: colors.text }]}>Clear all availability?</Text>
+                <Text style={[styles.dialogTitle, { color: colors.text }]}>{t('driverAvailability.clearAllTitle')}</Text>
                 <Text style={[styles.dialogBody, { color: colors.textSecondary }]}>
-                  This removes every selected hour for all days. You can set your schedule again before saving. Your
-                  active or inactive status stays the same.
+                  {t('driverAvailability.clearAllBody')}
                 </Text>
                 <View style={styles.dialogActions}>
                   <TouchableOpacity
@@ -546,14 +547,14 @@ export default function DriverAvailability() {
                     onPress={() => setClearModalVisible(false)}
                     activeOpacity={0.85}
                   >
-                    <Text style={[styles.dialogBtnSecondaryText, { color: colors.text }]}>Cancel</Text>
+                    <Text style={[styles.dialogBtnSecondaryText, { color: colors.text }]}>{t('common.cancel')}</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={[styles.dialogBtnDanger, { backgroundColor: colors.danger }]}
                     onPress={confirmClearAll}
                     activeOpacity={0.85}
                   >
-                    <Text style={styles.dialogBtnDangerText}>Clear all</Text>
+                    <Text style={styles.dialogBtnDangerText}>{t('driverAvailability.clearAllConfirm')}</Text>
                   </TouchableOpacity>
                 </View>
               </View>

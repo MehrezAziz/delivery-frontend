@@ -9,6 +9,7 @@ import {
   Alert,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
+import { useTranslation } from 'react-i18next';
 import { useTheme } from '../../contexts/ThemeContext';
 import { api } from '../../services/api/client';
 
@@ -18,6 +19,7 @@ type NotificationPreferences = {
 
 export default function DriverNotificationsSettingsScreen() {
   const { colors } = useTheme();
+  const { t } = useTranslation();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [prefs, setPrefs] = useState<NotificationPreferences | null>(null);
@@ -28,12 +30,12 @@ export default function DriverNotificationsSettingsScreen() {
       const data = await api.get<NotificationPreferences>('/drivers/me/notification-preferences');
       setPrefs(data);
     } catch (e: unknown) {
-      Alert.alert('Error', e instanceof Error ? e.message : 'Failed to load settings');
+      Alert.alert(t('common.error'), e instanceof Error ? e.message : t('common.error'));
       setPrefs({ notifyGameEvents: false });
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [t]);
 
   useFocusEffect(
     useCallback(() => {
@@ -55,14 +57,14 @@ export default function DriverNotificationsSettingsScreen() {
       contentContainerStyle={styles.content}
     >
       <Text style={[styles.intro, { color: colors.textSecondary }]}>
-        Choose which notifications you want to receive.
+        {t('notificationsSettings.masterBody')}
       </Text>
       <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
         <View style={styles.row}>
           <View style={{ flex: 1, paddingRight: 12 }}>
-            <Text style={[styles.rowTitle, { color: colors.text }]}>Game notifications</Text>
+            <Text style={[styles.rowTitle, { color: colors.text }]}>{t('notificationsSettings.masterTitle')}</Text>
             <Text style={[styles.rowSub, { color: colors.textSecondary }]}>
-              Reminders when a quiz is live, draw results, and if you win.
+              {t('notificationsSettings.masterBody')}
             </Text>
           </View>
           <Switch
@@ -80,7 +82,7 @@ export default function DriverNotificationsSettingsScreen() {
                 setPrefs(data);
               } catch (e: unknown) {
                 setPrefs({ notifyGameEvents: prev });
-                Alert.alert('Error', e instanceof Error ? e.message : 'Failed to update');
+                Alert.alert(t('common.error'), e instanceof Error ? e.message : t('common.error'));
               } finally {
                 setSaving(false);
               }

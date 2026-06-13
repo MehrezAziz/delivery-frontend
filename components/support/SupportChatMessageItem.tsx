@@ -1,5 +1,6 @@
 import React, { memo } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import type { SupportMessage } from '../../services/api/support.service';
 
 type ThemeColors = {
@@ -24,12 +25,6 @@ type Props = {
   onFeedback?: (messageId: string, helpful: boolean) => void;
 };
 
-function senderLabel(senderType: string): string {
-  if (senderType === 'BOT') return 'Assistant';
-  if (senderType === 'ADMIN') return 'Admin';
-  return 'Customer Service';
-}
-
 function SupportChatMessageItemInner({
   item,
   isMe,
@@ -38,6 +33,12 @@ function SupportChatMessageItemInner({
   feedbackGiven,
   onFeedback,
 }: Props) {
+  const { t } = useTranslation();
+  const senderLabel = (senderType: string): string => {
+    if (senderType === 'BOT') return t('supportChat.assistant');
+    if (senderType === 'ADMIN') return t('supportChat.admin');
+    return t('supportChat.customerService');
+  };
   const meta = item.metadata;
   const tr = meta?.trackRecommendation;
   const showTrack = tr?.showTrackButton && tr.orderId && onTrackPress;
@@ -59,10 +60,10 @@ function SupportChatMessageItemInner({
       </Text>
       {citations.length > 0 && (
         <View style={[styles.citations, { borderTopColor: colors.border }]}>
-          <Text style={[styles.citationsTitle, { color: colors.textTertiary }]}>Based on</Text>
+          <Text style={[styles.citationsTitle, { color: colors.textTertiary }]}>{t('supportChat.basedOn')}</Text>
           {citations.slice(0, 6).map((c, i) => (
             <Text key={i} style={[styles.citationLine, { color: colors.textSecondary }]}>
-              • {c}
+              {t('supportChat.bullet')}{c}
             </Text>
           ))}
         </View>
@@ -74,36 +75,36 @@ function SupportChatMessageItemInner({
           activeOpacity={0.85}
         >
           <Text style={styles.trackBtnText}>
-            {tr.driverTrackable ? 'Track delivery' : 'Open order / tracking'}
+            {tr.driverTrackable ? t('supportChat.trackDelivery') : t('supportChat.openOrderTracking')}
           </Text>
           {!tr.driverTrackable && (
-            <Text style={styles.trackHint}>Live position may be unavailable if the driver is offline.</Text>
+            <Text style={styles.trackHint}>{t('supportChat.liveUnavailable')}</Text>
           )}
         </TouchableOpacity>
       )}
       {item.senderType === 'BOT' && meta?.helpfulnessPrompt && onFeedback && fb === undefined && (
         <View style={styles.feedbackRow}>
-          <Text style={[styles.feedbackAsk, { color: colors.textSecondary }]}>Was this helpful?</Text>
+          <Text style={[styles.feedbackAsk, { color: colors.textSecondary }]}>{t('supportChat.wasHelpful')}</Text>
           <TouchableOpacity
             style={[styles.feedbackBtn, { borderColor: colors.border }]}
             onPress={() => onFeedback(item.id, true)}
           >
-            <Text style={{ color: colors.primary }}>Yes</Text>
+            <Text style={{ color: colors.primary }}>{t('supportChat.yes')}</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.feedbackBtn, { borderColor: colors.border }]}
             onPress={() => onFeedback(item.id, false)}
           >
-            <Text style={{ color: colors.textSecondary }}>No</Text>
+            <Text style={{ color: colors.textSecondary }}>{t('supportChat.no')}</Text>
           </TouchableOpacity>
         </View>
       )}
       {item.senderType === 'BOT' && fb !== undefined && (
-        <Text style={[styles.feedbackThanks, { color: colors.textTertiary }]}>Thanks for your feedback.</Text>
+        <Text style={[styles.feedbackThanks, { color: colors.textTertiary }]}>{t('supportChat.thanksFeedback')}</Text>
       )}
       <Text style={[styles.messageTime, isMe ? styles.myMessageTime : styles.theirMessageTime]}>
         {new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-        {item.readAt ? ' ✓' : ''}
+        {item.readAt ? t('supportChat.sentBadge') : ''}
       </Text>
     </View>
   );

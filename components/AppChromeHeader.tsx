@@ -11,17 +11,19 @@ import {
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useTranslation } from 'react-i18next';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAppNavigation } from '../contexts/AppNavigationContext';
 import { ThemeToggle } from './ThemeToggle';
 import { AppSideMenu } from './AppSideMenu';
+import { HeaderLanguagePicker } from './settings/HeaderLanguagePicker';
 import { NotificationPreviewModal } from './NotificationPreviewModal';
 import { notificationService } from '../services/api/notification.service';
 import { subscribeUnreadBadgeRefresh } from '../services/notifications';
 import {
-  AUTH_ROUTE_TITLES,
-  CUSTOMER_ROUTE_TITLES,
-  DRIVER_ROUTE_TITLES,
+  getAuthRouteTitle,
+  getCustomerRouteTitle,
+  getDriverRouteTitle,
 } from '../constants/screenTitles';
 import {
   getCustomerStatusDotColor,
@@ -68,6 +70,7 @@ export function AppChromeHeader({
   showProfile,
   showNotifications,
   showThemeToggle,
+  showLanguagePicker = false,
   hideBack,
   /** Customer/driver sign-in: header back always opens welcome (`/`). */
   guestLoginBackToWelcome,
@@ -82,6 +85,8 @@ export function AppChromeHeader({
   showNotifications?: boolean;
   /** When omitted: only on main Home tab (customer/driver); guest screens set explicitly. */
   showThemeToggle?: boolean;
+  /** Language icon-button + dropdown (used on the welcome/role-selection screen). */
+  showLanguagePicker?: boolean;
   /** When omitted: hidden on main Home tab (customer/driver); guest uses explicit value. */
   hideBack?: boolean;
   guestLoginBackToWelcome?: boolean;
@@ -95,6 +100,7 @@ export function AppChromeHeader({
   const unstableGlobalHref = useUnstableGlobalHref();
   const segments = useSegments() as string[];
   const { colors, isDark } = useTheme();
+  const { t, i18n: i18nInstance } = useTranslation();
   const [menuOpen, setMenuOpen] = useState(false);
   const [identityTitle, setIdentityTitle] = useState<string | null>(null);
   const [identitySubtitle, setIdentitySubtitle] = useState<string | null>(null);
@@ -202,10 +208,12 @@ export function AppChromeHeader({
     if (isMainHome && identityTitle) return identityTitle;
     const parts = pathname.replace(/^\//, '').split('/').filter(Boolean);
     const leaf = parts.filter((p) => !p.startsWith('(')).pop() || 'home';
-    if (role === 'customer') return CUSTOMER_ROUTE_TITLES[leaf] || leaf.replace(/-/g, ' ');
-    if (role === 'driver') return DRIVER_ROUTE_TITLES[leaf] || leaf.replace(/-/g, ' ');
-    return 'App';
-  }, [titleProp, pathname, role, isMainHome, identityTitle]);
+    if (role === 'customer') return getCustomerRouteTitle(leaf);
+    if (role === 'driver') return getDriverRouteTitle(leaf);
+    return t('common.app');
+    // i18nInstance.language is included so the title re-renders when language changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [titleProp, pathname, role, isMainHome, identityTitle, i18nInstance.language]);
 
   const resolvedHideBack =
     role === 'guest' ? !!hideBack : hideBack === true || (hideBack !== false && isMainHome);
@@ -310,7 +318,7 @@ export function AppChromeHeader({
           <TouchableOpacity
             activeOpacity={1}
             accessibilityRole="imagebutton"
-            accessibilityLabel="Profile picture"
+            accessibilityLabel={t('chrome.profilePicture')}
           >
             {profileImageUri ? (
               <Image source={{ uri: profileImageUri }} style={styles.headerAvatar} />
@@ -326,7 +334,7 @@ export function AppChromeHeader({
             onPress={onProfileNamePress}
             activeOpacity={0.75}
             accessibilityRole="button"
-            accessibilityLabel="Open profile"
+            accessibilityLabel={t('chrome.openProfile')}
             style={styles.homeIdentityText}
           >
             <Text style={[styles.title, { color: textColor }]} numberOfLines={1}>
@@ -383,7 +391,7 @@ export function AppChromeHeader({
                     onPress={() => push('/(driver)/support')}
                     style={[styles.iconBtn, { backgroundColor: iconBtnBg }]}
                     activeOpacity={0.75}
-                    accessibilityLabel="Support"
+                    accessibilityLabel={t('chrome.support')}
                   >
                     <Ionicons name="headset-outline" size={22} color={textColor} />
                   </TouchableOpacity>
@@ -411,7 +419,7 @@ export function AppChromeHeader({
                     onPress={() => push('/(customer)/settings')}
                     style={[styles.iconBtn, { backgroundColor: iconBtnBg }]}
                     activeOpacity={0.75}
-                    accessibilityLabel="Settings"
+                    accessibilityLabel={t('chrome.settings')}
                   >
                     <Ionicons name="settings-outline" size={22} color={textColor} />
                   </TouchableOpacity>
@@ -421,7 +429,7 @@ export function AppChromeHeader({
                     onPress={() => push('/(driver)/settings')}
                     style={[styles.iconBtn, { backgroundColor: iconBtnBg }]}
                     activeOpacity={0.75}
-                    accessibilityLabel="Settings"
+                    accessibilityLabel={t('chrome.settings')}
                   >
                     <Ionicons name="settings-outline" size={22} color={textColor} />
                   </TouchableOpacity>
@@ -431,7 +439,7 @@ export function AppChromeHeader({
                     onPress={() => setNotifPreviewOpen(true)}
                     style={[styles.notifCornerBtn, { backgroundColor: notifBtnBg }]}
                     activeOpacity={0.85}
-                    accessibilityLabel="Notifications"
+                    accessibilityLabel={t('chrome.notifications')}
                   >
                     <Ionicons name="notifications-outline" size={22} color={bellColor} />
                     {unreadCount > 0 ? (
@@ -440,6 +448,13 @@ export function AppChromeHeader({
                       </View>
                     ) : null}
                   </TouchableOpacity>
+                ) : null}
+                {showLanguagePicker ? (
+                  <HeaderLanguagePicker
+                    iconColor={textColor}
+                    buttonStyle={{ backgroundColor: iconBtnBg }}
+                    anchorTop={insets.top + 52}
+                  />
                 ) : null}
                 {resolvedShowTheme ? (
                   <ThemeToggle size={20} color="#fff" style={[styles.themeBtn, { backgroundColor: iconBtnBg }]} />
@@ -480,7 +495,7 @@ export function AppChromeHeader({
                     onPress={() => push('/(driver)/support')}
                     style={[styles.iconBtn, { backgroundColor: iconBtnBg }]}
                     activeOpacity={0.75}
-                    accessibilityLabel="Support"
+                    accessibilityLabel={t('chrome.support')}
                   >
                     <Ionicons name="headset-outline" size={22} color={textColor} />
                   </TouchableOpacity>
@@ -508,7 +523,7 @@ export function AppChromeHeader({
                     onPress={() => push('/(customer)/settings')}
                     style={[styles.iconBtn, { backgroundColor: iconBtnBg }]}
                     activeOpacity={0.75}
-                    accessibilityLabel="Settings"
+                    accessibilityLabel={t('chrome.settings')}
                   >
                     <Ionicons name="settings-outline" size={22} color={textColor} />
                   </TouchableOpacity>
@@ -518,7 +533,7 @@ export function AppChromeHeader({
                     onPress={() => push('/(driver)/settings')}
                     style={[styles.iconBtn, { backgroundColor: iconBtnBg }]}
                     activeOpacity={0.75}
-                    accessibilityLabel="Settings"
+                    accessibilityLabel={t('chrome.settings')}
                   >
                     <Ionicons name="settings-outline" size={22} color={textColor} />
                   </TouchableOpacity>
@@ -528,7 +543,7 @@ export function AppChromeHeader({
                     onPress={() => setNotifPreviewOpen(true)}
                     style={[styles.notifCornerBtn, { backgroundColor: notifBtnBg }]}
                     activeOpacity={0.85}
-                    accessibilityLabel="Notifications"
+                    accessibilityLabel={t('chrome.notifications')}
                   >
                     <Ionicons name="notifications-outline" size={22} color={bellColor} />
                     {unreadCount > 0 ? (
@@ -537,6 +552,13 @@ export function AppChromeHeader({
                       </View>
                     ) : null}
                   </TouchableOpacity>
+                ) : null}
+                {showLanguagePicker ? (
+                  <HeaderLanguagePicker
+                    iconColor={textColor}
+                    buttonStyle={{ backgroundColor: iconBtnBg }}
+                    anchorTop={insets.top + 52}
+                  />
                 ) : null}
                 {resolvedShowTheme ? (
                   <ThemeToggle size={20} color={role === 'guest' ? colors.text : '#fff'} style={[styles.themeBtn, { backgroundColor: iconBtnBg }]} />
@@ -580,7 +602,12 @@ export function AppChromeHeader({
 
 /** Use inside Stack `screenOptions` for auth routes. */
 export function AuthChromeHeader({ routeName }: { routeName: string }) {
-  const title = AUTH_ROUTE_TITLES[routeName] || 'Account';
+  const { t, i18n: i18nInstance } = useTranslation();
+  const title = useMemo(() => {
+    const tr = getAuthRouteTitle(routeName);
+    return tr || t('common.account');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [routeName, i18nInstance.language]);
   const guestLoginBackToWelcome = routeName === 'customer-login' || routeName === 'driver-login';
   return (
     <AppChromeHeader
@@ -713,3 +740,4 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
 });
+

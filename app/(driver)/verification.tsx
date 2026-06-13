@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { View, ActivityIndicator, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
 
@@ -11,6 +12,7 @@ const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api';
  */
 export default function DriverVerification() {
   const router = useRouter();
+  const { t } = useTranslation();
   const [busy, setBusy] = useState(true);
 
   useEffect(() => {
@@ -28,15 +30,15 @@ export default function DriverVerification() {
         });
 
         if (response.data.status === 'VERIFIED') {
-          Alert.alert('Already verified', 'Your account is already verified.', [
-            { text: 'OK', onPress: () => router.replace('/(driver)/home') },
+          Alert.alert(t('driverVerification.alreadyVerifiedTitle'), t('driverVerification.alreadyVerifiedBody'), [
+            { text: t('common.ok'), onPress: () => router.replace('/(driver)/home') },
           ]);
           setBusy(false);
           return;
         }
         if (response.data.status === 'PENDING_REVIEW') {
-          Alert.alert('Under review', 'Your documents are currently being reviewed.', [
-            { text: 'OK', onPress: () => router.replace('/(driver)/home') },
+          Alert.alert(t('driverVerification.underReviewTitle'), t('driverVerification.underReviewBody'), [
+            { text: t('common.ok'), onPress: () => router.replace('/(driver)/home') },
           ]);
           setBusy(false);
           return;
@@ -48,7 +50,7 @@ export default function DriverVerification() {
       setBusy(false);
       router.replace('/(auth)/driver-register-step3?source=verification');
     })();
-  }, [router]);
+  }, [router, t]);
 
   return (
     <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>

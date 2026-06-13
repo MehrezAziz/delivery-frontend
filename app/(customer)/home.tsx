@@ -7,6 +7,7 @@ import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useTranslation } from 'react-i18next';
 import { useTheme } from '../../contexts/ThemeContext';
 import { orderService, Order } from '../../services/api/order.service';
 import { restoreOrderTrackingForCustomer } from '../../services/notifications';
@@ -20,19 +21,20 @@ const ACTIVE_STATUSES = [
   'PENDING_PUBLISH', 'SEARCHING_DRIVER', 'PENDING_CUSTOMER_APPROVAL', 'DRIVER_ASSIGNED', 'DRIVER_ARRIVED', 'PICKED_UP', 'DELIVERING',
 ];
 
-const STATUS_META: Record<string, { icon: string; color: string; bg: string; label: string }> = {
-  PENDING_PUBLISH: { icon: 'calendar-outline', color: '#0284c7', bg: '#e0f2fe', label: 'Scheduled' },
-  SEARCHING_DRIVER: { icon: 'search-outline', color: '#ca8a04', bg: '#fef9c3', label: 'Searching' },
-  PENDING_CUSTOMER_APPROVAL: { icon: 'hourglass-outline', color: '#ea580c', bg: '#ffedd5', label: 'Approve Driver' },
-  DRIVER_ASSIGNED:  { icon: 'person-outline', color: '#2563eb', bg: '#dbeafe', label: 'Assigned' },
-  DRIVER_ARRIVED:   { icon: 'flag-outline',   color: '#7c3aed', bg: '#ede9fe', label: 'Arrived' },
-  PICKED_UP:        { icon: 'cube-outline',   color: '#ea580c', bg: '#ffedd5', label: 'Picked Up' },
-  DELIVERING:       { icon: 'bicycle-outline', color: '#4f46e5', bg: '#e0e7ff', label: 'On the Way' },
+const STATUS_META: Record<string, { icon: string; color: string; bg: string; labelKey: string }> = {
+  PENDING_PUBLISH: { icon: 'calendar-outline', color: '#0284c7', bg: '#e0f2fe', labelKey: 'customerHome.status.Scheduled' },
+  SEARCHING_DRIVER: { icon: 'search-outline', color: '#ca8a04', bg: '#fef9c3', labelKey: 'customerHome.status.Searching' },
+  PENDING_CUSTOMER_APPROVAL: { icon: 'hourglass-outline', color: '#ea580c', bg: '#ffedd5', labelKey: 'customerHome.status.ApproveDriver' },
+  DRIVER_ASSIGNED:  { icon: 'person-outline', color: '#2563eb', bg: '#dbeafe', labelKey: 'customerHome.status.Assigned' },
+  DRIVER_ARRIVED:   { icon: 'flag-outline',   color: '#7c3aed', bg: '#ede9fe', labelKey: 'customerHome.status.Arrived' },
+  PICKED_UP:        { icon: 'cube-outline',   color: '#ea580c', bg: '#ffedd5', labelKey: 'customerHome.status.PickedUp' },
+  DELIVERING:       { icon: 'bicycle-outline', color: '#4f46e5', bg: '#e0e7ff', labelKey: 'customerHome.status.OnTheWay' },
 };
 
 export default function CustomerHomeScreen() {
   const router = useRouter();
   const { colors, isDark } = useTheme();
+  const { t } = useTranslation();
   const [customerStatus, setCustomerStatus] = useState<string>('ACTIVE');
   const [activeOrders, setActiveOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
@@ -62,15 +64,15 @@ export default function CustomerHomeScreen() {
   useEffect(() => {
     if (customerStatus === 'CREATED' && !hasMainAddress) {
       appAlert(
-        'Address verification required',
-        'Please add MAIN address to be verified.',
+        t('customerHome.addressVerificationRequired'),
+        t('customerHome.pleaseAddMain'),
         [
-          { text: 'Later', style: 'cancel' },
-          { text: 'Add MAIN address', onPress: () => router.push('/(customer)/addresses') },
+          { text: t('customerHome.later'), style: 'cancel' },
+          { text: t('customerHome.addMainAddress'), onPress: () => router.push('/(customer)/addresses') },
         ],
       );
     }
-  }, [customerStatus, hasMainAddress, router]);
+  }, [customerStatus, hasMainAddress, router, t]);
 
   const loadOrders = useCallback(async () => {
     try {
@@ -116,8 +118,8 @@ export default function CustomerHomeScreen() {
               <Ionicons name="add-circle" size={32} color="#fff" />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={s.ctaTitle}>Create New Order</Text>
-              <Text style={s.ctaSub}>Send a package anywhere</Text>
+              <Text style={s.ctaTitle}>{t('customerHome.createNewOrder')}</Text>
+              <Text style={s.ctaSub}>{t('customerHome.sendPackage')}</Text>
             </View>
             <Ionicons name="chevron-forward" size={22} color="rgba(255,255,255,0.7)" />
           </TouchableOpacity>
@@ -129,31 +131,31 @@ export default function CustomerHomeScreen() {
 
         {/* Quick Actions */}
         <View style={s.section}>
-          <Text style={[s.sectionTitle, { color: colors.text }]}>Quick Actions</Text>
+          <Text style={[s.sectionTitle, { color: colors.text }]}>{t('customerHome.quickActions')}</Text>
           <View style={s.actionsGrid}>
             <TouchableOpacity style={[s.actionCard, { backgroundColor: colors.card }]} onPress={() => router.push('/(customer)/orders')}>
               <View style={[s.actionIconWrap, { backgroundColor: isDark ? '#1e3a5f' : '#dbeafe' }]}>
                 <Ionicons name="receipt-outline" size={22} color="#2563eb" />
               </View>
-              <Text style={[s.actionLabel, { color: colors.text }]}>My Orders</Text>
+              <Text style={[s.actionLabel, { color: colors.text }]}>{t('customerHome.myOrders')}</Text>
             </TouchableOpacity>
             <TouchableOpacity style={[s.actionCard, { backgroundColor: colors.card }]} onPress={() => router.push('/(customer)/addresses')}>
               <View style={[s.actionIconWrap, { backgroundColor: isDark ? '#052e16' : '#dcfce7' }]}>
                 <Ionicons name="location-outline" size={22} color="#16a34a" />
               </View>
-              <Text style={[s.actionLabel, { color: colors.text }]}>Addresses</Text>
+              <Text style={[s.actionLabel, { color: colors.text }]}>{t('customerHome.addresses')}</Text>
             </TouchableOpacity>
             <TouchableOpacity style={[s.actionCard, { backgroundColor: colors.card }]} onPress={() => router.push('/(customer)/wallet')}>
               <View style={[s.actionIconWrap, { backgroundColor: isDark ? '#422006' : '#fef9c3' }]}>
                 <Ionicons name="wallet-outline" size={22} color="#ca8a04" />
               </View>
-              <Text style={[s.actionLabel, { color: colors.text }]}>Wallet</Text>
+              <Text style={[s.actionLabel, { color: colors.text }]}>{t('customerHome.wallet')}</Text>
             </TouchableOpacity>
             <TouchableOpacity style={[s.actionCard, { backgroundColor: colors.card }]} onPress={() => router.push('/(customer)/settings')}>
               <View style={[s.actionIconWrap, { backgroundColor: isDark ? '#1e293b' : '#f1f5f9' }]}>
                 <Ionicons name="settings-outline" size={22} color={colors.primary} />
               </View>
-              <Text style={[s.actionLabel, { color: colors.text }]}>Settings</Text>
+              <Text style={[s.actionLabel, { color: colors.text }]}>{t('customerHome.settings')}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -161,10 +163,10 @@ export default function CustomerHomeScreen() {
         {/* Active Orders */}
         <View style={s.section}>
           <View style={s.sectionHeader}>
-            <Text style={[s.sectionTitle, { color: colors.text }]}>Active Orders</Text>
+            <Text style={[s.sectionTitle, { color: colors.text }]}>{t('customerHome.activeOrders')}</Text>
             {activeOrders.length > 0 && (
               <TouchableOpacity onPress={() => router.push('/(customer)/orders')}>
-                <Text style={[s.seeAll, { color: colors.primary }]}>See All</Text>
+                <Text style={[s.seeAll, { color: colors.primary }]}>{t('customerHome.seeAll')}</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -174,8 +176,8 @@ export default function CustomerHomeScreen() {
           ) : activeOrders.length === 0 ? (
             <View style={[s.emptyCard, { backgroundColor: colors.card }]}>
               <Ionicons name="cube-outline" size={40} color={colors.textTertiary} />
-              <Text style={[s.emptyText, { color: colors.textSecondary }]}>No active orders</Text>
-              <Text style={[s.emptySub, { color: colors.textTertiary }]}>Create an order to get started</Text>
+              <Text style={[s.emptyText, { color: colors.textSecondary }]}>{t('customerHome.noActiveOrders')}</Text>
+              <Text style={[s.emptySub, { color: colors.textTertiary }]}>{t('customerHome.createOrderHint')}</Text>
             </View>
           ) : (
             activeOrders.slice(0, 3).map(order => {
@@ -191,9 +193,9 @@ export default function CustomerHomeScreen() {
                   <View style={s.orderTop}>
                     <View style={[s.orderStatusBadge, { backgroundColor: isDark ? meta.color + '22' : meta.bg }]}>
                       <Ionicons name={meta.icon as any} size={14} color={meta.color} />
-                      <Text style={[s.orderStatusText, { color: meta.color }]}>{meta.label}</Text>
+                      <Text style={[s.orderStatusText, { color: meta.color }]}>{t(meta.labelKey)}</Text>
                     </View>
-                    <Text style={[s.orderPrice, { color: colors.text }]}>{order.price.toFixed(2)} TND</Text>
+                    <Text style={[s.orderPrice, { color: colors.text }]}>{order.price.toFixed(2)} {t('common.tnd')}</Text>
                   </View>
                   <View style={s.orderRoute}>
                     <View style={s.orderRouteIcons}>
@@ -203,10 +205,10 @@ export default function CustomerHomeScreen() {
                     </View>
                     <View style={{ flex: 1 }}>
                       <Text style={[s.orderAddr, { color: colors.textSecondary }]} numberOfLines={1}>
-                        {order.pickupAddress?.street || order.pickupAddress?.delegation?.nameDelegation || 'Pickup'}
+                        {order.pickupAddress?.street || order.pickupAddress?.delegation?.nameDelegation || t('customerHome.pickup')}
                       </Text>
                       <Text style={[s.orderAddr, { color: colors.textSecondary }]} numberOfLines={1}>
-                        {order.dropoffAddress?.street || order.dropoffAddress?.delegation?.nameDelegation || 'Delivery'}
+                        {order.dropoffAddress?.street || order.dropoffAddress?.delegation?.nameDelegation || t('customerHome.delivery')}
                       </Text>
                     </View>
                     <Ionicons name="chevron-forward" size={18} color={colors.textTertiary} />

@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -9,6 +10,7 @@ import { coinTopupRoutes, useCoinTopupRole } from '../lib/coin-topup-role';
 type ResultStatus = 'success' | 'failed';
 
 export default function CoinTopupResultScreen() {
+  const { t } = useTranslation();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { colors, isDark } = useTheme();
@@ -28,19 +30,19 @@ export default function CoinTopupResultScreen() {
   const isSuccess = status === 'success';
 
   const headline = useMemo(() => {
-    if (isSuccess) return 'Payment successful!';
-    return 'Payment not completed';
-  }, [isSuccess]);
+    if (isSuccess) return t('coinTopupResult.success');
+    return t('coinTopupResult.failed');
+  }, [isSuccess, t]);
 
   const subline = useMemo(() => {
     if (isSuccess) {
       if (Number.isFinite(coins)) {
-        return `${coins.toFixed(2)} coins were added to your balance.`;
+        return t('coinTopupResult.successBody', { count: coins.toFixed(2) });
       }
-      return 'Your coins have been credited to your balance.';
+      return t('coinTopupResult.successGenericBody');
     }
-    return 'The payment was cancelled, declined, or timed out. You were not charged.';
-  }, [coins, isSuccess]);
+    return t('coinTopupResult.failedBody');
+  }, [coins, isSuccess, t]);
 
   const accent = isSuccess ? (isDark ? '#34d399' : '#059669') : (isDark ? '#f87171' : '#dc2626');
   const glow = isSuccess
@@ -82,7 +84,7 @@ export default function CoinTopupResultScreen() {
           onPress={() => router.replace({ pathname: buyCoinsPath, params: { role } })}
           activeOpacity={0.9}
         >
-          <Text style={styles.primaryBtnText}>{isSuccess ? 'Done' : 'Back to buy coins'}</Text>
+          <Text style={styles.primaryBtnText}>{isSuccess ? t('coinTopupResult.done') : t('coinTopupResult.backToBuy')}</Text>
         </TouchableOpacity>
         {!isSuccess ? (
           <TouchableOpacity
@@ -90,7 +92,7 @@ export default function CoinTopupResultScreen() {
             onPress={() => router.replace({ pathname: buyCoinsPath, params: { role } })}
             activeOpacity={0.9}
           >
-            <Text style={[styles.secondaryBtnText, { color: colors.primary }]}>Try again</Text>
+            <Text style={[styles.secondaryBtnText, { color: colors.primary }]}>{t('coinTopupResult.tryAgain')}</Text>
           </TouchableOpacity>
         ) : null}
       </View>

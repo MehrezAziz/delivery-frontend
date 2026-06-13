@@ -18,6 +18,7 @@ import {
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Clipboard from 'expo-clipboard';
@@ -75,6 +76,7 @@ export default function DriverForgotPasswordScreen() {
   }>();
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
+  const { t } = useTranslation();
 
   const [step, setStep] = useState<Step>('method');
   const [contactKind, setContactKind] = useState<'email' | 'phone' | null>(null);
@@ -227,27 +229,27 @@ export default function DriverForgotPasswordScreen() {
       if (submittingOtpRef.current) return;
       setOtpSuccessMessage(null);
       if (otpEntryLockedUntil && Date.now() < otpEntryLockedUntil) {
-        setError('Too many incorrect attempts. Wait for the lock to end, then request a new code.');
+        setError(t('forgotPassword.tooManyIncorrect'));
         return;
       }
       if (otpExpiresAt && Date.now() >= otpExpiresAt) {
-        setError('This code has expired. Use Resend or go back to get a new code.');
+        setError(t('forgotPassword.codeNoLongerValid'));
         return;
       }
       if (otpChannelDead && recoveryChannel === 'sms') {
-        setError('Use “Resend code” when the wait ends, or go back.');
+        setError(t('forgotPassword.useResendWhenWaitEnds'));
         return;
       }
       if (otpChannelDead) {
-        setError('Request a new verification code (use Back, then send again).');
+        setError(t('forgotPassword.requestNewCode'));
         return;
       }
       if (sessionId && otpAttemptsUsed >= FORGOT_MAX_VERIFY_ATTEMPTS) {
-        setError('You have reached the maximum number of attempts.');
+        setError(t('forgotPassword.maxAttemptsReached'));
         return;
       }
       if (!sessionId && recoveryChannel === 'sms' && otpAttemptsUsed >= FORGOT_MAX_VERIFY_ATTEMPTS) {
-        setError('You have reached the maximum number of attempts.');
+        setError(t('forgotPassword.maxAttemptsReached'));
         return;
       }
       submittingOtpRef.current = true;
@@ -267,7 +269,7 @@ export default function DriverForgotPasswordScreen() {
                 ? data.message
                 : Array.isArray(data.message)
                   ? data.message.join(' ')
-                  : 'Invalid code';
+                  : t('forgotPassword.invalidCodeError');
             const msgLower = msg.toLowerCase();
             const hardCap =
               msgLower.includes('too many attempts') || msgLower.includes('maximum verification');
@@ -294,7 +296,7 @@ export default function DriverForgotPasswordScreen() {
             if (attemptsAtOrOverCap && !hardCap) {
               setOtpError(true);
               setOtpDigits(['', '', '', '', '', '']);
-              setError('You have reached the maximum number of attempts.');
+              setError(t('forgotPassword.maxAttemptsReached'));
               return;
             }
             setOtpError(true);
@@ -309,7 +311,7 @@ export default function DriverForgotPasswordScreen() {
         }
 
         const conf = firebaseConfirmationRef.current;
-        if (!conf) throw new Error('Session expired. Go back and request again.');
+        if (!conf) throw new Error(t('forgotPassword.sessionExpiredRetry'));
         try {
           await conf.confirm(code);
         } catch {
@@ -317,10 +319,10 @@ export default function DriverForgotPasswordScreen() {
           setOtpDigits(['', '', '', '', '', '']);
           registerFirebaseSmsWrongAttempt();
           setTimeout(() => otpRefs.current[0]?.focus(), 0);
-          throw new Error('Invalid code');
+          throw new Error(t('forgotPassword.invalidCodeError'));
         }
         const user = getAuth().currentUser;
-        if (!user) throw new Error('Verification incomplete');
+        if (!user) throw new Error(t('forgotPassword.verificationIncomplete'));
         const idToken = await getIdToken(user, true);
         const res = await fetch(`${API_BASE_URL}/auth/user/forgot-password/verify-firebase`, {
           method: 'POST',
@@ -339,14 +341,14 @@ export default function DriverForgotPasswordScreen() {
               ? data.message
               : Array.isArray(data.message)
                 ? data.message.join(' ')
-                : 'Verification failed',
+                : t('forgotPassword.verificationFailed'),
           );
         }
         resetTokenRef.current = data.resetToken;
         if (smsOtpPhoneE164Ref.current) void clearDriverSmsForgotCooldown(smsOtpPhoneE164Ref.current);
         setStep('newPassword');
       } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : 'Something went wrong';
+        const msg = e instanceof Error ? e.message : t('common.something_went_wrong');
         setError(msg);
       } finally {
         setLoading(false);
@@ -453,7 +455,7 @@ export default function DriverForgotPasswordScreen() {
   const submitEmailPhoneForPreview = async () => {
     setError(null);
     if (!selectedPhoneCountry || !phoneLocal.trim()) {
-      setError('Enter your account phone number');
+      setError(t('forgotPassword.enterAccountPhoneError'));
       return;
     }
     const e164 = toE164Phone(selectedPhoneCountry.dialCode, phoneLocal);
@@ -466,20 +468,20 @@ export default function DriverForgotPasswordScreen() {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        throw new Error(data.message || 'Could not check your account');
+        throw new Error(data.message || t('forgotPassword.couldNotCheckAccount'));
       }
       if (!data.ok) {
         if (data.reason === 'NO_SAVED_EMAIL') {
           Alert.alert(
-            'No saved email',
-            'Your profile does not have an email address. Sign in with another method and add one in your profile, or use phone recovery.',
-            [{ text: 'OK', onPress: () => setStep('method') }],
+            t('forgotPassword.noSavedEmailTitle'),
+            t('forgotPassword.noSavedEmailBody'),
+            [{ text: t('common.ok'), onPress: () => setStep('method') }],
           );
         } else {
           Alert.alert(
-            'Account not found',
-            'No driver account with this phone number and a saved password.',
-            [{ text: 'OK', onPress: () => setStep('method') }],
+            t('forgotPassword.accountNotFoundTitle'),
+            t('forgotPassword.accountNotFoundDriverBody'),
+            [{ text: t('common.ok'), onPress: () => setStep('method') }],
           );
         }
         return;
@@ -488,7 +490,7 @@ export default function DriverForgotPasswordScreen() {
       setMaskedEmail(data.maskedEmail);
       setStep('emailConfirm');
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Request failed');
+      setError(e instanceof Error ? e.message : t('forgotPassword.requestFailed'));
     } finally {
       setLoading(false);
     }
@@ -496,7 +498,7 @@ export default function DriverForgotPasswordScreen() {
 
   const sendEmailVerificationCode = async () => {
     if (!emailRecoveryE164) {
-      setError('Session expired. Go back and try again.');
+      setError(t('forgotPassword.sessionExpired'));
       return;
     }
     setError(null);
@@ -508,8 +510,8 @@ export default function DriverForgotPasswordScreen() {
         body: JSON.stringify({ channel: 'EMAIL', phone: emailRecoveryE164, role: FORGOT_PW_ROLE }),
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.message || 'Request failed');
-      if (data.mode !== 'SESSION') throw new Error('Unexpected response');
+      if (!res.ok) throw new Error(data.message || t('forgotPassword.requestFailed'));
+      if (data.mode !== 'SESSION') throw new Error(t('forgotPassword.unexpectedResponse'));
       setSessionId(data.sessionId);
       setResendAvailableAt(Date.now() + (data.resendAfterSeconds ?? 300) * 1000);
       setOtpExpiresAt(Date.now() + (data.expiresInSeconds ?? 600) * 1000);
@@ -521,7 +523,7 @@ export default function DriverForgotPasswordScreen() {
       smsOtpPhoneE164Ref.current = null;
       setStep('otp');
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Request failed');
+      setError(e instanceof Error ? e.message : t('forgotPassword.requestFailed'));
     } finally {
       setLoading(false);
     }
@@ -531,7 +533,7 @@ export default function DriverForgotPasswordScreen() {
     setError(null);
 
     if (!selectedPhoneCountry || !phoneLocal.trim()) {
-      setError('Enter your phone number');
+      setError(t('forgotPassword.enterPhoneError'));
       return;
     }
     const e164 = toE164Phone(selectedPhoneCountry.dialCode, phoneLocal);
@@ -545,8 +547,8 @@ export default function DriverForgotPasswordScreen() {
           body: JSON.stringify({ channel: 'WHATSAPP', phone: e164, role: FORGOT_PW_ROLE }),
         });
         const data = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(data.message || 'Request failed');
-        if (data.mode !== 'SESSION') throw new Error('Unexpected response');
+        if (!res.ok) throw new Error(data.message || t('forgotPassword.requestFailed'));
+        if (data.mode !== 'SESSION') throw new Error(t('forgotPassword.unexpectedResponse'));
         setSessionId(data.sessionId);
         setResendAvailableAt(Date.now() + (data.resendAfterSeconds ?? 300) * 1000);
         setOtpExpiresAt(Date.now() + (data.expiresInSeconds ?? 600) * 1000);
@@ -558,7 +560,7 @@ export default function DriverForgotPasswordScreen() {
         smsOtpPhoneE164Ref.current = null;
         setStep('otp');
       } catch (e: unknown) {
-        setError(e instanceof Error ? e.message : 'Request failed');
+        setError(e instanceof Error ? e.message : t('forgotPassword.requestFailed'));
       } finally {
         setLoading(false);
       }
@@ -569,7 +571,7 @@ export default function DriverForgotPasswordScreen() {
       const smsCooldownUntil = await getDriverSmsForgotCooldownUntil(e164);
       if (smsCooldownUntil > Date.now()) {
         setError(
-          `Please wait ${formatMsAsMmSs(smsCooldownUntil - Date.now())} before requesting another SMS for this number.`,
+          `${t('forgotPassword.smsCooldownPrefix')}${formatMsAsMmSs(smsCooldownUntil - Date.now())}${t('forgotPassword.smsCooldownSuffix')}`,
         );
         return;
       }
@@ -581,8 +583,8 @@ export default function DriverForgotPasswordScreen() {
           body: JSON.stringify({ channel: 'SMS', phone: e164, role: FORGOT_PW_ROLE }),
         });
         const data = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(data.message || 'Request failed');
-        if (data.mode !== 'FIREBASE_SMS') throw new Error('SMS setup error');
+        if (!res.ok) throw new Error(data.message || t('forgotPassword.requestFailed'));
+        if (data.mode !== 'FIREBASE_SMS') throw new Error(t('forgotPassword.smsSetupError'));
         const confirmation = await signInWithPhoneNumber(getAuth(), data.phoneE164);
         firebaseConfirmationRef.current = confirmation;
         setSessionId(null);
@@ -594,7 +596,7 @@ export default function DriverForgotPasswordScreen() {
         smsOtpPhoneE164Ref.current = e164;
         setStep('otp');
       } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : 'SMS failed';
+        const msg = e instanceof Error ? e.message : t('forgotPassword.smsFailed');
         setError(msg);
       } finally {
         setLoading(false);
@@ -616,7 +618,7 @@ export default function DriverForgotPasswordScreen() {
         body: JSON.stringify({ sessionId }),
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.message || 'Resend failed');
+      if (!res.ok) throw new Error(data.message || t('forgotPassword.resendFailed'));
       setResendAvailableAt(Date.now() + (data.resendAfterSeconds ?? 300) * 1000);
       setOtpExpiresAt(Date.now() + (data.expiresInSeconds ?? 600) * 1000);
       setOtpAttemptsUsed(0);
@@ -626,10 +628,10 @@ export default function DriverForgotPasswordScreen() {
       setOtpDigits(['', '', '', '', '', '']);
       setOtpError(false);
       if (recoveryChannel === 'email') {
-        setOtpSuccessMessage('A new verification code has been sent to your email.');
+        setOtpSuccessMessage(t('forgotPassword.newCodeSentEmail'));
       }
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Resend failed');
+      setError(e instanceof Error ? e.message : t('forgotPassword.resendFailed'));
     } finally {
       setLoading(false);
     }
@@ -637,13 +639,13 @@ export default function DriverForgotPasswordScreen() {
 
   const retryDriverForgotSms = async () => {
     if (!selectedPhoneCountry || !phoneLocal.trim()) {
-      setError('Enter your phone number');
+      setError(t('forgotPassword.enterPhoneError'));
       return;
     }
     const e164 = toE164Phone(selectedPhoneCountry.dialCode, phoneLocal);
     const until = await getDriverSmsForgotCooldownUntil(e164);
     if (until > Date.now()) {
-      setError(`Please wait ${formatMsAsMmSs(until - Date.now())} before requesting another SMS.`);
+      setError(`${t('forgotPassword.smsCooldownPrefix')}${formatMsAsMmSs(until - Date.now())}${t('forgotPassword.smsCooldownGenericSuffix')}`);
       return;
     }
     setError(null);
@@ -655,8 +657,8 @@ export default function DriverForgotPasswordScreen() {
         body: JSON.stringify({ channel: 'SMS', phone: e164, role: FORGOT_PW_ROLE }),
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.message || 'Request failed');
-      if (data.mode !== 'FIREBASE_SMS') throw new Error('SMS setup error');
+      if (!res.ok) throw new Error(data.message || t('forgotPassword.requestFailed'));
+      if (data.mode !== 'FIREBASE_SMS') throw new Error(t('forgotPassword.smsSetupError'));
       const confirmation = await signInWithPhoneNumber(getAuth(), data.phoneE164);
       firebaseConfirmationRef.current = confirmation;
       setSessionId(null);
@@ -670,7 +672,7 @@ export default function DriverForgotPasswordScreen() {
       smsOtpPhoneE164Ref.current = e164;
       setRecoveryChannel('sms');
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'SMS failed');
+      setError(e instanceof Error ? e.message : t('forgotPassword.smsFailed'));
     } finally {
       setLoading(false);
     }
@@ -679,16 +681,16 @@ export default function DriverForgotPasswordScreen() {
   const handleResetPassword = async () => {
     setError(null);
     if (newPassword.length < 8 || confirmPassword.length < 8) {
-      setError('Password must be at least 8 characters');
+      setError(t('auth.passwordMinLength'));
       return;
     }
     if (newPassword !== confirmPassword) {
-      setError('Passwords do not match');
+      setError(t('auth.passwordsDoNotMatch'));
       return;
     }
     const token = resetTokenRef.current;
     if (!token) {
-      setError('Session expired. Start again.');
+      setError(t('forgotPassword.sessionExpiredStartAgain'));
       return;
     }
     setLoading(true);
@@ -703,10 +705,10 @@ export default function DriverForgotPasswordScreen() {
         }),
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.message || 'Could not update password');
+      if (!res.ok) throw new Error(data.message || t('forgotPassword.couldNotUpdatePassword'));
       router.replace('/(auth)/driver-login');
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Could not update password');
+      setError(e instanceof Error ? e.message : t('forgotPassword.couldNotUpdatePassword'));
     } finally {
       setLoading(false);
     }
@@ -770,7 +772,7 @@ export default function DriverForgotPasswordScreen() {
       ]}
     >
       <Ionicons name="chevron-back" size={22} color={colors.primary} />
-      <Text style={[styles.navBackButtonText, { color: colors.text }]}>Back</Text>
+      <Text style={[styles.navBackButtonText, { color: colors.text }]}>{t('forgotPassword.backLabel')}</Text>
     </TouchableOpacity>
   );
 
@@ -784,24 +786,24 @@ export default function DriverForgotPasswordScreen() {
         keyboardShouldPersistTaps="handled"
       >
         <View style={styles.content}>
-          <Text style={[styles.title, { color: colors.text }]}>Forgot password</Text>
+          <Text style={[styles.title, { color: colors.text }]}>{t('forgotPassword.title')}</Text>
           <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-            {step === 'method' && 'Reset using your email or phone number.'}
+            {step === 'method' && t('forgotPassword.subtitleMethod')}
             {step === 'identifier' &&
               contactKind === 'email' &&
-              'Enter the phone number on your account. We will check if you have a saved email.'}
+              t('forgotPassword.subtitleIdentifierEmail')}
             {step === 'emailConfirm' &&
-              'Confirm this is the email where you want to receive the code.'}
+              t('forgotPassword.subtitleEmailConfirm')}
             {step === 'identifier' &&
               contactKind === 'phone' &&
               !phoneChannel &&
-              'Choose how you want to receive the code.'}
+              t('forgotPassword.subtitleChooseChannel')}
             {step === 'identifier' &&
               contactKind === 'phone' &&
               phoneChannel &&
-              'Enter your phone number with country code.'}
-            {step === 'otp' && 'Enter the 6-digit code we sent you.'}
-            {step === 'newPassword' && 'Choose a new password.'}
+              t('forgotPassword.subtitlePhone')}
+            {step === 'otp' && t('forgotPassword.subtitleOtp')}
+            {step === 'newPassword' && t('forgotPassword.subtitleNewPassword')}
           </Text>
 
           {step === 'method' && (
@@ -815,9 +817,9 @@ export default function DriverForgotPasswordScreen() {
                   setStep('identifier');
                 }}
               >
-                <Text style={[styles.choiceTitle, { color: colors.text }]}>Email</Text>
+                <Text style={[styles.choiceTitle, { color: colors.text }]}>{t('forgotPassword.methodEmail')}</Text>
                 <Text style={[styles.choiceSub, { color: colors.textSecondary }]}>
-                  Receive a code by email
+                  {t('forgotPassword.methodEmailHint')}
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity
@@ -828,9 +830,9 @@ export default function DriverForgotPasswordScreen() {
                   setStep('identifier');
                 }}
               >
-                <Text style={[styles.choiceTitle, { color: colors.text }]}>Phone</Text>
+                <Text style={[styles.choiceTitle, { color: colors.text }]}>{t('forgotPassword.methodPhone')}</Text>
                 <Text style={[styles.choiceSub, { color: colors.textSecondary }]}>
-                  SMS (Firebase)
+                  {t('forgotPassword.methodPhoneHint')}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -842,9 +844,9 @@ export default function DriverForgotPasswordScreen() {
                 style={[styles.choiceBtn, { backgroundColor: colors.surfaceVariant, borderColor: colors.border }]}
                 onPress={() => setPhoneChannel('sms')}
               >
-                <Text style={[styles.choiceTitle, { color: colors.text }]}>SMS</Text>
+                <Text style={[styles.choiceTitle, { color: colors.text }]}>{t('forgotPassword.channelSms')}</Text>
                 <Text style={[styles.choiceSub, { color: colors.textSecondary }]}>
-                  Code via Firebase (your device receives the SMS)
+                  {t('forgotPassword.channelSmsHint')}
                 </Text>
               </TouchableOpacity>
               <View
@@ -854,10 +856,10 @@ export default function DriverForgotPasswordScreen() {
                   { backgroundColor: colors.surfaceVariant, borderColor: colors.border, opacity: 0.55 },
                 ]}
               >
-                <Text style={[styles.choiceTitle, { color: colors.text }]}>WhatsApp</Text>
-                <Text style={[styles.choiceSoon, { color: colors.primary }]}>Coming soon</Text>
+                <Text style={[styles.choiceTitle, { color: colors.text }]}>{t('forgotPassword.channelWhatsApp')}</Text>
+                <Text style={[styles.choiceSoon, { color: colors.primary }]}>{t('forgotPassword.comingSoon')}</Text>
                 <Text style={[styles.choiceSub, { color: colors.textSecondary }]}>
-                  WhatsApp Business recovery is not available yet
+                  {t('forgotPassword.whatsappNotAvailable')}
                 </Text>
               </View>
               {renderForgotBackButton(() => setStep('method'), 8)}
@@ -866,7 +868,7 @@ export default function DriverForgotPasswordScreen() {
 
           {step === 'identifier' && contactKind === 'email' && (
             <View style={styles.form}>
-              <Text style={[styles.label, { color: colors.text }]}>Account phone number</Text>
+              <Text style={[styles.label, { color: colors.text }]}>{t('forgotPassword.accountPhoneNumber')}</Text>
               <View style={[styles.phoneRow, { backgroundColor: colors.inputBg, borderColor: colors.inputBorder }]}>
                 <TouchableOpacity
                   style={[styles.countryCodeBtn, { borderRightColor: colors.inputBorder }]}
@@ -886,11 +888,11 @@ export default function DriverForgotPasswordScreen() {
                 </TouchableOpacity>
                 <TextInput
                   style={[styles.phoneInput, { color: colors.text }]}
-                  placeholder="XX XXX XXX"
+                  placeholder={t('auth.phoneNumberPlaceholder')}
                   placeholderTextColor={colors.textTertiary}
                   keyboardType="phone-pad"
                   value={phoneLocal}
-                  onChangeText={(t) => setPhoneLocal(t.replace(/[^\d\s]/g, ''))}
+                  onChangeText={(txt) => setPhoneLocal(txt.replace(/[^\d\s]/g, ''))}
                 />
               </View>
               <TouchableOpacity
@@ -901,7 +903,7 @@ export default function DriverForgotPasswordScreen() {
                 {loading ? (
                   <ActivityIndicator color="#fff" />
                 ) : (
-                  <Text style={styles.primaryBtnText}>Check email</Text>
+                  <Text style={styles.primaryBtnText}>{t('forgotPassword.checkEmail')}</Text>
                 )}
               </TouchableOpacity>
               {renderForgotBackButton(() => setStep('method'))}
@@ -917,7 +919,7 @@ export default function DriverForgotPasswordScreen() {
                 ]}
               >
                 <Text style={[styles.emailPickLabel, { color: colors.textSecondary }]}>
-                  Code will be sent to:
+                  {t('forgotPassword.codeWillBeSentTo')}
                 </Text>
                 <Text style={[styles.emailPickValue, { color: colors.text }]}>{maskedEmail}</Text>
               </View>
@@ -926,7 +928,7 @@ export default function DriverForgotPasswordScreen() {
                 onPress={sendEmailVerificationCode}
                 disabled={loading}
               >
-                {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryBtnText}>Send code</Text>}
+                {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryBtnText}>{t('forgotPassword.sendCode')}</Text>}
               </TouchableOpacity>
               {renderForgotBackButton(() => {
                 setStep('identifier');
@@ -938,7 +940,7 @@ export default function DriverForgotPasswordScreen() {
 
           {step === 'identifier' && contactKind === 'phone' && phoneChannel && (
             <View style={styles.form}>
-              <Text style={[styles.label, { color: colors.text }]}>Phone number</Text>
+              <Text style={[styles.label, { color: colors.text }]}>{t('forgotPassword.phoneNumberLabel')}</Text>
               <View style={[styles.phoneRow, { backgroundColor: colors.inputBg, borderColor: colors.inputBorder }]}>
                 <TouchableOpacity
                   style={[styles.countryCodeBtn, { borderRightColor: colors.inputBorder }]}
@@ -958,11 +960,11 @@ export default function DriverForgotPasswordScreen() {
                 </TouchableOpacity>
                 <TextInput
                   style={[styles.phoneInput, { color: colors.text }]}
-                  placeholder="XX XXX XXX"
+                  placeholder={t('auth.phoneNumberPlaceholder')}
                   placeholderTextColor={colors.textTertiary}
                   keyboardType="phone-pad"
                   value={phoneLocal}
-                  onChangeText={(t) => setPhoneLocal(t.replace(/[^\d\s]/g, ''))}
+                  onChangeText={(txt) => setPhoneLocal(txt.replace(/[^\d\s]/g, ''))}
                 />
               </View>
               <TouchableOpacity
@@ -973,7 +975,7 @@ export default function DriverForgotPasswordScreen() {
                 {loading ? (
                   <ActivityIndicator color="#fff" />
                 ) : (
-                  <Text style={styles.primaryBtnText}>Send code</Text>
+                  <Text style={styles.primaryBtnText}>{t('forgotPassword.sendCode')}</Text>
                 )}
               </TouchableOpacity>
               {renderForgotBackButton(() => {
@@ -988,29 +990,29 @@ export default function DriverForgotPasswordScreen() {
               {otpExpiresAt ? (
                 Math.max(0, otpExpiresAt - Date.now()) > 0 ? (
                   <Text style={[styles.otpMetaLine, { color: colors.textSecondary }]}>
-                    Code valid for {'\u2212'}
+                    {t('forgotPassword.codeValidFor')}{'\u2212'}
                     {formatMsAsMmSs(Math.max(0, otpExpiresAt - Date.now()))}
                   </Text>
                 ) : (
                   <Text style={[styles.otpMetaLine, { color: colors.danger }]}>
-                    This code is no longer valid — tap Resend for a new one or go back.
+                    {t('forgotPassword.codeNoLongerValidShort')}
                   </Text>
                 )
               ) : null}
               {otpLockedByMax && otpEntryLockedUntil ? (
                 <Text style={[styles.otpMetaLine, { color: colors.textSecondary }]}>
-                  Too many incorrect attempts. Digit entry is locked for {'\u2212'}
+                  {t('forgotPassword.digitEntryLocked')}{'\u2212'}
                   {formatMsAsMmSs(Math.max(0, otpEntryLockedUntil - Date.now()))}
                 </Text>
               ) : null}
               {otpChannelDead && !otpLockedByMax && recoveryChannel !== 'sms' ? (
                 <Text style={[styles.otpMetaLine, { color: colors.textSecondary }]}>
-                  Request a new verification code using Back, then send a code again.
+                  {t('forgotPassword.requestNewCodeBack')}
                 </Text>
               ) : null}
               {sessionId || recoveryChannel === 'sms' ? (
                 <Text style={[styles.otpMetaLine, { color: colors.textSecondary, marginBottom: 10 }]}>
-                  {otpAttemptsUsed}/{otpMaxAttempts} attempts
+                  {otpAttemptsUsed}/{otpMaxAttempts}{t('forgotPassword.attemptsSuffix')}
                 </Text>
               ) : null}
               <View style={styles.otpRow}>
@@ -1033,10 +1035,10 @@ export default function DriverForgotPasswordScreen() {
                     maxLength={1}
                     editable={!otpInputsBlocked}
                     value={d}
-                    onChangeText={(t) => {
+                    onChangeText={(txt) => {
                       if (otpInputsBlocked) return;
-                      if (t.length > 1) {
-                        const pasted = extractSixDigits(t);
+                      if (txt.length > 1) {
+                        const pasted = extractSixDigits(txt);
                         if (pasted) {
                           setOtpSuccessMessage(null);
                           setOtpDigits(pasted.split(''));
@@ -1045,7 +1047,7 @@ export default function DriverForgotPasswordScreen() {
                         }
                         return;
                       }
-                      updateOtpCell(i, t);
+                      updateOtpCell(i, txt);
                     }}
                     onKeyPress={(e) => onOtpKeyPress(i, e)}
                   />
@@ -1063,7 +1065,7 @@ export default function DriverForgotPasswordScreen() {
                 {loading ? (
                   <ActivityIndicator color="#fff" />
                 ) : (
-                  <Text style={styles.primaryBtnText}>Continue</Text>
+                  <Text style={styles.primaryBtnText}>{t('forgotPassword.continueLabel')}</Text>
                 )}
               </TouchableOpacity>
 
@@ -1086,8 +1088,8 @@ export default function DriverForgotPasswordScreen() {
                     }}
                   >
                     {resendWaitSeconds && !codeValidityExpired && recoveryChannel !== 'email'
-                      ? `Resend in ${resendWaitSeconds}s`
-                      : 'Resend code'}
+                      ? t('auth.resendIn', { seconds: resendWaitSeconds })
+                      : t('forgotPassword.resendCode')}
                   </Text>
                 </TouchableOpacity>
               ) : recoveryChannel === 'sms' ? (
@@ -1099,18 +1101,18 @@ export default function DriverForgotPasswordScreen() {
                       style={{ alignSelf: 'center' }}
                     >
                       <Text style={{ color: colors.primary, fontWeight: '700', fontSize: 16 }}>
-                        Resend code
+                        {t('forgotPassword.resendCode')}
                       </Text>
                     </TouchableOpacity>
                   ) : (
                     <Text style={[styles.hint, { color: colors.textTertiary, textAlign: 'center' }]}>
-                      Paste works automatically when the clipboard has exactly 6 digits.
+                      {t('forgotPassword.pasteHint')}
                     </Text>
                   )}
                 </View>
               ) : (
                 <Text style={[styles.hint, { color: colors.textTertiary }]}>
-                  Paste works automatically when the clipboard has exactly 6 digits.
+                  {t('forgotPassword.pasteHint')}
                 </Text>
               )}
 
@@ -1147,19 +1149,19 @@ export default function DriverForgotPasswordScreen() {
 
           {step === 'newPassword' && (
             <View style={styles.form}>
-              <Text style={[styles.label, { color: colors.text }]}>New password</Text>
+              <Text style={[styles.label, { color: colors.text }]}>{t('forgotPassword.newPasswordLabel')}</Text>
               <TextInput
                 style={[styles.input, { backgroundColor: colors.inputBg, borderColor: colors.inputBorder, color: colors.text }]}
-                placeholder="At least 8 characters"
+                placeholder={t('forgotPassword.atLeast8Chars')}
                 placeholderTextColor={colors.textTertiary}
                 secureTextEntry
                 value={newPassword}
                 onChangeText={setNewPassword}
               />
-              <Text style={[styles.label, { color: colors.text }]}>Confirm password</Text>
+              <Text style={[styles.label, { color: colors.text }]}>{t('forgotPassword.confirmPasswordLabel')}</Text>
               <TextInput
                 style={[styles.input, { backgroundColor: colors.inputBg, borderColor: colors.inputBorder, color: colors.text }]}
-                placeholder="Repeat password"
+                placeholder={t('forgotPassword.repeatPassword')}
                 placeholderTextColor={colors.textTertiary}
                 secureTextEntry
                 value={confirmPassword}
@@ -1170,7 +1172,7 @@ export default function DriverForgotPasswordScreen() {
                 onPress={handleResetPassword}
                 disabled={loading}
               >
-                {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryBtnText}>Save password</Text>}
+                {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryBtnText}>{t('forgotPassword.savePassword')}</Text>}
               </TouchableOpacity>
             </View>
           )}
@@ -1187,7 +1189,7 @@ export default function DriverForgotPasswordScreen() {
         <View style={styles.pickerOverlay}>
           <View style={[styles.pickerCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <View style={[styles.pickerHeader, { borderBottomColor: colors.border }]}>
-              <Text style={[styles.pickerTitle, { color: colors.text }]}>Country code</Text>
+              <Text style={[styles.pickerTitle, { color: colors.text }]}>{t('forgotPassword.countryCode')}</Text>
               <TouchableOpacity onPress={() => setShowPhoneCountryModal(false)}>
                 <Text style={{ color: colors.textTertiary, fontSize: 18 }}>✕</Text>
               </TouchableOpacity>
@@ -1195,7 +1197,7 @@ export default function DriverForgotPasswordScreen() {
             <View style={[styles.pickerSearchWrap, { backgroundColor: colors.inputBg, borderColor: colors.inputBorder }]}>
               <TextInput
                 style={[styles.pickerSearchInput, { color: colors.text }]}
-                placeholder="Search"
+                placeholder={t('forgotPassword.searchLabel')}
                 placeholderTextColor={colors.textTertiary}
                 value={phoneCountrySearch}
                 onChangeText={setPhoneCountrySearch}

@@ -1,11 +1,13 @@
 import { View, Text, TouchableOpacity, TextInput, KeyboardAvoidingView, Platform, ScrollView, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useTheme } from '../../contexts/ThemeContext';
 
 export default function DriverRegisterScreen() {
   const router = useRouter();
   const { colors, isDark } = useTheme();
+  const { t } = useTranslation();
   const [formData, setFormData] = useState({
     firstName: '',
     secondName: '',
@@ -32,17 +34,17 @@ export default function DriverRegisterScreen() {
             <View style={[styles.iconContainer, { backgroundColor: '#7c3aed' }]}>
               <Text style={styles.iconText}>🚗</Text>
             </View>
-            <Text style={[styles.title, { color: colors.text }]}>Become a driver</Text>
-            <Text style={[styles.subtitle, { color: colors.textSecondary }]}>Start earning with flexible deliveries near you.</Text>
+            <Text style={[styles.title, { color: colors.text }]}>{t('auth.driverRegistrationTitle')}</Text>
+            <Text style={[styles.subtitle, { color: colors.textSecondary }]}>{t('auth.driverRegisterStep1Subtitle')}</Text>
           </View>
 
           {/* Form */}
           <View style={styles.form}>
             <View style={styles.inputGroup}>
-              <Text style={[styles.label, { color: colors.text }]}>First Name</Text>
+              <Text style={[styles.label, { color: colors.text }]}>{t('auth.firstName')}</Text>
               <TextInput
                 style={[styles.input, { backgroundColor: colors.inputBg, borderColor: colors.inputBorder, color: colors.text }]}
-                placeholder="Enter your first name"
+                placeholder={t('auth.enterFirstName')}
                 placeholderTextColor={colors.textTertiary}
                 value={formData.firstName}
                 onChangeText={(text) => setFormData({...formData, firstName: text})}
@@ -50,10 +52,10 @@ export default function DriverRegisterScreen() {
             </View>
 
             <View style={styles.inputGroup}>
-              <Text style={[styles.label, { color: colors.text }]}>Last Name</Text>
+              <Text style={[styles.label, { color: colors.text }]}>{t('auth.secondName')}</Text>
               <TextInput
                 style={[styles.input, { backgroundColor: colors.inputBg, borderColor: colors.inputBorder, color: colors.text }]}
-                placeholder="Enter your last name"
+                placeholder={t('auth.enterLastName')}
                 placeholderTextColor={colors.textTertiary}
                 value={formData.secondName}
                 onChangeText={(text) => setFormData({...formData, secondName: text})}
@@ -61,7 +63,7 @@ export default function DriverRegisterScreen() {
             </View>
 
             <View style={styles.inputGroup}>
-              <Text style={[styles.label, { color: colors.text }]}>Phone Number</Text>
+              <Text style={[styles.label, { color: colors.text }]}>{t('auth.phoneNumber')}</Text>
               <TextInput
                 style={[styles.input, { backgroundColor: colors.inputBg, borderColor: colors.inputBorder, color: colors.text }]}
                 placeholder="+216 XX XXX XXX"
@@ -73,10 +75,10 @@ export default function DriverRegisterScreen() {
             </View>
 
             <View style={styles.inputGroup}>
-              <Text style={[styles.label, { color: colors.text }]}>Vehicle Type</Text>
+              <Text style={[styles.label, { color: colors.text }]}>{t('auth.vehicleType')}</Text>
               <TextInput
                 style={[styles.input, { backgroundColor: colors.inputBg, borderColor: colors.inputBorder, color: colors.text }]}
-                placeholder="e.g., Motorcycle, Car, Van"
+                placeholder={t('auth.selectVehicleType')}
                 placeholderTextColor={colors.textTertiary}
                 value={formData.vehicleType}
                 onChangeText={(text) => setFormData({...formData, vehicleType: text})}
@@ -84,10 +86,10 @@ export default function DriverRegisterScreen() {
             </View>
 
             <View style={styles.inputGroup}>
-              <Text style={[styles.label, { color: colors.text }]}>Password</Text>
+              <Text style={[styles.label, { color: colors.text }]}>{t('auth.password')}</Text>
               <TextInput
                 style={[styles.input, { backgroundColor: colors.inputBg, borderColor: colors.inputBorder, color: colors.text }]}
-                placeholder="Create a password"
+                placeholder={t('auth.createPassword')}
                 placeholderTextColor={colors.textTertiary}
                 secureTextEntry
                 value={formData.password}
@@ -96,10 +98,10 @@ export default function DriverRegisterScreen() {
             </View>
 
             <View style={styles.inputGroup}>
-              <Text style={[styles.label, { color: colors.text }]}>Confirm Password</Text>
+              <Text style={[styles.label, { color: colors.text }]}>{t('auth.confirmPassword')}</Text>
               <TextInput
                 style={[styles.input, { backgroundColor: colors.inputBg, borderColor: colors.inputBorder, color: colors.text }]}
-                placeholder="Confirm your password"
+                placeholder={t('auth.confirmYourPassword')}
                 placeholderTextColor={colors.textTertiary}
                 secureTextEntry
                 value={formData.confirmPassword}
@@ -112,14 +114,14 @@ export default function DriverRegisterScreen() {
               onPress={handleRegister}
               activeOpacity={0.8}
             >
-              <Text style={styles.registerButtonText}>Create Driver Account</Text>
+              <Text style={styles.registerButtonText}>{t('auth.createAccount')}</Text>
             </TouchableOpacity>
 
             {/* Login Link */}
             <View style={styles.loginContainer}>
-              <Text style={[styles.loginText, { color: colors.textSecondary }]}>Already a driver? </Text>
+              <Text style={[styles.loginText, { color: colors.textSecondary }]}>{t('auth.alreadyHaveAccount')} </Text>
               <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace('/')}>
-                <Text style={styles.loginLink}>Login</Text>
+                <Text style={styles.loginLink}>{t('auth.login')}</Text>
               </TouchableOpacity>
             </View>
           </View>

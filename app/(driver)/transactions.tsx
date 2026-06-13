@@ -5,6 +5,7 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -97,6 +98,7 @@ function buildDisplayRows(transactions: Transaction[]): DisplayRow[] {
 export default function DriverTransactionsScreen() {
   const router = useRouter();
   const { colors } = useTheme();
+  const { t } = useTranslation();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [balance, setBalance] = useState(0);
   const [currency, setCurrency] = useState('TND');
@@ -207,9 +209,9 @@ export default function DriverTransactionsScreen() {
             <Ionicons name={colors_.icon as any} size={20} color={colors_.text} />
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={[s.txType, { color: colors.text }]}>Return deposit (settlement)</Text>
+            <Text style={[s.txType, { color: colors.text }]}>{t('driverMyOrders.status.ReturnDeposit')}</Text>
             <Text style={[s.txDesc, { color: colors.textTertiary }]} numberOfLines={2}>
-              Platform fee + payout combined
+              {t('orderDetail.fee')}
             </Text>
             <Text style={s.txDate}>
               {new Date(row.createdAt).toLocaleDateString()}{' '}
@@ -220,8 +222,8 @@ export default function DriverTransactionsScreen() {
             <Text style={[s.txAmount, { color: isPositive ? '#16a34a' : '#dc2626' }]}>
               {isPositive ? '+' : ''}{row.netAmount.toFixed(2)}
             </Text>
-            <Text style={[s.txBalance, { color: colors.textTertiary }]} accessibilityLabel="Wallet balance after">
-              {row.balanceAfter.toFixed(2)} coins
+            <Text style={[s.txBalance, { color: colors.textTertiary }]} accessibilityLabel={t('chat.walletBalanceAfter')}>
+              {row.balanceAfter.toFixed(2)}{t('common.coinsSuffix')}
             </Text>
           </View>
         </TouchableOpacity>
@@ -251,8 +253,8 @@ export default function DriverTransactionsScreen() {
           <Text style={[s.txAmount, { color: isPositive ? '#16a34a' : '#dc2626' }]}>
             {isPositive ? '+' : ''}{item.amount.toFixed(2)}
           </Text>
-          <Text style={[s.txBalance, { color: colors.textTertiary }]} accessibilityLabel="Wallet balance after">
-            {item.balanceAfter.toFixed(2)} coins
+          <Text style={[s.txBalance, { color: colors.textTertiary }]} accessibilityLabel={t('chat.walletBalanceAfter')}>
+            {item.balanceAfter.toFixed(2)}{t('common.coinsSuffix')}
           </Text>
         </View>
       </TouchableOpacity>
@@ -272,7 +274,7 @@ export default function DriverTransactionsScreen() {
   return (
     <View style={[s.container, { backgroundColor: colors.background }]}>
       <View style={[s.balanceCard, { backgroundColor: colors.card }]}>
-        <Text style={[s.balanceLabel, { color: colors.textTertiary }]}>Current Balance</Text>
+        <Text style={[s.balanceLabel, { color: colors.textTertiary }]}>{t('customerProfile.accountBalance')}</Text>
         <Text style={[s.balanceValue, { color: balance < 0 ? '#dc2626' : '#16a34a' }]}>
           {balance.toFixed(2)} {currency}
         </Text>
@@ -292,7 +294,7 @@ export default function DriverTransactionsScreen() {
         ListEmptyComponent={
           <View style={s.empty}>
             <Ionicons name="receipt-outline" size={48} color="#d1d5db" />
-            <Text style={s.emptyText}>No transactions yet</Text>
+            <Text style={s.emptyText}>{t('driverTransactions.empty')}</Text>
           </View>
         }
         ListFooterComponent={loadingMore ? <ActivityIndicator style={{ padding: 16 }} color="#0284c7" /> : null}
@@ -303,7 +305,7 @@ export default function DriverTransactionsScreen() {
         <Pressable style={s.modalOverlay} onPress={closeDetail}>
           <Pressable style={[s.modalBox, { backgroundColor: colors.card }]} onPress={() => {}}>
             <View style={s.modalHeader}>
-              <Text style={[s.modalTitle, { color: colors.text }]}>Transaction details</Text>
+              <Text style={[s.modalTitle, { color: colors.text }]}>{t('driverTransactions.title')}</Text>
               <TouchableOpacity onPress={closeDetail} hitSlop={12}>
                 <Ionicons name="close" size={22} color={colors.textSecondary} />
               </TouchableOpacity>
@@ -311,12 +313,12 @@ export default function DriverTransactionsScreen() {
             <ScrollView style={{ maxHeight: 420 }}>
               {detailExtra?.merged && (
                 <View style={{ marginBottom: 16 }}>
-                  <DetailLine label="Return gross (price + 50%)" value={`${detailExtra.merged.grossPayout.toFixed(2)} coins`} colors={colors} />
-                  <DetailLine label="Platform fee (deducted)" value={`-${detailExtra.merged.platformFee.toFixed(2)} coins`} colors={colors} />
-                  <DetailLine label="Net credited to wallet" value={`${detailExtra.merged.netAmount.toFixed(2)} coins`} colors={colors} bold />
+                  <DetailLine label={t('orderDetail.total')} value={`${detailExtra.merged.grossPayout.toFixed(2)}${t('common.coinsSuffix')}`} colors={colors} />
+                  <DetailLine label={t('orderDetail.fee')} value={`-${detailExtra.merged.platformFee.toFixed(2)}${t('common.coinsSuffix')}`} colors={colors} />
+                  <DetailLine label={t('chat.walletBalanceAfter')} value={`${detailExtra.merged.netAmount.toFixed(2)}${t('common.coinsSuffix')}`} colors={colors} bold />
                   <DetailLine
-                    label="Wallet balance after"
-                    value={`${Number(detailExtra.merged.balanceAfter).toFixed(2)} coins`}
+                    label={t('chat.walletBalanceAfter')}
+                    value={`${Number(detailExtra.merged.balanceAfter).toFixed(2)}${t('common.coinsSuffix')}`}
                     colors={colors}
                     bold
                   />
@@ -324,39 +326,39 @@ export default function DriverTransactionsScreen() {
               )}
               {detailExtra?.single && (
                 <View style={{ marginBottom: 12 }}>
-                  <DetailLine label="Transaction type" value={detailExtra.single.type.replace(/_/g, ' ')} colors={colors} />
+                  <DetailLine label={t('driverTransactions.title')} value={detailExtra.single.type.replace(/_/g, ' ')} colors={colors} />
                   {detailLoading && detailOrderId ? (
                     <ActivityIndicator color={colors.primary} style={{ marginVertical: 8 }} />
                   ) : null}
                   {!detailLoading && detailOrder?.driverFeeBreakdown ? (
                     <>
                       <DetailLine
-                        label="Total price"
-                        value={`${detailOrder.driverFeeBreakdown.totalPriceCoins.toFixed(2)} coins`}
+                        label={t('orderDetail.total')}
+                        value={`${detailOrder.driverFeeBreakdown.totalPriceCoins.toFixed(2)}${t('common.coinsSuffix')}`}
                         colors={colors}
                       />
                       <DetailLine
-                        label="Base fee (platform)"
-                        value={`-${detailOrder.driverFeeBreakdown.baseFeeCoins.toFixed(2)} coins`}
+                        label={t('orderDetail.fee')}
+                        value={`-${detailOrder.driverFeeBreakdown.baseFeeCoins.toFixed(2)}${t('common.coinsSuffix')}`}
                         colors={colors}
                       />
                     </>
                   ) : !detailLoading && detailExtra.single.type === 'PLATFORM_FEE' ? (
                     <DetailLine
-                      label="Base fee (platform)"
-                      value={`-${Math.abs(Number(detailExtra.single.amount)).toFixed(2)} coins`}
+                      label={t('orderDetail.fee')}
+                      value={`-${Math.abs(Number(detailExtra.single.amount)).toFixed(2)}${t('common.coinsSuffix')}`}
                       colors={colors}
                     />
                   ) : null}
                   <DetailLine
-                    label="Transaction amount (coins)"
-                    value={`${detailExtra.single.amount >= 0 ? '+' : ''}${Number(detailExtra.single.amount).toFixed(2)} coins`}
+                    label={t('wallet.amountCoins')}
+                    value={`${detailExtra.single.amount >= 0 ? '+' : ''}${Number(detailExtra.single.amount).toFixed(2)}${t('common.coinsSuffix')}`}
                     colors={colors}
                     bold
                   />
                   <DetailLine
-                    label="Wallet balance after (ledger)"
-                    value={`${Number(detailExtra.single.balanceAfter ?? 0).toFixed(2)} coins`}
+                    label={t('chat.walletBalanceAfter')}
+                    value={`${Number(detailExtra.single.balanceAfter ?? 0).toFixed(2)}${t('common.coinsSuffix')}`}
                     colors={colors}
                   />
                   {detailExtra.single.description ? (

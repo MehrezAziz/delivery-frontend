@@ -4,6 +4,7 @@ import {
   ActivityIndicator, StyleSheet, ScrollView,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { CameraView, useCameraPermissions } from 'expo-camera';
@@ -29,6 +30,7 @@ export default function UploadProofsScreen() {
   }, [params.afterProof]);
   const markMode = afterProofRaw === 'delivered' || afterProofRaw === 'returned' ? afterProofRaw : undefined;
   const { colors, isDark } = useTheme();
+  const { t } = useTranslation();
   const [image1, setImage1] = useState<string | null>(null);
   const [image2, setImage2] = useState<string | null>(null);
   const [existingImage1, setExistingImage1] = useState(false);
@@ -103,7 +105,7 @@ export default function UploadProofsScreen() {
     if (!permission?.granted) {
       const res = await requestPermission();
       if (!res.granted) {
-        Alert.alert('Permission Required', 'Camera access is needed to take photos.');
+        Alert.alert(t('common.permission'), t('auth.cameraPermissionBody'));
         return;
       }
     }
@@ -125,7 +127,7 @@ export default function UploadProofsScreen() {
     } catch (e) {
       console.error(e);
       setCameraOpen(false);
-      Alert.alert('Error', 'Failed to take picture. Please try again.');
+      Alert.alert(t('common.error'), t('common.tryAgain'));
     }
   };
 
@@ -135,13 +137,13 @@ export default function UploadProofsScreen() {
 
   const handleSubmit = async () => {
     if (!image1) {
-      Alert.alert('Required', 'Please provide the first proof image');
+      Alert.alert(t('common.required'), t('driverMyOrders.proofRequiredBody'));
       return;
     }
     const sendImage1 = existingImage1 ? undefined : image1;
     const sendImage2 = existingImage2 ? undefined : (image2 || undefined);
     if (!sendImage1 && !sendImage2) {
-      Alert.alert('No Changes', 'All images are already uploaded');
+      Alert.alert(t('common.info'), t('driverUploadProofs.uploaded'));
       return;
     }
     setSubmitting(true);
@@ -149,7 +151,7 @@ export default function UploadProofsScreen() {
       await orderService.uploadProofs(orderId, sendImage1 || image1, sendImage2);
       goOrderDetail();
     } catch (e: any) {
-      Alert.alert('Error', e.message);
+      Alert.alert(t('common.error'), e.message);
     } finally {
       setSubmitting(false);
     }
@@ -157,7 +159,7 @@ export default function UploadProofsScreen() {
 
   const uploadOnlyNavigate = async () => {
     if (!image1) {
-      Alert.alert('Required', 'Please provide the first proof image');
+      Alert.alert(t('common.required'), t('driverMyOrders.proofRequiredBody'));
       return;
     }
     const sendImage1 = existingImage1 ? undefined : image1;
@@ -171,7 +173,7 @@ export default function UploadProofsScreen() {
       await orderService.uploadProofs(orderId, sendImage1 || image1, sendImage2);
       goOrderDetail();
     } catch (e: any) {
-      Alert.alert('Error', e.message);
+      Alert.alert(t('common.error'), e.message);
     } finally {
       setSubmitting(false);
     }
@@ -179,7 +181,7 @@ export default function UploadProofsScreen() {
 
   const uploadAndMarkStatus = async () => {
     if (!image1) {
-      Alert.alert('Required', 'Please provide the first proof image');
+      Alert.alert(t('common.required'), t('driverMyOrders.proofRequiredBody'));
       return;
     }
     const sendImage1 = existingImage1 ? undefined : image1;
@@ -197,7 +199,7 @@ export default function UploadProofsScreen() {
       await restoreOrderTrackingForDriver();
       goOrderDetail();
     } catch (e: any) {
-      Alert.alert('Error', e?.message || 'Could not update order');
+      Alert.alert(t('common.error'), e?.message || t('driverUploadProofs.uploadFailed'));
     } finally {
       setSubmitting(false);
     }
@@ -236,10 +238,10 @@ export default function UploadProofsScreen() {
       <View style={[s.fieldCard, { backgroundColor: colors.card }]}>
         <View style={s.fieldHeader}>
           <Ionicons name="camera-outline" size={20} color={required ? '#16a34a' : colors.textSecondary} />
-          <Text style={[s.fieldLabel, { color: colors.text }]}>Proof Image {imageNum}</Text>
+          <Text style={[s.fieldLabel, { color: colors.text }]}>{t('driverUploadProofs.title')} {imageNum}</Text>
           <View style={isExisting ? s.uploadedBadge : required ? s.requiredBadge : s.optionalBadge}>
             <Text style={isExisting ? s.uploadedText : required ? s.requiredText : s.optionalText}>
-              {isExisting ? 'Uploaded' : required ? 'Required' : 'Optional'}
+              {isExisting ? t('driverUploadProofs.uploaded') : required ? t('common.required') : t('common.optional')}
             </Text>
           </View>
         </View>
@@ -257,11 +259,11 @@ export default function UploadProofsScreen() {
           <View style={s.actionRow}>
             <TouchableOpacity style={[s.pickBtn, { backgroundColor: colors.background, borderColor: colors.border }]} onPress={() => pickFromGallery(imageNum)} activeOpacity={0.7}>
               <Ionicons name="images-outline" size={24} color={colors.primary} />
-              <Text style={[s.pickBtnText, { color: colors.primary }]}>Gallery</Text>
+              <Text style={[s.pickBtnText, { color: colors.primary }]}>{t('editProfile.pickFromGallery')}</Text>
             </TouchableOpacity>
             <TouchableOpacity style={[s.pickBtn, { backgroundColor: colors.background, borderColor: colors.border }]} onPress={() => openCamera(imageNum)} activeOpacity={0.7}>
               <Ionicons name="camera-outline" size={24} color="#16a34a" />
-              <Text style={[s.pickBtnText, { color: '#16a34a' }]}>Camera</Text>
+              <Text style={[s.pickBtnText, { color: '#16a34a' }]}>{t('editProfile.takePhoto')}</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -285,13 +287,9 @@ export default function UploadProofsScreen() {
             <Ionicons name="shield-checkmark" size={24} color="#0284c7" />
           </View>
           <Text style={s.infoText}>
-            <Text style={{ fontWeight: '800', color: colors.primary }}>Order #{orderId.slice(0, 8)}</Text>
+            <Text style={{ fontWeight: '800', color: colors.primary }}>{t('orderDetail.title')} #{orderId.slice(0, 8)}</Text>
             {'\n'}
-            {markMode === 'delivered'
-              ? 'Add at least the first proof image. You can upload only, or upload and mark the order as delivered in one step.'
-              : markMode === 'returned'
-                ? 'Add at least the first proof image before marking the order as returned.'
-                : 'Upload delivery proof images. The first image is required before you can mark the order as delivered.'}
+            {t('driverMyOrders.proofRequiredBody')}
           </Text>
         </View>
 
@@ -309,7 +307,7 @@ export default function UploadProofsScreen() {
               {submitting ? (
                 <ActivityIndicator color={colors.primary} />
               ) : (
-                <Text style={[s.secondaryOutlineBtnText, { color: colors.primary }]}>Upload image</Text>
+                <Text style={[s.secondaryOutlineBtnText, { color: colors.primary }]}>{t('driverUploadProofs.submit')}</Text>
               )}
             </TouchableOpacity>
             <TouchableOpacity
@@ -322,9 +320,9 @@ export default function UploadProofsScreen() {
                 <ActivityIndicator color="#fff" />
               ) : (
                 <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
-                  <Text style={s.submitText}>Upload image and Mark as </Text>
+                  <Text style={s.submitText}>{t('driverUploadProofs.submit')} </Text>
                   <Text style={markMode === 'delivered' ? s.markWordDelivered : s.markWordReturned}>
-                    {markMode === 'delivered' ? 'Delivered' : 'Returned'}
+                    {markMode === 'delivered' ? t('orderDetail.delivered') : t('orderDetail.returned')}
                   </Text>
                 </View>
               )}
@@ -343,7 +341,7 @@ export default function UploadProofsScreen() {
               <>
                 <Ionicons name="cloud-upload-outline" size={20} color="#fff" />
                 <Text style={s.submitText}>
-                  {existingImage1 && existingImage2 ? 'All Uploaded' : existingImage1 ? 'Upload Image 2' : 'Upload Proofs'}
+                  {existingImage1 && existingImage2 ? t('driverUploadProofs.uploaded') : t('driverUploadProofs.submit')}
                 </Text>
               </>
             )}

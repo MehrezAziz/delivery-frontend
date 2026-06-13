@@ -1,4 +1,5 @@
 import { View, Text, StyleSheet, type ViewStyle } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import { Ionicons } from '@expo/vector-icons';
 
 type Props = {
@@ -17,12 +18,13 @@ export function ActiveOrderChatUnreadBadge({
   iconBg,
   style,
 }: Props) {
+  const { t } = useTranslation();
   if (count <= 0) return null;
 
   const wash = iconBg ?? `${iconColor}20`;
 
   return (
-    <View style={[styles.anchor, style]} pointerEvents="box-none" accessibilityLabel={`${count} unread messages`}>
+    <View style={[styles.anchor, style]} pointerEvents="box-none" accessibilityLabel={`${count}${t('chat.unreadMessagesSuffix')}`}>
       <View style={[styles.iconChip, { backgroundColor: wash }]}>
         <Ionicons name="chatbubbles-outline" size={17} color={iconColor} />
       </View>

@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import { Ionicons } from '@expo/vector-icons';
 import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -14,12 +15,13 @@ function parseParam(v: string | string[] | undefined): string {
 export default function DriverAddressMapScreen() {
   const router = useRouter();
   const { colors, isDark } = useTheme();
+  const { t } = useTranslation();
   const params = useLocalSearchParams<{ lat?: string | string[]; lng?: string | string[]; kind?: string | string[]; title?: string | string[] }>();
 
   const latRaw = parseParam(params.lat);
   const lngRaw = parseParam(params.lng);
   const kind = parseParam(params.kind) as 'pickup' | 'dropoff' | '';
-  const title = parseParam(params.title) || 'Location';
+  const title = parseParam(params.title) || t('driverAddressMap.title');
 
   const coord = useMemo(() => {
     const lat = parseFloat(latRaw);
@@ -42,7 +44,7 @@ export default function DriverAddressMapScreen() {
           <Ionicons name="chevron-back" size={22} color={colors.text} />
         </TouchableOpacity>
         <Text style={{ color: colors.textSecondary, textAlign: 'center', paddingHorizontal: 24 }}>
-          Invalid or missing map coordinates.
+          {t('orderDetail.locationUnavailableBody')}
         </Text>
       </View>
     );

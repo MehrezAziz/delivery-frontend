@@ -9,6 +9,7 @@ import {
   Alert,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
+import { useTranslation } from 'react-i18next';
 import { useTheme } from '../../contexts/ThemeContext';
 import { api } from '../../services/api/client';
 
@@ -19,6 +20,7 @@ type NotificationPreferences = {
 
 export default function CustomerNotificationsSettingsScreen() {
   const { colors } = useTheme();
+  const { t } = useTranslation();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [prefs, setPrefs] = useState<NotificationPreferences | null>(null);
@@ -29,13 +31,13 @@ export default function CustomerNotificationsSettingsScreen() {
       const data = await api.get<NotificationPreferences>('/customers/me/notification-preferences');
       setPrefs(data);
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : 'Failed to load notification settings';
-      Alert.alert('Error', msg);
+      const msg = e instanceof Error ? e.message : t('common.something_went_wrong');
+      Alert.alert(t('common.error'), msg);
       setPrefs({ notifyReferralCommission: true, notifyGameEvents: false });
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [t]);
 
   useFocusEffect(
     useCallback(() => {
@@ -55,8 +57,8 @@ export default function CustomerNotificationsSettingsScreen() {
       setPrefs(data);
     } catch (e: unknown) {
       setPrefs({ ...prefs, notifyReferralCommission: prev });
-      const msg = e instanceof Error ? e.message : 'Failed to update setting';
-      Alert.alert('Error', msg);
+      const msg = e instanceof Error ? e.message : t('notificationsSettings.saveFailed');
+      Alert.alert(t('common.error'), msg);
     } finally {
       setSaving(false);
     }
@@ -76,17 +78,17 @@ export default function CustomerNotificationsSettingsScreen() {
       contentContainerStyle={styles.content}
     >
       <Text style={[styles.intro, { color: colors.textSecondary }]}>
-        Choose which notifications you want to receive in the app and on your device.
+        {t('notificationsSettings.masterBody')}
       </Text>
 
       <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
         <View style={styles.row}>
           <View style={{ flex: 1, paddingRight: 12 }}>
             <Text style={[styles.rowTitle, { color: colors.text }]}>
-              Receive notifications about referral commission
+              {t('notificationsSettings.promotions')}
             </Text>
             <Text style={[styles.rowSub, { color: colors.textSecondary }]}>
-              When someone you referred completes an order and you earn commission coins.
+              {t('notificationsSettings.promotionsBody')}
             </Text>
           </View>
           <Switch
@@ -103,10 +105,10 @@ export default function CustomerNotificationsSettingsScreen() {
         <View style={styles.row}>
           <View style={{ flex: 1, paddingRight: 12 }}>
             <Text style={[styles.rowTitle, { color: colors.text }]}>
-              Game notifications
+              {t('notificationsSettings.systemAlerts')}
             </Text>
             <Text style={[styles.rowSub, { color: colors.textSecondary }]}>
-              Reminders when a quiz is live, draw results, and if you win a prize.
+              {t('notificationsSettings.systemAlertsBody')}
             </Text>
           </View>
           <Switch
@@ -124,7 +126,7 @@ export default function CustomerNotificationsSettingsScreen() {
                 setPrefs(data);
               } catch (e: unknown) {
                 setPrefs({ ...prefs, notifyGameEvents: prev });
-                Alert.alert('Error', e instanceof Error ? e.message : 'Failed to update');
+                Alert.alert(t('common.error'), e instanceof Error ? e.message : t('notificationsSettings.saveFailed'));
               } finally {
                 setSaving(false);
               }

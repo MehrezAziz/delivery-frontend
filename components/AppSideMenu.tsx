@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { useRouter, usePathname } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAppNavigation } from '../contexts/AppNavigationContext';
 import { clearSession } from '../services/auth-session';
@@ -24,34 +25,34 @@ export const isSideMenuRouteActive = isSameAppRoute;
 
 type Role = 'guest' | 'customer' | 'driver';
 
-type LinkItem = { label: string; icon: keyof typeof Ionicons.glyphMap; href: string };
+type LinkItem = { labelKey: string; icon: keyof typeof Ionicons.glyphMap; href: string };
 
 const GUEST_LINKS: LinkItem[] = [
-  { label: 'Welcome', icon: 'home-outline', href: '/' },
-  { label: 'Customer sign in', icon: 'person-outline', href: '/(auth)/customer-login' },
-  { label: 'Driver sign in', icon: 'car-outline', href: '/(auth)/driver-login' },
-  { label: 'Terms & privacy', icon: 'document-text-outline', href: '/(auth)/terms' },
+  { labelKey: 'sideMenu.welcome', icon: 'home-outline', href: '/' },
+  { labelKey: 'sideMenu.customerSignIn', icon: 'person-outline', href: '/(auth)/customer-login' },
+  { labelKey: 'sideMenu.driverSignIn', icon: 'car-outline', href: '/(auth)/driver-login' },
+  { labelKey: 'sideMenu.termsAndPrivacy', icon: 'document-text-outline', href: '/(auth)/terms' },
 ];
 
 const CUSTOMER_LINKS: LinkItem[] = [
-  { label: 'Home', icon: 'home-outline', href: '/(customer)/home' },
-  { label: 'My orders', icon: 'receipt-outline', href: '/(customer)/orders' },
-  { label: 'Wallet', icon: 'wallet-outline', href: '/(customer)/wallet' },
-  { label: 'Profile', icon: 'person-outline', href: '/(customer)/profile' },
-  { label: 'Addresses', icon: 'location-outline', href: '/(customer)/addresses' },
-  { label: 'Notifications', icon: 'notifications-outline', href: '/(customer)/notifications' },
-  { label: 'Support', icon: 'headset-outline', href: '/(customer)/support' },
-  { label: 'Settings', icon: 'settings-outline', href: '/(customer)/settings' },
+  { labelKey: 'sideMenu.home', icon: 'home-outline', href: '/(customer)/home' },
+  { labelKey: 'sideMenu.myOrders', icon: 'receipt-outline', href: '/(customer)/orders' },
+  { labelKey: 'sideMenu.wallet', icon: 'wallet-outline', href: '/(customer)/wallet' },
+  { labelKey: 'sideMenu.profile', icon: 'person-outline', href: '/(customer)/profile' },
+  { labelKey: 'sideMenu.addresses', icon: 'location-outline', href: '/(customer)/addresses' },
+  { labelKey: 'sideMenu.notifications', icon: 'notifications-outline', href: '/(customer)/notifications' },
+  { labelKey: 'sideMenu.support', icon: 'headset-outline', href: '/(customer)/support' },
+  { labelKey: 'sideMenu.settings', icon: 'settings-outline', href: '/(customer)/settings' },
 ];
 
 /** Driver: Settings / documents / addresses / earnings / ratings / transactions live on Settings, Home, or Profile — keep menu lean. */
 const DRIVER_LINKS: LinkItem[] = [
-  { label: 'Home', icon: 'home-outline', href: '/(driver)/home' },
-  { label: 'My deliveries', icon: 'list-outline', href: '/(driver)/my-orders' },
-  { label: 'Available orders', icon: 'cube-outline', href: '/(driver)/available-orders' },
-  { label: 'Profile', icon: 'person-outline', href: '/(driver)/profile' },
-  { label: 'Notifications', icon: 'notifications-outline', href: '/(driver)/notifications' },
-  { label: 'Support', icon: 'headset-outline', href: '/(driver)/support' },
+  { labelKey: 'sideMenu.home', icon: 'home-outline', href: '/(driver)/home' },
+  { labelKey: 'sideMenu.myDeliveries', icon: 'list-outline', href: '/(driver)/my-orders' },
+  { labelKey: 'sideMenu.availableOrders', icon: 'cube-outline', href: '/(driver)/available-orders' },
+  { labelKey: 'sideMenu.profile', icon: 'person-outline', href: '/(driver)/profile' },
+  { labelKey: 'sideMenu.notifications', icon: 'notifications-outline', href: '/(driver)/notifications' },
+  { labelKey: 'sideMenu.support', icon: 'headset-outline', href: '/(driver)/support' },
 ];
 
 export function AppSideMenu({
@@ -67,6 +68,7 @@ export function AppSideMenu({
   const pathname = usePathname();
   const { push } = useAppNavigation();
   const { colors, isDark } = useTheme();
+  const { t } = useTranslation();
   const [signOutVisible, setSignOutVisible] = useState(false);
   const [signOutBusy, setSignOutBusy] = useState(false);
 
@@ -85,8 +87,8 @@ export function AppSideMenu({
 
   const signOutBody =
     role === 'driver'
-      ? 'You will be signed out on this device. Sign in again to accept deliveries and manage your account.'
-      : 'You will be signed out on this device. Sign in again to place orders and manage your account.';
+      ? t('sideMenu.signOutDriverBody')
+      : t('sideMenu.signOutCustomerBody');
 
   const performSignOut = async () => {
     setSignOutBusy(true);
@@ -122,7 +124,7 @@ export function AppSideMenu({
           onPress={(e) => e.stopPropagation()}
         >
           <View style={[styles.sheetHeader, { borderBottomColor: colors.border }]}>
-            <Text style={[styles.sheetTitle, { color: colors.text }]}>Menu</Text>
+            <Text style={[styles.sheetTitle, { color: colors.text }]}>{t('sideMenu.menu')}</Text>
             <TouchableOpacity onPress={onClose} style={[styles.closeBtn, { backgroundColor: colors.surfaceVariant }]} hitSlop={12}>
               <Ionicons name="close" size={22} color={colors.text} />
             </TouchableOpacity>
@@ -132,7 +134,7 @@ export function AppSideMenu({
               const active = isSameAppRoute(pathname, item.href);
               return (
                 <TouchableOpacity
-                  key={item.href + item.label}
+                  key={item.href + item.labelKey}
                   style={[
                     styles.row,
                     {
@@ -159,7 +161,7 @@ export function AppSideMenu({
                     <Ionicons name={item.icon} size={20} color={colors.primary} />
                   </View>
                   <Text style={[styles.rowLabel, { color: colors.text, fontWeight: active ? '800' : '600' }]}>
-                    {item.label}
+                    {t(item.labelKey)}
                   </Text>
                   <Ionicons
                     name={active ? 'checkmark-circle' : 'chevron-forward'}
@@ -176,7 +178,7 @@ export function AppSideMenu({
                 activeOpacity={0.75}
               >
                 <Ionicons name="log-out-outline" size={22} color={colors.danger} />
-                <Text style={[styles.logoutText, { color: colors.danger }]}>Sign out</Text>
+                <Text style={[styles.logoutText, { color: colors.danger }]}>{t('sideMenu.signOut')}</Text>
               </TouchableOpacity>
             )}
           </ScrollView>
@@ -197,14 +199,14 @@ export function AppSideMenu({
             style={[StyleSheet.absoluteFillObject, { backgroundColor: signOutOverlayTint }]}
             onPress={() => !signOutBusy && setSignOutVisible(false)}
             accessibilityRole="button"
-            accessibilityLabel="Dismiss"
+            accessibilityLabel={t('sideMenu.dismiss')}
           />
           <View style={styles.signOutModalAlign} pointerEvents="box-none">
             <View
               style={[styles.signOutDialog, { backgroundColor: colors.card, borderColor: colors.border }]}
               accessibilityViewIsModal
             >
-              <Text style={[styles.signOutDialogTitle, { color: colors.text }]}>Sign out</Text>
+              <Text style={[styles.signOutDialogTitle, { color: colors.text }]}>{t('sideMenu.signOut')}</Text>
               <Text style={[styles.signOutDialogBody, { color: colors.textSecondary }]}>{signOutBody}</Text>
               <View style={styles.signOutDialogActions}>
                 <TouchableOpacity
@@ -216,7 +218,7 @@ export function AppSideMenu({
                   disabled={signOutBusy}
                   activeOpacity={0.8}
                 >
-                  <Text style={[styles.signOutBtnSecondaryText, { color: colors.text }]}>Cancel</Text>
+                  <Text style={[styles.signOutBtnSecondaryText, { color: colors.text }]}>{t('common.cancel')}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={[styles.signOutBtnPrimary, { backgroundColor: colors.danger }]}
@@ -227,7 +229,7 @@ export function AppSideMenu({
                   {signOutBusy ? (
                     <ActivityIndicator size="small" color="#fff" />
                   ) : (
-                    <Text style={styles.signOutBtnPrimaryText}>Sign out</Text>
+                    <Text style={styles.signOutBtnPrimaryText}>{t('sideMenu.signOut')}</Text>
                   )}
                 </TouchableOpacity>
               </View>

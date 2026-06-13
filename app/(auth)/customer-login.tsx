@@ -3,6 +3,7 @@ import { useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useTranslation } from 'react-i18next';
 import { useGoogleAuth } from '../../hooks/useGoogleAuth';
 import { saveLoginTimestamp } from '../../services/auth-session';
 import { restoreOrderTrackingForCustomer } from '../../services/notifications';
@@ -32,6 +33,7 @@ export default function CustomerLoginScreen() {
   const router = useRouter();
   const { colors, isDark } = useTheme();
   const insets = useSafeAreaInsets();
+  const { t } = useTranslation();
   const [phoneCountries, setPhoneCountries] = useState<PhoneCountry[]>([]);
   const [selectedPhoneCountry, setSelectedPhoneCountry] = useState<PhoneCountry | null>(null);
   const [showPhoneCountryModal, setShowPhoneCountryModal] = useState(false);
@@ -94,16 +96,16 @@ export default function CustomerLoginScreen() {
 
     // Basic validation
     if (!phone || !password) {
-      setError('Phone and password are required');
+      setError(t('auth.phoneAndPasswordRequired'));
       return;
     }
     if (!selectedPhoneCountry) {
-      setError('Please select a country for the phone number');
+      setError(t('auth.selectCountryRequired'));
       return;
     }
 
     if (password.length < 8) {
-      setError('Password must be at least 8 characters');
+      setError(t('auth.passwordMinLength'));
       return;
     }
 
@@ -111,7 +113,7 @@ export default function CustomerLoginScreen() {
     const lock = await getLoginLockStatus('customer', e164);
     if (lock.locked) {
       setLoginLockUntil(lock.lockedUntil);
-      setError('Too many failed login attempts. Please wait before trying again.');
+      setError(t('auth.tooManyAttempts'));
       return;
     }
 
@@ -143,13 +145,13 @@ export default function CustomerLoginScreen() {
         loginHttpStatus = response.status;
         // Handle specific error cases
         if (response.status === 404 || data.message?.includes('not found') || data.message?.includes('does not exist')) {
-          throw new Error('Account not found. Please register first.');
+          throw new Error(t('auth.accountNotFound'));
         }
         if (response.status === 401 || data.message?.includes('Invalid credentials')) {
-          throw new Error('Invalid phone number or password.');
+          throw new Error(t('auth.invalidCredentials'));
         }
         // Handle error response
-        throw new Error(data.message || 'Login failed. Please check your credentials.');
+        throw new Error(data.message || t('auth.loginCheckCreds'));
       }
 
       await clearLoginFailures('customer', e164);
@@ -212,7 +214,7 @@ export default function CustomerLoginScreen() {
       if (loginHttpStatus === 400 || loginHttpStatus === 401) {
         await recordLoginFailure('customer', e164);
       }
-      setError(error.message || 'Login failed. Please try again.');
+      setError(error.message || t('auth.loginGenericFailed'));
     } finally {
       setIsSubmitting(false);
     }
@@ -241,13 +243,13 @@ export default function CustomerLoginScreen() {
             <View style={[styles.iconContainer, { backgroundColor: colors.primary }]}>
               <Text style={styles.iconText}>📦</Text>
             </View>
-            <Text style={[styles.title, { color: colors.text }]}>Welcome back</Text>
-            <Text style={[styles.subtitle, { color: colors.textSecondary }]}>Sign in to track deliveries and manage orders.</Text>
+            <Text style={[styles.title, { color: colors.text }]}>{t('auth.welcomeBack')}</Text>
+            <Text style={[styles.subtitle, { color: colors.textSecondary }]}>{t('auth.customerSignInSubtitle')}</Text>
           </View>
 
           <View style={styles.form}>
             <View style={styles.inputGroup}>
-              <Text style={[styles.label, { color: colors.text }]}>Phone Number</Text>
+              <Text style={[styles.label, { color: colors.text }]}>{t('auth.phoneNumber')}</Text>
               <View style={[styles.phoneRow, { backgroundColor: colors.inputBg, borderColor: colors.inputBorder }]}>
                 <TouchableOpacity
                   style={[styles.countryCodeBtn, { borderRightColor: colors.inputBorder }]}
@@ -268,7 +270,7 @@ export default function CustomerLoginScreen() {
                 </TouchableOpacity>
                 <TextInput
                   style={[styles.phoneInput, { color: colors.text }]}
-                  placeholder="XX XXX XXX"
+                  placeholder={t('auth.phoneNumberPlaceholder')}
                   placeholderTextColor={colors.textTertiary}
                   keyboardType="phone-pad"
                   value={phone}
@@ -280,14 +282,14 @@ export default function CustomerLoginScreen() {
                   editable={!isSubmitting}
                 />
               </View>
-              <Text style={[styles.phoneHint, { color: colors.textTertiary }]}>International calling code is added automatically.</Text>
+              <Text style={[styles.phoneHint, { color: colors.textTertiary }]}>{t('auth.phoneHint')}</Text>
             </View>
 
             <View style={styles.inputGroup}>
-              <Text style={[styles.label, { color: colors.text }]}>Password</Text>
+              <Text style={[styles.label, { color: colors.text }]}>{t('auth.password')}</Text>
               <TextInput
                 style={[styles.input, { backgroundColor: colors.inputBg, borderColor: colors.inputBorder, color: colors.text }]}
-                placeholder="Enter your password"
+                placeholder={t('auth.enterPassword')}
                 placeholderTextColor={colors.textTertiary}
                 secureTextEntry
                 value={password}
@@ -314,7 +316,7 @@ export default function CustomerLoginScreen() {
               }
               disabled={isSubmitting}
             >
-              <Text style={[styles.forgotText, { color: colors.primary }]}>Forgot Password?</Text>
+              <Text style={[styles.forgotText, { color: colors.primary }]}>{t('auth.forgotPassword')}</Text>
             </TouchableOpacity>
 
             {/* Error Display */}
@@ -325,7 +327,7 @@ export default function CustomerLoginScreen() {
                   <Text style={styles.errorText}>{error}</Text>
                   {loginLockUntil > Date.now() ? (
                     <Text style={[styles.errorText, { marginTop: 6, opacity: 0.9 }]}>
-                      Remaining wait: {'\u2212'}
+                      {t('auth.remainingWait')}{'\u2212'}
                       {formatMsAsMmSs(loginLockUntil - Date.now())}
                     </Text>
                   ) : null}
@@ -346,17 +348,17 @@ export default function CustomerLoginScreen() {
               {isSubmitting ? (
                 <View style={styles.loginButtonContent}>
                   <ActivityIndicator size="small" color="#ffffff" />
-                  <Text style={styles.loginButtonText}>Logging in...</Text>
+                  <Text style={styles.loginButtonText}>{t('auth.loggingIn')}</Text>
                 </View>
               ) : (
-                <Text style={styles.loginButtonText}>Login</Text>
+                <Text style={styles.loginButtonText}>{t('auth.login')}</Text>
               )}
             </TouchableOpacity>
 
             {/* Divider */}
             <View style={styles.dividerContainer}>
               <View style={[styles.divider, { backgroundColor: colors.border }]} />
-              <Text style={[styles.dividerText, { color: colors.textSecondary }]}>OR</Text>
+              <Text style={[styles.dividerText, { color: colors.textSecondary }]}>{t('auth.or')}</Text>
               <View style={[styles.divider, { backgroundColor: colors.border }]} />
             </View>
 
@@ -376,15 +378,15 @@ export default function CustomerLoginScreen() {
               ) : (
                 <>
                   <Text style={styles.googleIcon}>G</Text>
-                  <Text style={[styles.googleButtonText, { color: colors.text }]}>Continue with Google</Text>
+                  <Text style={[styles.googleButtonText, { color: colors.text }]}>{t('auth.continueWithGoogle')}</Text>
                 </>
               )}
             </TouchableOpacity>
 
             <View style={styles.registerLink}>
-              <Text style={[styles.registerText, { color: colors.textSecondary }]}>Don't have an account? </Text>
+              <Text style={[styles.registerText, { color: colors.textSecondary }]}>{t('auth.dontHaveAccount')}</Text>
               <TouchableOpacity onPress={() => router.push('/(auth)/customer-register')}>
-                <Text style={[styles.registerLinkText, { color: colors.primary }]}>Register</Text>
+                <Text style={[styles.registerLinkText, { color: colors.primary }]}>{t('auth.register')}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -399,7 +401,7 @@ export default function CustomerLoginScreen() {
         <View style={styles.pickerOverlay}>
           <View style={[styles.pickerCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <View style={[styles.pickerHeader, { borderBottomColor: colors.border }]}>
-              <Text style={[styles.pickerTitle, { color: colors.text }]}>Select country code</Text>
+              <Text style={[styles.pickerTitle, { color: colors.text }]}>{t('auth.selectCountryCode')}</Text>
               <TouchableOpacity onPress={() => setShowPhoneCountryModal(false)} style={styles.pickerCloseBtn}>
                 <Text style={[styles.pickerCloseText, { color: colors.textTertiary }]}>✕</Text>
               </TouchableOpacity>
@@ -408,7 +410,7 @@ export default function CustomerLoginScreen() {
               <Text style={styles.pickerSearchIcon}>🔍</Text>
               <TextInput
                 style={[styles.pickerSearchInput, { color: colors.text }]}
-                placeholder="Search country, ISO or code"
+                placeholder={t('auth.searchCountryISO')}
                 placeholderTextColor={colors.textTertiary}
                 value={phoneCountrySearch}
                 onChangeText={setPhoneCountrySearch}

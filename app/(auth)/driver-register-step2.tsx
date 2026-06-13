@@ -4,6 +4,7 @@ import {
   ScrollView, Alert, ActivityIndicator, FlatList, Modal,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import axios from 'axios';
@@ -26,19 +27,20 @@ interface Governorate { id: string; nameGovernorate: string; }
 interface Delegation { id: string; nameDelegation: string; }
 
 function SearchPicker({ visible, title, data, onSelect, onClose, search, setSearch, labelKey, colors }: any) {
+  const { t } = useTranslation();
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
       <View style={[styles.modalContainer, { backgroundColor: colors.background }]}>
         <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
           <Text style={[styles.modalTitle, { color: colors.text }]}>{title}</Text>
-          <TouchableOpacity onPress={onClose}><Text style={[styles.modalClose, { color: colors.textTertiary }]}>✕</Text></TouchableOpacity>
+          <TouchableOpacity onPress={onClose} accessibilityLabel={t('common.close')}><Text style={[styles.modalClose, { color: colors.textTertiary }]}>✕</Text></TouchableOpacity>
         </View>
         <View style={[styles.searchBox, { borderColor: colors.inputBorder, backgroundColor: colors.card }]}>
           <Text>🔍</Text>
-          <TextInput style={[styles.searchInput, { color: colors.text }]} placeholder="Search..." placeholderTextColor={colors.textTertiary}
+          <TextInput style={[styles.searchInput, { color: colors.text }]} placeholder={t('common.search')} placeholderTextColor={colors.textTertiary}
             value={search} onChangeText={setSearch} autoFocus />
           {search.length > 0 && (
-            <TouchableOpacity onPress={() => setSearch('')}><Text style={[styles.clearIcon, { color: colors.textTertiary }]}>✕</Text></TouchableOpacity>
+            <TouchableOpacity onPress={() => setSearch('')} accessibilityLabel={t('common.close')}><Text style={[styles.clearIcon, { color: colors.textTertiary }]}>✕</Text></TouchableOpacity>
           )}
         </View>
         <FlatList
@@ -51,7 +53,7 @@ function SearchPicker({ visible, title, data, onSelect, onClose, search, setSear
               {item.isoCode && <Text style={[styles.pickerItemSub, { color: colors.textSecondary }]}>{item.isoCode} · {item.currencyCode}</Text>}
             </TouchableOpacity>
           )}
-          ListEmptyComponent={<Text style={[styles.emptyText, { color: colors.textTertiary }]}>No results</Text>}
+          ListEmptyComponent={<Text style={[styles.emptyText, { color: colors.textTertiary }]}>{t('common.noResults')}</Text>}
         />
       </View>
     </Modal>
@@ -61,6 +63,7 @@ function SearchPicker({ visible, title, data, onSelect, onClose, search, setSear
 export default function DriverRegisterStep2() {
   const router = useRouter();
   const { colors, isDark } = useTheme();
+  const { t } = useTranslation();
   const [vehicleType, setVehicleType] = useState('');
   const [description, setDescription] = useState('');
   const [loading, setLoading] = useState(false);
@@ -144,12 +147,12 @@ export default function DriverRegisterStep2() {
   };
 
   const handleSubmit = async () => {
-    if (!vehicleType) { Alert.alert('Error', 'Please select a vehicle type'); return; }
-    if (!selectedDelegation) { Alert.alert('Error', 'Please select your country, governorate and delegation'); return; }
+    if (!vehicleType) { Alert.alert(t('common.error'), t('auth.selectVehicleType')); return; }
+    if (!selectedDelegation) { Alert.alert(t('common.error'), t('auth.pleaseFillRequired')); return; }
 
     const pendingToken = await AsyncStorage.getItem('driverPendingToken');
     if (!pendingToken) {
-      Alert.alert('Session Expired', 'Your registration session has expired. Please start over.');
+      Alert.alert(t('common.error'), t('forgotPassword.sessionExpired'));
       router.replace('/(auth)/driver-register-step1');
       return;
     }
@@ -173,12 +176,12 @@ export default function DriverRegisterStep2() {
 
       router.push('/(auth)/driver-register-step3');
     } catch (error: any) {
-      const msg = error.response?.data?.message || 'An error occurred';
+      const msg = error.response?.data?.message || t('auth.somethingWentWrongRetry');
       if (error.response?.status === 401) {
-        Alert.alert('Session Expired', 'Your registration session has expired. Please start over.');
+        Alert.alert(t('common.error'), t('forgotPassword.sessionExpired'));
         router.replace('/(auth)/driver-register-step1');
       } else {
-        Alert.alert('Error', msg);
+        Alert.alert(t('common.error'), msg);
       }
     } finally { setLoading(false); }
   };
@@ -190,9 +193,9 @@ export default function DriverRegisterStep2() {
       keyboardShouldPersistTaps="handled"
     >
       <View style={[styles.heroCard, { backgroundColor: colors.surfaceVariant, borderColor: colors.border }]}>
-        <Text style={[styles.stepBadge, { color: colors.primary, backgroundColor: colors.primaryLight }]}>Step 2 of 3</Text>
-        <Text style={[styles.title, { color: colors.text }]}>Vehicle & address</Text>
-        <Text style={[styles.subtitle, { color: colors.textSecondary }]}>Tell us how you deliver and where you are based.</Text>
+        <Text style={[styles.stepBadge, { color: colors.primary, backgroundColor: colors.primaryLight }]}>{t('auth.stepOf', { current: 2, total: 3 })}</Text>
+        <Text style={[styles.title, { color: colors.text }]}>{t('auth.driverRegistrationTitle')}</Text>
+        <Text style={[styles.subtitle, { color: colors.textSecondary }]}>{t('auth.driverRegisterStep2Subtitle')}</Text>
       </View>
 
       <View style={styles.progressContainer}>
@@ -205,7 +208,7 @@ export default function DriverRegisterStep2() {
 
       {/* Vehicle Type */}
       <View style={styles.inputGroup}>
-        <Text style={[styles.label, { color: colors.text }]}>Vehicle Type *</Text>
+        <Text style={[styles.label, { color: colors.text }]}>{t('auth.vehicleType')} *</Text>
         <View style={styles.vehicleGrid}>
           {VEHICLE_TYPES.map(type => (
             <TouchableOpacity key={type}
@@ -219,8 +222,8 @@ export default function DriverRegisterStep2() {
 
       {/* Description */}
       <View style={styles.inputGroup}>
-        <Text style={[styles.label, { color: colors.text }]}>Vehicle Description (Optional)</Text>
-        <TextInput style={[styles.input, styles.textArea, { borderColor: colors.inputBorder, backgroundColor: colors.inputBg, color: colors.text }]} placeholder="e.g., Red Honda Civic 2020"
+        <Text style={[styles.label, { color: colors.text }]}>{`${t('createOrder.notes')} (${t('common.optional')})`}</Text>
+        <TextInput style={[styles.input, styles.textArea, { borderColor: colors.inputBorder, backgroundColor: colors.inputBg, color: colors.text }]} placeholder={t('auth.selectVehicleHint')}
           placeholderTextColor={colors.textTertiary}
           value={description} onChangeText={setDescription} multiline numberOfLines={3} maxLength={500} />
         <Text style={[styles.charCount, { color: colors.textTertiary }]}>{description.length}/500</Text>
@@ -228,13 +231,13 @@ export default function DriverRegisterStep2() {
 
       {/* Address — required */}
       <View style={styles.inputGroup}>
-        <Text style={[styles.label, { color: colors.text }]}>Your Address *</Text>
-        <Text style={[styles.hint, { color: colors.textTertiary }]}>Select your country, governorate and delegation.</Text>
+        <Text style={[styles.label, { color: colors.text }]}>{t('addresses.title')} *</Text>
+        <Text style={[styles.hint, { color: colors.textTertiary }]}>{t('auth.pleaseFillRequired')}</Text>
 
         {/* Country */}
         <TouchableOpacity style={[styles.pickerButton, { borderColor: colors.inputBorder, backgroundColor: colors.inputBg }]} onPress={() => setShowCountryPicker(true)}>
           <Text style={selectedCountry ? [styles.pickerText, { color: colors.text }] : [styles.pickerPlaceholder, { color: colors.textTertiary }]}>
-            {selectedCountry ? `${selectedCountry.name} (${selectedCountry.isoCode})` : 'Select Country *'}
+            {selectedCountry ? `${selectedCountry.name} (${selectedCountry.isoCode})` : `${t('auth.selectCountry')} *`}
           </Text>
           <Text style={[styles.pickerArrow, { color: colors.textTertiary }]}>▾</Text>
         </TouchableOpacity>
@@ -246,7 +249,7 @@ export default function DriverRegisterStep2() {
             {geoLoading && !selectedGovernorate
               ? <ActivityIndicator size="small" color={colors.primary} />
               : <Text style={selectedGovernorate ? [styles.pickerText, { color: colors.text }] : [styles.pickerPlaceholder, { color: colors.textTertiary }]}>
-                  {selectedGovernorate ? selectedGovernorate.nameGovernorate : 'Select Governorate *'}
+                  {selectedGovernorate ? selectedGovernorate.nameGovernorate : `${t('auth.selectGovernorate')} *`}
                 </Text>}
             <Text style={[styles.pickerArrow, { color: colors.textTertiary }]}>▾</Text>
           </TouchableOpacity>
@@ -259,7 +262,7 @@ export default function DriverRegisterStep2() {
             {geoLoading && !selectedDelegation
               ? <ActivityIndicator size="small" color={colors.primary} />
               : <Text style={selectedDelegation ? [styles.pickerText, { color: colors.text }] : [styles.pickerPlaceholder, { color: colors.textTertiary }]}>
-                  {selectedDelegation ? selectedDelegation.nameDelegation : 'Select Delegation *'}
+                  {selectedDelegation ? selectedDelegation.nameDelegation : `${t('auth.selectDelegation')} *`}
                 </Text>}
             <Text style={[styles.pickerArrow, { color: colors.textTertiary }]}>▾</Text>
           </TouchableOpacity>
@@ -268,24 +271,24 @@ export default function DriverRegisterStep2() {
         {/* Street (optional) */}
         {selectedDelegation && (
           <TextInput style={[styles.input, { marginTop: 10, borderColor: colors.inputBorder, backgroundColor: colors.inputBg, color: colors.text }]}
-            placeholder="Street (optional)" placeholderTextColor={colors.textTertiary}
+            placeholder={t('auth.streetOptional')} placeholderTextColor={colors.textTertiary}
             value={street} onChangeText={setStreet} />
         )}
       </View>
 
       <TouchableOpacity style={[styles.submitButton, { backgroundColor: colors.primary }, loading && styles.submitButtonDisabled]}
         onPress={handleSubmit} disabled={loading}>
-        {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.submitButtonText}>Continue to Step 3</Text>}
+        {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.submitButtonText}>{t('auth.nextStep')}</Text>}
       </TouchableOpacity>
 
       {/* Pickers */}
-      <SearchPicker visible={showCountryPicker} title="Select Country" data={filteredCountries}
+      <SearchPicker visible={showCountryPicker} title={t('auth.selectCountry')} data={filteredCountries}
         onSelect={handleSelectCountry} onClose={() => setShowCountryPicker(false)}
         search={countrySearch} setSearch={setCountrySearch} labelKey="name" colors={colors} />
-      <SearchPicker visible={showGovPicker} title="Select Governorate" data={filteredGov}
+      <SearchPicker visible={showGovPicker} title={t('auth.selectGovernorate')} data={filteredGov}
         onSelect={handleSelectGovernorate} onClose={() => setShowGovPicker(false)}
         search={govSearch} setSearch={setGovSearch} labelKey="nameGovernorate" colors={colors} />
-      <SearchPicker visible={showDelPicker} title="Select Delegation" data={filteredDel}
+      <SearchPicker visible={showDelPicker} title={t('auth.selectDelegation')} data={filteredDel}
         onSelect={(d: Delegation) => { setSelectedDelegation(d); setShowDelPicker(false); }}
         onClose={() => setShowDelPicker(false)}
         search={delSearch} setSearch={setDelSearch} labelKey="nameDelegation" colors={colors} />

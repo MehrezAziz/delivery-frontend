@@ -1,4 +1,5 @@
 import { View, Text, StyleSheet } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import type { SecurityTier } from '../../services/api/security.service';
 
 type ThemeColors = {
@@ -17,12 +18,6 @@ function tierPoleColor(index: 0 | 1 | 2, tier: SecurityTier, colors: ThemeColors
   return index === 0 ? green : red;
 }
 
-function tierLabel(tier: SecurityTier): string {
-  if (tier === 'HIGH') return 'High';
-  if (tier === 'MEDIUM') return 'Medium';
-  return 'Low';
-}
-
 export function SecurityTierPoles({
   tier,
   colors,
@@ -33,10 +28,17 @@ export function SecurityTierPoles({
   /** Tighter layout for list rows */
   compact?: boolean;
 }) {
+  const { t } = useTranslation();
   const poles: (0 | 1 | 2)[] = [0, 1, 2];
+  const tierLabel =
+    tier === 'HIGH'
+      ? t('securityTier.high')
+      : tier === 'MEDIUM'
+        ? t('securityTier.medium')
+        : t('securityTier.low');
   return (
     <View style={[styles.wrap, compact && styles.wrapCompact]}>
-      <Text style={[styles.tierText, { color: colors.textSecondary }]}>{tierLabel(tier)}</Text>
+      <Text style={[styles.tierText, { color: colors.textSecondary }]}>{tierLabel}</Text>
       <View style={styles.poles}>
         {poles.map((i) => (
           <View
