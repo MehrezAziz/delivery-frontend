@@ -8,6 +8,11 @@ import { useTranslation } from 'react-i18next';
 import { Ionicons } from '@expo/vector-icons';
 import { notificationService, Notification } from '../../services/api/notification.service';
 import { syncNativeChatPreviewAfterThreadRead } from '../../services/notifications';
+import {
+  resolveLocationShareRequestId,
+  isLocationShareIncomingRequest,
+  locationShareRequestRoute,
+} from '../../utils/locationShareNavigation';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useAppNavigation } from '../../contexts/AppNavigationContext';
 import {
@@ -127,6 +132,11 @@ export default function DriverNotifications() {
       item.relatedEntityType === 'DriverWithdrawalRequest'
     ) {
       push('/(driver)/transactions');
+    } else if (isLocationShareIncomingRequest(item)) {
+      const reqId = resolveLocationShareRequestId(item);
+      if (reqId) {
+        push(locationShareRequestRoute(reqId, 'driver'));
+      }
     }
   };
 

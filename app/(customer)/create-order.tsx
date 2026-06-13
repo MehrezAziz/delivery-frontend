@@ -26,6 +26,16 @@ import {
 } from '../../utils/createOrderStepUpSession';
 import { previewLineAmount, hasCoinRate } from '../../utils/orderPriceCoins';
 import { OrderPreviewPaymentSwitch, OrderPreviewTotalPrice } from '../../components/OrderPreviewPaymentUi';
+import { RequestLocationModal, type RequestLocationResult } from '../../components/location/RequestLocationModal';
+import {
+  ensureLocationSharePollRunning,
+  setLocationSharePollSharedLocationLabel,
+  subscribeLocationSharePoll,
+} from '../../services/locationSharePendingPoll';
+import {
+  clearLocationSharePending,
+  getLocationSharePending,
+} from '../../utils/locationSharePendingStorage';
 
 const ORDER_BIO_ROUND_LIMIT = 5;
 
@@ -106,6 +116,14 @@ export default function CreateOrderScreen() {
   const [savedPickerVisible, setSavedPickerVisible] = useState(false);
   const [savedPickerTarget, setSavedPickerTarget] = useState<'pickup' | 'dropoff'>('pickup');
   const [savedSearch, setSavedSearch] = useState('');
+  const [requestLocationVisible, setRequestLocationVisible] = useState(false);
+  const [requestLocationSlot, setRequestLocationSlot] = useState<'pickup' | 'dropoff'>('pickup');
+  const [pickupWaitingName, setPickupWaitingName] = useState<string | null>(null);
+  const [dropoffWaitingName, setDropoffWaitingName] = useState<string | null>(null);
+  const [pickupDeclinedName, setPickupDeclinedName] = useState<string | null>(null);
+  const [dropoffDeclinedName, setDropoffDeclinedName] = useState<string | null>(null);
+  const pickupAddressRef = useRef<SavedAddress | null>(null);
+  const dropoffAddressRef = useRef<SavedAddress | null>(null);
   const [recentAddressIds, setRecentAddressIds] = useState<string[]>([]);
   const [customerStatus, setCustomerStatus] = useState<string>('ACTIVE');
   const [scheduleLater, setScheduleLater] = useState(false);
@@ -257,8 +275,33 @@ export default function CreateOrderScreen() {
   }, []);
 
   // Resolve address from map picker params
+  const refreshLocationShareSlotUi = useCallback(async () => {
+    const [pickupPending, dropoffPending] = await Promise.all([
+      getLocationSharePending('pickup'),
+      getLocationSharePending('dropoff'),
+    ]);
+    setPickupWaitingName(
+      pickupPending?.phase === 'waiting' ? pickupPending.targetDisplayName : null,
+    );
+    setDropoffWaitingName(
+      dropoffPending?.phase === 'waiting' ? dropoffPending.targetDisplayName : null,
+    );
+    setPickupDeclinedName(
+      pickupPending?.phase === 'declined' ? pickupPending.targetDisplayName : null,
+    );
+    setDropoffDeclinedName(
+      dropoffPending?.phase === 'declined' ? dropoffPending.targetDisplayName : null,
+    );
+  }, []);
+
+  const clearSlotLocationShare = useCallback(async (slot: 'pickup' | 'dropoff') => {
+    await clearLocationSharePending(slot);
+    await refreshLocationShareSlotUi();
+  }, [refreshLocationShareSlotUi]);
+
   const resolveAddress = useCallback(async (
     lat: number, lng: number, label: string,
+    slot: 'pickup' | 'dropoff',
     setter: (a: SavedAddress) => void,
     setResolving: (b: boolean) => void,
   ) => {
@@ -283,12 +326,13 @@ export default function CreateOrderScreen() {
         sublabel: `${delegation.nameDelegation}, ${delegation.governorate.nameGovernorate}`,
         lat, lng,
       });
+      await clearSlotLocationShare(slot);
     } catch (e: any) {
       appAlert(t('common.error'), e.message || t('common.something_went_wrong'));
     } finally {
       setResolving(false);
     }
-  }, [t]);
+  }, [t, clearSlotLocationShare]);
 
   // Clean up stale picker data on mount
   useEffect(() => {
@@ -310,7 +354,7 @@ export default function CreateOrderScreen() {
           if (parsed.timestamp > pickupTimestamp.current) {
             pickupTimestamp.current = parsed.timestamp;
             await AsyncStorage.removeItem('picked_pickup');
-            resolveAddress(parsed.lat, parsed.lng, parsed.address, setPickupAddress, setResolvingPickup);
+            resolveAddress(parsed.lat, parsed.lng, parsed.address, 'pickup', setPickupAddress, setResolvingPickup);
           }
         }
         const dropoffData = await AsyncStorage.getItem('picked_dropoff');
@@ -319,13 +363,98 @@ export default function CreateOrderScreen() {
           if (parsed.timestamp > dropoffTimestamp.current) {
             dropoffTimestamp.current = parsed.timestamp;
             await AsyncStorage.removeItem('picked_dropoff');
-            resolveAddress(parsed.lat, parsed.lng, parsed.address, setDropoffAddress, setResolvingDropoff);
+            resolveAddress(parsed.lat, parsed.lng, parsed.address, 'dropoff', setDropoffAddress, setResolvingDropoff);
           }
         }
       } catch {}
     }, 500);
     return () => clearInterval(interval);
   }, [resolveAddress]);
+
+  const openRequestLocation = (target: 'pickup' | 'dropoff') => {
+    setRequestLocationSlot(target);
+    setRequestLocationVisible(true);
+  };
+
+  const markRecentAddress = useCallback(async (addressId: string) => {
+    setRecentAddressIds((prev) => {
+      const next = [addressId, ...prev.filter((id) => id !== addressId)].slice(0, 6);
+      void AsyncStorage.setItem(RECENT_ADDR_KEY, JSON.stringify(next));
+      return next;
+    });
+  }, []);
+
+  useEffect(() => {
+    pickupAddressRef.current = pickupAddress;
+  }, [pickupAddress]);
+
+  useEffect(() => {
+    dropoffAddressRef.current = dropoffAddress;
+  }, [dropoffAddress]);
+
+  useFocusEffect(
+    useCallback(() => {
+      void refreshLocationShareSlotUi();
+    }, [refreshLocationShareSlotUi]),
+  );
+
+  const selectSavedAddressForSlot = useCallback(async (
+    slot: 'pickup' | 'dropoff',
+    address: SavedAddress,
+  ) => {
+    if (slot === 'pickup') setPickupAddress(address);
+    else setDropoffAddress(address);
+    await clearSlotLocationShare(slot);
+  }, [clearSlotLocationShare]);
+
+  const applyRequestLocationResult = useCallback((slot: 'pickup' | 'dropoff', result: RequestLocationResult) => {
+    const saved: SavedAddress = {
+      addressId: result.addressId,
+      label: result.label,
+      sublabel: result.sublabel,
+      lat: result.lat,
+      lng: result.lng,
+    };
+    const slotLabel = slot === 'pickup' ? t('createOrder.pickup') : t('createOrder.delivery');
+    const current = slot === 'pickup' ? pickupAddressRef.current : dropoffAddressRef.current;
+    const isEmpty = !current?.addressId && !current?.label?.trim();
+
+    const fill = () => {
+      if (slot === 'pickup') setPickupAddress(saved);
+      else setDropoffAddress(saved);
+      void markRecentAddress(result.addressId);
+      void clearSlotLocationShare(slot);
+      appAlert(t('locationShare.acceptedTitle'), t('locationShare.fieldFilled', { slot: slotLabel }));
+    };
+
+    if (isEmpty) {
+      fill();
+      return;
+    }
+
+    appAlert(
+      t('locationShare.replaceAddressTitle'),
+      t('locationShare.replaceAddressBody', { slot: slotLabel, address: saved.label }),
+      [
+        { text: t('common.no'), style: 'cancel' },
+        { text: t('locationShare.replaceConfirm'), onPress: fill },
+      ],
+    );
+  }, [clearSlotLocationShare, t, markRecentAddress]);
+
+  useEffect(() => {
+    setLocationSharePollSharedLocationLabel(t('locationShare.sharedLocation'));
+    ensureLocationSharePollRunning();
+    return subscribeLocationSharePoll((event) => {
+      if (event.type === 'accepted') {
+        applyRequestLocationResult(event.slot, event.result);
+        if (event.slot === requestLocationSlot) {
+          setRequestLocationVisible(false);
+        }
+      }
+      void refreshLocationShareSlotUi();
+    });
+  }, [t, requestLocationSlot, applyRequestLocationResult, refreshLocationShareSlotUi]);
 
   const openMapPicker = (type: 'pickup' | 'dropoff') => {
     router.push(`/(customer)/pick-location?type=${type}&returnTo=${encodeURIComponent('/(customer)/create-order')}`);
@@ -361,12 +490,6 @@ export default function CreateOrderScreen() {
     ) || null;
   };
 
-  const markRecentAddress = async (addressId: string) => {
-    const next = [addressId, ...recentAddressIds.filter((id) => id !== addressId)].slice(0, 6);
-    setRecentAddressIds(next);
-    try { await AsyncStorage.setItem(RECENT_ADDR_KEY, JSON.stringify(next)); } catch {}
-  };
-
   const useMyLocation = async (which: 'pickup' | 'dropoff') => {
     const setResolving = which === 'pickup' ? setResolvingPickup : setResolvingDropoff;
     setResolving(true);
@@ -381,6 +504,7 @@ export default function CreateOrderScreen() {
         pos.coords.latitude,
         pos.coords.longitude,
         t('createOrder.now'),
+        which,
         which === 'pickup' ? setPickupAddress : setDropoffAddress,
         which === 'pickup' ? setResolvingPickup : setResolvingDropoff,
       );
@@ -1171,7 +1295,7 @@ export default function CreateOrderScreen() {
                 ) : (
                   <Text style={[s.addressPlaceholder, { color: colors.textTertiary }]}>{t('createOrder.pickupAddress')}</Text>
                 )}
-                <View style={{ flexDirection: 'row', gap: 8, marginTop: 10 }}>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 10 }}>
                   <TouchableOpacity style={[s.inlineActionBtn, { backgroundColor: surfaceMuted }]} onPress={() => openMapPicker('pickup')} activeOpacity={0.7}>
                     <Ionicons name="map-outline" size={16} color="#16a34a" />
                     <Text style={[s.inlineActionTxt, { color: colors.text }]}>{t('createOrder.chooseAddress')}</Text>
@@ -1186,7 +1310,27 @@ export default function CreateOrderScreen() {
                     <Ionicons name="locate" size={16} color="#2563eb" />
                     <Text style={[s.inlineActionTxt, { color: colors.text }]}>{t('createOrder.now')}</Text>
                   </TouchableOpacity>
+                  <TouchableOpacity style={[s.inlineActionBtn, { backgroundColor: surfaceMuted }]} onPress={() => openRequestLocation('pickup')} activeOpacity={0.7}>
+                    <Ionicons name="person-add-outline" size={16} color="#7c3aed" />
+                    <Text style={[s.inlineActionTxt, { color: colors.text }]}>{t('createOrder.askContact')}</Text>
+                  </TouchableOpacity>
                 </View>
+                {pickupWaitingName ? (
+                  <View style={s.locationShareWaitingRow}>
+                    <ActivityIndicator size="small" color={colors.primary} />
+                    <Text style={[s.locationShareWaitingTxt, { color: colors.primary }]}>
+                      {t('locationShare.waiting', { name: pickupWaitingName })}
+                    </Text>
+                  </View>
+                ) : null}
+                {pickupDeclinedName ? (
+                  <View style={[s.locationShareDeclinedRow, { backgroundColor: isDark ? 'rgba(234,88,12,0.15)' : '#fff7ed', borderColor: '#fdba74' }]}>
+                    <Ionicons name="information-circle-outline" size={18} color="#ea580c" />
+                    <Text style={s.locationShareDeclinedTxt}>
+                      {t('locationShare.declinedByName', { name: pickupDeclinedName })}
+                    </Text>
+                  </View>
+                ) : null}
               </View>
             </View>
 
@@ -1217,7 +1361,7 @@ export default function CreateOrderScreen() {
                 ) : (
                   <Text style={[s.addressPlaceholder, { color: colors.textTertiary }]}>{t('createOrder.deliveryAddress')}</Text>
                 )}
-                <View style={{ flexDirection: 'row', gap: 8, marginTop: 10 }}>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 10 }}>
                   <TouchableOpacity style={[s.inlineActionBtn, { backgroundColor: surfaceMuted }]} onPress={() => openMapPicker('dropoff')} activeOpacity={0.7}>
                     <Ionicons name="map-outline" size={16} color="#ef4444" />
                     <Text style={[s.inlineActionTxt, { color: colors.text }]}>{t('createOrder.chooseAddress')}</Text>
@@ -1232,7 +1376,27 @@ export default function CreateOrderScreen() {
                     <Ionicons name="locate" size={16} color="#2563eb" />
                     <Text style={[s.inlineActionTxt, { color: colors.text }]}>{t('createOrder.now')}</Text>
                   </TouchableOpacity>
+                  <TouchableOpacity style={[s.inlineActionBtn, { backgroundColor: surfaceMuted }]} onPress={() => openRequestLocation('dropoff')} activeOpacity={0.7}>
+                    <Ionicons name="person-add-outline" size={16} color="#7c3aed" />
+                    <Text style={[s.inlineActionTxt, { color: colors.text }]}>{t('createOrder.askContact')}</Text>
+                  </TouchableOpacity>
                 </View>
+                {dropoffWaitingName ? (
+                  <View style={s.locationShareWaitingRow}>
+                    <ActivityIndicator size="small" color={colors.primary} />
+                    <Text style={[s.locationShareWaitingTxt, { color: colors.primary }]}>
+                      {t('locationShare.waiting', { name: dropoffWaitingName })}
+                    </Text>
+                  </View>
+                ) : null}
+                {dropoffDeclinedName ? (
+                  <View style={[s.locationShareDeclinedRow, { backgroundColor: isDark ? 'rgba(234,88,12,0.15)' : '#fff7ed', borderColor: '#fdba74' }]}>
+                    <Ionicons name="information-circle-outline" size={18} color="#ea580c" />
+                    <Text style={s.locationShareDeclinedTxt}>
+                      {t('locationShare.declinedByName', { name: dropoffDeclinedName })}
+                    </Text>
+                  </View>
+                ) : null}
               </View>
             </View>
 
@@ -1470,9 +1634,8 @@ export default function CreateOrderScreen() {
                         <TouchableOpacity
                           key={r.addressId}
                           style={[s.recentChip, { borderColor: colors.border, backgroundColor: colors.inputBg }]}
-                          onPress={() => {
-                            if (savedPickerTarget === 'pickup') setPickupAddress(r);
-                            else setDropoffAddress(r);
+                          onPress={async () => {
+                            await selectSavedAddressForSlot(savedPickerTarget, r);
                             markRecentAddress(r.addressId);
                             setSavedPickerVisible(false);
                           }}
@@ -1489,9 +1652,8 @@ export default function CreateOrderScreen() {
               renderItem={({ item }) => (
                 <TouchableOpacity
                   style={[s.modalItem, { borderBottomColor: colors.border }]}
-                  onPress={() => {
-                    if (savedPickerTarget === 'pickup') setPickupAddress(item);
-                    else setDropoffAddress(item);
+                  onPress={async () => {
+                    await selectSavedAddressForSlot(savedPickerTarget, item);
                     markRecentAddress(item.addressId);
                     setSavedPickerVisible(false);
                   }}
@@ -1505,6 +1667,15 @@ export default function CreateOrderScreen() {
           </View>
         </View>
       </Modal>
+
+      <RequestLocationModal
+        key={requestLocationSlot}
+        visible={requestLocationVisible}
+        slot={requestLocationSlot}
+        onClose={() => setRequestLocationVisible(false)}
+        onAccepted={(result) => applyRequestLocationResult(requestLocationSlot, result)}
+        onWaitingStateChange={() => { void refreshLocationShareSlotUi(); }}
+      />
     </KeyboardAvoidingView>
   );
 }
@@ -1597,6 +1768,24 @@ const s = StyleSheet.create({
     borderRadius: 999, backgroundColor: '#f3f4f6',
   },
   inlineActionTxt: { fontSize: 12, fontWeight: '700', color: '#374151' },
+  locationShareWaitingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 10,
+    paddingVertical: 4,
+  },
+  locationShareWaitingTxt: { fontSize: 13, fontWeight: '600', flex: 1 },
+  locationShareDeclinedRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    marginTop: 10,
+    padding: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  locationShareDeclinedTxt: { flex: 1, fontSize: 13, lineHeight: 18, fontWeight: '600', color: '#c2410c' },
   smallSelectBtn: {
     paddingHorizontal: 10, paddingVertical: 8, borderRadius: 10, backgroundColor: '#dcfce7', alignSelf: 'center',
   },

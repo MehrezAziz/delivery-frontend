@@ -9,6 +9,13 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import { notificationService, Notification } from '../../services/api/notification.service';
 import { syncNativeChatPreviewAfterThreadRead } from '../../services/notifications';
+import {
+  resolveLocationShareRequestId,
+  isLocationShareIncomingRequest,
+  isLocationShareRequesterOutcome,
+  locationShareRequestRoute,
+  locationShareRequesterRoute,
+} from '../../utils/locationShareNavigation';
 import { useTheme } from '../../contexts/ThemeContext';
 import {
   groupNotificationsByThread,
@@ -42,7 +49,7 @@ const TYPE_ICONS: Record<string, string> = {
   DISPUTE_OPENED: 'alert-outline',
   DISPUTE_RESOLVED: 'checkmark-done-outline',
   SUPPORT_TICKET_REPLY: 'chatbubble-outline',
-  NEW_MESSAGE_FROM_DRIVER: 'chatbubble-ellipses-outline',
+  LOCATION_SHARE_REQUEST: 'location-outline',
 };
 
 export default function CustomerNotifications() {
@@ -118,6 +125,13 @@ export default function CustomerNotifications() {
       item.relatedEntityType === 'WithdrawalRequest'
     ) {
       router.push('/(customer)/wallet?tab=transactions' as never);
+    } else if (isLocationShareRequesterOutcome(item)) {
+      router.push(locationShareRequesterRoute() as never);
+    } else if (isLocationShareIncomingRequest(item)) {
+      const reqId = resolveLocationShareRequestId(item);
+      if (reqId) {
+        router.push(locationShareRequestRoute(reqId, 'customer') as never);
+      }
     }
   };
 

@@ -11,6 +11,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../../contexts/ThemeContext';
 import { GOOGLE_MAPS_DARK_STYLE } from '../../constants/googleMapsDarkStyle';
+import { locationRequestService } from '../../services/api/locationRequest.service';
+import { appAlert } from '../../utils/appAlert';
 
 const GOOGLE_API_KEY = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY || '';
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -23,9 +25,10 @@ interface PlacePrediction {
 
 export default function PickLocationScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ type: string; returnTo?: string }>();
+  const params = useLocalSearchParams<{ type: string; returnTo?: string; requestId?: string }>();
   const { colors, isDark } = useTheme();
   const { t } = useTranslation();
+  const isLocationShare = params.type === 'locationShare';
   const isPickup = params.type === 'pickup';
   const mapRef = useRef<MapView>(null);
 
@@ -173,6 +176,20 @@ export default function PickLocationScreen() {
   // Confirm selection → save to AsyncStorage and return to previous screen
   const handleConfirm = async () => {
     if (!marker) return;
+    if (isLocationShare && params.requestId) {
+      try {
+        await locationRequestService.accept(params.requestId, {
+          latitude: marker.latitude,
+          longitude: marker.longitude,
+          street: address || undefined,
+        });
+        appAlert(t('locationShare.acceptedTitle'), t('locationShare.acceptedBody'));
+        router.replace((returnTo || '/(customer)/location-requests') as any);
+      } catch (e) {
+        appAlert(t('common.error'), e instanceof Error ? e.message : t('common.error'));
+      }
+      return;
+    }
     const data = {
       lat: marker.latitude,
       lng: marker.longitude,
@@ -183,8 +200,12 @@ export default function PickLocationScreen() {
     router.replace(returnTo as any);
   };
 
-  const accentColor = isPickup ? '#22c55e' : '#ef4444';
-  const title = isPickup ? t('createOrder.pickup') : t('createOrder.dropoff');
+  const accentColor = isLocationShare ? '#2563eb' : isPickup ? '#22c55e' : '#ef4444';
+  const title = isLocationShare
+    ? t('locationShare.confirmOnMap')
+    : isPickup
+      ? t('createOrder.pickup')
+      : t('createOrder.delivery');
 
   return (
     <View style={styles.container}>

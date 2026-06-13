@@ -107,6 +107,8 @@ export default function CustomerLayout() {
       <Tabs.Screen name="buy-coins-result" options={{ href: null, headerShown: false }} />
       <Tabs.Screen name="security" options={{ href: null }} />
       <Tabs.Screen name="transfer-pin" options={{ href: null }} />
+      <Tabs.Screen name="share-location-request" options={{ href: null, title: t('locationShare.incomingTitle') }} />
+      <Tabs.Screen name="location-requests" options={{ href: null, title: t('locationShare.inboxTitle') }} />
     </Tabs>
   );
 }

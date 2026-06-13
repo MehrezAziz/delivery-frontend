@@ -604,6 +604,15 @@ export default function CustomerProfileScreen() {
         <View style={styles.menuContainer}>
           <TouchableOpacity
             style={[styles.textLinkRow, { backgroundColor: colors.card, borderColor: colors.border }]}
+            onPress={() => router.push('/(customer)/location-requests')}
+            activeOpacity={0.75}
+          >
+            <Text style={[styles.textLinkLabel, { color: colors.text }]}>{t('locationShare.inboxTitle')}</Text>
+            <Text style={[styles.textLinkChevron, { color: colors.textTertiary }]}>›</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.textLinkRow, { backgroundColor: colors.card, borderColor: colors.border, marginTop: 10 }]}
             onPress={() => router.push('/(customer)/support')}
             activeOpacity={0.75}
           >

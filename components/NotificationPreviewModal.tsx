@@ -17,7 +17,13 @@ import {
   type Notification,
   type NotificationPreviewGroup,
 } from '../services/api/notification.service';
-import { syncNativeChatPreviewAfterThreadRead } from '../services/notifications';
+import {
+  resolveLocationShareRequestId,
+  isLocationShareIncomingRequest,
+  isLocationShareRequesterOutcome,
+  locationShareRequestRoute,
+  locationShareRequesterRoute,
+} from '../utils/locationShareNavigation';
 import {
   routeWhenDriverCannotOpenOrderDetail,
   shouldSuppressDriverOrderDetailNavigation,
@@ -85,6 +91,18 @@ function navigateFromNotification(router: ReturnType<typeof useRouter>, item: No
   }
   if (item.relatedEntityType === 'Rating' && variant === 'driver') {
     router.push('/(driver)/my-ratings' as any);
+    return;
+  }
+  if (isLocationShareRequesterOutcome(item) && variant === 'customer') {
+    router.push(locationShareRequesterRoute() as any);
+    return;
+  }
+  if (isLocationShareIncomingRequest(item)) {
+    const reqId = resolveLocationShareRequestId(item);
+    if (reqId) {
+      router.push(locationShareRequestRoute(reqId, variant) as any);
+    }
+    return;
   }
 }
 

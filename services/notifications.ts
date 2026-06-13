@@ -22,9 +22,17 @@ import { router } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ExpoNotifications from 'expo-notifications';
 import { runAfterNextPaint } from '../utils/scheduleIdle';
+import { resolveLocationShareRequestId } from '../utils/locationShareNavigation';
 import { notificationService } from './api/notification.service';
 import { api } from './api/client';
 import { orderService, Order } from './api/order.service';
+import {
+  handleLocationShareAcceptFromNotification,
+  handleLocationShareDeclineFromNotification,
+  guardLocationShareBodyNavigation,
+  dismissLocationShareNotification,
+  stableLocationShareNotifId,
+} from './locationShareNotificationActions';
 
 // Channel IDs
 const CHANNEL_ORDER = 'order-updates';
@@ -650,9 +658,11 @@ const SILENT_NOTIFICATION_ACTION_IDS = new Set([
   'driver_mark_picked_up',
   'driver_mark_delivering',
   'driver_open_return_deposit',
+  'location_share_decline',
 ]);
 
 function buildNotifeeActions(data: Record<string, string>) {
+  if (data.locationShareTerminal) return [];
   const buttons = parseActionButtons(data);
   if (buttons.length > 0) {
     return buttons.map((btn) => ({
@@ -1418,6 +1428,13 @@ function getOrderRoute(orderId: string, scrollToDriver: boolean = false) {
     : `/(customer)/order-detail?orderId=${orderId}`;
 }
 
+async function getLocationShareRoute(requestId: string): Promise<string> {
+  const role = (await getStoredUserRole()) || 'CUSTOMER';
+  const q = encodeURIComponent(requestId);
+  if (role === 'DRIVER') return `/(driver)/share-location-request?id=${q}`;
+  return `/(customer)/share-location-request?id=${q}`;
+}
+
 async function savePendingNotificationRoute(route: string) {
   try {
     await AsyncStorage.setItem(PENDING_NOTIFICATION_ROUTE_KEY, route);
@@ -1693,6 +1710,29 @@ async function handleChatQuickReply(orderId: string, input: string | undefined) 
   }
 }
 
+async function routeLocationShareNotificationTap(data: Record<string, string>): Promise<string | null> {
+  const merged = coerceFcmData(data as Record<string, unknown>);
+  const type = (merged.type || '').trim();
+
+  if (type === 'LOCATION_SHARE_FULFILLED' || type === 'LOCATION_SHARE_DECLINED') {
+    return notificationDataToRoute(merged);
+  }
+
+  const isIncomingRequest =
+    type === 'LOCATION_SHARE_REQUEST' ||
+    merged.relatedEntityType === 'LocationShareRequest' ||
+    (merged.groupKey || '').startsWith('LocationShareRequest:');
+  if (isIncomingRequest) {
+    const reqId = resolveLocationShareRequestId({
+      relatedEntityId: merged.relatedEntityId,
+      groupKey: merged.groupKey,
+    });
+    if (reqId) await dismissLocationShareNotification(reqId);
+    await guardLocationShareBodyNavigation(merged);
+  }
+  return notificationDataToRoute(merged);
+}
+
 /** Build an expo-router path from FCM / Notifee notification data. */
 export async function notificationDataToRoute(
   data: Record<string, string> | undefined,
@@ -1747,6 +1787,21 @@ export async function notificationDataToRoute(
   }
 
   const { relatedEntityType, relatedEntityId, type } = data;
+
+  if (
+    gk.startsWith('LocationShareRequest:') ||
+    type === 'LOCATION_SHARE_REQUEST' ||
+    type === 'LOCATION_SHARE_FULFILLED' ||
+    type === 'LOCATION_SHARE_DECLINED' ||
+    relatedEntityType === 'LocationShareRequest'
+  ) {
+    if (type === 'LOCATION_SHARE_FULFILLED' || type === 'LOCATION_SHARE_DECLINED') {
+      return '/(customer)/create-order';
+    }
+    const reqId = resolveLocationShareRequestId({ relatedEntityId, groupKey: gk });
+    if (reqId) return getLocationShareRoute(reqId);
+  }
+
   if (!relatedEntityType || !relatedEntityId) return null;
 
   switch (relatedEntityType) {
@@ -1864,6 +1919,12 @@ export async function notificationDataToRoute(
       }
       return null;
     }
+    case 'LocationShareRequest': {
+      if (type === 'LOCATION_SHARE_FULFILLED' || type === 'LOCATION_SHARE_DECLINED') {
+        return '/(customer)/create-order';
+      }
+      return getLocationShareRoute(relatedEntityId);
+    }
     default:
       return null;
   }
@@ -1902,6 +1963,8 @@ async function routeFromNotifeeInitialForNavigation(initial: NotifeeInitial): Pr
     return `/(driver)/order-chat?orderId=${orderId}`;
   }
   if (actionId === 'accept_driver') return null;
+  if (actionId === 'location_share_accept') return null;
+  if (actionId === 'location_share_decline') return null;
   if (
     actionId &&
     ['driver_mark_arrived', 'driver_mark_picked_up', 'driver_mark_delivering'].includes(actionId)
@@ -1940,6 +2003,25 @@ async function routeFromNotifeeInitialForNavigation(initial: NotifeeInitial): Pr
     return role === 'DRIVER'
       ? `/(driver)/support-chat?ticketId=${q}`
       : `/(customer)/support-chat?ticketId=${q}`;
+  }
+
+  const locShareId = resolveLocationShareRequestId({
+    relatedEntityId: data.relatedEntityId,
+    groupKey: data.groupKey,
+  });
+  const locShareType = (data.type || '').trim();
+  if (locShareType === 'LOCATION_SHARE_FULFILLED' || locShareType === 'LOCATION_SHARE_DECLINED') {
+    return '/(customer)/create-order';
+  }
+  if (
+    locShareId &&
+    (locShareType === 'LOCATION_SHARE_REQUEST' ||
+      data.relatedEntityType === 'LocationShareRequest' ||
+      (data.groupKey || '').startsWith('LocationShareRequest:'))
+  ) {
+    await dismissLocationShareNotification(locShareId);
+    await guardLocationShareBodyNavigation(data);
+    return getLocationShareRoute(locShareId);
   }
 
   if (data.relatedEntityType && data.relatedEntityId) {
@@ -1985,6 +2067,16 @@ export async function resolveLaunchRouteAfterLogin(): Promise<string | null> {
     if (orderId) await handleAcceptDriver(orderId);
     return null;
   }
+  if (n?.pressAction?.id === 'location_share_accept') {
+    const data = coerceFcmData(n.notification?.data as Record<string, unknown>);
+    await handleLocationShareAcceptFromNotification(data);
+    return null;
+  }
+  if (n?.pressAction?.id === 'location_share_decline') {
+    const data = coerceFcmData(n.notification?.data as Record<string, unknown>);
+    await handleLocationShareDeclineFromNotification(data);
+    return null;
+  }
   if (n?.pressAction?.id === 'driver_open_return_deposit') {
     const data = coerceFcmData(n.notification?.data as Record<string, unknown>);
     const orderId = data.orderId || data.relatedEntityId;
@@ -2007,7 +2099,7 @@ export async function resolveLaunchRouteAfterLogin(): Promise<string | null> {
 
   const fcm = await getInitialNotification(firebaseMessaging);
   if (fcm?.data) {
-    const r = await notificationDataToRoute(coerceFcmData(fcm.data as Record<string, unknown>));
+    const r = await routeLocationShareNotificationTap(coerceFcmData(fcm.data as Record<string, unknown>));
     if (r) return r;
   }
   return null;
@@ -2203,9 +2295,22 @@ async function displayRegularNotification(data: Record<string, string>, androidI
   const isCoinTransferDeepLink =
     data.relatedEntityType === 'CoinTransfer' &&
     (data.type === 'COIN_TRANSFER_RECEIVED' || data.type === 'COIN_TRANSFER_OUTBOUND_COMPLETED');
+  const isLocationShare = data.type === 'LOCATION_SHARE_REQUEST';
+  const locShareId = resolveLocationShareRequestId({
+    relatedEntityId: data.relatedEntityId,
+    groupKey: data.groupKey,
+  });
+  const notifeeData =
+    isLocationShare && locShareId && !data.groupKey
+      ? { ...data, groupKey: `LocationShareRequest:${locShareId}` }
+      : data;
+  const notifeeActions = buildNotifeeActions(notifeeData);
   const resolvedAndroidId =
     androidId ||
-    (isSupportReply ? stableSupportTicketNotificationId(String(data.relatedEntityId || '').trim()) : undefined);
+    (isSupportReply ? stableSupportTicketNotificationId(String(data.relatedEntityId || '').trim()) : undefined) ||
+    (isLocationShare && locShareId
+      ? stableLocationShareNotifId(locShareId)
+      : undefined);
 
   if (Platform.OS === 'android') {
     try {
@@ -2215,30 +2320,31 @@ async function displayRegularNotification(data: Record<string, string>, androidI
     }
   }
 
-  const threadIdIos = (data.groupKey || '').trim() || (isSupportReply ? `support:${data.relatedEntityId}`.trim() : '');
+  const threadIdIos =
+    (data.groupKey || '').trim() ||
+    (isSupportReply ? `support:${data.relatedEntityId}`.trim() : '') ||
+    (isLocationShare && locShareId ? `LocationShareRequest:${locShareId}` : '');
 
   await notifee.displayNotification({
     ...(resolvedAndroidId ? { id: resolvedAndroidId } : {}),
     title,
     body,
     android: {
-      channelId: CHANNEL_DEFAULT,
-      importance: AndroidImportance.DEFAULT,
-      /** `launchActivity` helps cold-start: open app then deep-link to support ticket chat. */
-      pressAction:
-        (isSupportReply || isCoinTransferDeepLink) && Platform.OS === 'android'
-          ? { id: 'default', launchActivity: 'default' }
-          : { id: 'default' },
+      channelId: isLocationShare ? CHANNEL_ORDER : CHANNEL_DEFAULT,
+      importance: isLocationShare ? AndroidImportance.HIGH : AndroidImportance.DEFAULT,
+      pressAction: { id: 'default', launchActivity: 'default' },
+      ...(notifeeActions.length > 0 ? { actions: notifeeActions } : {}),
       /** One tray slot per ticket; no Messaging-style UI or inline reply (unlike order chat). */
       ...(isSupportReply && resolvedAndroidId
         ? { tag: resolvedAndroidId, category: AndroidCategory.STATUS }
         : {}),
+      ...(isLocationShare && resolvedAndroidId ? { tag: resolvedAndroidId } : {}),
     },
     ios: {
       sound: 'default',
       ...(threadIdIos ? { threadId: threadIdIos } : {}),
     },
-    data,
+    data: notifeeData,
   });
 }
 
@@ -2256,7 +2362,7 @@ export function setupNotificationListeners() {
       remoteMessage,
       coerceFcmData(raw && typeof raw === 'object' ? raw : undefined),
     );
-    const route = await notificationDataToRoute(data);
+    const route = await routeLocationShareNotificationTap(data);
     if (route) {
       runAfterNextPaint(() => router.push(route as any));
     }
@@ -2274,6 +2380,16 @@ export function setupNotificationListeners() {
 
       if (actionId === 'accept_driver' && orderId) {
         handleAcceptDriver(orderId);
+        return;
+      }
+      if (actionId === 'location_share_accept') {
+        const merged = coerceFcmData(data as Record<string, unknown>);
+        void handleLocationShareAcceptFromNotification(merged);
+        return;
+      }
+      if (actionId === 'location_share_decline') {
+        const merged = coerceFcmData(data as Record<string, unknown>);
+        void handleLocationShareDeclineFromNotification(merged);
         return;
       }
       if (actionId === ORDER_CHAT_REPLY_ACTION) {
@@ -2321,7 +2437,7 @@ export function setupNotificationListeners() {
       }
       /** Android often reports a body tap as ACTION_PRESS with id `default` (not EventType.PRESS). */
       if (actionId === 'default' && data) {
-        void notificationDataToRoute(coerceFcmData(data as Record<string, unknown>)).then((route) => {
+        void routeLocationShareNotificationTap(coerceFcmData(data as Record<string, unknown>)).then((route) => {
           if (route) runAfterNextPaint(() => router.push(route as any));
         });
         return;
@@ -2329,7 +2445,7 @@ export function setupNotificationListeners() {
     }
     if (type === EventType.PRESS) {
       const data = detail.notification?.data as Record<string, string> | undefined;
-      void notificationDataToRoute(coerceFcmData(data as Record<string, unknown>)).then((route) => {
+      void routeLocationShareNotificationTap(coerceFcmData(data as Record<string, unknown>)).then((route) => {
         if (route) runAfterNextPaint(() => router.push(route as any));
       });
     }
@@ -2409,6 +2525,16 @@ export function setupBackgroundHandler() {
         await handleAcceptDriver(orderId);
         return;
       }
+      if (actionId === 'location_share_accept') {
+        const merged = coerceFcmData(data as Record<string, unknown>);
+        await handleLocationShareAcceptFromNotification(merged);
+        return;
+      }
+      if (actionId === 'location_share_decline') {
+        const merged = coerceFcmData(data as Record<string, unknown>);
+        await handleLocationShareDeclineFromNotification(merged);
+        return;
+      }
       if (actionId === ORDER_CHAT_REPLY_ACTION) {
         const merged = coerceFcmData(detail.notification?.data as Record<string, unknown>);
         const oid = effectiveOrderIdFromChatPayload(merged);
@@ -2452,14 +2578,14 @@ export function setupBackgroundHandler() {
       }
       if (actionId === 'default' && data) {
         const merged = coerceFcmData(data as Record<string, unknown>);
-        const route = await notificationDataToRoute(merged);
+        const route = await routeLocationShareNotificationTap(merged);
         if (route) await savePendingNotificationRoute(route);
         return;
       }
     }
     if (type === EventType.PRESS) {
       const data = detail.notification?.data as Record<string, string> | undefined;
-      const route = await notificationDataToRoute(coerceFcmData(data as Record<string, unknown>));
+      const route = await routeLocationShareNotificationTap(coerceFcmData(data as Record<string, unknown>));
       if (route) await savePendingNotificationRoute(route);
     }
   });
