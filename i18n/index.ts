@@ -66,8 +66,8 @@ export async function initI18n(): Promise<SupportedLanguage> {
     });
 
   try {
+    I18nManager.allowRTL(true);
     const wantRTL = isRTL(lang);
-    I18nManager.allowRTL(wantRTL);
     if (I18nManager.isRTL !== wantRTL) {
       I18nManager.forceRTL(wantRTL);
     }
@@ -89,7 +89,7 @@ export async function changeAppLanguage(lang: SupportedLanguage): Promise<{ rtlC
   }
   const wantRTL = isRTL(lang);
   try {
-    I18nManager.allowRTL(wantRTL);
+    I18nManager.allowRTL(true);
     if (I18nManager.isRTL !== wantRTL) {
       I18nManager.forceRTL(wantRTL);
     }

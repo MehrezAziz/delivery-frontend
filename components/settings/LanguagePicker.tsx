@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Modal, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { LANGUAGE_LABELS, SupportedLanguage } from '../../i18n';
@@ -18,6 +19,7 @@ export function LanguagePicker({ compact = false }: { compact?: boolean }) {
   const { t } = useTranslation();
   const { colors, isDark } = useTheme();
   const { language, setLanguage, supported } = useLanguage();
+  const insets = useSafeAreaInsets();
   const [open, setOpen] = useState(false);
   const [restartNotice, setRestartNotice] = useState(false);
 
@@ -53,7 +55,14 @@ export function LanguagePicker({ compact = false }: { compact?: boolean }) {
       <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
         <Pressable style={styles.overlay} onPress={() => setOpen(false)}>
           <Pressable
-            style={[styles.sheet, { backgroundColor: colors.card, borderColor: colors.border }]}
+            style={[
+              styles.sheet,
+              {
+                backgroundColor: colors.card,
+                borderColor: colors.border,
+                paddingBottom: Math.max(insets.bottom, 16) + 16,
+              },
+            ]}
             onPress={(e) => e.stopPropagation()}
           >
             <View style={styles.sheetHeader}>
@@ -142,7 +151,6 @@ const styles = StyleSheet.create({
   sheet: {
     paddingHorizontal: 16,
     paddingTop: 14,
-    paddingBottom: 28,
     borderTopLeftRadius: 18,
     borderTopRightRadius: 18,
     borderWidth: StyleSheet.hairlineWidth,

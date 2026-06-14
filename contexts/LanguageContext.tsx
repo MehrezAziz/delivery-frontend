@@ -1,5 +1,4 @@
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
-import { I18nManager } from 'react-native';
 import {
   SUPPORTED_LANGUAGES,
   SupportedLanguage,
@@ -64,7 +63,7 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
     <LanguageContext.Provider
       value={{
         language,
-        isRTL: isRTL(language) || I18nManager.isRTL,
+        isRTL: isRTL(language),
         ready,
         setLanguage,
         supported: SUPPORTED_LANGUAGES,

@@ -16,6 +16,7 @@ import { api } from '../../services/api/client';
 import { useActiveOrdersChatUnreadMap } from '../../hooks/useOrderChatUnread';
 import { ActiveOrderChatUnreadBadge } from '../../components/ActiveOrderChatUnreadBadge';
 import { GameEntrySection } from '../../components/games/GameEntrySection';
+import { hasIncompleteCreateOrderDraft } from '../../utils/createOrderDraftStorage';
 
 const ACTIVE_STATUSES = [
   'PENDING_PUBLISH', 'SEARCHING_DRIVER', 'PENDING_CUSTOMER_APPROVAL', 'DRIVER_ASSIGNED', 'DRIVER_ARRIVED', 'PICKED_UP', 'DELIVERING',
@@ -40,6 +41,7 @@ export default function CustomerHomeScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [hasMainAddress, setHasMainAddress] = useState(false);
+  const [hasOrderDraft, setHasOrderDraft] = useState(false);
 
   const activeOrderIds = useMemo(() => activeOrders.map((o) => o.id), [activeOrders]);
   const chatUnreadByOrder = useActiveOrdersChatUnreadMap(activeOrderIds);
@@ -94,6 +96,7 @@ export default function CustomerHomeScreen() {
     useCallback(() => {
       void loadHeaderIdentity();
       loadOrders();
+      void hasIncompleteCreateOrderDraft().then(setHasOrderDraft);
     }, [loadHeaderIdentity, loadOrders]),
   );
 
@@ -118,7 +121,10 @@ export default function CustomerHomeScreen() {
               <Ionicons name="add-circle" size={32} color="#fff" />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={s.ctaTitle}>{t('customerHome.createNewOrder')}</Text>
+              <View style={s.ctaTitleRow}>
+                <Text style={s.ctaTitle}>{t('customerHome.createNewOrder')}</Text>
+                {hasOrderDraft ? <View style={s.orderDraftDot} /> : null}
+              </View>
               <Text style={s.ctaSub}>{t('customerHome.sendPackage')}</Text>
             </View>
             <Ionicons name="chevron-forward" size={22} color="rgba(255,255,255,0.7)" />
@@ -241,6 +247,14 @@ const s = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
   },
   ctaTitle: { fontSize: 18, fontWeight: '700', color: '#fff' },
+  ctaTitleRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'nowrap' },
+  orderDraftDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#f97316',
+    marginStart: 6,
+  },
   ctaSub: { fontSize: 13, color: 'rgba(255,255,255,0.7)', marginTop: 2 },
 
   // Actions grid

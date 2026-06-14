@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
-import { Tabs } from 'expo-router';
-import { Platform, StyleSheet } from 'react-native';
+import { Tabs, router, usePathname } from 'expo-router';
+import { Platform, StyleSheet, TouchableOpacity, View } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -16,13 +16,20 @@ const TAB_ICON_NAMES: Record<string, { active: keyof typeof Ionicons.glyphMap; i
   profile: { active: 'person', inactive: 'person-outline' },
 };
 
+const CREATE_ORDER_FLOW_SEGMENTS = ['create-order', 'pick-location', 'new-order'] as const;
+
 export default function CustomerLayout() {
   const { colors, isDark } = useTheme();
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
+  const pathname = usePathname() ?? '';
   const tabBarHeight = 60 + insets.bottom;
   const bottomOverlayClearance = tabBarHeight - 1;
   const noSceneBottomInsetRoutes = new Set(['order-chat', 'support-chat']);
+  const isCreateOrderFlow = CREATE_ORDER_FLOW_SEGMENTS.some((segment) => pathname.includes(segment));
+  const fabBorderIdle = isDark ? colors.border : '#ffffff';
+  const fabBorderSelected = isDark ? '#7dd3fc' : '#ffffff';
+  const fabShadowStyle = isDark ? styles.createOrderFabDark : styles.createOrderFabLight;
 
   useEffect(() => {
     void (async () => {
@@ -85,6 +92,42 @@ export default function CustomerLayout() {
     >
       <Tabs.Screen name="home" options={{ title: t('nav.tabs.home') }} />
       <Tabs.Screen name="orders" options={{ title: t('nav.tabs.orders') }} />
+      <Tabs.Screen
+        name="new-order"
+        options={{
+          title: '',
+          tabBarLabel: () => null,
+          tabBarIcon: ({ focused }) => {
+            const selected = focused || isCreateOrderFlow;
+            return (
+              <View
+                style={[
+                  styles.createOrderFab,
+                  fabShadowStyle,
+                  {
+                    backgroundColor: colors.headerBg,
+                    borderWidth: selected ? 3 : 2,
+                    borderColor: selected ? fabBorderSelected : fabBorderIdle,
+                  },
+                  selected && (isDark ? styles.createOrderFabSelectedDark : styles.createOrderFabSelectedLight),
+                ]}
+              >
+                <Ionicons name="add" size={30} color="#ffffff" />
+              </View>
+            );
+          },
+          tabBarButton: (props) => (
+            <TouchableOpacity
+              {...props}
+              onPress={() => router.push('/(customer)/create-order' as never)}
+              activeOpacity={0.85}
+              accessibilityRole="button"
+              accessibilityLabel={t('createOrder.title')}
+              accessibilityState={{ selected: isCreateOrderFlow }}
+            />
+          ),
+        }}
+      />
       <Tabs.Screen name="wallet" options={{ title: t('nav.tabs.wallet') }} />
       <Tabs.Screen name="profile" options={{ title: t('nav.tabs.profile') }} />
       <Tabs.Screen name="addresses" options={{ href: null, headerShown: true }} />
@@ -115,4 +158,46 @@ export default function CustomerLayout() {
 
 const styles = StyleSheet.create({
   tabLabel: { fontSize: 11, fontWeight: '700', letterSpacing: 0.2 },
+  createOrderFab: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: -10,
+  },
+  createOrderFabLight: Platform.select({
+    ios: {
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.22,
+      shadowRadius: 6,
+    },
+    android: { elevation: 6 },
+  }),
+  createOrderFabDark: Platform.select({
+    ios: {
+      shadowColor: '#0c4a6e',
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.35,
+      shadowRadius: 8,
+    },
+    android: { elevation: 8 },
+  }),
+  createOrderFabSelectedLight: Platform.select({
+    ios: {
+      shadowColor: '#0284c7',
+      shadowOpacity: 0.32,
+      shadowRadius: 8,
+    },
+    android: { elevation: 10 },
+  }),
+  createOrderFabSelectedDark: Platform.select({
+    ios: {
+      shadowColor: '#0c4a6e',
+      shadowOpacity: 0.45,
+      shadowRadius: 10,
+    },
+    android: { elevation: 12 },
+  }),
 });

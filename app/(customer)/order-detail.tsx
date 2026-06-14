@@ -507,46 +507,36 @@ export default function OrderDetailScreen() {
           </View>
         )}
 
-        {order.status === 'SEARCHING_DRIVER' && order.driverAvailability && (
+        {order.status === 'SEARCHING_DRIVER' && order.urgentNotify && (
           <View style={[s.card, { backgroundColor: colors.card }]}>
-            <Text style={[s.cardTitle, { color: colors.text }]}>{t('orderDetail.driver')}</Text>
-            <Text style={{ color: colors.textSecondary, marginBottom: 8 }}>
-              <Text style={{ fontWeight: '800', color: colors.text }}>{order.driverAvailability.availableInDelegation}</Text>
-            </Text>
-            <Text style={{ color: colors.textSecondary, marginBottom: 12 }}>
-              <Text style={{ fontWeight: '800', color: colors.text }}>{order.driverAvailability.availableNearDelegationApprox}</Text>
-            </Text>
-            {order.urgentNotify && (
-              <>
-                <TouchableOpacity
-                  style={{
-                    padding: 14,
-                    borderRadius: 12,
-                    backgroundColor: order.urgentNotify.canStartNewCycle && !order.urgentNotify.cycleInProgress ? '#f59e0b' : '#e5e7eb',
-                    alignItems: 'center',
-                  }}
-                  disabled={!order.urgentNotify.canStartNewCycle || !!order.urgentNotify.cycleInProgress || notifyLoading}
-                  onPress={handleNotifyDrivers}
-                >
-                  {notifyLoading ? (
-                    <ActivityIndicator color="#fff" />
-                  ) : (
-                    <Text style={{
-                      color: order.urgentNotify.canStartNewCycle && !order.urgentNotify.cycleInProgress ? '#fff' : '#9ca3af',
-                      fontWeight: '700',
-                    }}>
-                      {t('orderDetail.driver')}
-                    </Text>
-                  )}
-                </TouchableOpacity>
-                {order.urgentNotify.nextButtonEnabledAt && (
-                  <Text style={{ fontSize: 12, color: colors.textTertiary, marginTop: 8 }}>
-                    {urgentRemainingSec > 0
-                      ? `${Math.floor(urgentRemainingSec / 60)}:${String(urgentRemainingSec % 60).padStart(2, '0')}`
-                      : new Date(order.urgentNotify.nextButtonEnabledAt).toLocaleString()}
-                  </Text>
-                )}
-              </>
+            <Text style={[s.cardTitle, { color: colors.text }]}>{t('orderDetail.notifyDrivers')}</Text>
+            <TouchableOpacity
+              style={{
+                padding: 14,
+                borderRadius: 12,
+                backgroundColor: order.urgentNotify.canStartNewCycle && !order.urgentNotify.cycleInProgress ? '#f59e0b' : '#e5e7eb',
+                alignItems: 'center',
+              }}
+              disabled={!order.urgentNotify.canStartNewCycle || !!order.urgentNotify.cycleInProgress || notifyLoading}
+              onPress={handleNotifyDrivers}
+            >
+              {notifyLoading ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text style={{
+                  color: order.urgentNotify.canStartNewCycle && !order.urgentNotify.cycleInProgress ? '#fff' : '#9ca3af',
+                  fontWeight: '700',
+                }}>
+                  {t('orderDetail.notifyDriversNow')}
+                </Text>
+              )}
+            </TouchableOpacity>
+            {order.urgentNotify.nextButtonEnabledAt && urgentRemainingSec > 0 && (
+              <Text style={{ fontSize: 12, color: colors.textTertiary, marginTop: 8 }}>
+                {t('orderDetail.nextUrgentNotifyIn', {
+                  time: `${Math.floor(urgentRemainingSec / 60)}:${String(urgentRemainingSec % 60).padStart(2, '0')}`,
+                })}
+              </Text>
             )}
           </View>
         )}

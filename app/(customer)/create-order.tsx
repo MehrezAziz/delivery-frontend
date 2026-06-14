@@ -6,6 +6,7 @@ import {
 import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
@@ -14,6 +15,7 @@ import { api } from '../../services/api/client';
 import { orderService, Order } from '../../services/api/order.service';
 import { requestNotificationBadgeRefresh, startOrderTracking } from '../../services/notifications';
 import { useTheme } from '../../contexts/ThemeContext';
+import { useLanguage } from '../../contexts/LanguageContext';
 import { appAlert } from '../../utils/appAlert';
 import { clampMinSchedule } from '../../utils/schedPublishHelpers';
 import { pickScheduleDateTimeAndroid } from '../../utils/scheduleDateTimePicker';
@@ -36,6 +38,7 @@ import {
   clearLocationSharePending,
   getLocationSharePending,
 } from '../../utils/locationSharePendingStorage';
+import { clearCreateOrderDraft, saveCreateOrderDraft } from '../../utils/createOrderDraftStorage';
 
 const ORDER_BIO_ROUND_LIMIT = 5;
 
@@ -76,7 +79,9 @@ interface PricePreview {
 
 export default function CreateOrderScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { t } = useTranslation();
+  const { isRTL } = useLanguage();
   const { colors, isDark } = useTheme();
   const surfaceSoft = isDark ? '#1f2937' : '#f9fafb';
   const surfaceMuted = isDark ? '#111827' : '#f3f4f6';
@@ -111,6 +116,10 @@ export default function CreateOrderScreen() {
   const [walletBalance, setWalletBalance] = useState(0);
   const [pickupNickSave, setPickupNickSave] = useState('');
   const [dropoffNickSave, setDropoffNickSave] = useState('');
+  const [pickupShowNameField, setPickupShowNameField] = useState(false);
+  const [dropoffShowNameField, setDropoffShowNameField] = useState(false);
+  const [pickupSavingName, setPickupSavingName] = useState(false);
+  const [dropoffSavingName, setDropoffSavingName] = useState(false);
   const [savedAddresses, setSavedAddresses] = useState<SavedAddress[]>([]);
   const [hasMainAddress, setHasMainAddress] = useState(false);
   const [savedPickerVisible, setSavedPickerVisible] = useState(false);
@@ -143,6 +152,30 @@ export default function CreateOrderScreen() {
   useEffect(() => {
     if (!scheduleLater) setScheduleIosOpen(false);
   }, [scheduleLater]);
+
+  useEffect(() => {
+    void saveCreateOrderDraft({
+      hasPickup: !!pickupAddress,
+      hasDropoff: !!dropoffAddress,
+      weight,
+      description,
+      paymentType,
+      scheduleLater,
+      customerExtraAmount,
+      cancelAfterMinutes,
+      step,
+    });
+  }, [
+    pickupAddress,
+    dropoffAddress,
+    weight,
+    description,
+    paymentType,
+    scheduleLater,
+    customerExtraAmount,
+    cancelAfterMinutes,
+    step,
+  ]);
 
   const openSchedulePickers = async () => {
     if (Platform.OS === 'android') {
@@ -392,6 +425,19 @@ export default function CreateOrderScreen() {
     dropoffAddressRef.current = dropoffAddress;
   }, [dropoffAddress]);
 
+  useEffect(() => {
+    setPickupShowNameField(false);
+    setPickupNickSave('');
+  }, [pickupAddress?.addressId]);
+
+  useEffect(() => {
+    setDropoffShowNameField(false);
+    setDropoffNickSave('');
+  }, [dropoffAddress?.addressId]);
+
+  const formatAddressCoords = (lat: number, lng: number) =>
+    `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+
   useFocusEffect(
     useCallback(() => {
       void refreshLocationShareSlotUi();
@@ -503,7 +549,7 @@ export default function CreateOrderScreen() {
       await resolveAddress(
         pos.coords.latitude,
         pos.coords.longitude,
-        t('createOrder.now'),
+        t('createOrder.thisPosition'),
         which,
         which === 'pickup' ? setPickupAddress : setDropoffAddress,
         which === 'pickup' ? setResolvingPickup : setResolvingDropoff,
@@ -557,6 +603,136 @@ export default function CreateOrderScreen() {
       return null;
     }
   };
+
+  const saveAddressNameForSlot = useCallback(async (slot: 'pickup' | 'dropoff', nick: string) => {
+    const addr = slot === 'pickup' ? pickupAddressRef.current : dropoffAddressRef.current;
+    const trimmed = nick.trim();
+    if (!addr) return;
+    if (trimmed.length < 2) {
+      appAlert(t('common.error'), t('createOrder.addressNameTooShort'));
+      return;
+    }
+    const setSaving = slot === 'pickup' ? setPickupSavingName : setDropoffSavingName;
+    setSaving(true);
+    try {
+      const delegation = await api.get<{ id: string }>(
+        `/geography/delegations/by-coordinates?lat=${addr.lat}&lng=${addr.lng}`,
+      );
+      const existing = savedAddresses.find((s) =>
+        Math.abs(s.lat - addr.lat) <= COORD_MATCH_EPSILON &&
+        Math.abs(s.lng - addr.lng) <= COORD_MATCH_EPSILON,
+      );
+      if (existing) {
+        await api.patch(`/addresses/${existing.addressId}`, {
+          street: addr.label,
+          delegationId: delegation.id,
+          nickname: trimmed,
+        });
+      } else {
+        await api.post('/addresses', {
+          latitude: addr.lat,
+          longitude: addr.lng,
+          street: addr.label,
+          delegationId: delegation.id,
+          nickname: trimmed,
+        });
+      }
+      await loadSavedAddresses();
+      const setter = slot === 'pickup' ? setPickupAddress : setDropoffAddress;
+      setter((prev) => (prev ? { ...prev, label: trimmed, nickname: trimmed } : prev));
+      if (slot === 'pickup') {
+        setPickupShowNameField(false);
+        setPickupNickSave(trimmed);
+      } else {
+        setDropoffShowNameField(false);
+        setDropoffNickSave(trimmed);
+      }
+      appAlert(t('addresses.saved'), t('createOrder.addressNameSaved'));
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : t('common.something_went_wrong');
+      appAlert(t('common.error'), msg);
+    } finally {
+      setSaving(false);
+    }
+  }, [loadSavedAddresses, savedAddresses, t]);
+
+  const renderUnsavedAddressContent = useCallback((
+    slot: 'pickup' | 'dropoff',
+    address: SavedAddress,
+    showNameField: boolean,
+    setShowNameField: (v: boolean) => void,
+    nickSave: string,
+    setNickSave: (v: string) => void,
+    savingName: boolean,
+  ) => {
+    const canSave = nickSave.trim().length >= 2;
+    return (
+      <>
+        {nickSave.trim() && !showNameField ? (
+          <Text style={[s.addressMainText, { color: colors.text }]}>{nickSave.trim()}</Text>
+        ) : null}
+        <View style={s.addressCoordsRow}>
+          <Text style={[s.addressCoordsText, { color: colors.textSecondary }]}>
+            {formatAddressCoords(address.lat, address.lng)}
+          </Text>
+          {!showNameField ? (
+            <TouchableOpacity
+              style={[s.giveNameBtn, { borderColor: colors.border, backgroundColor: surfaceMuted }]}
+              onPress={() => setShowNameField(true)}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="pencil-outline" size={14} color={colors.primary} />
+              <Text style={[s.giveNameBtnTxt, { color: colors.primary }]}>{t('createOrder.giveName')}</Text>
+            </TouchableOpacity>
+          ) : null}
+        </View>
+        <Text style={[s.addressSubText, { color: colors.textSecondary }]}>{address.sublabel}</Text>
+        {showNameField ? (
+          <View style={s.addressNameFieldWrap}>
+            <TextInput
+              style={[
+                s.addressNameInput,
+                {
+                  color: colors.text,
+                  borderColor: colors.inputBorder,
+                  backgroundColor: colors.inputBg,
+                  textAlign: isRTL ? 'right' : 'left',
+                  paddingRight: isRTL ? 12 : 44,
+                  paddingLeft: isRTL ? 44 : 12,
+                },
+              ]}
+              placeholder={t('createOrder.addressNamePlaceholder')}
+              placeholderTextColor={colors.textTertiary}
+              value={nickSave}
+              onChangeText={setNickSave}
+              autoFocus
+              maxLength={60}
+              editable={!savingName}
+              {...(Platform.OS === 'ios' ? { writingDirection: isRTL ? 'rtl' : 'ltr' } : {})}
+            />
+            <TouchableOpacity
+              style={[
+                s.addressNameSaveBtn,
+                isRTL ? { left: 6 } : { right: 6 },
+                (!canSave || savingName) && { opacity: 0.45 },
+              ]}
+              onPress={() => { void saveAddressNameForSlot(slot, nickSave); }}
+              disabled={!canSave || savingName}
+              activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel={t('common.save')}
+            >
+              {savingName ? (
+                <ActivityIndicator size="small" color={colors.primary} />
+              ) : (
+                <Ionicons name="save-outline" size={20} color={colors.primary} />
+              )}
+            </TouchableOpacity>
+          </View>
+        ) : null}
+      </>
+    );
+  }, [colors, formatAddressCoords, isRTL, saveAddressNameForSlot, surfaceMuted, t]);
 
   // Calculate price
   const handleCalculatePrice = async () => {
@@ -689,6 +865,7 @@ export default function CreateOrderScreen() {
       setPublishAt(new Date(Date.now() + 15 * 60 * 1000));
       setPreview(null);
       setStep('form');
+      await clearCreateOrderDraft();
       try {
         const all = await orderService.getMyOrders();
         setActiveOrders(all.filter(o => ACTIVE_STATUSES.includes(o.status)));
@@ -881,13 +1058,28 @@ export default function CreateOrderScreen() {
     }
   };
 
+  const formatTipAmountDisplay = (amount: number) =>
+    amount % 1 === 0 ? String(Math.round(amount)) : amount.toFixed(1);
+
   const adjustPreviewExtraByStep = async (delta: number) => {
     const current = parseFloat((customerExtraAmount || '0').replace(',', '.'));
     const safeCurrent = Number.isNaN(current) || current < 0 ? 0 : current;
-    const next = Math.max(0, Math.min(MAX_CUSTOMER_EXTRA, safeCurrent + delta));
-    setCustomerExtraAmount(String(next));
+    const next = Math.round(Math.max(0, Math.min(MAX_CUSTOMER_EXTRA, safeCurrent + delta)) * 10) / 10;
+    setCustomerExtraAmount(formatTipAmountDisplay(next));
     await handleUpdatePreviewExtra(next);
   };
+
+  const commitExtraAmountInput = async (raw: string) => {
+    const parsed = parseFloat((raw || '0').replace(',', '.'));
+    const next = Number.isNaN(parsed) || parsed < 0
+      ? 0
+      : Math.min(MAX_CUSTOMER_EXTRA, Math.round(parsed * 10) / 10);
+    setCustomerExtraAmount(formatTipAmountDisplay(next));
+    await handleUpdatePreviewExtra(next);
+  };
+
+  const parsedExtraAmount = parseFloat((customerExtraAmount || '0').replace(',', '.'));
+  const safeExtraAmount = Number.isNaN(parsedExtraAmount) || parsedExtraAmount < 0 ? 0 : parsedExtraAmount;
 
   // ═══════════════════════════════════════════
   // STEP 2: PRICE PREVIEW
@@ -974,32 +1166,49 @@ export default function CreateOrderScreen() {
           </View>
 
           <View style={[s.card, { backgroundColor: colors.card }]}>
-            <Text style={[s.cardTitle, { color: colors.text }]}>{t('common.optional')}</Text>
-            <Text style={[s.inputLabel, { color: colors.textSecondary, marginBottom: 8 }]}>
-              {t('common.enterValidAmount')} (max {MAX_CUSTOMER_EXTRA} {preview.currencySymbol})
-            </Text>
+            <Text style={[s.cardTitle, { color: colors.text }]}>{t('createOrder.tip')}</Text>
             <View style={s.extraStepperRow}>
               <TouchableOpacity
                 style={[
                   s.extraStepperBtn,
                   { backgroundColor: colors.inputBg, borderColor: colors.border },
-                  parseFloat((customerExtraAmount || '0').replace(',', '.')) <= 0 && s.extraStepperBtnDisabled,
+                  safeExtraAmount <= 0 && s.extraStepperBtnDisabled,
                 ]}
-                onPress={() => adjustPreviewExtraByStep(-1)}
-                disabled={loading || parseFloat((customerExtraAmount || '0').replace(',', '.')) <= 0}
+                onPress={() => adjustPreviewExtraByStep(-0.1)}
+                disabled={loading || safeExtraAmount <= 0}
                 activeOpacity={0.7}
               >
                 <Text style={[s.extraStepperBtnText, { color: colors.text }]}>-</Text>
               </TouchableOpacity>
               <View style={[s.extraStepperValueBox, { backgroundColor: colors.inputBg, borderColor: colors.border }]}>
-                <Text style={[s.extraStepperValueText, { color: colors.text }]}>
-                  {Math.max(0, parseFloat((customerExtraAmount || '0').replace(',', '.')) || 0).toFixed(0)}
+                <TextInput
+                  style={[s.extraStepperValueInput, { color: colors.text }]}
+                  value={customerExtraAmount}
+                  onChangeText={(text) => {
+                    const normalized = text.replace(',', '.');
+                    if (normalized === '' || /^\d*\.?\d{0,2}$/.test(normalized)) {
+                      setCustomerExtraAmount(normalized);
+                    }
+                  }}
+                  onBlur={() => { void commitExtraAmountInput(customerExtraAmount); }}
+                  keyboardType="decimal-pad"
+                  textAlign="right"
+                  editable={!loading}
+                  selectTextOnFocus
+                  maxLength={8}
+                />
+                <Text style={[s.extraStepperCurrency, { color: colors.textSecondary }]}>
+                  {preview.currencySymbol}
                 </Text>
               </View>
               <TouchableOpacity
-                style={[s.extraStepperBtn, { backgroundColor: colors.inputBg, borderColor: colors.border }]}
-                onPress={() => adjustPreviewExtraByStep(1)}
-                disabled={loading}
+                style={[
+                  s.extraStepperBtn,
+                  { backgroundColor: colors.inputBg, borderColor: colors.border },
+                  safeExtraAmount >= MAX_CUSTOMER_EXTRA && s.extraStepperBtnDisabled,
+                ]}
+                onPress={() => adjustPreviewExtraByStep(0.1)}
+                disabled={loading || safeExtraAmount >= MAX_CUSTOMER_EXTRA}
                 activeOpacity={0.7}
               >
                 <Text style={[s.extraStepperBtnText, { color: colors.text }]}>+</Text>
@@ -1026,7 +1235,7 @@ export default function CreateOrderScreen() {
             />
             {preview.customerExtraAmount > 0 && (
               <PriceRow
-                label={t('common.optional')}
+                label={t('createOrder.tip')}
                 {...line(preview.customerExtraAmount)}
                 labelColor={colors.textSecondary}
                 valueColor={colors.text}
@@ -1288,27 +1497,39 @@ export default function CreateOrderScreen() {
                 {resolvingPickup ? (
                   <Text style={[s.addressFetching, { color: colors.primary }]}>{t('common.loading')}</Text>
                 ) : pickupAddress ? (
-                  <>
-                    <Text style={[s.addressMainText, { color: colors.text }]}>{pickupAddress.label}</Text>
-                    <Text style={[s.addressSubText, { color: colors.textSecondary }]}>{pickupAddress.sublabel}</Text>
-                  </>
+                  isAlreadySavedAddress(pickupAddress) ? (
+                    <>
+                      <Text style={[s.addressMainText, { color: colors.text }]}>{pickupAddress.label}</Text>
+                      <Text style={[s.addressSubText, { color: colors.textSecondary }]}>{pickupAddress.sublabel}</Text>
+                    </>
+                  ) : (
+                    renderUnsavedAddressContent(
+                      'pickup',
+                      pickupAddress,
+                      pickupShowNameField,
+                      setPickupShowNameField,
+                      pickupNickSave,
+                      setPickupNickSave,
+                      pickupSavingName,
+                    )
+                  )
                 ) : (
                   <Text style={[s.addressPlaceholder, { color: colors.textTertiary }]}>{t('createOrder.pickupAddress')}</Text>
                 )}
                 <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 10 }}>
                   <TouchableOpacity style={[s.inlineActionBtn, { backgroundColor: surfaceMuted }]} onPress={() => openMapPicker('pickup')} activeOpacity={0.7}>
                     <Ionicons name="map-outline" size={16} color="#16a34a" />
-                    <Text style={[s.inlineActionTxt, { color: colors.text }]}>{t('createOrder.chooseAddress')}</Text>
+                    <Text style={[s.inlineActionTxt, { color: colors.text }]}>{t('createOrder.map')}</Text>
                   </TouchableOpacity>
                   {savedAddresses.length > 0 && (
                     <TouchableOpacity style={[s.inlineActionBtn, { backgroundColor: surfaceMuted }]} onPress={() => openSavedPicker('pickup')} activeOpacity={0.7}>
                       <Ionicons name="list-outline" size={16} color="#166534" />
-                      <Text style={[s.inlineActionTxt, { color: colors.text }]}>{t('common.showAll')}</Text>
+                      <Text style={[s.inlineActionTxt, { color: colors.text }]}>{t('createOrder.addressList')}</Text>
                     </TouchableOpacity>
                   )}
                   <TouchableOpacity style={[s.inlineActionBtn, { backgroundColor: surfaceMuted }]} onPress={() => useMyLocation('pickup')} disabled={resolvingPickup} activeOpacity={0.7}>
                     <Ionicons name="locate" size={16} color="#2563eb" />
-                    <Text style={[s.inlineActionTxt, { color: colors.text }]}>{t('createOrder.now')}</Text>
+                    <Text style={[s.inlineActionTxt, { color: colors.text }]}>{t('createOrder.thisPosition')}</Text>
                   </TouchableOpacity>
                   <TouchableOpacity style={[s.inlineActionBtn, { backgroundColor: surfaceMuted }]} onPress={() => openRequestLocation('pickup')} activeOpacity={0.7}>
                     <Ionicons name="person-add-outline" size={16} color="#7c3aed" />
@@ -1354,27 +1575,39 @@ export default function CreateOrderScreen() {
                 {resolvingDropoff ? (
                   <Text style={[s.addressFetching, { color: colors.primary }]}>{t('common.loading')}</Text>
                 ) : dropoffAddress ? (
-                  <>
-                    <Text style={[s.addressMainText, { color: colors.text }]}>{dropoffAddress.label}</Text>
-                    <Text style={[s.addressSubText, { color: colors.textSecondary }]}>{dropoffAddress.sublabel}</Text>
-                  </>
+                  isAlreadySavedAddress(dropoffAddress) ? (
+                    <>
+                      <Text style={[s.addressMainText, { color: colors.text }]}>{dropoffAddress.label}</Text>
+                      <Text style={[s.addressSubText, { color: colors.textSecondary }]}>{dropoffAddress.sublabel}</Text>
+                    </>
+                  ) : (
+                    renderUnsavedAddressContent(
+                      'dropoff',
+                      dropoffAddress,
+                      dropoffShowNameField,
+                      setDropoffShowNameField,
+                      dropoffNickSave,
+                      setDropoffNickSave,
+                      dropoffSavingName,
+                    )
+                  )
                 ) : (
                   <Text style={[s.addressPlaceholder, { color: colors.textTertiary }]}>{t('createOrder.deliveryAddress')}</Text>
                 )}
                 <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 10 }}>
                   <TouchableOpacity style={[s.inlineActionBtn, { backgroundColor: surfaceMuted }]} onPress={() => openMapPicker('dropoff')} activeOpacity={0.7}>
                     <Ionicons name="map-outline" size={16} color="#ef4444" />
-                    <Text style={[s.inlineActionTxt, { color: colors.text }]}>{t('createOrder.chooseAddress')}</Text>
+                    <Text style={[s.inlineActionTxt, { color: colors.text }]}>{t('createOrder.map')}</Text>
                   </TouchableOpacity>
                   {savedAddresses.length > 0 && (
                     <TouchableOpacity style={[s.inlineActionBtn, { backgroundColor: surfaceMuted }]} onPress={() => openSavedPicker('dropoff')} activeOpacity={0.7}>
                       <Ionicons name="list-outline" size={16} color="#b91c1c" />
-                      <Text style={[s.inlineActionTxt, { color: colors.text }]}>{t('common.showAll')}</Text>
+                      <Text style={[s.inlineActionTxt, { color: colors.text }]}>{t('createOrder.addressList')}</Text>
                     </TouchableOpacity>
                   )}
                   <TouchableOpacity style={[s.inlineActionBtn, { backgroundColor: surfaceMuted }]} onPress={() => useMyLocation('dropoff')} disabled={resolvingDropoff} activeOpacity={0.7}>
                     <Ionicons name="locate" size={16} color="#2563eb" />
-                    <Text style={[s.inlineActionTxt, { color: colors.text }]}>{t('createOrder.now')}</Text>
+                    <Text style={[s.inlineActionTxt, { color: colors.text }]}>{t('createOrder.thisPosition')}</Text>
                   </TouchableOpacity>
                   <TouchableOpacity style={[s.inlineActionBtn, { backgroundColor: surfaceMuted }]} onPress={() => openRequestLocation('dropoff')} activeOpacity={0.7}>
                     <Ionicons name="person-add-outline" size={16} color="#7c3aed" />
@@ -1402,70 +1635,47 @@ export default function CreateOrderScreen() {
 
           </View>
 
-          {(pickupAddress || dropoffAddress) && (
-            <View style={[s.card, { backgroundColor: colors.card }]}>
-              <Text style={[s.cardTitle, { color: colors.text }]}>{t('common.add')}</Text>
-              <Text style={[s.inputLabel, { color: colors.textSecondary, marginBottom: 8 }]}>
-                {(pickupAddress && !isAlreadySavedAddress(pickupAddress)) || (dropoffAddress && !isAlreadySavedAddress(dropoffAddress))
-                  ? t('common.optional')
-                  : t('common.saved')}
-              </Text>
-              {pickupAddress && !isAlreadySavedAddress(pickupAddress) && (
-                <View style={{ marginBottom: 12 }}>
-                  <Text style={[s.inputLabel, { color: colors.text }]}>{t('createOrder.pickup')}</Text>
-                  <TextInput
-                    style={[s.descInput, { color: colors.text, borderColor: colors.inputBorder, backgroundColor: colors.inputBg }]}
-                    placeholder={t('common.optional')}
-                    placeholderTextColor={colors.textTertiary}
-                    value={pickupNickSave}
-                    onChangeText={setPickupNickSave}
-                  />
-                </View>
-              )}
-              {dropoffAddress && !isAlreadySavedAddress(dropoffAddress) && (
-                <View>
-                  <Text style={[s.inputLabel, { color: colors.text }]}>{t('createOrder.delivery')}</Text>
-                  <TextInput
-                    style={[s.descInput, { color: colors.text, borderColor: colors.inputBorder, backgroundColor: colors.inputBg }]}
-                    placeholder={t('common.optional')}
-                    placeholderTextColor={colors.textTertiary}
-                    value={dropoffNickSave}
-                    onChangeText={setDropoffNickSave}
-                  />
-                </View>
-              )}
-            </View>
-          )}
-
-          <View style={[s.card, { backgroundColor: colors.card }]}>
-            <Text style={[s.cardTitle, { color: colors.text }]}>{t('createOrder.payment')}</Text>
-            <View style={s.paymentRow}>
+          <View style={[s.card, s.paymentCard, { backgroundColor: colors.card }]}>
+            <Text style={[s.paymentCardTitle, { color: colors.textSecondary }]}>{t('createOrder.payment')}</Text>
+            <View style={[s.paymentSegment, { backgroundColor: surfaceMuted, borderColor: borderSoft }]}>
               <TouchableOpacity
                 style={[
-                  s.paymentOption,
-                  { backgroundColor: surfaceSoft, borderColor: borderSoft },
-                  paymentType === 'COD' && s.paymentOptionActiveCash,
+                  s.paymentChip,
+                  paymentType === 'COD' && s.paymentChipActiveCash,
                 ]}
                 onPress={() => setPaymentType('COD')}
                 activeOpacity={0.7}
               >
-                <Text style={s.paymentEmoji}>💵</Text>
-                <Text style={[s.paymentLabel, { color: colors.text }, paymentType === 'COD' && { color: '#fff' }]}>{t('orderDetail.cash')}</Text>
-                <Text style={[s.paymentSub, { color: colors.textSecondary }, paymentType === 'COD' && { color: 'rgba(255,255,255,0.8)' }]}>{t('createOrder.payCash')}</Text>
+                <Ionicons
+                  name="cash-outline"
+                  size={18}
+                  color={paymentType === 'COD' ? '#fff' : colors.textSecondary}
+                />
+                <Text style={[s.paymentChipLabel, { color: colors.text }, paymentType === 'COD' && s.paymentChipLabelActive]}>
+                  {t('createOrder.payMethodCash')}
+                </Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[
-                  s.paymentOption,
-                  { backgroundColor: surfaceSoft, borderColor: borderSoft },
-                  paymentType === 'WALLET' && s.paymentOptionActiveWallet,
+                  s.paymentChip,
+                  paymentType === 'WALLET' && s.paymentChipActiveWallet,
                 ]}
                 onPress={() => setPaymentType('WALLET')}
                 activeOpacity={0.7}
               >
-                <Text style={s.paymentEmoji}>💰</Text>
-                <Text style={[s.paymentLabel, { color: colors.text }, paymentType === 'WALLET' && { color: '#fff' }]}>{t('orderDetail.wallet')}</Text>
-                <Text style={[s.paymentSub, { color: colors.textSecondary }, paymentType === 'WALLET' && { color: 'rgba(255,255,255,0.8)' }]}>{t('createOrder.payWallet')}</Text>
-                <Text style={[s.paymentSub, { color: colors.textSecondary }, paymentType === 'WALLET' && { color: 'rgba(255,255,255,0.8)' }]}>{walletBalance} {t('common.coinsSuffix')}</Text>
+                <Ionicons
+                  name="wallet-outline"
+                  size={18}
+                  color={paymentType === 'WALLET' ? '#fff' : colors.textSecondary}
+                />
+                <View style={s.paymentChipTextCol}>
+                  <Text style={[s.paymentChipLabel, { color: colors.text }, paymentType === 'WALLET' && s.paymentChipLabelActive]}>
+                    {t('createOrder.payMethodWallet')}
+                  </Text>
+                  <Text style={[s.paymentChipBalance, { color: colors.textTertiary }, paymentType === 'WALLET' && s.paymentChipBalanceActive]}>
+                    {walletBalance} {t('common.coinsSuffix')}
+                  </Text>
+                </View>
               </TouchableOpacity>
             </View>
           </View>
@@ -1511,7 +1721,7 @@ export default function CreateOrderScreen() {
 
           <View style={[s.card, { backgroundColor: colors.card }]}>
             <Text style={[s.cardTitle, { color: colors.text }]}>{t('orderDetail.cancelOrder')}</Text>
-            <Text style={[s.inputLabel, { color: colors.textSecondary }]}>{t('orderDetail.cancelConfirm')}</Text>
+            <Text style={[s.inputLabel, { color: colors.textSecondary }]}>{t('createOrder.cancelAfterMinutesLabel')}</Text>
             <View style={s.weightRow}>
               <TouchableOpacity style={[s.weightBtn, { backgroundColor: surfaceMuted }]} onPress={() => {
                 setCancelAfterMinutes(prev => Math.max(15, prev - 1));
@@ -1593,7 +1803,7 @@ export default function CreateOrderScreen() {
             ) : (
               <>
                 <Ionicons name="calculator-outline" size={22} color="white" style={{ marginRight: 8 }} />
-                <Text style={s.primaryBtnText}>{t('createOrder.estimatedPrice')}</Text>
+                <Text style={s.primaryBtnText}>{t('createOrder.calculatePrice')}</Text>
               </>
             )}
           </TouchableOpacity>
@@ -1601,7 +1811,14 @@ export default function CreateOrderScreen() {
       </View>
       <Modal visible={savedPickerVisible} transparent animationType="slide" onRequestClose={() => setSavedPickerVisible(false)}>
         <View style={s.modalOverlay}>
-          <View style={[s.modalCard, { backgroundColor: colors.card }]}>
+          <TouchableOpacity
+            style={s.modalBackdrop}
+            activeOpacity={1}
+            onPress={() => setSavedPickerVisible(false)}
+            accessibilityRole="button"
+            accessibilityLabel={t('common.close')}
+          />
+          <View style={[s.modalCard, { backgroundColor: colors.card, paddingBottom: Math.max(insets.bottom, 16) + 12 }]}>
             <View style={s.modalHeadRow}>
               <Text style={[s.modalTitle, { color: colors.text }]}>
                 {t('createOrder.chooseAddress')} — {savedPickerTarget === 'pickup' ? t('createOrder.pickup') : t('createOrder.delivery')}
@@ -1625,6 +1842,7 @@ export default function CreateOrderScreen() {
               keyExtractor={(item) => item.addressId}
               keyboardShouldPersistTaps="handled"
               style={{ maxHeight: 340 }}
+              contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, 12) + 8 }}
               ListHeaderComponent={
                 recentAddresses.length > 0 ? (
                   <View style={{ marginBottom: 8 }}>
@@ -1761,6 +1979,43 @@ const s = StyleSheet.create({
   addressDot: { width: 12, height: 12, borderRadius: 6 },
   addressMainText: { fontSize: 14, fontWeight: '600', color: '#111827' },
   addressSubText: { fontSize: 12, color: '#6b7280', marginTop: 2 },
+  addressCoordsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+    marginTop: 2,
+  },
+  addressCoordsText: { fontSize: 14, fontWeight: '600', flex: 1 },
+  giveNameBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  giveNameBtnTxt: { fontSize: 12, fontWeight: '700' },
+  addressNameFieldWrap: {
+    position: 'relative',
+    marginTop: 10,
+    justifyContent: 'center',
+  },
+  addressNameInput: {
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingVertical: Platform.OS === 'ios' ? 10 : 8,
+    fontSize: 15,
+  },
+  addressNameSaveBtn: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    width: 36,
+  },
   addressPlaceholder: { fontSize: 14, color: '#9ca3af' },
   addressFetching: { fontSize: 14, color: '#2563eb', fontWeight: '600' },
   inlineActionBtn: {
@@ -1796,10 +2051,15 @@ const s = StyleSheet.create({
   },
   savedPickerBtnTxt: { fontSize: 12, fontWeight: '700' },
   modalOverlay: {
-    flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end',
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'flex-end',
+  },
+  modalBackdrop: {
+    ...StyleSheet.absoluteFillObject,
   },
   modalCard: {
-    borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: 16, paddingBottom: 20,
+    borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: 16,
   },
   modalHeadRow: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10,
@@ -1820,17 +2080,33 @@ const s = StyleSheet.create({
     width: 2, height: 20, backgroundColor: '#e5e7eb', marginLeft: 19, marginVertical: 2,
   },
 
-  // Payment
-  paymentRow: { flexDirection: 'row', gap: 12 },
-  paymentOption: {
-    flex: 1, padding: 16, borderRadius: 14, alignItems: 'center',
-    backgroundColor: '#f9fafb', borderWidth: 1.5, borderColor: '#e5e7eb',
+  // Payment — compact segment
+  paymentCard: { paddingVertical: 12, paddingHorizontal: 14 },
+  paymentCardTitle: { fontSize: 12, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 8 },
+  paymentSegment: {
+    flexDirection: 'row',
+    borderRadius: 12,
+    padding: 4,
+    gap: 4,
+    borderWidth: StyleSheet.hairlineWidth,
   },
-  paymentOptionActiveCash: { backgroundColor: '#22c55e', borderColor: '#22c55e' },
-  paymentOptionActiveWallet: { backgroundColor: '#3b82f6', borderColor: '#3b82f6' },
-  paymentEmoji: { fontSize: 28, marginBottom: 6 },
-  paymentLabel: { fontSize: 15, fontWeight: '700', color: '#374151' },
-  paymentSub: { fontSize: 11, color: '#9ca3af', marginTop: 2 },
+  paymentChip: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 10,
+    paddingHorizontal: 8,
+    borderRadius: 9,
+  },
+  paymentChipActiveCash: { backgroundColor: '#22c55e' },
+  paymentChipActiveWallet: { backgroundColor: '#3b82f6' },
+  paymentChipTextCol: { alignItems: 'flex-start' },
+  paymentChipLabel: { fontSize: 13, fontWeight: '700' },
+  paymentChipLabelActive: { color: '#fff' },
+  paymentChipBalance: { fontSize: 10, fontWeight: '600', marginTop: 1 },
+  paymentChipBalanceActive: { color: 'rgba(255,255,255,0.85)' },
 
   // Weight
   inputLabel: { fontSize: 13, fontWeight: '600', color: '#6b7280', marginBottom: 8 },
@@ -1872,16 +2148,27 @@ const s = StyleSheet.create({
     lineHeight: 28,
   },
   extraStepperValueBox: {
-    minWidth: 92,
+    flex: 1,
+    maxWidth: 140,
     height: 46,
     borderRadius: 12,
     borderWidth: 1,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 16,
+    paddingHorizontal: 10,
+    gap: 4,
   },
-  extraStepperValueText: {
+  extraStepperValueInput: {
+    flex: 0,
+    minWidth: 36,
     fontSize: 20,
+    fontWeight: '700',
+    paddingVertical: Platform.OS === 'ios' ? 8 : 4,
+    paddingHorizontal: 0,
+  },
+  extraStepperCurrency: {
+    fontSize: 16,
     fontWeight: '700',
   },
 
