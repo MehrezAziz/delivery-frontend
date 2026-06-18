@@ -39,6 +39,8 @@ import {
   getLocationSharePending,
 } from '../../utils/locationSharePendingStorage';
 import { clearCreateOrderDraft, saveCreateOrderDraft } from '../../utils/createOrderDraftStorage';
+import { walletService, type WalletsSummary } from '../../services/api/wallet.service';
+import { ForeignCountryWalletModal } from '../../components/wallet/ForeignCountryWalletModal';
 
 const ORDER_BIO_ROUND_LIMIT = 5;
 
@@ -52,6 +54,9 @@ interface SavedAddress {
   sublabel: string;
   lat: number;
   lng: number;
+  countryId?: string;
+  countryName?: string;
+  currencyCode?: string;
 }
 
 const COORD_MATCH_EPSILON = 0.00015;
@@ -75,6 +80,10 @@ interface PricePreview {
   currencySymbol: string;
   walletBalance: number | null;
   paymentType: 'COD' | 'WALLET';
+  orderCountryId?: string;
+  orderCountryName?: string;
+  allowedPaymentTypes?: Array<'COD' | 'WALLET'>;
+  codOnly?: boolean;
 }
 
 export default function CreateOrderScreen() {
@@ -133,6 +142,17 @@ export default function CreateOrderScreen() {
   const [dropoffDeclinedName, setDropoffDeclinedName] = useState<string | null>(null);
   const pickupAddressRef = useRef<SavedAddress | null>(null);
   const dropoffAddressRef = useRef<SavedAddress | null>(null);
+  const walletSummaryRef = useRef<WalletsSummary | null>(null);
+  const [walletSummary, setWalletSummary] = useState<WalletsSummary | null>(null);
+  const [orderCountryId, setOrderCountryId] = useState<string | null>(null);
+  const [orderCountryName, setOrderCountryName] = useState<string | null>(null);
+  const [orderCurrencyCode, setOrderCurrencyCode] = useState<string | null>(null);
+  const [pendingAddressCommit, setPendingAddressCommit] = useState<{
+    slot: 'pickup' | 'dropoff';
+    address: SavedAddress;
+  } | null>(null);
+  const [foreignModalVisible, setForeignModalVisible] = useState(false);
+  const [foreignModalBusy, setForeignModalBusy] = useState(false);
   const [recentAddressIds, setRecentAddressIds] = useState<string[]>([]);
   const [customerStatus, setCustomerStatus] = useState<string>('ACTIVE');
   const [scheduleLater, setScheduleLater] = useState(false);
@@ -224,25 +244,67 @@ export default function CreateOrderScreen() {
     return () => clearInterval(interval);
   }, []);
 
-  // Fetch wallet balance
-  const fetchWalletBalance = useCallback(async () => {
+  const loadWalletSummary = useCallback(async () => {
     try {
-      const wallet = await api.get<{
-        id: string;
-        balance: number;
-        spendable?: number;
-        currency: string;
-        discount: number;
-      }>('/wallet/me');
+      const summary = await walletService.getWalletsSummary();
+      setWalletSummary(summary);
+      walletSummaryRef.current = summary;
+      return summary;
+    } catch {
+      setWalletSummary(null);
+      walletSummaryRef.current = null;
+      return null;
+    }
+  }, []);
+
+  const fetchWalletBalance = useCallback(async (countryId?: string) => {
+    try {
+      const cid = countryId ?? orderCountryId ?? undefined;
+      const wallet = await walletService.getWallet(cid);
       setWalletBalance(wallet.spendable ?? wallet.balance ?? 0);
     } catch {
       setWalletBalance(0);
     }
-  }, []);
+  }, [orderCountryId]);
+
+  const hasWalletForCountry = useCallback((countryId: string, summary = walletSummaryRef.current ?? walletSummary) =>
+    !!summary?.wallets.some((w) => w.countryId === countryId),
+  [walletSummary]);
+
+  const isCodOnlyForCountry = useCallback((countryId: string, summary = walletSummaryRef.current ?? walletSummary) =>
+    !!summary?.countryPreferences.some((p) => p.countryId === countryId && p.codOnly),
+  [walletSummary]);
+
+  const walletPayEnabled = orderCountryId
+    ? hasWalletForCountry(orderCountryId) && !isCodOnlyForCountry(orderCountryId)
+    : true;
+
+  useEffect(() => {
+    walletSummaryRef.current = walletSummary;
+  }, [walletSummary]);
 
   // Fetch wallet balance on mount and when screen regains focus
-  useEffect(() => { fetchWalletBalance(); }, [fetchWalletBalance]);
-  useFocusEffect(useCallback(() => { fetchWalletBalance(); }, [fetchWalletBalance]));
+  useEffect(() => { void loadWalletSummary(); }, [loadWalletSummary]);
+  useEffect(() => { void fetchWalletBalance(); }, [fetchWalletBalance]);
+  useFocusEffect(useCallback(() => {
+    void loadWalletSummary();
+    void fetchWalletBalance();
+  }, [loadWalletSummary, fetchWalletBalance]));
+
+  useEffect(() => {
+    if (!pickupAddress && !dropoffAddress) {
+      setOrderCountryId(null);
+      setOrderCountryName(null);
+      setOrderCurrencyCode(null);
+      void fetchWalletBalance();
+    }
+  }, [pickupAddress, dropoffAddress, fetchWalletBalance]);
+
+  useEffect(() => {
+    if (orderCountryId && !walletPayEnabled && paymentType === 'WALLET') {
+      setPaymentType('COD');
+    }
+  }, [orderCountryId, walletPayEnabled, paymentType]);
   useFocusEffect(
     useCallback(() => {
       (async () => {
@@ -272,7 +334,20 @@ export default function CreateOrderScreen() {
   const loadSavedAddresses = useCallback(async () => {
     try {
       const rows = await api.get<
-        { id: string; latitude: number | null; longitude: number | null; street: string | null; nickname: string | null; delegation: { nameDelegation: string; governorate: { nameGovernorate: string } } }[]
+        {
+          id: string;
+          latitude: number | null;
+          longitude: number | null;
+          street: string | null;
+          nickname: string | null;
+          delegation: {
+            nameDelegation: string;
+            governorate: {
+              nameGovernorate: string;
+              country: { id: string; name: string; currencyCode?: string };
+            };
+          };
+        }[]
       >('/addresses');
       setHasMainAddress(rows.some((a) => String(a.nickname || '').toUpperCase() === 'MAIN'));
       setSavedAddresses(
@@ -286,6 +361,9 @@ export default function CreateOrderScreen() {
             sublabel: `${a.delegation.nameDelegation}, ${a.delegation.governorate.nameGovernorate}`,
             lat: a.latitude as number,
             lng: a.longitude as number,
+            countryId: a.delegation.governorate.country.id,
+            countryName: a.delegation.governorate.country.name,
+            currencyCode: a.delegation.governorate.country.currencyCode,
           })),
       );
     } catch {
@@ -332,40 +410,161 @@ export default function CreateOrderScreen() {
     await refreshLocationShareSlotUi();
   }, [refreshLocationShareSlotUi]);
 
+  const enrichAddressCountry = useCallback(async (address: SavedAddress): Promise<SavedAddress> => {
+    if (address.countryId) return address;
+    try {
+      const delegation = await api.get<{
+        nameDelegation: string;
+        governorate: {
+          nameGovernorate: string;
+          country: { id: string; name: string; currencyCode?: string };
+        };
+      }>(`/geography/delegations/by-coordinates?lat=${address.lat}&lng=${address.lng}`);
+      return {
+        ...address,
+        countryId: delegation.governorate.country.id,
+        countryName: delegation.governorate.country.name,
+        currencyCode: delegation.governorate.country.currencyCode,
+        sublabel: address.sublabel || `${delegation.nameDelegation}, ${delegation.governorate.nameGovernorate}`,
+      };
+    } catch {
+      return address;
+    }
+  }, []);
+
+  const applyAddressToSlot = useCallback((slot: 'pickup' | 'dropoff', address: SavedAddress) => {
+    if (slot === 'pickup') setPickupAddress(address);
+    else setDropoffAddress(address);
+  }, []);
+
+  const finalizeAddressAssignment = useCallback(async (
+    slot: 'pickup' | 'dropoff',
+    address: SavedAddress,
+  ) => {
+    applyAddressToSlot(slot, address);
+    await clearSlotLocationShare(slot);
+    if (address.countryId) {
+      setOrderCountryId(address.countryId);
+      setOrderCountryName(address.countryName ?? null);
+      setOrderCurrencyCode(address.currencyCode ?? null);
+      void fetchWalletBalance(address.countryId);
+    }
+  }, [applyAddressToSlot, clearSlotLocationShare, fetchWalletBalance]);
+
+  const commitAddressToSlot = useCallback(async (
+    slot: 'pickup' | 'dropoff',
+    rawAddress: SavedAddress,
+  ): Promise<boolean> => {
+    const address = await enrichAddressCountry(rawAddress);
+    const other = slot === 'pickup' ? dropoffAddressRef.current : pickupAddressRef.current;
+
+    if (other?.countryId && address.countryId && other.countryId !== address.countryId) {
+      appAlert(
+        t('multiWallet.sameCountryRequired'),
+        t('multiWallet.sameCountryDetail', {
+          firstCountry: other.countryName || t('common.unknown'),
+          secondCountry: address.countryName || t('common.unknown'),
+        }),
+      );
+      return false;
+    }
+
+    const isFirstAddress = !pickupAddressRef.current && !dropoffAddressRef.current;
+    if (isFirstAddress && address.countryId) {
+      const summary = walletSummaryRef.current ?? (await loadWalletSummary());
+      const hasWallet = hasWalletForCountry(address.countryId, summary);
+      const codOnly = isCodOnlyForCountry(address.countryId, summary);
+
+      if (!hasWallet && !codOnly) {
+        setPendingAddressCommit({ slot, address });
+        setForeignModalVisible(true);
+        return false;
+      }
+      if (codOnly) setPaymentType('COD');
+    }
+
+    await finalizeAddressAssignment(slot, address);
+    return true;
+  }, [
+    enrichAddressCountry,
+    t,
+    loadWalletSummary,
+    hasWalletForCountry,
+    isCodOnlyForCountry,
+    finalizeAddressAssignment,
+  ]);
+
+  const handleForeignCreateWallet = useCallback(async () => {
+    const pending = pendingAddressCommit;
+    if (!pending?.address.countryId) return;
+    setForeignModalBusy(true);
+    try {
+      await walletService.createCountryWallet(pending.address.countryId);
+      await loadWalletSummary();
+      setPendingAddressCommit(null);
+      setForeignModalVisible(false);
+      await finalizeAddressAssignment(pending.slot, pending.address);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : t('common.something_went_wrong');
+      appAlert(t('common.error'), msg);
+    } finally {
+      setForeignModalBusy(false);
+    }
+  }, [pendingAddressCommit, loadWalletSummary, finalizeAddressAssignment, t]);
+
+  const handleForeignCashOnly = useCallback(async () => {
+    const pending = pendingAddressCommit;
+    if (!pending?.address.countryId) return;
+    setForeignModalBusy(true);
+    try {
+      await walletService.setCountryPreference(pending.address.countryId, true);
+      await loadWalletSummary();
+      setPaymentType('COD');
+      setPendingAddressCommit(null);
+      setForeignModalVisible(false);
+      await finalizeAddressAssignment(pending.slot, pending.address);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : t('common.something_went_wrong');
+      appAlert(t('common.error'), msg);
+    } finally {
+      setForeignModalBusy(false);
+    }
+  }, [pendingAddressCommit, loadWalletSummary, finalizeAddressAssignment, t]);
+
   const resolveAddress = useCallback(async (
     lat: number, lng: number, label: string,
     slot: 'pickup' | 'dropoff',
-    setter: (a: SavedAddress) => void,
     setResolving: (b: boolean) => void,
   ) => {
     setResolving(true);
     try {
-      // Find nearest delegation
       const delegation = await api.get<{
         id: string; nameDelegation: string;
-        governorate: { id: string; nameGovernorate: string; country: { id: string; name: string } };
+        governorate: { id: string; nameGovernorate: string; country: { id: string; name: string; currencyCode?: string } };
       }>(`/geography/delegations/by-coordinates?lat=${lat}&lng=${lng}`);
 
-      // Create address record (order address — no userId)
       const address = await api.post<{ id: string }>('/addresses/order', {
         latitude: lat, longitude: lng,
         street: label,
         delegationId: delegation.id,
       });
 
-      setter({
+      const saved: SavedAddress = {
         addressId: address.id,
         label: label || `${lat.toFixed(4)}, ${lng.toFixed(4)}`,
         sublabel: `${delegation.nameDelegation}, ${delegation.governorate.nameGovernorate}`,
         lat, lng,
-      });
-      await clearSlotLocationShare(slot);
+        countryId: delegation.governorate.country.id,
+        countryName: delegation.governorate.country.name,
+        currencyCode: delegation.governorate.country.currencyCode,
+      };
+      await commitAddressToSlot(slot, saved);
     } catch (e: any) {
       appAlert(t('common.error'), e.message || t('common.something_went_wrong'));
     } finally {
       setResolving(false);
     }
-  }, [t, clearSlotLocationShare]);
+  }, [t, commitAddressToSlot]);
 
   // Clean up stale picker data on mount
   useEffect(() => {
@@ -387,7 +586,7 @@ export default function CreateOrderScreen() {
           if (parsed.timestamp > pickupTimestamp.current) {
             pickupTimestamp.current = parsed.timestamp;
             await AsyncStorage.removeItem('picked_pickup');
-            resolveAddress(parsed.lat, parsed.lng, parsed.address, 'pickup', setPickupAddress, setResolvingPickup);
+            resolveAddress(parsed.lat, parsed.lng, parsed.address, 'pickup', setResolvingPickup);
           }
         }
         const dropoffData = await AsyncStorage.getItem('picked_dropoff');
@@ -396,7 +595,7 @@ export default function CreateOrderScreen() {
           if (parsed.timestamp > dropoffTimestamp.current) {
             dropoffTimestamp.current = parsed.timestamp;
             await AsyncStorage.removeItem('picked_dropoff');
-            resolveAddress(parsed.lat, parsed.lng, parsed.address, 'dropoff', setDropoffAddress, setResolvingDropoff);
+            resolveAddress(parsed.lat, parsed.lng, parsed.address, 'dropoff', setResolvingDropoff);
           }
         }
       } catch {}
@@ -447,11 +646,7 @@ export default function CreateOrderScreen() {
   const selectSavedAddressForSlot = useCallback(async (
     slot: 'pickup' | 'dropoff',
     address: SavedAddress,
-  ) => {
-    if (slot === 'pickup') setPickupAddress(address);
-    else setDropoffAddress(address);
-    await clearSlotLocationShare(slot);
-  }, [clearSlotLocationShare]);
+  ) => commitAddressToSlot(slot, address), [commitAddressToSlot]);
 
   const applyRequestLocationResult = useCallback((slot: 'pickup' | 'dropoff', result: RequestLocationResult) => {
     const saved: SavedAddress = {
@@ -465,16 +660,15 @@ export default function CreateOrderScreen() {
     const current = slot === 'pickup' ? pickupAddressRef.current : dropoffAddressRef.current;
     const isEmpty = !current?.addressId && !current?.label?.trim();
 
-    const fill = () => {
-      if (slot === 'pickup') setPickupAddress(saved);
-      else setDropoffAddress(saved);
+    const fill = async () => {
+      const ok = await commitAddressToSlot(slot, saved);
+      if (!ok) return;
       void markRecentAddress(result.addressId);
-      void clearSlotLocationShare(slot);
       appAlert(t('locationShare.acceptedTitle'), t('locationShare.fieldFilled', { slot: slotLabel }));
     };
 
     if (isEmpty) {
-      fill();
+      void fill();
       return;
     }
 
@@ -483,10 +677,10 @@ export default function CreateOrderScreen() {
       t('locationShare.replaceAddressBody', { slot: slotLabel, address: saved.label }),
       [
         { text: t('common.no'), style: 'cancel' },
-        { text: t('locationShare.replaceConfirm'), onPress: fill },
+        { text: t('locationShare.replaceConfirm'), onPress: () => { void fill(); } },
       ],
     );
-  }, [clearSlotLocationShare, t, markRecentAddress]);
+  }, [t, markRecentAddress, commitAddressToSlot]);
 
   useEffect(() => {
     setLocationSharePollSharedLocationLabel(t('locationShare.sharedLocation'));
@@ -513,14 +707,16 @@ export default function CreateOrderScreen() {
   };
 
   const filteredSavedAddresses = savedAddresses.filter((a) => {
+    if (orderCountryId && a.countryId && a.countryId !== orderCountryId) return false;
     const q = savedSearch.trim().toLowerCase();
     if (!q) return true;
-    const hay = `${a.nickname || ''} ${a.street || ''} ${a.label || ''} ${a.sublabel || ''}`.toLowerCase();
+    const hay = `${a.nickname || ''} ${a.street || ''} ${a.label || ''} ${a.sublabel || ''} ${a.countryName || ''}`.toLowerCase();
     return hay.includes(q);
   });
   const recentAddresses = recentAddressIds
     .map((id) => savedAddresses.find((a) => a.addressId === id))
-    .filter((a): a is SavedAddress => !!a);
+    .filter((a): a is SavedAddress => !!a)
+    .filter((a) => !orderCountryId || !a.countryId || a.countryId === orderCountryId);
   const isAlreadySavedAddress = (addr: SavedAddress | null) => {
     if (!addr) return false;
     return savedAddresses.some((s) =>
@@ -551,7 +747,6 @@ export default function CreateOrderScreen() {
         pos.coords.longitude,
         t('createOrder.thisPosition'),
         which,
-        which === 'pickup' ? setPickupAddress : setDropoffAddress,
         which === 'pickup' ? setResolvingPickup : setResolvingDropoff,
       );
     } finally {
@@ -781,6 +976,8 @@ export default function CreateOrderScreen() {
     }
     setLoading(true);
     try {
+      const payType = orderCountryId && !walletPayEnabled && paymentType === 'WALLET' ? 'COD' : paymentType;
+      if (payType !== paymentType) setPaymentType('COD');
       const [savedPickupNickname, savedDropoffNickname] = await Promise.all([
         autoSaveAddressForLater(pickupAddress, pickupNickSave, t('createOrder.pickup')),
         autoSaveAddressForLater(dropoffAddress, dropoffNickSave, t('createOrder.delivery')),
@@ -794,7 +991,7 @@ export default function CreateOrderScreen() {
       const result = await orderService.previewOrder({
         pickupAddressId: pickupAddress.addressId,
         dropoffAddressId: dropoffAddress.addressId,
-        paymentType, weight: w,
+        paymentType: payType, weight: w,
         customerExtraAmount: ex,
         scheduledPublishAt: scheduleLater ? publishAt.toISOString() : undefined,
       });
@@ -865,6 +1062,9 @@ export default function CreateOrderScreen() {
       setPublishAt(new Date(Date.now() + 15 * 60 * 1000));
       setPreview(null);
       setStep('form');
+      setOrderCountryId(null);
+      setOrderCountryName(null);
+      setOrderCurrencyCode(null);
       await clearCreateOrderDraft();
       try {
         const all = await orderService.getMyOrders();
@@ -1018,7 +1218,17 @@ export default function CreateOrderScreen() {
   };
 
   const handleSwitchToCash = () => void rerunPreviewWithPayment('COD');
-  const handleSwitchToWallet = () => void rerunPreviewWithPayment('WALLET');
+  const handleSwitchToWallet = () => {
+    if (preview?.allowedPaymentTypes && !preview.allowedPaymentTypes.includes('WALLET')) {
+      appAlert(t('common.error'), t('multiWallet.walletRequired', { currency: preview.currencySymbol || preview.currency }));
+      return;
+    }
+    if (orderCountryId && !walletPayEnabled) {
+      appAlert(t('common.error'), t('multiWallet.walletRequired', { currency: orderCurrencyCode || '' }));
+      return;
+    }
+    void rerunPreviewWithPayment('WALLET');
+  };
 
   /** Re-run preview after customer changes optional extra on the summary screen. */
   const handleUpdatePreviewExtra = async (overrideExtraAmount?: number) => {
@@ -1090,6 +1300,9 @@ export default function CreateOrderScreen() {
     const totalCoins = preview.totalPriceCoins ?? preview.totalPrice;
     const insufficientWallet =
       !isCash && preview.walletBalance !== null && preview.walletBalance < totalCoins;
+    const walletAllowed = preview.allowedPaymentTypes
+      ? preview.allowedPaymentTypes.includes('WALLET')
+      : walletPayEnabled;
     const line = (fiat: number) => previewLineAmount(fiat, isCash, coinsPerFiatUnit, preview.currencySymbol);
     const secondaryColor = colors.textTertiary;
 
@@ -1398,11 +1611,17 @@ export default function CreateOrderScreen() {
             currencySymbol={preview.currencySymbol}
             orderTotalCoins={totalCoins}
             switching={switchingPayment}
+            walletAllowed={walletAllowed}
             onSwitchToCash={handleSwitchToCash}
             onSwitchToWallet={handleSwitchToWallet}
             colors={colors}
             isDark={isDark}
           />
+          {preview.codOnly ? (
+            <Text style={[s.codOnlyHint, { color: colors.textSecondary }]}>
+              {t('multiWallet.codOnlyBanner', { country: preview.orderCountryName || orderCountryName || '' })}
+            </Text>
+          ) : null}
 
           {/* Confirm */}
           <TouchableOpacity
@@ -1637,6 +1856,11 @@ export default function CreateOrderScreen() {
 
           <View style={[s.card, s.paymentCard, { backgroundColor: colors.card }]}>
             <Text style={[s.paymentCardTitle, { color: colors.textSecondary }]}>{t('createOrder.payment')}</Text>
+            {orderCountryId && isCodOnlyForCountry(orderCountryId) ? (
+              <Text style={[s.codOnlyHint, { color: colors.textSecondary, marginBottom: 10 }]}>
+                {t('createOrder.codOnlyBanner', { country: orderCountryName || '' })}
+              </Text>
+            ) : null}
             <View style={[s.paymentSegment, { backgroundColor: surfaceMuted, borderColor: borderSoft }]}>
               <TouchableOpacity
                 style={[
@@ -1659,8 +1883,19 @@ export default function CreateOrderScreen() {
                 style={[
                   s.paymentChip,
                   paymentType === 'WALLET' && s.paymentChipActiveWallet,
+                  (!walletPayEnabled && !!orderCountryId) && { opacity: 0.45 },
                 ]}
-                onPress={() => setPaymentType('WALLET')}
+                onPress={() => {
+                  if (orderCountryId && !walletPayEnabled) {
+                    appAlert(
+                      t('common.error'),
+                      t('multiWallet.walletRequired', { currency: orderCurrencyCode || '' }),
+                    );
+                    return;
+                  }
+                  setPaymentType('WALLET');
+                }}
+                disabled={!!orderCountryId && !walletPayEnabled}
                 activeOpacity={0.7}
               >
                 <Ionicons
@@ -1853,9 +2088,11 @@ export default function CreateOrderScreen() {
                           key={r.addressId}
                           style={[s.recentChip, { borderColor: colors.border, backgroundColor: colors.inputBg }]}
                           onPress={async () => {
-                            await selectSavedAddressForSlot(savedPickerTarget, r);
-                            markRecentAddress(r.addressId);
-                            setSavedPickerVisible(false);
+                            const ok = await selectSavedAddressForSlot(savedPickerTarget, r);
+                            if (ok) {
+                              markRecentAddress(r.addressId);
+                              setSavedPickerVisible(false);
+                            }
                           }}
                         >
                           <Text style={[s.recentChipText, { color: colors.text }]} numberOfLines={1}>
@@ -1871,13 +2108,17 @@ export default function CreateOrderScreen() {
                 <TouchableOpacity
                   style={[s.modalItem, { borderBottomColor: colors.border }]}
                   onPress={async () => {
-                    await selectSavedAddressForSlot(savedPickerTarget, item);
-                    markRecentAddress(item.addressId);
-                    setSavedPickerVisible(false);
+                    const ok = await selectSavedAddressForSlot(savedPickerTarget, item);
+                    if (ok) {
+                      markRecentAddress(item.addressId);
+                      setSavedPickerVisible(false);
+                    }
                   }}
                 >
                   <Text style={[s.modalItemTitle, { color: colors.text }]}>{item.nickname || item.street || item.label}</Text>
-                  <Text style={[s.modalItemSub, { color: colors.textSecondary }]} numberOfLines={1}>{item.sublabel}</Text>
+                  <Text style={[s.modalItemSub, { color: colors.textSecondary }]} numberOfLines={1}>
+                    {item.countryName ? `${item.countryName} · ` : ''}{item.sublabel}
+                  </Text>
                 </TouchableOpacity>
               )}
               ListEmptyComponent={<Text style={[s.modalEmpty, { color: colors.textTertiary }]}>{t('common.noResults')}</Text>}
@@ -1885,6 +2126,20 @@ export default function CreateOrderScreen() {
           </View>
         </View>
       </Modal>
+
+      <ForeignCountryWalletModal
+        visible={foreignModalVisible}
+        countryName={pendingAddressCommit?.address.countryName || orderCountryName || ''}
+        currencyCode={pendingAddressCommit?.address.currencyCode || orderCurrencyCode || undefined}
+        busy={foreignModalBusy}
+        onCreateWallet={() => { void handleForeignCreateWallet(); }}
+        onCashOnly={() => { void handleForeignCashOnly(); }}
+        onClose={() => {
+          if (foreignModalBusy) return;
+          setForeignModalVisible(false);
+          setPendingAddressCommit(null);
+        }}
+      />
 
       <RequestLocationModal
         key={requestLocationSlot}
@@ -2083,6 +2338,7 @@ const s = StyleSheet.create({
   // Payment — compact segment
   paymentCard: { paddingVertical: 12, paddingHorizontal: 14 },
   paymentCardTitle: { fontSize: 12, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 8 },
+  codOnlyHint: { fontSize: 13, lineHeight: 18, marginBottom: 12, fontWeight: '500' },
   paymentSegment: {
     flexDirection: 'row',
     borderRadius: 12,

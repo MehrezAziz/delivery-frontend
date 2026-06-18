@@ -28,6 +28,7 @@ import { appAlert } from '../../utils/appAlert';
 import { ThemedConfirmDialog } from '../ThemedConfirmDialog';
 import { coinTransferStatusMeta } from '../../utils/coinTransferStatus';
 import { formatCoinSenderLine } from '../../utils/coinTransferSenderDisplay';
+import { parseWalletIdParam } from '../../utils/walletNavigation';
 
 function errMsg(e: unknown): string {
   if (e instanceof ApiError) return e.message;
@@ -75,7 +76,9 @@ export default function SendCoinsScreen() {
     amount?: string;
     sender?: string;
     sendsOnly?: string;
+    walletId?: string;
   }>();
+  const selectedWalletId = parseWalletIdParam(params.walletId);
   const { colors } = useTheme();
   const { t } = useTranslation();
   const [recipientMode, setRecipientMode] = useState<'id' | 'phone'>('id');
@@ -112,6 +115,7 @@ export default function SendCoinsScreen() {
   const [rescheduleIosOpen, setRescheduleIosOpen] = useState(false);
   const [rescheduleSaving, setRescheduleSaving] = useState(false);
   const [availableCoins, setAvailableCoins] = useState<number | null>(null);
+  const [walletLabel, setWalletLabel] = useState<string | null>(null);
   const [availableLoading, setAvailableLoading] = useState(false);
   const [availableTouched, setAvailableTouched] = useState(false);
   const paramsRef = useRef(params);
@@ -141,16 +145,20 @@ export default function SendCoinsScreen() {
         const b = me?.account?.balance;
         setAvailableCoins(typeof b === 'number' && Number.isFinite(b) ? b : null);
       } else {
-        const w = await walletService.getWallet();
+        const w = selectedWalletId
+          ? await walletService.getWallet(undefined, selectedWalletId)
+          : await walletService.getWallet();
         const spend = w.spendable ?? w.balance;
         setAvailableCoins(typeof spend === 'number' && Number.isFinite(spend) ? spend : null);
+        setWalletLabel(w.countryName || w.currencyCode || null);
       }
     } catch {
       setAvailableCoins(null);
+      setWalletLabel(null);
     } finally {
       setAvailableLoading(false);
     }
-  }, []);
+  }, [selectedWalletId]);
 
   useEffect(() => {
     void (async () => {
@@ -236,10 +244,11 @@ export default function SendCoinsScreen() {
     setPreviewLoading(true);
     setPreview(null);
     try {
+      const walletFields = selectedWalletId ? { walletId: selectedWalletId } : {};
       const previewBody =
         recipientMode === 'id'
-          ? { recipientUserId: recipientId.trim(), grossCoins: gross }
-          : { recipientPhone: recipientPhone.trim(), grossCoins: gross };
+          ? { recipientUserId: recipientId.trim(), grossCoins: gross, ...walletFields }
+          : { recipientPhone: recipientPhone.trim(), grossCoins: gross, ...walletFields };
       const p = await coinsService.preview(previewBody);
       setPreview(p);
     } catch (e) {
@@ -266,11 +275,13 @@ export default function SendCoinsScreen() {
       );
       const idempotencyKey = `${Date.now()}-${Math.random().toString(36).slice(2, 12)}`;
       const scheduledIso = scheduleOn && isValidSchedule(scheduleAt) ? scheduleAt.toISOString() : undefined;
+      const walletFields = selectedWalletId ? { walletId: selectedWalletId } : {};
       const transferBody = {
         grossCoins: gross,
         challengeToken,
         giftMessage: gift.trim() || undefined,
         scheduledAt: scheduledIso,
+        ...walletFields,
         ...(recipientMode === 'id'
           ? { recipientUserId: recipientId.trim() }
           : { recipientPhone: recipientPhone.trim() }),
@@ -562,6 +573,7 @@ export default function SendCoinsScreen() {
           <Text style={[styles.availableLine, { color: colors.textTertiary }]}>{t('sendCoins.loadingAvailable')}</Text>
         ) : availableCoins != null ? (
           <Text style={[styles.availableLine, { color: colors.textSecondary }]}>
+            {walletLabel ? `${walletLabel} · ` : ''}
             {t('sendCoins.available')} <Text style={{ fontWeight: '700', color: colors.text }}>{availableCoins.toFixed(2)}</Text> {t('wallet.coins')}
           </Text>
         ) : availableTouched ? (

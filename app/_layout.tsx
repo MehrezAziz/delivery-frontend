@@ -9,6 +9,7 @@ import { ThemeProvider, useTheme } from '../contexts/ThemeContext';
 import { LanguageProvider, useLanguage } from '../contexts/LanguageContext';
 import { ThemedAlertProvider } from '../components/ThemedAlert';
 import { AppNavigationProvider } from '../contexts/AppNavigationContext';
+import { AppMenuProvider } from '../contexts/AppMenuContext';
 import GlobalErrorBoundary from '../components/GlobalErrorBoundary';
 import FriendlyErrorModal from '../components/FriendlyErrorModal';
 import { GameCongratsModal } from '../components/games/GameCongratsModal';
@@ -181,7 +182,9 @@ export default function RootLayout() {
         <ThemedAlertProvider>
           <SafeAreaProvider>
             <AppNavigationProvider>
-              <RootContent />
+              <AppMenuProvider>
+                <RootContent />
+              </AppMenuProvider>
             </AppNavigationProvider>
           </SafeAreaProvider>
         </ThemedAlertProvider>

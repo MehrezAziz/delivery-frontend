@@ -14,8 +14,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAppNavigation } from '../contexts/AppNavigationContext';
+import { useAppMenu } from '../contexts/AppMenuContext';
 import { ThemeToggle } from './ThemeToggle';
-import { AppSideMenu } from './AppSideMenu';
 import { HeaderLanguagePicker } from './settings/HeaderLanguagePicker';
 import { NotificationPreviewModal } from './NotificationPreviewModal';
 import { notificationService } from '../services/api/notification.service';
@@ -25,6 +25,14 @@ import {
   getCustomerRouteTitle,
   getDriverRouteTitle,
 } from '../constants/screenTitles';
+import {
+  getNestedDefaultReturnHref,
+  isNestedTabScreen,
+  parseReturnToFromSearch,
+  resolveReturnToHref,
+  type AppRole,
+} from '../utils/navigationReturnTo';
+import { isSameAppRoute } from '../utils/appRoutes';
 import {
   getCustomerStatusDotColor,
   getDriverStatusDotColor,
@@ -94,14 +102,14 @@ export function AppChromeHeader({
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const navigation = useNavigation();
-  const { push } = useAppNavigation();
+  const { push, getPreviousPath, getLastMainTabHref } = useAppNavigation();
   const pathname = usePathname();
   const globalSearchParams = useGlobalSearchParams();
   const unstableGlobalHref = useUnstableGlobalHref();
   const segments = useSegments() as string[];
   const { colors, isDark } = useTheme();
   const { t, i18n: i18nInstance } = useTranslation();
-  const [menuOpen, setMenuOpen] = useState(false);
+  const { toggle: toggleMenu, visible: menuOpen, setLayout } = useAppMenu();
   const [identityTitle, setIdentityTitle] = useState<string | null>(null);
   const [identitySubtitle, setIdentitySubtitle] = useState<string | null>(null);
   const [initials, setInitials] = useState('');
@@ -109,6 +117,16 @@ export function AppChromeHeader({
   const [statusDotColor, setStatusDotColor] = useState('#9ca3af');
   const [notifPreviewOpen, setNotifPreviewOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [chromeHeaderHeight, setChromeHeaderHeight] = useState(0);
+
+  useEffect(() => {
+    if (!showMenu) return;
+    setLayout({
+      topOffset: chromeHeaderHeight,
+      bottomOffset: role === 'guest' ? insets.bottom : 60 + insets.bottom,
+      role,
+    });
+  }, [showMenu, chromeHeaderHeight, insets.bottom, role, setLayout]);
 
   const isMainHome = useMemo(() => isMainHomeScreen(role, segments, pathname), [role, segments, pathname]);
   const showTabsNotifications = useMemo(
@@ -221,53 +239,68 @@ export function AppChromeHeader({
   const resolvedShowTheme =
     showThemeToggle !== undefined ? showThemeToggle : role !== 'guest' && isMainHome;
 
-  const resolveCustomerReturnTo = (): string | undefined => {
-    const returnToRaw = globalSearchParams.returnTo;
-    let r =
-      typeof returnToRaw === 'string' ? returnToRaw : Array.isArray(returnToRaw) ? returnToRaw[0] : undefined;
-    const tryParse = (s: string) => {
-      if (!s.includes('?')) return undefined;
-      try {
-        return new URLSearchParams(s.slice(s.indexOf('?') + 1)).get('returnTo') ?? undefined;
-      } catch {
-        return undefined;
-      }
-    };
-    if (!r) r = tryParse(unstableGlobalHref);
-    if (!r) r = tryParse(pathname);
-    return r;
-  };
-
   const onBack = () => {
     if (role === 'guest' && guestLoginBackToWelcome) {
       router.replace('/');
       return;
     }
-    // Must run before any goBack(): a parent stack often reports canGoBack() and pops to Home,
-    // even though the user arrived from Settings via sibling tab routes.
-    const returnToSettings = resolveCustomerReturnTo() === 'settings';
-    if (role === 'customer' && returnToSettings) {
-      router.replace('/(customer)/settings' as never);
+
+    const appRole: AppRole | null = role === 'customer' ? 'customer' : role === 'driver' ? 'driver' : null;
+
+    if (appRole) {
+      const returnToRaw = parseReturnToFromSearch(
+        globalSearchParams.returnTo,
+        pathname,
+        unstableGlobalHref,
+      );
+      if (returnToRaw) {
+        const target = resolveReturnToHref(appRole, returnToRaw);
+        if (target) {
+          router.replace(target as never);
+          return;
+        }
+      }
+
+      const defaultReturn = getNestedDefaultReturnHref(appRole, pathname);
+      if (defaultReturn && isNestedTabScreen(appRole, pathname)) {
+        router.replace(defaultReturn as never);
+        return;
+      }
+
+      if (isNestedTabScreen(appRole, pathname)) {
+        const previous = getPreviousPath();
+        if (previous && !isSameAppRoute(previous, pathname)) {
+          router.replace(previous as never);
+          return;
+        }
+        const lastMainTab = getLastMainTabHref(appRole);
+        if (lastMainTab) {
+          router.replace(lastMainTab as never);
+          return;
+        }
+      }
+    }
+
+    if (router.canGoBack()) {
+      router.back();
       return;
     }
-    if (role === 'driver' && returnToSettings) {
-      router.replace('/(driver)/settings' as never);
-      return;
-    }
-    // Walk up navigators: the nearest one is often the tab bar (`canGoBack` false) while the
-    // parent stack still has entries.
+
+    // Stack navigators only — tab `goBack()` jumps to the first tab (Home), not the prior screen.
     let nav: ReturnType<typeof useNavigation> | undefined = navigation;
     for (let depth = 0; depth < 8 && nav != null; depth++) {
+      const state = nav.getState?.();
+      if (state?.type === 'tab' || state?.type === 'drawer') {
+        nav = nav.getParent();
+        continue;
+      }
       if (nav.canGoBack()) {
         nav.goBack();
         return;
       }
       nav = nav.getParent();
     }
-    if (router.canGoBack()) {
-      router.back();
-      return;
-    }
+
     if (role === 'guest') router.replace('/');
     else if (role === 'customer') router.replace('/(customer)/home');
     else router.replace('/(driver)/home');
@@ -371,7 +404,10 @@ export function AppChromeHeader({
 
   return (
     <>
-      <View style={{ paddingTop: insets.top, backgroundColor: headerBg }}>
+      <View
+        onLayout={(e) => setChromeHeaderHeight(e.nativeEvent.layout.height)}
+        style={{ paddingTop: insets.top, backgroundColor: headerBg }}
+      >
         <View style={styles.row}>
           {showHomeIdentity ? (
             <>
@@ -461,9 +497,20 @@ export function AppChromeHeader({
                 ) : null}
                 {showMenu ? (
                   <TouchableOpacity
-                    onPress={() => setMenuOpen(true)}
-                    style={[styles.iconBtn, { backgroundColor: iconBtnBg }]}
+                    onPress={toggleMenu}
+                    style={[
+                      styles.iconBtn,
+                      {
+                        backgroundColor: menuOpen
+                          ? role === 'guest'
+                            ? colors.primary + '22'
+                            : 'rgba(255,255,255,0.32)'
+                          : iconBtnBg,
+                      },
+                    ]}
                     activeOpacity={0.75}
+                    accessibilityLabel={t('sideMenu.menu')}
+                    accessibilityState={{ expanded: menuOpen }}
                   >
                     <Ionicons name="menu" size={22} color={textColor} />
                   </TouchableOpacity>
@@ -565,9 +612,20 @@ export function AppChromeHeader({
                 ) : null}
                 {showMenu ? (
                   <TouchableOpacity
-                    onPress={() => setMenuOpen(true)}
-                    style={[styles.iconBtn, { backgroundColor: iconBtnBg }]}
+                    onPress={toggleMenu}
+                    style={[
+                      styles.iconBtn,
+                      {
+                        backgroundColor: menuOpen
+                          ? role === 'guest'
+                            ? colors.primary + '22'
+                            : 'rgba(255,255,255,0.32)'
+                          : iconBtnBg,
+                      },
+                    ]}
                     activeOpacity={0.75}
+                    accessibilityLabel={t('sideMenu.menu')}
+                    accessibilityState={{ expanded: menuOpen }}
                   >
                     <Ionicons name="menu" size={22} color={textColor} />
                   </TouchableOpacity>
@@ -592,9 +650,6 @@ export function AppChromeHeader({
           }}
           onMarkAllRead={() => setUnreadCount(0)}
         />
-      ) : null}
-      {showMenu ? (
-        <AppSideMenu visible={menuOpen} onClose={() => setMenuOpen(false)} role={role} />
       ) : null}
     </>
   );

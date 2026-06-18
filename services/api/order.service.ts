@@ -210,6 +210,10 @@ export const orderService = {
       currencySymbol: string;
       walletBalance: number | null;
       paymentType: 'COD' | 'WALLET';
+      orderCountryId?: string;
+      orderCountryName?: string;
+      allowedPaymentTypes?: Array<'COD' | 'WALLET'>;
+      codOnly?: boolean;
     }>('/orders/preview', data),
 
   getMyOrders: () => api.get<Order[]>('/orders/my-orders'),

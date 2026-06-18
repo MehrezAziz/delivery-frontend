@@ -104,7 +104,6 @@ export default function LocalPickupOrderScreen() {
   const router = useRouter();
   const { t } = useTranslation();
   const { colors, isDark } = useTheme();
-  const backToNewOrder = '/(customer)/create-order';
   const surfaceSoft = isDark ? '#1f2937' : '#f9fafb';
   const surfaceMuted = isDark ? '#111827' : '#f3f4f6';
   const borderSoft = isDark ? '#374151' : '#e5e7eb';
@@ -973,15 +972,6 @@ export default function LocalPickupOrderScreen() {
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <View style={[s.container, { backgroundColor: colors.background }]}>
         <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 40 }}>
-          <TouchableOpacity
-            style={[s.backInline, { backgroundColor: colors.card, borderColor: colors.border }]}
-            onPress={() => router.replace(backToNewOrder as never)}
-            activeOpacity={0.75}
-          >
-            <Ionicons name="chevron-back" size={18} color={colors.primary} />
-            <Text style={[s.backInlineText, { color: colors.primary }]}>{t('common.back')}</Text>
-          </TouchableOpacity>
-
           <Text style={[s.hint, { color: colors.textSecondary }]}>
             {t('localPickup.description')}
           </Text>
@@ -1269,18 +1259,6 @@ export default function LocalPickupOrderScreen() {
 
 const s = StyleSheet.create({
   container: { flex: 1 },
-  backInline: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    alignSelf: 'flex-start',
-    gap: 6,
-    borderRadius: 10,
-    borderWidth: StyleSheet.hairlineWidth,
-    paddingVertical: 8,
-    paddingHorizontal: 10,
-    marginBottom: 12,
-  },
-  backInlineText: { fontSize: 13, fontWeight: '700' },
   hint: { marginBottom: 16, fontSize: 14, lineHeight: 20 },
   card: { borderRadius: 12, padding: 16, marginBottom: 16 },
   cardTitle: { fontSize: 16, fontWeight: '700', marginBottom: 12 },

@@ -1200,6 +1200,22 @@ const ar = {
     addressNamePlaceholder: 'اسم هذا العنوان (مثال: المنزل، العمل)',
     addressNameTooShort: 'أدخل حرفين على الأقل لحفظ هذا العنوان.',
     addressNameSaved: 'تمت إضافة هذا العنوان إلى قائمتك.',
+    codOnlyBanner: 'طلبات {{country}} نقداً فقط حتى تنشئ محفظة {{country}}.',
+  },
+
+  multiWallet: {
+    promptTitle: 'عنوان في {{country}}',
+    promptBody: 'ليس لديك محفظة لـ {{country}} بعد ({{currency}}). أنشئ واحدة للدفع بالمحفظة، أو تابع نقداً فقط.',
+    createWallet: 'إنشاء محفظة {{country}}',
+    cashOnly: 'الدفع نقداً فقط (بدون محفظة)',
+    codOnlyBanner: 'طلبات {{country}} نقداً فقط حتى تنشئ محفظة {{country}}.',
+    walletRequired: 'أنشئ محفظة {{currency}} للدفع بالمحفظة.',
+    sameCountryRequired: 'يجب أن يكون الاستلام والتسليم في نفس البلد.',
+    sameCountryDetail: 'لقد اخترت {{firstCountry}}. هذا العنوان في {{secondCountry}}.',
+    addWallet: 'إضافة محفظة لبلد آخر',
+    selectCountry: 'اختر بلداً',
+    walletCreated: 'تم إنشاء المحفظة',
+    noMoreCountries: 'لديك بالفعل محفظة لكل البلدان المتاحة.',
   },
 
   locationShare: {

@@ -1214,6 +1214,22 @@ const fr = {
     addressNamePlaceholder: 'Nom de cette adresse (ex. Maison, Bureau)',
     addressNameTooShort: 'Saisissez au moins 2 caractères pour enregistrer cette adresse.',
     addressNameSaved: 'Cette adresse a été ajoutée à votre liste.',
+    codOnlyBanner: 'Les commandes en {{country}} sont en espèces uniquement jusqu\'à ce que vous créiez un portefeuille {{country}}.',
+  },
+
+  multiWallet: {
+    promptTitle: 'Adresse en {{country}}',
+    promptBody: 'Vous n\'avez pas encore de portefeuille pour {{country}} ({{currency}}). Créez-en un pour payer par portefeuille, ou continuez en espèces uniquement.',
+    createWallet: 'Créer un portefeuille {{country}}',
+    cashOnly: 'Payer en espèces uniquement (sans portefeuille)',
+    codOnlyBanner: 'Les commandes en {{country}} sont en espèces uniquement jusqu\'à ce que vous créiez un portefeuille {{country}}.',
+    walletRequired: 'Créez un portefeuille {{currency}} pour payer par portefeuille.',
+    sameCountryRequired: 'Le retrait et la livraison doivent être dans le même pays.',
+    sameCountryDetail: 'Vous avez sélectionné {{firstCountry}}. Cette adresse est en {{secondCountry}}.',
+    addWallet: 'Ajouter un portefeuille pour un autre pays',
+    selectCountry: 'Choisir un pays',
+    walletCreated: 'Portefeuille créé',
+    noMoreCountries: 'Vous avez déjà un portefeuille pour tous les pays disponibles.',
   },
 
   locationShare: {

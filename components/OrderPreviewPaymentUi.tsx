@@ -140,6 +140,7 @@ export function OrderPreviewPaymentSwitch({
   currencySymbol,
   orderTotalCoins,
   switching,
+  walletAllowed = true,
   onSwitchToCash,
   onSwitchToWallet,
   colors,
@@ -151,6 +152,7 @@ export function OrderPreviewPaymentSwitch({
   currencySymbol?: string;
   orderTotalCoins?: number;
   switching: boolean;
+  walletAllowed?: boolean;
   onSwitchToCash: () => void;
   onSwitchToWallet: () => void;
   colors: {
@@ -177,6 +179,7 @@ export function OrderPreviewPaymentSwitch({
         colors={colors}
         isDark={isDark}
       />
+      {walletAllowed ? (
       <TouchableOpacity
         style={[ui.switchBtn, { borderColor: colors.border, backgroundColor: colors.card }]}
         onPress={isCash ? onSwitchToWallet : onSwitchToCash}
@@ -195,6 +198,7 @@ export function OrderPreviewPaymentSwitch({
           </>
         )}
       </TouchableOpacity>
+      ) : null}
     </View>
   );
 }

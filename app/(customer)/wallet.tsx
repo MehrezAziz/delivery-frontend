@@ -11,11 +11,15 @@ import { useTranslation } from 'react-i18next';
 import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { walletService, coinsService } from '../../services/api';
 import type { Wallet, WalletTransaction, WithdrawalRequest, WithdrawalQuote, CoinTransferDto } from '../../services/api';
+import type { WalletsSummary } from '../../services/api/wallet.service';
+import { geographyService, type Country } from '../../services/api/geography.service';
 import { useTheme } from '../../contexts/ThemeContext';
+import { useAppNavigation } from '../../contexts/AppNavigationContext';
 import { pickScheduleDateTimeAndroid } from '../../utils/scheduleDateTimePicker';
 import { coinTransferStatusMeta } from '../../utils/coinTransferStatus';
 import { formatCoinSenderLine } from '../../utils/coinTransferSenderDisplay';
 import { GameEntrySection } from '../../components/games/GameEntrySection';
+import { hrefWithWalletId } from '../../utils/walletNavigation';
 
 type Tab = 'overview' | 'transactions' | 'withdrawals' | 'coin';
 
@@ -43,6 +47,22 @@ const STATUS_COLORS: Record<string, string> = {
   ON_REVIEW: '#6366f1',
 };
 
+const TAB_CONFIG: { key: Tab; label: string; icon: keyof typeof Ionicons.glyphMap; iconActive: keyof typeof Ionicons.glyphMap }[] = [
+  { key: 'overview', label: 'overview', icon: 'grid-outline', iconActive: 'grid' },
+  { key: 'transactions', label: 'transactions', icon: 'receipt-outline', iconActive: 'receipt' },
+  { key: 'withdrawals', label: 'withdrawals', icon: 'cash-outline', iconActive: 'cash' },
+  { key: 'coin', label: 'coin', icon: 'paper-plane-outline', iconActive: 'paper-plane' },
+];
+
+function txTypeIcon(type: string): { icon: keyof typeof Ionicons.glyphMap; bg: string; fg: string } {
+  const credit = ['TOP_UP', 'REFUND', 'BONUS', 'REFERRAL_REWARD', 'COIN_TRANSFER_RECEIVED', 'GAME_PRIZE'];
+  if (credit.includes(type)) return { icon: 'arrow-down-circle', bg: '#dcfce7', fg: '#16a34a' };
+  if (type.includes('WITHDRAWAL')) return { icon: 'arrow-up-circle', bg: '#ffedd5', fg: '#ea580c' };
+  if (type.includes('COIN_TRANSFER')) return { icon: 'paper-plane', bg: '#e0e7ff', fg: '#4f46e5' };
+  if (type === 'ORDER_PAYMENT') return { icon: 'cart', bg: '#dbeafe', fg: '#2563eb' };
+  return { icon: 'swap-horizontal', bg: '#f3f4f6', fg: '#6b7280' };
+}
+
 function walletParam(v: string | string[] | undefined): string {
   if (v == null) return '';
   return Array.isArray(v) ? (v[0] ?? '') : v;
@@ -59,6 +79,7 @@ function decodeURIComponentSafe(s: string): string {
 
 export default function WalletScreen() {
   const router = useRouter();
+  const { push: navPush } = useAppNavigation();
   const { colors, isDark } = useTheme();
   const { t } = useTranslation();
 
@@ -81,6 +102,12 @@ export default function WalletScreen() {
   };
   const [activeTab, setActiveTab] = useState<Tab>('overview');
   const [wallet, setWallet] = useState<Wallet | null>(null);
+  const [walletsSummary, setWalletsSummary] = useState<WalletsSummary | null>(null);
+  const [selectedWalletId, setSelectedWalletId] = useState<string | null>(null);
+  const selectedWalletIdRef = useRef<string | null>(null);
+  const [showAddWalletModal, setShowAddWalletModal] = useState(false);
+  const [allCountries, setAllCountries] = useState<Country[]>([]);
+  const [addWalletBusy, setAddWalletBusy] = useState(false);
   const [transactions, setTransactions] = useState<WalletTransaction[]>([]);
   const [withdrawals, setWithdrawals] = useState<WithdrawalRequest[]>([]);
   const [loading, setLoading] = useState(true);
@@ -155,11 +182,26 @@ export default function WalletScreen() {
     };
   }, [showWithdrawModal, withdrawPayout]);
 
-  const loadWallet = useCallback(async () => {
+  const refreshWalletScreen = useCallback(async (preferWalletId?: string) => {
     try {
       setLoading(true);
       setError(null);
-      const w = await walletService.getWallet();
+      const summary = await walletService.getWalletsSummary();
+      setWalletsSummary(summary);
+      const pickId = (preferWalletId && summary.wallets.some((w) => w.id === preferWalletId))
+        ? preferWalletId
+        : (selectedWalletIdRef.current && summary.wallets.some((w) => w.id === selectedWalletIdRef.current))
+          ? selectedWalletIdRef.current
+          : (summary.primaryWalletId ?? summary.wallets[0]?.id ?? null);
+      selectedWalletIdRef.current = pickId;
+      setSelectedWalletId(pickId);
+      if (!pickId) {
+        setWallet(null);
+        setError(t('common.something_went_wrong'));
+        return;
+      }
+      const picked = summary.wallets.find((w) => w.id === pickId)!;
+      const w = await walletService.getWallet(picked.countryId, picked.id);
       setWallet(w);
     } catch (e: any) {
       setError(e.message || t('common.something_went_wrong'));
@@ -168,29 +210,70 @@ export default function WalletScreen() {
     }
   }, [t]);
 
+  const selectWalletTab = useCallback(async (walletId: string) => {
+    selectedWalletIdRef.current = walletId;
+    setSelectedWalletId(walletId);
+    try {
+      const picked = walletsSummary?.wallets.find((w) => w.id === walletId);
+      if (!picked) {
+        await refreshWalletScreen(walletId);
+        return;
+      }
+      const w = await walletService.getWallet(picked.countryId, picked.id);
+      setWallet(w);
+    } catch (e: unknown) {
+      Alert.alert(t('common.error'), e instanceof Error ? e.message : t('common.something_went_wrong'));
+    }
+  }, [walletsSummary, refreshWalletScreen, t]);
+
+  const openAddWalletModal = useCallback(async () => {
+    try {
+      const countries = await geographyService.getCountries();
+      setAllCountries(countries);
+      setShowAddWalletModal(true);
+    } catch (e: unknown) {
+      Alert.alert(t('common.error'), e instanceof Error ? e.message : t('common.something_went_wrong'));
+    }
+  }, [t]);
+
+  const handleAddCountryWallet = useCallback(async (countryId: string) => {
+    setAddWalletBusy(true);
+    try {
+      const created = await walletService.createCountryWallet(countryId);
+      setShowAddWalletModal(false);
+      await refreshWalletScreen(created.id);
+      Alert.alert(t('multiWallet.walletCreated'), created.countryName || '');
+    } catch (e: unknown) {
+      Alert.alert(t('common.error'), e instanceof Error ? e.message : t('common.operationFailed'));
+    } finally {
+      setAddWalletBusy(false);
+    }
+  }, [refreshWalletScreen, t]);
+
   const loadTransactions = useCallback(async () => {
     try {
       setTxLoading(true);
-      const res = await walletService.getTransactions();
+      const w = wallet;
+      const res = await walletService.getTransactions(1, 20, w?.id, w?.countryId);
       setTransactions(res.transactions ?? []);
     } catch {
       // silent
     } finally {
       setTxLoading(false);
     }
-  }, []);
+  }, [wallet]);
 
   const loadWithdrawals = useCallback(async () => {
     try {
       setWdLoading(true);
-      const res = await walletService.getWithdrawals();
+      const res = await walletService.getWithdrawals(1, 20, wallet?.id, wallet?.countryId);
       setWithdrawals(res.requests ?? []);
     } catch {
       // silent
     } finally {
       setWdLoading(false);
     }
-  }, []);
+  }, [wallet]);
 
   const loadCoinTransfers = useCallback(async () => {
     try {
@@ -208,7 +291,7 @@ export default function WalletScreen() {
   // every render, which would recreate this callback and retrigger useFocusEffect in an infinite loop.
   useFocusEffect(
     useCallback(() => {
-      void loadWallet();
+      void refreshWalletScreen();
       void loadCoinTransfers();
 
       const p = paramsRef.current;
@@ -265,7 +348,7 @@ export default function WalletScreen() {
         })();
         routerRef.current.setParams({ referralBonus: undefined, amount: undefined } as never);
       }
-    }, [loadWallet, loadCoinTransfers]),
+    }, [refreshWalletScreen, loadCoinTransfers]),
   );
 
   const closeReferralBonusModal = () => setReferralBonusVisible(false);
@@ -333,7 +416,7 @@ export default function WalletScreen() {
     if (amount == null) return;
     setQuoteLoading(true);
     try {
-      const q = await walletService.getWithdrawalQuote(amount);
+      const q = await walletService.getWithdrawalQuote(amount, wallet?.id, wallet?.countryId);
       if (q.totalCoins > q.spendableCoins) {
         Alert.alert(
           t('wallet.insufficientBalance'),
@@ -366,6 +449,8 @@ export default function WalletScreen() {
         payoutBankName: bankName.trim(),
         payoutBankAccountRef: bankRef.trim(),
         saveBankDetailsToProfile: saveBankProfile,
+        walletId: wallet?.id,
+        countryId: wallet?.countryId,
       });
       setShowWithdrawModal(false);
       setWithdrawStep('edit');
@@ -400,7 +485,7 @@ export default function WalletScreen() {
             try {
               await walletService.cancelWithdrawal(requestId);
               await loadWithdrawals();
-              await loadWallet();
+              await refreshWalletScreen();
             } catch (e: unknown) {
               Alert.alert(t('common.error'), e instanceof Error ? e.message : t('common.operationFailed'));
             } finally {
@@ -478,10 +563,24 @@ export default function WalletScreen() {
       ? coinTransfers.filter((t) => t.senderUserId === myUserId)
       : coinTransfers;
 
+  const walletActionHref = useCallback(
+    (path: string) => hrefWithWalletId(path, selectedWalletId),
+    [selectedWalletId],
+  );
+
   if (loading) {
     return (
       <View style={[styles.container, { backgroundColor: colors.background }]}>
-        <View style={styles.center}><ActivityIndicator size="large" color={colors.primary} /></View>
+        <View style={styles.walletSkeletonWrap}>
+          <View style={[styles.balanceSkeleton, { backgroundColor: colors.skeleton }]} />
+          <View style={[styles.bannerSkeleton, { backgroundColor: colors.skeleton }]} />
+          <View style={[styles.tabsSkeleton, { backgroundColor: colors.skeleton }]} />
+          <View style={{ gap: 10, paddingHorizontal: 20 }}>
+            {[1, 2, 3].map((i) => (
+              <View key={i} style={[styles.rowSkeleton, { backgroundColor: colors.skeleton }]} />
+            ))}
+          </View>
+        </View>
       </View>
     );
   }
@@ -499,111 +598,147 @@ export default function WalletScreen() {
     );
   }
 
+  const tabLabel = (tab: Tab) =>
+    tab === 'overview'
+      ? t('driverProfile.overview')
+      : tab === 'transactions'
+        ? t('driverTransactions.title')
+        : tab === 'withdrawals'
+          ? t('driverEarnings.pendingPayout')
+          : t('sendCoins.send');
+
+  const quickActions = [
+    { key: 'buy', icon: 'add-circle-outline' as const, label: t('wallet.buyCoins'), onPress: () => navPush(walletActionHref('/(customer)/buy-coins')) },
+    { key: 'send', icon: 'paper-plane-outline' as const, label: t('sendCoins.send'), onPress: () => navPush(walletActionHref('/(customer)/send-coins')) },
+    { key: 'scan', icon: 'scan-outline' as const, label: t('wallet.scan'), onPress: () => Alert.alert(t('wallet.scan'), t('wallet.scanComingSoon')) },
+    { key: 'more', icon: 'ellipsis-horizontal' as const, label: t('common.menu'), onPress: () => setWalletQuickMore((v) => !v) },
+  ];
+
+  const quickMoreActions = [
+    { key: 'withdraw', icon: 'arrow-down-circle-outline' as const, label: t('wallet.requestWithdrawal'), onPress: () => { setWalletQuickMore(false); setWithdrawStep('edit'); setShowWithdrawModal(true); } },
+    { key: 'support', icon: 'help-circle-outline' as const, label: t('customerProfile.support'), onPress: () => { setWalletQuickMore(false); router.push('/(customer)/support'); } },
+    { key: 'news', icon: 'newspaper-outline' as const, label: t('wallet.news'), onPress: () => { setWalletQuickMore(false); Alert.alert(t('wallet.news'), t('wallet.newsComingSoon')); } },
+  ];
+
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      {/* Balance card */}
-      <View style={[styles.balanceCard, { backgroundColor: colors.primary }]}>
-        <Text style={styles.balanceLabel}>{t('wallet.available')}</Text>
-        <Text style={styles.balanceAmount}>
-          {(wallet.spendable ?? wallet.balance).toFixed(2)}{' '}
-          <Text style={styles.currency}>{t('wallet.coins')}</Text>
-        </Text>
-        {(wallet.lockedForTransfers ?? 0) > 0 && (
-          <Text style={[styles.lockedHint, { color: 'rgba(255,255,255,0.85)' }]}>
-            {t('wallet.reservedForSends', { amount: wallet.lockedForTransfers!.toFixed(2) })}
-          </Text>
-        )}
-        {wallet.discount > 0 && (
-          <Text style={styles.discountText}>🎁 {wallet.discount.toFixed(2)} {t('wallet.coins')}</Text>
-        )}
-        <View style={styles.walletQuickWrap}>
-          <View style={styles.walletQuickRow}>
-            <TouchableOpacity
-              style={styles.walletQuickItem}
-              onPress={() => router.push('/(customer)/buy-coins')}
-              activeOpacity={0.85}
+      {/* Balance hero */}
+      <View style={[styles.balanceCardOuter, { shadowColor: isDark ? '#000' : colors.primary }]}>
+        <View style={[styles.balanceCard, { backgroundColor: isDark ? '#0369a1' : colors.primary }]}>
+          <View style={styles.balanceDecor1} />
+          <View style={styles.balanceDecor2} />
+
+          {(walletsSummary?.wallets.length ?? 0) > 0 ? (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.walletCountryRow}
+              style={styles.walletCountryScroll}
             >
-              <View style={styles.walletQuickCircle}>
-                <Text style={styles.walletQuickGlyph}>+</Text>
-              </View>
-              <Text style={styles.walletQuickLabel}>{t('wallet.buyCoins')}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.walletQuickItem}
-              onPress={() => router.push('/(customer)/send-coins')}
-              activeOpacity={0.85}
-            >
-              <View style={styles.walletQuickCircle}>
-                <Ionicons name="arrow-forward" size={22} color="rgba(255,255,255,0.95)" />
-              </View>
-              <Text style={styles.walletQuickLabel}>{t('sendCoins.send')}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.walletQuickItem}
-              onPress={() => Alert.alert(t('wallet.scan'), t('wallet.scanComingSoon'))}
-              activeOpacity={0.85}
-            >
-              <View style={styles.walletQuickCircle}>
-                <Ionicons name="scan-outline" size={22} color="rgba(255,255,255,0.95)" />
-              </View>
-              <Text style={styles.walletQuickLabel}>{t('wallet.scan')}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.walletQuickItem}
-              onPress={() => setWalletQuickMore((v) => !v)}
-              activeOpacity={0.85}
-            >
-              <View style={styles.walletQuickCircle}>
-                <Text style={styles.walletQuickGlyph}>···</Text>
-              </View>
-              <Text style={styles.walletQuickLabel}>{t('common.menu')}</Text>
-            </TouchableOpacity>
+              {walletsSummary!.wallets.map((w) => {
+                const active = w.id === selectedWalletId;
+                return (
+                  <TouchableOpacity
+                    key={w.id}
+                    style={[styles.walletCountryChip, active && styles.walletCountryChipActive]}
+                    onPress={() => { void selectWalletTab(w.id); }}
+                    activeOpacity={0.85}
+                  >
+                    <Text style={[styles.walletCountryChipText, active && styles.walletCountryChipTextActive]}>
+                      {w.countryName || w.currencyCode || w.currency}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+              <TouchableOpacity
+                style={styles.walletCountryAddChip}
+                onPress={() => { void openAddWalletModal(); }}
+                activeOpacity={0.85}
+              >
+                <Ionicons name="add" size={18} color="rgba(255,255,255,0.95)" />
+              </TouchableOpacity>
+            </ScrollView>
+          ) : null}
+
+          <View style={styles.balanceHeaderRow}>
+            <View style={styles.balanceIconWrap}>
+              <Ionicons name="wallet" size={22} color="rgba(255,255,255,0.95)" />
+            </View>
+            <Text style={styles.balanceLabel}>
+              {wallet.countryName ? `${wallet.countryName} · ` : ''}{t('wallet.available')}
+            </Text>
           </View>
-          {walletQuickMore && (
-            <View style={[styles.walletQuickRow, styles.walletQuickMoreRow]}>
-              <TouchableOpacity
-                style={styles.walletQuickItem}
-                onPress={() => {
-                  setWalletQuickMore(false);
-                  setWithdrawStep('edit');
-                  setShowWithdrawModal(true);
-                }}
-                activeOpacity={0.85}
-              >
-                <View style={styles.walletQuickCircle}>
-                  <Text style={styles.walletQuickGlyph}>−</Text>
-                </View>
-                <Text style={styles.walletQuickLabel}>{t('wallet.requestWithdrawal')}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.walletQuickItem}
-                onPress={() => {
-                  setWalletQuickMore(false);
-                  router.push('/(customer)/support');
-                }}
-                activeOpacity={0.85}
-              >
-                <View style={styles.walletQuickCircle}>
-                  <Text style={styles.walletQuickGlyph}>?</Text>
-                </View>
-                <Text style={styles.walletQuickLabel}>{t('customerProfile.support')}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.walletQuickItem}
-                onPress={() => {
-                  setWalletQuickMore(false);
-                  Alert.alert(t('wallet.news'), t('wallet.newsComingSoon'));
-                }}
-                activeOpacity={0.85}
-              >
-                <View style={styles.walletQuickCircle}>
-                  <Ionicons name="newspaper-outline" size={20} color="rgba(255,255,255,0.95)" />
-                </View>
-                <Text style={styles.walletQuickLabel}>{t('wallet.news')}</Text>
-              </TouchableOpacity>
-              <View style={styles.walletQuickItem} />
+
+          <Text style={styles.balanceAmount}>
+            {(wallet.spendable ?? wallet.balance).toFixed(2)}
+            <Text style={styles.currency}> {t('wallet.coins')}</Text>
+          </Text>
+
+          {wallet.coinsToLocalFiat ? (
+            <TouchableOpacity
+              activeOpacity={0.8}
+              onPress={() => setShowCoinFiatModal(true)}
+              style={styles.fiatHintPill}
+            >
+              <Ionicons name="cash-outline" size={14} color="rgba(255,255,255,0.9)" />
+              <Text style={styles.fiatHintText}>
+                ≈ {wallet.coinsToLocalFiat.currencySymbol}{wallet.coinsToLocalFiat.spendableAsLocalFiat.toFixed(2)} {wallet.coinsToLocalFiat.currencyCode}
+              </Text>
+              <Ionicons name="chevron-forward" size={14} color="rgba(255,255,255,0.7)" />
+            </TouchableOpacity>
+          ) : null}
+
+          {(wallet.lockedForTransfers ?? 0) > 0 && (
+            <View style={styles.lockedPill}>
+              <Ionicons name="lock-closed-outline" size={13} color="rgba(255,255,255,0.9)" />
+              <Text style={styles.lockedHint}>
+                {t('wallet.reservedForSends', { amount: wallet.lockedForTransfers!.toFixed(2) })}
+              </Text>
             </View>
           )}
+
+          {wallet.discount > 0 && (
+            <View style={styles.discountPill}>
+              <Ionicons name="gift-outline" size={14} color="#fef08a" />
+              <Text style={styles.discountText}>{wallet.discount.toFixed(2)} {t('wallet.coins')}</Text>
+            </View>
+          )}
+
+          <View style={styles.walletQuickWrap}>
+            <View style={styles.walletQuickRow}>
+              {quickActions.map((action) => (
+                <TouchableOpacity
+                  key={action.key}
+                  style={styles.walletQuickItem}
+                  onPress={action.onPress}
+                  activeOpacity={0.85}
+                >
+                  <View style={styles.walletQuickCircle}>
+                    <Ionicons name={action.icon} size={22} color="rgba(255,255,255,0.95)" />
+                  </View>
+                  <Text style={styles.walletQuickLabel} numberOfLines={2}>{action.label}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            {walletQuickMore && (
+              <View style={[styles.walletQuickRow, styles.walletQuickMoreRow]}>
+                {quickMoreActions.map((action) => (
+                  <TouchableOpacity
+                    key={action.key}
+                    style={styles.walletQuickItem}
+                    onPress={action.onPress}
+                    activeOpacity={0.85}
+                  >
+                    <View style={styles.walletQuickCircle}>
+                      <Ionicons name={action.icon} size={20} color="rgba(255,255,255,0.95)" />
+                    </View>
+                    <Text style={styles.walletQuickLabel} numberOfLines={2}>{action.label}</Text>
+                  </TouchableOpacity>
+                ))}
+                <View style={styles.walletQuickItem} />
+              </View>
+            )}
+          </View>
         </View>
       </View>
 
@@ -611,39 +746,56 @@ export default function WalletScreen() {
         activeOpacity={0.92}
         accessibilityRole="button"
         accessibilityLabel={t('wallet.buyCoins')}
-        onPress={() => router.push('/(customer)/buy-coins')}
-        style={[styles.comingSoonBanner, { backgroundColor: colors.card, borderColor: colors.border }]}
+        onPress={() => navPush(walletActionHref('/(customer)/buy-coins'))}
+        style={[styles.promoBanner, { backgroundColor: colors.card, borderColor: colors.border }]}
       >
-        <Text style={[styles.comingSoonTitle, { color: colors.text }]}>{t('wallet.buyCoins')}</Text>
-        <Text style={[styles.comingSoonText, { color: colors.textSecondary }]}>
-          {t('buyCoins.title')}. <Text style={{ fontWeight: '700', color: colors.primary }}>{t('wallet.buyCoins')}.</Text>
-        </Text>
+        <View style={[styles.promoIconWrap, { backgroundColor: isDark ? '#0c4a6e' : colors.primaryLight }]}>
+          <Ionicons name="sparkles" size={22} color={colors.primary} />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={[styles.promoTitle, { color: colors.text }]}>{t('wallet.buyCoins')}</Text>
+          <Text style={[styles.promoSub, { color: colors.textSecondary }]} numberOfLines={2}>
+            {t('buyCoins.title')}
+          </Text>
+        </View>
+        <Ionicons name="chevron-forward" size={20} color={colors.primary} />
       </TouchableOpacity>
 
-      <View style={{ paddingHorizontal: 16, paddingTop: 8 }}>
+      <View style={{ paddingHorizontal: 16, paddingTop: 4 }}>
         <GameEntrySection placement="CUSTOMER_WALLET" role="customer" />
       </View>
 
       {/* Tabs */}
-      <View style={[styles.tabs, { backgroundColor: colors.card }]}>
-        {(['overview', 'transactions', 'withdrawals', 'coin'] as Tab[]).map((tab) => (
-          <TouchableOpacity
-            key={tab}
-            style={[styles.tab, activeTab === tab && [styles.tabActive, { backgroundColor: colors.primary }]]}
-            onPress={() => setActiveTab(tab)}
-          >
-            <Text style={[styles.tabText, { color: colors.textSecondary }, activeTab === tab && styles.tabTextActive]}>
-              {tab === 'overview'
-                ? t('driverProfile.overview')
-                : tab === 'transactions'
-                  ? t('driverTransactions.title')
-                  : tab === 'withdrawals'
-                    ? t('driverEarnings.pendingPayout')
-                    : t('sendCoins.send')}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </View>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.tabsScrollContent}
+        style={styles.tabsScroll}
+      >
+        <View style={[styles.tabs, { backgroundColor: isDark ? colors.surfaceVariant : colors.surfaceVariant, borderColor: colors.border }]}>
+          {TAB_CONFIG.map(({ key, icon, iconActive }) => {
+            const active = activeTab === key;
+            return (
+              <TouchableOpacity
+                key={key}
+                style={[styles.tab, active && [styles.tabActive, { backgroundColor: colors.primary }]]}
+                onPress={() => setActiveTab(key)}
+                activeOpacity={0.85}
+              >
+                <Ionicons
+                  name={active ? iconActive : icon}
+                  size={15}
+                  color={active ? '#fff' : colors.textSecondary}
+                  style={{ marginRight: 5 }}
+                />
+                <Text style={[styles.tabText, { color: colors.textSecondary }, active && styles.tabTextActive]}>
+                  {tabLabel(key)}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      </ScrollView>
 
       {sendsOnlyFilter && activeTab === 'coin' && (
         <View
@@ -664,43 +816,82 @@ export default function WalletScreen() {
 
         {/* Overview */}
         {activeTab === 'overview' && (
-          <View style={{ gap: 16 }}>
+          <View style={{ gap: 14 }}>
+            <View style={styles.overviewStatsRow}>
+              <View style={[styles.statCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                <View style={[styles.statIconWrap, { backgroundColor: isDark ? '#0c4a6e' : colors.primaryLight }]}>
+                  <Ionicons name="wallet-outline" size={18} color={colors.primary} />
+                </View>
+                <Text style={[styles.statLabel, { color: colors.textSecondary }]}>{t('wallet.available')}</Text>
+                <Text style={[styles.statValue, { color: colors.text }]}>
+                  {(wallet.spendable ?? wallet.balance).toFixed(2)}
+                </Text>
+              </View>
+              <View style={[styles.statCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                <View style={[styles.statIconWrap, { backgroundColor: isDark ? '#422006' : colors.warningBg }]}>
+                  <Ionicons name="lock-closed-outline" size={18} color={colors.warning} />
+                </View>
+                <Text style={[styles.statLabel, { color: colors.textSecondary }]}>{t('sendCoins.send')}</Text>
+                <Text style={[styles.statValue, { color: colors.text }]}>
+                  {(wallet.lockedForTransfers ?? 0).toFixed(2)}
+                </Text>
+              </View>
+            </View>
+
             <TouchableOpacity
-              style={[styles.infoCard, { backgroundColor: colors.card }]}
+              style={[styles.infoCard, { backgroundColor: colors.card, borderColor: colors.border }]}
               activeOpacity={0.75}
               onPress={() => {
                 if (!wallet) return;
                 if (wallet.coinsToLocalFiat) setShowCoinFiatModal(true);
-                else {
-                  Alert.alert(
-                    t('wallet.cashEquivalent'),
-                    t('wallet.cashEquivalent'),
-                  );
-                }
+                else Alert.alert(t('wallet.cashEquivalent'), t('wallet.cashEquivalent'));
               }}
             >
+              <View style={[styles.infoCardIcon, { backgroundColor: isDark ? '#14532d' : colors.successBg }]}>
+                <Ionicons name="cash-outline" size={20} color={colors.success} />
+              </View>
               <View style={{ flex: 1 }}>
                 <Text style={[styles.infoLabel, { color: colors.textSecondary }]}>{t('wallet.currency')}</Text>
-                <Text style={{ color: colors.textTertiary, fontSize: 12, marginTop: 4 }}>
+                <Text style={[styles.infoValue, { color: colors.text }]}>{wallet.currency}</Text>
+                <Text style={{ color: colors.textTertiary, fontSize: 12, marginTop: 2 }}>
                   {t('wallet.tapForEstimate')}
                 </Text>
               </View>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                <Text style={[styles.infoValue, { color: colors.text }]}>{wallet.currency}</Text>
-                <Ionicons name="chevron-forward" size={18} color={colors.textTertiary} />
+              <Ionicons name="chevron-forward" size={18} color={colors.textTertiary} />
+            </TouchableOpacity>
+
+            <View style={[styles.infoCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+              <View style={[styles.infoCardIcon, { backgroundColor: isDark ? '#1e3a5f' : '#dbeafe' }]}>
+                <Ionicons name="time-outline" size={20} color="#2563eb" />
               </View>
-            </TouchableOpacity>
-            <View style={[styles.infoCard, { backgroundColor: colors.card }]}>
-              <Text style={[styles.infoLabel, { color: colors.textSecondary }]}>{t('common.refresh')}</Text>
-              <Text style={[styles.infoValue, { color: colors.text }]}>{formatDate(wallet.updatedAt)}</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.infoLabel, { color: colors.textSecondary }]}>{t('common.refresh')}</Text>
+                <Text style={[styles.infoValue, { color: colors.text }]}>{formatDate(wallet.updatedAt)}</Text>
+              </View>
             </View>
-            <TouchableOpacity style={[styles.navCard, { backgroundColor: colors.card }]} onPress={() => setActiveTab('transactions')}>
-              <Text style={[styles.navCardText, { color: colors.text }]}>📋  {t('wallet.viewTransactionHistory')}</Text>
-              <Text style={[styles.navArrow, { color: colors.primary }]}>→</Text>
+
+            <TouchableOpacity
+              style={[styles.navCard, { backgroundColor: colors.card, borderColor: colors.border }]}
+              onPress={() => setActiveTab('transactions')}
+              activeOpacity={0.8}
+            >
+              <View style={[styles.navCardIcon, { backgroundColor: isDark ? '#312e81' : '#e0e7ff' }]}>
+                <Ionicons name="receipt-outline" size={20} color="#4f46e5" />
+              </View>
+              <Text style={[styles.navCardText, { color: colors.text }]}>{t('wallet.viewTransactionHistory')}</Text>
+              <Ionicons name="chevron-forward" size={18} color={colors.primary} />
             </TouchableOpacity>
-            <TouchableOpacity style={[styles.navCard, { backgroundColor: colors.card }]} onPress={() => setActiveTab('withdrawals')}>
-              <Text style={[styles.navCardText, { color: colors.text }]}>💸  {t('wallet.requestWithdrawal')}</Text>
-              <Text style={[styles.navArrow, { color: colors.primary }]}>→</Text>
+
+            <TouchableOpacity
+              style={[styles.navCard, { backgroundColor: colors.card, borderColor: colors.border }]}
+              onPress={() => setActiveTab('withdrawals')}
+              activeOpacity={0.8}
+            >
+              <View style={[styles.navCardIcon, { backgroundColor: isDark ? '#422006' : '#ffedd5' }]}>
+                <Ionicons name="cash-outline" size={20} color="#ea580c" />
+              </View>
+              <Text style={[styles.navCardText, { color: colors.text }]}>{t('wallet.requestWithdrawal')}</Text>
+              <Ionicons name="chevron-forward" size={18} color={colors.primary} />
             </TouchableOpacity>
           </View>
         )}
@@ -711,12 +902,21 @@ export default function WalletScreen() {
             <ActivityIndicator color="#0284c7" style={{ marginTop: 40 }} />
           ) : transactions.length === 0 ? (
             <View style={styles.empty}>
-              <Text style={styles.emptyIcon}>📋</Text>
-              <Text style={[styles.emptyText, { color: colors.textTertiary }]}>{t('wallet.noTransactions')}</Text>
+              <View style={[styles.emptyIconWrap, { backgroundColor: isDark ? colors.surfaceVariant : colors.surfaceVariant }]}>
+                <Ionicons name="receipt-outline" size={36} color={colors.textTertiary} />
+              </View>
+              <Text style={[styles.emptyTitle, { color: colors.text }]}>{t('wallet.noTransactions')}</Text>
+              <Text style={[styles.emptyText, { color: colors.textTertiary }]}>{t('wallet.viewTransactionHistory')}</Text>
             </View>
           ) : (
-            transactions.map((tx) => (
-              <View key={tx.id} style={[styles.txCard, { backgroundColor: colors.card }]}>
+            transactions.map((tx) => {
+              const meta = txTypeIcon(tx.type);
+              const isDarkIcon = isDark;
+              return (
+              <View key={tx.id} style={[styles.txCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                <View style={[styles.txIconWrap, { backgroundColor: isDarkIcon ? colors.surfaceVariant : meta.bg }]}>
+                  <Ionicons name={meta.icon} size={20} color={isDarkIcon ? colors.primary : meta.fg} />
+                </View>
                 <View style={styles.txLeft}>
                   <Text style={[styles.txType, { color: colors.text }]}>{localizeTxType(tx.type)}</Text>
                   <Text style={[styles.txDate, { color: colors.textTertiary }]}>{formatDate(tx.createdAt)}</Text>
@@ -724,17 +924,18 @@ export default function WalletScreen() {
                 <View style={styles.txRight}>
                   <Text style={[
                     styles.txAmount,
-                    ['TOP_UP','REFUND','BONUS','REFERRAL_REWARD','COIN_TRANSFER_RECEIVED'].includes(tx.type)
+                    ['TOP_UP','REFUND','BONUS','REFERRAL_REWARD','COIN_TRANSFER_RECEIVED','GAME_PRIZE'].includes(tx.type)
                       ? styles.txCredit : styles.txDebit,
                   ]}>
-                    {formatAmount(tx.amount, tx.type)} {t('wallet.coins')}
+                    {formatAmount(tx.amount, tx.type)}
                   </Text>
+                  <Text style={[styles.txCoinUnit, { color: colors.textTertiary }]}>{t('wallet.coins')}</Text>
                   <View style={[styles.statusBadge, { backgroundColor: STATUS_COLORS[tx.status] + '22' }]}>
                     <Text style={[styles.statusText, { color: STATUS_COLORS[tx.status] }]}>{tx.status}</Text>
                   </View>
                 </View>
               </View>
-            ))
+            );})
           )
         )}
 
@@ -744,22 +945,28 @@ export default function WalletScreen() {
             <ActivityIndicator color="#0284c7" style={{ marginTop: 40 }} />
           ) : withdrawals.length === 0 ? (
             <View style={styles.empty}>
-              <Text style={styles.emptyIcon}>💸</Text>
-              <Text style={[styles.emptyText, { color: colors.textTertiary }]}>{t('wallet.noTransactions')}</Text>
+              <View style={[styles.emptyIconWrap, { backgroundColor: colors.surfaceVariant }]}>
+                <Ionicons name="cash-outline" size={36} color={colors.textTertiary} />
+              </View>
+              <Text style={[styles.emptyTitle, { color: colors.text }]}>{t('wallet.noTransactions')}</Text>
               <TouchableOpacity
-                style={styles.newWithdrawBtn}
+                style={[styles.newWithdrawBtn, { backgroundColor: colors.primary }]}
                 onPress={() => {
                   setWithdrawStep('edit');
                   setShowWithdrawModal(true);
                 }}
               >
+                <Ionicons name="add" size={18} color="#fff" style={{ marginRight: 6 }} />
                 <Text style={styles.newWithdrawBtnText}>{t('wallet.requestWithdrawal')}</Text>
               </TouchableOpacity>
             </View>
           ) : (
             <>
               {withdrawals.map((wd) => (
-                <View key={wd.id} style={[styles.txCard, { backgroundColor: colors.card }]}>
+                <View key={wd.id} style={[styles.txCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                  <View style={[styles.txIconWrap, { backgroundColor: isDark ? colors.surfaceVariant : '#ffedd5' }]}>
+                    <Ionicons name="arrow-up-circle-outline" size={20} color={isDark ? colors.primary : '#ea580c'} />
+                  </View>
                   <View style={styles.txLeft}>
                     <Text style={[styles.wdAmountLine, { color: colors.text }]}>
                       {wd.amount.toFixed(2)} <Text style={styles.wdAmountCurrency}>{t('wallet.coins')}</Text>
@@ -812,13 +1019,14 @@ export default function WalletScreen() {
                 </View>
               ))}
               <TouchableOpacity
-                style={styles.newWithdrawBtn}
+                style={[styles.newWithdrawBtn, { backgroundColor: colors.primary }]}
                 onPress={() => {
                   setWithdrawStep('edit');
                   setShowWithdrawModal(true);
                 }}
               >
-                <Text style={styles.newWithdrawBtnText}>+ {t('wallet.requestWithdrawal')}</Text>
+                <Ionicons name="add" size={18} color="#fff" style={{ marginRight: 6 }} />
+                <Text style={styles.newWithdrawBtnText}>{t('wallet.requestWithdrawal')}</Text>
               </TouchableOpacity>
             </>
           )
@@ -829,16 +1037,17 @@ export default function WalletScreen() {
             <ActivityIndicator color="#0284c7" style={{ marginTop: 40 }} />
           ) : coinListFiltered.length === 0 ? (
             <View style={styles.empty}>
-              <Text style={styles.emptyIcon}>↗️</Text>
-              <Text style={[styles.emptyText, { color: colors.textTertiary }]}>
-                {sendsOnlyFilter ? t('wallet.noTransactions') : t('wallet.noTransactions')}
-              </Text>
+              <View style={[styles.emptyIconWrap, { backgroundColor: colors.surfaceVariant }]}>
+                <Ionicons name="paper-plane-outline" size={36} color={colors.textTertiary} />
+              </View>
+              <Text style={[styles.emptyTitle, { color: colors.text }]}>{t('wallet.noTransactions')}</Text>
               {!sendsOnlyFilter ? (
-                <TouchableOpacity style={styles.newWithdrawBtn} onPress={() => router.push('/(customer)/send-coins')}>
+                <TouchableOpacity style={[styles.newWithdrawBtn, { backgroundColor: colors.primary }]} onPress={() => navPush(walletActionHref('/(customer)/send-coins'))}>
+                  <Ionicons name="paper-plane" size={16} color="#fff" style={{ marginRight: 6 }} />
                   <Text style={styles.newWithdrawBtnText}>{t('sendCoins.send')}</Text>
                 </TouchableOpacity>
               ) : (
-                <TouchableOpacity style={styles.newWithdrawBtn} onPress={() => setSendsOnlyFilter(false)}>
+                <TouchableOpacity style={[styles.newWithdrawBtn, { backgroundColor: colors.primary }]} onPress={() => setSendsOnlyFilter(false)}>
                   <Text style={styles.newWithdrawBtnText}>{t('common.showAll')}</Text>
                 </TouchableOpacity>
               )}
@@ -937,7 +1146,7 @@ export default function WalletScreen() {
                                     try {
                                       await coinsService.cancelTransfer(tx.id);
                                       await loadCoinTransfers();
-                                      await loadWallet();
+                                      await refreshWalletScreen();
                                     } catch (e: unknown) {
                                       Alert.alert(t('common.error'), e instanceof Error ? e.message : t('common.operationFailed'));
                                     } finally {
@@ -957,7 +1166,8 @@ export default function WalletScreen() {
                 </View>
               );
               })}
-              <TouchableOpacity style={styles.newWithdrawBtn} onPress={() => router.push('/(customer)/send-coins')}>
+              <TouchableOpacity style={[styles.newWithdrawBtn, { backgroundColor: colors.primary }]} onPress={() => navPush(walletActionHref('/(customer)/send-coins'))}>
+                <Ionicons name="add" size={18} color="#fff" style={{ marginRight: 6 }} />
                 <Text style={styles.newWithdrawBtnText}>{t('wallet.newSend')}</Text>
               </TouchableOpacity>
             </>
@@ -1341,6 +1551,42 @@ export default function WalletScreen() {
           </Pressable>
         </Pressable>
       </Modal>
+
+      <Modal visible={showAddWalletModal} transparent animationType="slide" onRequestClose={() => setShowAddWalletModal(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={[styles.addWalletSheet, { backgroundColor: colors.card }]}>
+            <View style={styles.addWalletHead}>
+              <Text style={[styles.modalTitle, { color: colors.text }]}>{t('multiWallet.addWallet')}</Text>
+              <TouchableOpacity onPress={() => setShowAddWalletModal(false)} hitSlop={10}>
+                <Ionicons name="close" size={24} color={colors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+            {addWalletBusy ? (
+              <ActivityIndicator color={colors.primary} style={{ marginVertical: 24 }} />
+            ) : (
+              <ScrollView style={{ maxHeight: 360 }}>
+                {allCountries
+                  .filter((c) => !walletsSummary?.wallets.some((w) => w.countryId === c.id))
+                  .map((c) => (
+                    <TouchableOpacity
+                      key={c.id}
+                      style={[styles.addWalletRow, { borderBottomColor: colors.border }]}
+                      onPress={() => { void handleAddCountryWallet(c.id); }}
+                    >
+                      <Text style={[styles.addWalletRowTitle, { color: colors.text }]}>{c.name}</Text>
+                      <Text style={{ color: colors.textSecondary, fontSize: 13 }}>{c.currencyCode}</Text>
+                    </TouchableOpacity>
+                  ))}
+                {allCountries.filter((c) => !walletsSummary?.wallets.some((w) => w.countryId === c.id)).length === 0 ? (
+                  <Text style={{ color: colors.textSecondary, textAlign: 'center', padding: 20 }}>
+                    {t('multiWallet.noMoreCountries')}
+                  </Text>
+                ) : null}
+              </ScrollView>
+            )}
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -1349,34 +1595,121 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f9fafb' },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 16 },
   errorText: { color: '#6b7280', fontSize: 16, textAlign: 'center' },
-  setupBtn: { backgroundColor: '#0284c7', paddingHorizontal: 24, paddingVertical: 12, borderRadius: 8 },
+  setupBtn: { backgroundColor: '#0284c7', paddingHorizontal: 24, paddingVertical: 12, borderRadius: 12 },
   setupBtnText: { color: '#fff', fontWeight: '600', fontSize: 15 },
 
+  walletSkeletonWrap: { paddingTop: 12, gap: 14 },
+  balanceSkeleton: { marginHorizontal: 20, height: 220, borderRadius: 24 },
+  bannerSkeleton: { marginHorizontal: 20, height: 72, borderRadius: 16 },
+  tabsSkeleton: { marginHorizontal: 20, height: 44, borderRadius: 14 },
+  rowSkeleton: { height: 72, borderRadius: 14 },
+
+  balanceCardOuter: {
+    marginHorizontal: 16,
+    marginTop: 10,
+    marginBottom: 6,
+    borderRadius: 24,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.22,
+    shadowRadius: 16,
+    elevation: 8,
+  },
   balanceCard: {
-    marginHorizontal: 20,
-    marginTop: 8,
-    marginBottom: 4,
-    backgroundColor: '#0284c7',
-    borderRadius: 20,
-    padding: 24,
+    borderRadius: 24,
+    padding: 22,
     alignItems: 'center',
     gap: 8,
+    overflow: 'hidden',
   },
-  balanceLabel: { color: 'rgba(255,255,255,0.55)', fontSize: 13, fontWeight: '600' },
-  balanceAmount: { color: 'rgba(255,255,255,0.92)', fontSize: 40, fontWeight: 'bold' },
-  currency: { fontSize: 20, fontWeight: '600', color: 'rgba(255,255,255,0.65)' },
-  discountText: { color: 'rgba(255,255,255,0.9)', fontSize: 13 },
-  withdrawBtn: {
-    marginTop: 8,
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    paddingHorizontal: 24,
-    paddingVertical: 10,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.4)',
+  balanceDecor1: {
+    position: 'absolute',
+    top: -40,
+    right: -30,
+    width: 140,
+    height: 140,
+    borderRadius: 70,
+    backgroundColor: 'rgba(255,255,255,0.08)',
   },
-  withdrawBtnText: { color: '#fff', fontWeight: '600', fontSize: 15 },
-  walletQuickWrap: { width: '100%', marginTop: 8, paddingHorizontal: 4 },
+  balanceDecor2: {
+    position: 'absolute',
+    bottom: -50,
+    left: -20,
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+  },
+  balanceHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 4,
+  },
+  balanceIconWrap: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  walletCountryScroll: { alignSelf: 'stretch', marginBottom: 6, maxHeight: 36, zIndex: 1 },
+  walletCountryRow: { gap: 8, paddingBottom: 4, alignItems: 'center' },
+  walletCountryChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+  },
+  walletCountryChipActive: { backgroundColor: 'rgba(255,255,255,0.95)' },
+  walletCountryChipText: { color: 'rgba(255,255,255,0.92)', fontSize: 13, fontWeight: '700' },
+  walletCountryChipTextActive: { color: '#0284c7' },
+  walletCountryAddChip: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.22)',
+  },
+  balanceLabel: { color: 'rgba(255,255,255,0.75)', fontSize: 13, fontWeight: '600' },
+  balanceAmount: { color: '#fff', fontSize: 42, fontWeight: '800', letterSpacing: -1, zIndex: 1 },
+  currency: { fontSize: 18, fontWeight: '600', color: 'rgba(255,255,255,0.75)' },
+  fiatHintPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(255,255,255,0.14)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
+    marginTop: 2,
+    zIndex: 1,
+  },
+  fiatHintText: { color: 'rgba(255,255,255,0.92)', fontSize: 13, fontWeight: '600' },
+  lockedPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(0,0,0,0.12)',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 999,
+    zIndex: 1,
+  },
+  lockedHint: { fontSize: 12, color: 'rgba(255,255,255,0.88)' },
+  discountPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(254,240,138,0.2)',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 999,
+    zIndex: 1,
+  },
+  discountText: { color: '#fef08a', fontSize: 13, fontWeight: '600' },
+  walletQuickWrap: { width: '100%', marginTop: 10, paddingHorizontal: 2, zIndex: 1 },
   walletQuickRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -1386,72 +1719,142 @@ const styles = StyleSheet.create({
   walletQuickMoreRow: { marginTop: 14, paddingTop: 14, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: 'rgba(255,255,255,0.25)' },
   walletQuickItem: { flex: 1, alignItems: 'center', maxWidth: '25%' },
   walletQuickCircle: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    backgroundColor: 'rgba(255,255,255,0.22)',
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: 'rgba(255,255,255,0.2)',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.38)',
+    borderColor: 'rgba(255,255,255,0.32)',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  walletQuickGlyph: { color: 'rgba(255,255,255,0.95)', fontSize: 22, fontWeight: '700', marginTop: -2 },
   walletQuickLabel: {
-    marginTop: 8,
+    marginTop: 7,
     color: 'rgba(255,255,255,0.92)',
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '700',
     letterSpacing: 0.2,
     textAlign: 'center',
+    lineHeight: 13,
   },
-  lockedHint: { fontSize: 12, textAlign: 'center', marginTop: 2 },
 
+  promoBanner: {
+    marginHorizontal: 16,
+    marginTop: 10,
+    marginBottom: 4,
+    borderRadius: 16,
+    borderWidth: 1,
+    padding: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  promoIconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  promoTitle: { fontSize: 15, fontWeight: '700' },
+  promoSub: { fontSize: 12, marginTop: 2, lineHeight: 17 },
+
+  tabsScroll: { marginTop: 8, marginBottom: 4, flexGrow: 0 },
+  tabsScrollContent: { paddingHorizontal: 16 },
   tabs: {
     flexDirection: 'row',
-    backgroundColor: '#fff',
-    marginHorizontal: 20,
-    borderRadius: 12,
+    borderRadius: 14,
     padding: 4,
-    marginBottom: 4,
+    borderWidth: StyleSheet.hairlineWidth,
+    gap: 4,
   },
-  tab: { flex: 1, paddingVertical: 10, alignItems: 'center', borderRadius: 10 },
+  tab: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 9,
+    paddingHorizontal: 12,
+    borderRadius: 11,
+    minWidth: 88,
+  },
   tabActive: { backgroundColor: '#0284c7' },
-  tabText: { fontSize: 13, fontWeight: '600', color: '#6b7280' },
+  tabText: { fontSize: 12, fontWeight: '700', color: '#6b7280' },
   tabTextActive: { color: '#fff' },
 
   content: { flex: 1 },
-  contentPad: { padding: 20, gap: 12, paddingBottom: 40 },
+  contentPad: { padding: 16, gap: 10, paddingBottom: 40 },
+
+  overviewStatsRow: { flexDirection: 'row', gap: 10 },
+  statCard: {
+    flex: 1,
+    borderRadius: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    padding: 14,
+    gap: 6,
+  },
+  statIconWrap: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  statLabel: { fontSize: 12, fontWeight: '600' },
+  statValue: { fontSize: 20, fontWeight: '800', letterSpacing: -0.5 },
 
   infoCard: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 16,
+    borderRadius: 16,
+    padding: 14,
     flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  infoLabel: { color: '#6b7280', fontSize: 15 },
-  infoValue: { color: '#111827', fontWeight: '600', fontSize: 15 },
-  navCard: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 16,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
+    gap: 12,
+    borderWidth: StyleSheet.hairlineWidth,
   },
-  navCardText: { color: '#111827', fontSize: 15, fontWeight: '500' },
-  navArrow: { color: '#0284c7', fontSize: 18 },
+  infoCardIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  infoLabel: { color: '#6b7280', fontSize: 13, fontWeight: '600' },
+  infoValue: { color: '#111827', fontWeight: '700', fontSize: 16, marginTop: 2 },
+  navCard: {
+    borderRadius: 16,
+    padding: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  navCardIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  navCardText: { flex: 1, color: '#111827', fontSize: 15, fontWeight: '600' },
 
   txCard: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 16,
+    borderRadius: 16,
+    padding: 14,
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'flex-start',
+    gap: 10,
+    borderWidth: StyleSheet.hairlineWidth,
   },
-  txLeft: { flex: 1, gap: 4 },
-  txRight: { alignItems: 'flex-end', gap: 6 },
+  txIconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 2,
+  },
+  txLeft: { flex: 1, gap: 3 },
+  txRight: { alignItems: 'flex-end', gap: 2 },
+  txCoinUnit: { fontSize: 11, fontWeight: '600' },
   wdRightCol: { alignItems: 'flex-end', gap: 8 },
   wdAmountLine: { fontSize: 22, fontWeight: '800', letterSpacing: -0.5 },
   wdAmountCurrency: { fontSize: 15, fontWeight: '600', opacity: 0.85 },
@@ -1486,17 +1889,49 @@ const styles = StyleSheet.create({
   statusBadge: { paddingHorizontal: 10, paddingVertical: 3, borderRadius: 20 },
   statusText: { fontSize: 12, fontWeight: '600' },
 
-  empty: { alignItems: 'center', paddingTop: 60, gap: 12 },
-  emptyIcon: { fontSize: 48 },
-  emptyText: { fontSize: 16, color: '#9ca3af' },
-  newWithdrawBtn: {
-    backgroundColor: '#0284c7',
-    paddingVertical: 14,
-    borderRadius: 12,
+  empty: { alignItems: 'center', paddingTop: 48, gap: 10, paddingHorizontal: 24 },
+  emptyIconWrap: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
     alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 4,
+  },
+  emptyTitle: { fontSize: 17, fontWeight: '700', textAlign: 'center' },
+  emptyText: { fontSize: 14, color: '#9ca3af', textAlign: 'center' },
+  newWithdrawBtn: {
+    flexDirection: 'row',
+    paddingVertical: 13,
+    paddingHorizontal: 20,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
     marginTop: 8,
   },
   newWithdrawBtnText: { color: '#fff', fontWeight: '700', fontSize: 15 },
+
+  addWalletSheet: {
+    marginTop: 'auto',
+    borderTopLeftRadius: 18,
+    borderTopRightRadius: 18,
+    padding: 20,
+    maxHeight: '70%',
+  },
+  addWalletHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  addWalletRow: {
+    paddingVertical: 14,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  addWalletRowTitle: { fontSize: 16, fontWeight: '600' },
 
   // Modal
   modalOverlay: {
@@ -1564,15 +1999,6 @@ const styles = StyleSheet.create({
   },
   modalSubmitText: { color: '#fff', fontWeight: '700', fontSize: 15 },
   btnDisabled: { backgroundColor: '#9ca3af' },
-  comingSoonBanner: {
-    marginHorizontal: 16,
-    marginBottom: 12,
-    padding: 14,
-    borderRadius: 14,
-    borderWidth: 1,
-  },
-  comingSoonTitle: { fontSize: 15, fontWeight: '700', marginBottom: 4 },
-  comingSoonText: { fontSize: 13, lineHeight: 18 },
 
   sendsOnlyBanner: {
     flexDirection: 'row',

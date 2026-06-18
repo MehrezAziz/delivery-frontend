@@ -4,14 +4,16 @@ export interface Wallet {
   id: string;
   customerId: string;
   countryId?: string;
+  countryName?: string;
+  countryIsoCode?: string;
+  currencyCode?: string;
+  currencySymbol?: string;
+  coinsPerFiatUnit?: number;
   balance: number;
-  /** Available for orders & withdrawals (balance minus pending P2P locks) */
   spendable?: number;
   lockedForTransfers?: number;
-  /** Legacy: country fiat code; primary balance is shown as Coins in the app. */
   currency: string;
   balanceUnit?: 'COINS';
-  /** Estimated local fiat equivalent from active country coin config (coins per 1.00 fiat). */
   coinsToLocalFiat?: {
     coinsPerFiatUnit: number;
     currencyCode: string;
@@ -22,6 +24,17 @@ export interface Wallet {
   } | null;
   discount: number;
   updatedAt: string;
+}
+
+export interface WalletCountryPreference {
+  countryId: string;
+  codOnly: boolean;
+}
+
+export interface WalletsSummary {
+  primaryWalletId: string | null;
+  wallets: Wallet[];
+  countryPreferences: WalletCountryPreference[];
 }
 
 export interface WalletTransaction {
@@ -87,16 +100,45 @@ export interface PaginatedResponse<T> {
 }
 
 export const walletService = {
-  getWallet: () => api.get<Wallet>('/wallet/me'),
+  getWallet: (countryId?: string, walletId?: string) => {
+    const q = new URLSearchParams();
+    if (countryId) q.set('countryId', countryId);
+    if (walletId) q.set('walletId', walletId);
+    const qs = q.toString();
+    return api.get<Wallet>(`/wallet/me${qs ? `?${qs}` : ''}`);
+  },
 
-  getTransactions: (page = 1, limit = 20) =>
-    api.get<PaginatedResponse<WalletTransaction>>(`/wallet/me/transactions?page=${page}&limit=${limit}`),
+  getWalletsSummary: () => api.get<WalletsSummary>('/wallet/me/summary'),
 
-  getWithdrawals: (page = 1, limit = 20) =>
-    api.get<PaginatedResponse<WithdrawalRequest>>(`/wallet/me/withdrawals?page=${page}&limit=${limit}`),
+  createCountryWallet: (countryId: string) =>
+    api.post<Wallet>('/wallet/countries', { countryId }),
 
-  getWithdrawalQuote: (amount: number) =>
-    api.get<WithdrawalQuote>(`/wallet/me/withdrawals/quote?amount=${encodeURIComponent(String(amount))}`),
+  setCountryPreference: (countryId: string, codOnly: boolean) =>
+    api.put<{ countryId: string; codOnly: boolean }>(
+      `/customers/me/country-preferences/${countryId}`,
+      { codOnly },
+    ),
+
+  getTransactions: (page = 1, limit = 20, walletId?: string, countryId?: string) => {
+    const q = new URLSearchParams({ page: String(page), limit: String(limit) });
+    if (walletId) q.set('walletId', walletId);
+    if (countryId) q.set('countryId', countryId);
+    return api.get<PaginatedResponse<WalletTransaction>>(`/wallet/me/transactions?${q}`);
+  },
+
+  getWithdrawals: (page = 1, limit = 20, walletId?: string, countryId?: string) => {
+    const q = new URLSearchParams({ page: String(page), limit: String(limit) });
+    if (walletId) q.set('walletId', walletId);
+    if (countryId) q.set('countryId', countryId);
+    return api.get<PaginatedResponse<WithdrawalRequest>>(`/wallet/me/withdrawals?${q}`);
+  },
+
+  getWithdrawalQuote: (amount: number, walletId?: string, countryId?: string) => {
+    const q = new URLSearchParams({ amount: String(amount) });
+    if (walletId) q.set('walletId', walletId);
+    if (countryId) q.set('countryId', countryId);
+    return api.get<WithdrawalQuote>(`/wallet/me/withdrawals/quote?${q}`);
+  },
 
   getPayoutBankDetails: () =>
     api.get<PayoutBankDetails | null>('/wallet/me/payout-bank-details'),
@@ -121,6 +163,8 @@ export const walletService = {
       payoutBankName?: string;
       payoutBankAccountRef?: string;
       saveBankDetailsToProfile?: boolean;
+      walletId?: string;
+      countryId?: string;
     },
   ) => {
     const payoutMethod = opts?.payoutMethod ?? 'BANK_TRANSFER';
@@ -129,6 +173,8 @@ export const walletService = {
       descriptionOfCustomer: opts?.description,
       payoutMethod,
     };
+    if (opts?.walletId) body.walletId = opts.walletId;
+    if (opts?.countryId) body.countryId = opts.countryId;
     if (payoutMethod === 'BANK_TRANSFER') {
       body.payoutBankHolderName = opts?.payoutBankHolderName?.trim();
       body.payoutBankName = opts?.payoutBankName?.trim();

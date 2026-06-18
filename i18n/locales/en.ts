@@ -1205,6 +1205,22 @@ const en = {
     addressNamePlaceholder: 'Name for this address (e.g. Home, Office)',
     addressNameTooShort: 'Enter at least 2 characters to save this address.',
     addressNameSaved: 'This address was added to your saved list.',
+    codOnlyBanner: '{{country}} orders are cash-only until you create a {{country}} wallet.',
+  },
+
+  multiWallet: {
+    promptTitle: 'Address in {{country}}',
+    promptBody: 'You do not have a wallet for {{country}} yet ({{currency}}). Create one to pay with wallet, or continue with cash only.',
+    createWallet: 'Create {{country}} wallet',
+    cashOnly: 'Pay cash only (no wallet)',
+    codOnlyBanner: '{{country}} orders are cash-only until you create a {{country}} wallet.',
+    walletRequired: 'Create a {{currency}} wallet to pay with wallet.',
+    sameCountryRequired: 'Pickup and delivery must be in the same country.',
+    sameCountryDetail: 'You selected {{firstCountry}}. This address is in {{secondCountry}}.',
+    addWallet: 'Add wallet for another country',
+    selectCountry: 'Choose a country',
+    walletCreated: 'Wallet created',
+    noMoreCountries: 'You already have a wallet for every available country.',
   },
 
   locationShare: {

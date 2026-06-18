@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { useRouter, usePathname } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../contexts/ThemeContext';
@@ -24,6 +25,7 @@ import { resetOrderConfirmIdentitySession } from '../utils/createOrderStepUpSess
 export const isSideMenuRouteActive = isSameAppRoute;
 
 type Role = 'guest' | 'customer' | 'driver';
+export type AppMenuRole = Role;
 
 type LinkItem = { labelKey: string; icon: keyof typeof Ionicons.glyphMap; href: string };
 
@@ -59,13 +61,20 @@ export function AppSideMenu({
   visible,
   onClose,
   role,
+  topOffset = 0,
+  bottomOffset = 0,
 }: {
   visible: boolean;
   onClose: () => void;
   role: Role;
+  /** Measured AppChromeHeader height — sidebar starts directly beneath it. */
+  topOffset?: number;
+  /** Space reserved above the bottom tab bar / home indicator. */
+  bottomOffset?: number;
 }) {
   const router = useRouter();
   const pathname = usePathname();
+  const insets = useSafeAreaInsets();
   const { push } = useAppNavigation();
   const { colors, isDark } = useTheme();
   const { t } = useTranslation();
@@ -82,6 +91,10 @@ export function AppSideMenu({
     onClose();
     setTimeout(() => push(href), 0);
   };
+
+  const fallbackTop = insets.top + 60;
+  const sidebarTop = topOffset > 0 ? topOffset : fallbackTop;
+  const sidebarBottom = bottomOffset > 0 ? bottomOffset : insets.bottom;
 
   const signOutOverlayTint = isDark ? 'rgba(0,0,0,0.72)' : 'rgba(15,23,42,0.48)';
 
@@ -115,21 +128,30 @@ export function AppSideMenu({
     }
   };
 
+  if (!visible && !signOutVisible) return null;
+
   return (
     <>
-    <Modal visible={visible} animationType="fade" transparent onRequestClose={onClose}>
-      <Pressable style={styles.overlay} onPress={onClose}>
-        <Pressable
-          style={[styles.sheet, { backgroundColor: colors.surface, borderColor: colors.border }]}
-          onPress={(e) => e.stopPropagation()}
-        >
-          <View style={[styles.sheetHeader, { borderBottomColor: colors.border }]}>
-            <Text style={[styles.sheetTitle, { color: colors.text }]}>{t('sideMenu.menu')}</Text>
-            <TouchableOpacity onPress={onClose} style={[styles.closeBtn, { backgroundColor: colors.surfaceVariant }]} hitSlop={12}>
-              <Ionicons name="close" size={22} color={colors.text} />
-            </TouchableOpacity>
-          </View>
-          <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+    {visible ? (
+      <View style={styles.portal} pointerEvents="box-none">
+        {sidebarTop > 0 ? <View style={{ height: sidebarTop }} pointerEvents="none" /> : null}
+        <View style={[styles.overlay, { marginBottom: sidebarBottom }]}>
+          <Pressable style={styles.backdrop} onPress={onClose} />
+          <View
+            style={[
+              styles.sheet,
+              {
+                backgroundColor: colors.surface,
+                borderColor: colors.border,
+              },
+            ]}
+          >
+          <ScrollView
+            style={styles.scroll}
+            contentContainerStyle={styles.scrollContent}
+            showsVerticalScrollIndicator
+            bounces
+          >
             {links.map((item) => {
               const active = isSameAppRoute(pathname, item.href);
               return (
@@ -158,14 +180,14 @@ export function AppSideMenu({
                       },
                     ]}
                   >
-                    <Ionicons name={item.icon} size={20} color={colors.primary} />
+                    <Ionicons name={item.icon} size={18} color={colors.primary} />
                   </View>
                   <Text style={[styles.rowLabel, { color: colors.text, fontWeight: active ? '800' : '600' }]}>
                     {t(item.labelKey)}
                   </Text>
                   <Ionicons
                     name={active ? 'checkmark-circle' : 'chevron-forward'}
-                    size={active ? 20 : 18}
+                    size={active ? 18 : 16}
                     color={active ? colors.primary : colors.textTertiary}
                   />
                 </TouchableOpacity>
@@ -177,14 +199,15 @@ export function AppSideMenu({
                 onPress={() => setSignOutVisible(true)}
                 activeOpacity={0.75}
               >
-                <Ionicons name="log-out-outline" size={22} color={colors.danger} />
+                <Ionicons name="log-out-outline" size={18} color={colors.danger} />
                 <Text style={[styles.logoutText, { color: colors.danger }]}>{t('sideMenu.signOut')}</Text>
               </TouchableOpacity>
             )}
           </ScrollView>
-        </Pressable>
-      </Pressable>
-    </Modal>
+          </View>
+        </View>
+      </View>
+    ) : null}
 
     {role !== 'guest' && (
       <Modal
@@ -243,74 +266,65 @@ export function AppSideMenu({
 }
 
 const styles = StyleSheet.create({
+  portal: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 9999,
+    elevation: 9999,
+  },
   overlay: {
     flex: 1,
     flexDirection: 'row',
     justifyContent: 'flex-end',
+  },
+  backdrop: {
+    flex: 1,
     backgroundColor: 'rgba(15, 23, 42, 0.45)',
   },
   sheet: {
-    width: '86%',
-    maxWidth: 340,
-    marginTop: 56,
-    marginBottom: 24,
-    marginRight: 12,
+    width: '78%',
+    maxWidth: 320,
+    marginRight: 0,
     marginLeft: 0,
     alignSelf: 'stretch',
-    borderRadius: 18,
+    borderRadius: 0,
     borderWidth: StyleSheet.hairlineWidth,
+    borderRightWidth: 0,
     overflow: 'hidden',
     shadowColor: '#000',
-    shadowOffset: { width: 4, height: 0 },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
-    elevation: 8,
+    shadowOffset: { width: -4, height: 0 },
+    shadowOpacity: 0.18,
+    shadowRadius: 14,
+    elevation: 10,
   },
-  sheetHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 18,
-    paddingVertical: 14,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-  },
-  sheetTitle: { fontSize: 18, fontWeight: '800' },
-  closeBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  scroll: { maxHeight: '88%' },
-  scrollContent: { padding: 14, paddingBottom: 24, gap: 8 },
+  scroll: { flex: 1 },
+  scrollContent: { paddingTop: 12, paddingHorizontal: 10, paddingBottom: 12, gap: 6 },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    borderRadius: 14,
+    gap: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: 0,
   },
   rowIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
+    width: 32,
+    height: 32,
+    borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  rowLabel: { flex: 1, fontSize: 15, fontWeight: '600' },
+  rowLabel: { flex: 1, fontSize: 14, fontWeight: '600' },
   logoutRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-    marginTop: 16,
-    paddingVertical: 14,
-    paddingHorizontal: 12,
-    borderRadius: 14,
+    gap: 8,
+    marginTop: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 10,
+    borderRadius: 0,
     borderWidth: StyleSheet.hairlineWidth,
   },
-  logoutText: { fontSize: 15, fontWeight: '700' },
+  logoutText: { fontSize: 14, fontWeight: '700' },
 
   signOutModalRoot: { flex: 1 },
   signOutModalAlign: {

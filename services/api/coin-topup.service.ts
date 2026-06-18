@@ -51,7 +51,13 @@ export interface CoinTopUpPending {
 }
 
 export const coinTopupService = {
-  quote: () => api.get<CoinTopUpQuote>('/coin-topup/quote'),
+  quote: (walletId?: string, countryId?: string) => {
+    const q = new URLSearchParams();
+    if (walletId) q.set('walletId', walletId);
+    if (countryId) q.set('countryId', countryId);
+    const qs = q.toString();
+    return api.get<CoinTopUpQuote>(`/coin-topup/quote${qs ? `?${qs}` : ''}`);
+  },
 
   pending: () => api.get<CoinTopUpPending[]>('/coin-topup/pending'),
 
@@ -60,8 +66,12 @@ export const coinTopupService = {
       `/coin-topup/pending/${encodeURIComponent(trackingId)}`,
     ),
 
-  initFlouci: (coinsAmount: number) =>
-    api.post<CoinTopUpInit>('/coin-topup/flouci/init', { coinsAmount }),
+  initFlouci: (coinsAmount: number, walletId?: string, countryId?: string) =>
+    api.post<CoinTopUpInit>('/coin-topup/flouci/init', {
+      coinsAmount,
+      ...(walletId ? { walletId } : {}),
+      ...(countryId ? { countryId } : {}),
+    }),
 
   verify: (body: { paymentId?: string; trackingId?: string }) =>
     api.post<CoinTopUpVerifyResponse>('/coin-topup/flouci/verify', body),

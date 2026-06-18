@@ -12,6 +12,11 @@ import { usePathname, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from './ThemeContext';
 import { isSameAppRoute } from '../utils/appRoutes';
+import {
+  type AppRole,
+  getMainTabHref,
+  hrefWithReturnTo,
+} from '../utils/navigationReturnTo';
 
 /** Only show loading if navigation takes longer than this (fast screens stay clean). */
 const NAV_OVERLAY_SHOW_DELAY_MS = 300;
@@ -21,6 +26,10 @@ const NAV_OVERLAY_MAX_WAIT_MS = 5000;
 type Ctx = {
   /** Navigation with optional delayed overlay; skips duplicate taps and no-op when already on route. */
   push: (href: string) => void;
+  /** Path visited immediately before the current screen (for tab-sibling back). */
+  getPreviousPath: () => string | null;
+  /** Last main bottom-tab route for customer/driver. */
+  getLastMainTabHref: (role: AppRole) => string | null;
 };
 
 const AppNavigationContext = createContext<Ctx | null>(null);
@@ -69,6 +78,12 @@ export function AppNavigationProvider({ children }: { children: React.ReactNode 
   const navEpochRef = useRef(0);
   const showDelayTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const maxWaitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const previousPathRef = useRef<string | null>(null);
+  const currentPathRef = useRef<string | null>(null);
+  const lastMainTabRef = useRef<{ customer: string; driver: string }>({
+    customer: '/(customer)/home',
+    driver: '/(driver)/home',
+  });
 
   const clearNavTimers = useCallback(() => {
     if (showDelayTimerRef.current) {
@@ -93,23 +108,43 @@ export function AppNavigationProvider({ children }: { children: React.ReactNode 
 
   useEffect(() => () => clearNavTimers(), [clearNavTimers]);
 
+  useEffect(() => {
+    const prev = currentPathRef.current;
+    if (pathname && prev && pathname !== prev) {
+      previousPathRef.current = prev;
+    }
+    currentPathRef.current = pathname;
+
+    const customerMain = getMainTabHref('customer', pathname);
+    if (customerMain) lastMainTabRef.current.customer = customerMain;
+    const driverMain = getMainTabHref('driver', pathname);
+    if (driverMain) lastMainTabRef.current.driver = driverMain;
+  }, [pathname]);
+
+  const getPreviousPath = useCallback(() => previousPathRef.current, []);
+  const getLastMainTabHref = useCallback(
+    (role: AppRole) => lastMainTabRef.current[role],
+    [],
+  );
+
   const push = useCallback(
     (href: string) => {
       if (!href) return;
-      if (isSameAppRoute(pathname, href)) return;
+      const target = hrefWithReturnTo(pathname, href);
+      if (isSameAppRoute(pathname, target)) return;
       const now = Date.now();
       const prev = lastPushRef.current;
-      if (prev && prev.href === href && now - prev.at < 900) return;
-      lastPushRef.current = { href, at: now };
+      if (prev && prev.href === target && now - prev.at < 900) return;
+      lastPushRef.current = { href: target, at: now };
 
       clearNavTimers();
       setOverlay(false);
       navEpochRef.current += 1;
       const epoch = navEpochRef.current;
-      pendingHrefRef.current = href;
+      pendingHrefRef.current = target;
 
       showDelayTimerRef.current = setTimeout(() => {
-        if (navEpochRef.current !== epoch || pendingHrefRef.current !== href) return;
+        if (navEpochRef.current !== epoch || pendingHrefRef.current !== target) return;
         setOverlay(true);
       }, NAV_OVERLAY_SHOW_DELAY_MS);
 
@@ -122,7 +157,7 @@ export function AppNavigationProvider({ children }: { children: React.ReactNode 
       }, NAV_OVERLAY_MAX_WAIT_MS);
 
       try {
-        router.push(href as never);
+        router.push(target as never);
       } catch {
         pendingHrefRef.current = null;
         navEpochRef.current += 1;
@@ -133,7 +168,10 @@ export function AppNavigationProvider({ children }: { children: React.ReactNode 
     [router, pathname, clearNavTimers],
   );
 
-  const value = useMemo(() => ({ push }), [push]);
+  const value = useMemo(
+    () => ({ push, getPreviousPath, getLastMainTabHref }),
+    [push, getPreviousPath, getLastMainTabHref],
+  );
 
   return (
     <AppNavigationContext.Provider value={value}>

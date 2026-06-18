@@ -81,6 +81,8 @@ export const coinsService = {
     grossCoins: number;
     recipientUserId?: string;
     recipientPhone?: string;
+    walletId?: string;
+    countryId?: string;
   }) => api.post<CoinTransferPreview>('/coins/transfers/preview', body),
 
   createTransfer: async (
@@ -91,6 +93,8 @@ export const coinsService = {
       challengeToken: string;
       giftMessage?: string;
       scheduledAt?: string;
+      walletId?: string;
+      countryId?: string;
     },
     opts?: { idempotencyKey?: string },
   ) => {

@@ -14,7 +14,7 @@ import {
 } from 'react-native';
 import Slider from '@react-native-community/slider';
 import * as WebBrowser from 'expo-web-browser';
-import { useFocusEffect, useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
@@ -26,7 +26,7 @@ import {
 } from '../services/api/coin-topup.service';
 import { ApiError } from '../services/api/client';
 import { ThemedConfirmDialog } from './ThemedConfirmDialog';
-import { coinTopupRoutes, useCoinTopupRole } from '../lib/coin-topup-role';
+import { parseWalletIdParam } from '../utils/walletNavigation';
 
 type PackPreset = CoinTopUpQuote['presets'][number];
 
@@ -245,6 +245,8 @@ const packStyles = StyleSheet.create({
 
 export default function BuyCoinsScreen() {
   const router = useRouter();
+  const { walletId: walletIdParam } = useLocalSearchParams<{ walletId?: string }>();
+  const selectedWalletId = parseWalletIdParam(walletIdParam);
   const insets = useSafeAreaInsets();
   const { colors, isDark } = useTheme();
   const { t } = useTranslation();
@@ -287,7 +289,7 @@ export default function BuyCoinsScreen() {
     try {
       setLoadErr(null);
       setLoadingQuote(true);
-      const q = await coinTopupService.quote();
+      const q = await coinTopupService.quote(selectedWalletId);
       setQuote(q);
       const start = clampSliderCoins(q.presets?.[1]?.coins ?? 2000, q);
       setCoins(start);
@@ -299,7 +301,7 @@ export default function BuyCoinsScreen() {
     } finally {
       setLoadingQuote(false);
     }
-  }, [loadPending, syncDraftFromCoins, t]);
+  }, [loadPending, syncDraftFromCoins, t, selectedWalletId]);
 
   useEffect(() => {
     void fetchQuote();
@@ -416,7 +418,7 @@ export default function BuyCoinsScreen() {
     setCheckoutPreview(null);
     setBusy(true);
     try {
-      const init = await coinTopupService.initFlouci(checkoutPreview.coins);
+      const init = await coinTopupService.initFlouci(checkoutPreview.coins, selectedWalletId);
       await openFlouciCheckout(init);
     } catch (e: unknown) {
       pendingRef.current = null;
@@ -425,7 +427,7 @@ export default function BuyCoinsScreen() {
     } finally {
       setBusy(false);
     }
-  }, [checkoutPreview, openFlouciCheckout, quote, t]);
+  }, [checkoutPreview, openFlouciCheckout, quote, selectedWalletId, t]);
 
   const confirmRemovePending = useCallback(async () => {
     const row = removePendingTarget;
@@ -473,8 +475,6 @@ export default function BuyCoinsScreen() {
     [openFlouciCheckout, t],
   );
 
-  const accentGlow = isDark ? 'rgba(94,234,212,0.16)' : 'rgba(14,165,233,0.22)';
-  const accentRing = isDark ? 'rgba(94,234,212,0.35)' : 'rgba(59,130,246,0.35)';
   const popularAccent = isDark ? '#fbbf24' : '#d97706';
   const popularBg = isDark ? 'rgba(251,191,36,0.14)' : '#fffbeb';
   const popularBorder = isDark ? 'rgba(251,191,36,0.55)' : 'rgba(217,119,6,0.45)';
@@ -482,46 +482,102 @@ export default function BuyCoinsScreen() {
 
   if (loadingQuote && !quote) {
     return (
-      <View style={[styles.fill, styles.centered, { backgroundColor: colors.background }]}>
-        <ActivityIndicator color={colors.primary} size="large" />
-        <Text style={{ marginTop: 16, color: colors.textSecondary, fontWeight: '600' }}>{t('buyCoins.loadingPricing')}</Text>
+      <View style={[styles.fill, { backgroundColor: colors.background, paddingHorizontal: 16, paddingTop: 12, gap: 14 }]}>
+        <View style={[styles.skeletonHero, { backgroundColor: colors.skeleton }]} />
+        <View style={[styles.skeletonCard, { backgroundColor: colors.skeleton }]} />
+        <View style={[styles.skeletonPack, { backgroundColor: colors.skeleton }]} />
+        <View style={[styles.skeletonPack, { backgroundColor: colors.skeleton, height: 140 }]} />
       </View>
     );
   }
 
   if (loadErr || !quote) {
     return (
-      <View style={[styles.fill, styles.centerPad, { backgroundColor: colors.background, paddingTop: insets.top + 24 }]}>
-        <Text style={{ color: colors.danger ?? '#dc2626', fontWeight: '600' }}>{loadErr}</Text>
-        <TouchableOpacity style={[styles.secondaryBtn, { borderColor: colors.border, marginTop: 20 }]} onPress={() => void fetchQuote()}>
-          <Text style={{ color: colors.primary, fontWeight: '800' }}>{t('buyCoins.tryAgain')}</Text>
+      <View style={[styles.fill, styles.centerPad, { backgroundColor: colors.background, paddingTop: 24 }]}>
+        <View style={[styles.errorIconWrap, { backgroundColor: isDark ? 'rgba(239,68,68,0.15)' : '#fef2f2' }]}>
+          <Ionicons name="alert-circle-outline" size={40} color={colors.danger ?? '#dc2626'} />
+        </View>
+        <Text style={[styles.errorTitle, { color: colors.text }]}>{t('buyCoins.unavailable')}</Text>
+        <Text style={{ color: colors.textSecondary, textAlign: 'center', marginTop: 8, lineHeight: 20 }}>{loadErr}</Text>
+        <TouchableOpacity
+          style={[styles.retryBtn, { backgroundColor: colors.primary, marginTop: 24 }]}
+          onPress={() => void fetchQuote()}
+        >
+          <Ionicons name="refresh" size={18} color="#fff" />
+          <Text style={styles.retryBtnText}>{t('buyCoins.tryAgain')}</Text>
         </TouchableOpacity>
       </View>
     );
   }
 
+  const rateLabel =
+    quote.coinsPerFiatUnit % 1 === 0
+      ? quote.coinsPerFiatUnit.toLocaleString('en-US')
+      : quote.coinsPerFiatUnit.toFixed(2);
+
   return (
     <View style={[styles.fill, { backgroundColor: colors.background }]}>
       <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + 32 }} showsVerticalScrollIndicator={false}>
-        <View style={{ paddingHorizontal: 20, paddingTop: insets.top + 12 }}>
-          <View style={styles.heroVisual} pointerEvents="none">
-            <View style={[styles.blob, styles.blobOne, { backgroundColor: accentGlow }]} />
-            <View style={[styles.blob, styles.blobTwo, { backgroundColor: accentRing }]} />
+        <View style={{ paddingHorizontal: 16, paddingTop: 8 }}>
+          {/* Hero */}
+          <View style={[styles.heroOuter, { shadowColor: isDark ? '#000' : colors.primary }]}>
+            <View style={[styles.heroCard, { backgroundColor: isDark ? '#0369a1' : colors.primary }]}>
+              <View style={styles.heroDecor1} />
+              <View style={styles.heroDecor2} />
+              <View style={styles.heroTopRow}>
+                <View style={styles.heroIconWrap}>
+                  <Ionicons name="sparkles" size={22} color="rgba(255,255,255,0.95)" />
+                </View>
+                <View style={[styles.heroStatusPill, { backgroundColor: quote.flouciReady ? 'rgba(16,185,129,0.25)' : 'rgba(251,191,36,0.25)' }]}>
+                  <Ionicons
+                    name={quote.flouciReady ? 'checkmark-circle' : 'time-outline'}
+                    size={13}
+                    color={quote.flouciReady ? '#6ee7b7' : '#fde68a'}
+                  />
+                  <Text style={[styles.heroStatusText, { color: quote.flouciReady ? '#d1fae5' : '#fef3c7' }]}>
+                    {quote.flouciReady ? t('buyCoins.buyNow') : t('buyCoins.unavailable')}
+                  </Text>
+                </View>
+              </View>
+              <Text style={styles.heroTitle}>{t('buyCoins.title')}</Text>
+              <Text style={styles.heroSub}>
+                {t('buyCoins.payInPrefix')}{quote.currencyCode}{t('buyCoins.pricingFollowsRegion')}
+              </Text>
+              <View style={styles.heroRateRow}>
+                <View style={styles.heroRatePill}>
+                  <Ionicons name="swap-horizontal" size={14} color="rgba(255,255,255,0.9)" />
+                  <Text style={styles.heroRateText}>
+                    1 {quote.currencyCode} = {rateLabel} {t('buyCoins.coins')}
+                  </Text>
+                </View>
+                <View style={styles.heroRatePill}>
+                  <Ionicons name="globe-outline" size={14} color="rgba(255,255,255,0.9)" />
+                  <Text style={styles.heroRateText}>{quote.currencyCode}</Text>
+                </View>
+              </View>
+            </View>
           </View>
 
-          <Text style={[styles.title, { color: colors.text }]}>{t('buyCoins.title')}</Text>
-          <Text style={[styles.lede, { color: colors.textSecondary }]}>
-            {t('buyCoins.payInPrefix')}{quote.currencyCode}{t('buyCoins.pricingFollowsRegion')}
-            <Text style={{ fontWeight: '700', color: colors.text }}>{t('buyCoins.countryCoinConfig')}</Text>{t('buyCoins.period')}
-          </Text>
-
           {pendingList.length > 0 ? (
-            <View style={[styles.pendingBlock, { borderColor: colors.border, backgroundColor: colors.card }]}>
-              <Text style={[styles.pendingTitle, { color: colors.text }]}>{t('buyCoins.pendingPayments')}</Text>
+            <View style={[styles.pendingBlock, { borderColor: isDark ? 'rgba(251,191,36,0.35)' : '#fcd34d', backgroundColor: isDark ? 'rgba(251,191,36,0.08)' : '#fffbeb' }]}>
+              <View style={styles.pendingHeader}>
+                <View style={[styles.pendingHeaderIcon, { backgroundColor: isDark ? 'rgba(251,191,36,0.2)' : '#fef3c7' }]}>
+                  <Ionicons name="hourglass-outline" size={18} color={popularAccent} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.pendingTitle, { color: colors.text }]}>{t('buyCoins.pendingPayments')}</Text>
+                  <Text style={[styles.pendingHeaderSub, { color: colors.textSecondary }]}>
+                    {pendingList.length} {pendingList.length === 1 ? 'session' : 'sessions'}
+                  </Text>
+                </View>
+              </View>
               {pendingList.map((row) => {
                 const removing = removingTrackingId === row.trackingId;
                 return (
-                  <View key={row.trackingId} style={[styles.pendingRow, { borderTopColor: colors.border }]}>
+                  <View key={row.trackingId} style={[styles.pendingRow, { borderTopColor: isDark ? 'rgba(251,191,36,0.2)' : '#fde68a' }]}>
+                    <View style={[styles.pendingCoinIcon, { backgroundColor: isDark ? 'rgba(14,165,233,0.15)' : colors.primaryLight }]}>
+                      <Ionicons name="logo-bitcoin" size={18} color={colors.primary} />
+                    </View>
                     <View style={{ flex: 1 }}>
                       <Text style={[styles.pendingCoins, { color: colors.text }]}>{row.coins.toFixed(2)} {t('buyCoins.coins')}</Text>
                       <Text style={[styles.pendingFiat, { color: colors.textSecondary }]}>
@@ -561,17 +617,39 @@ export default function BuyCoinsScreen() {
             <View
               style={[
                 styles.noticeCard,
-                { backgroundColor: colors.card, borderColor: quote.flouciReady ? colors.primary + '44' : colors.border },
+                {
+                  backgroundColor: colors.card,
+                  borderColor: quote.flouciReady ? colors.primary + '55' : '#fcd34d',
+                  borderLeftWidth: 3,
+                  borderLeftColor: quote.flouciReady ? colors.primary : '#f59e0b',
+                },
               ]}
             >
-              <Ionicons
-                name={quote.flouciReady ? 'card-outline' : 'information-circle-outline'}
-                size={22}
-                color={quote.flouciReady ? colors.primary : '#f59e0b'}
-              />
-              <Text style={[styles.noticeBody, { color: colors.textSecondary }]}>{subtitle}</Text>
+              <View style={[styles.noticeIconWrap, { backgroundColor: quote.flouciReady ? colors.primaryLight : '#fef3c7' }]}>
+                <Ionicons
+                  name={quote.flouciReady ? 'card-outline' : 'information-circle-outline'}
+                  size={20}
+                  color={quote.flouciReady ? colors.primary : '#f59e0b'}
+                />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.noticeTitle, { color: colors.text }]}>
+                  {quote.flouciReady ? t('buyCoins.continueToFlouci') : t('buyCoins.unavailable')}
+                </Text>
+                <Text style={[styles.noticeBody, { color: colors.textSecondary }]}>{subtitle}</Text>
+              </View>
             </View>
           ) : null}
+
+          <View style={[styles.sectionHeader, { marginTop: subtitle || pendingList.length ? 18 : 20 }]}>
+            <View style={[styles.sectionIconWrap, { backgroundColor: isDark ? '#0c4a6e' : colors.primaryLight }]}>
+              <Ionicons name="create-outline" size={18} color={colors.primary} />
+            </View>
+            <View>
+              <Text style={[styles.sectionHeaderTitle, { color: colors.text }]}>{t('buyCoins.coinAmountToBuy')}</Text>
+              <Text style={[styles.sectionHeaderSub, { color: colors.textTertiary }]}>{t('buyCoins.countryCoinConfig')}</Text>
+            </View>
+          </View>
 
           <View
             style={[
@@ -580,13 +658,10 @@ export default function BuyCoinsScreen() {
                 borderColor: isDark ? 'rgba(148,163,184,0.22)' : 'rgba(148,163,184,0.35)',
                 backgroundColor: colors.card,
                 shadowColor: isDark ? '#000' : '#0f172a',
-                shadowOffset: { width: 0, height: 14 },
-                shadowOpacity: isDark ? 0.32 : 0.1,
-                shadowRadius: 20,
-                elevation: 10,
               },
             ]}
           >
+            <View style={[styles.amountCardAccent, { backgroundColor: colors.primary }]} />
             <Text style={[styles.amountLabel, { color: colors.textSecondary }]}>{t('buyCoins.youReceive')}</Text>
             <View style={styles.amountInputRow}>
               <TextInput
@@ -612,8 +687,15 @@ export default function BuyCoinsScreen() {
               {t('buyCoins.minimumCoins', { n: quote.minCoins })}
             </Text>
             <View style={[styles.divider, { backgroundColor: colors.border }]} />
-            <Text style={[styles.payLabel, { color: colors.textSecondary }]}>{t('buyCoins.youPayApprox')}</Text>
-            <Text style={[styles.payValue, { color: colors.text }]}>{formatFiat(fiatNow, quote)}</Text>
+            <View style={styles.payRow}>
+              <View style={[styles.payIconWrap, { backgroundColor: isDark ? 'rgba(16,185,129,0.15)' : '#dcfce7' }]}>
+                <Ionicons name="cash-outline" size={20} color="#16a34a" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.payLabel, { color: colors.textSecondary }]}>{t('buyCoins.youPayApprox')}</Text>
+                <Text style={[styles.payValue, { color: colors.text }]}>{formatFiat(fiatNow, quote)}</Text>
+              </View>
+            </View>
 
             <View style={{ marginTop: 18 }}>
               <View style={[styles.sliderTrackShell, { backgroundColor: colors.surfaceVariant ?? 'rgba(0,0,0,0.06)' }]}>
@@ -652,20 +734,35 @@ export default function BuyCoinsScreen() {
                   {
                     backgroundColor: quote.flouciReady ? colors.primary : colors.textTertiary,
                     opacity: busy ? 0.72 : 1,
+                    shadowColor: quote.flouciReady ? colors.primary : 'transparent',
                   },
                 ]}
                 activeOpacity={0.9}
               >
-                {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.buyNowText}>{t('buyCoins.buyNow')}</Text>}
+                {busy ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <>
+                    <Ionicons name="lock-closed-outline" size={18} color="#fff" style={{ marginRight: 8 }} />
+                    <Text style={styles.buyNowText}>{t('buyCoins.buyNow')}</Text>
+                  </>
+                )}
               </TouchableOpacity>
             </View>
           </View>
 
           <View style={styles.packSection}>
-            <Text style={[styles.sectionTitle, { color: colors.textSecondary, marginTop: 0 }]}>{t('buyCoins.quickPacks')}</Text>
-            <Text style={[styles.packSectionHint, { color: colors.textTertiary }]}>
-              {t('buyCoins.quickPacksHint')}
-            </Text>
+            <View style={styles.sectionHeader}>
+              <View style={[styles.sectionIconWrap, { backgroundColor: isDark ? 'rgba(251,191,36,0.15)' : popularBg }]}>
+                <Ionicons name="flash" size={18} color={popularAccent} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.sectionHeaderTitle, { color: colors.text }]}>{t('buyCoins.quickPacks')}</Text>
+                <Text style={[styles.packSectionHint, { color: colors.textTertiary, marginTop: 2 }]}>
+                  {t('buyCoins.quickPacksHint')}
+                </Text>
+              </View>
+            </View>
             <View style={styles.packList}>
               {quote.presets.map((pack) => {
                 const sel = clampSliderCoins(coins, quote) === clampSliderCoins(pack.coins, quote);
@@ -723,26 +820,39 @@ export default function BuyCoinsScreen() {
               ]}
               accessibilityViewIsModal
             >
+              <View style={[styles.modalIconWrap, { backgroundColor: isDark ? '#0c4a6e' : colors.primaryLight }]}>
+                <Ionicons name="shield-checkmark-outline" size={28} color={colors.primary} />
+              </View>
               <Text style={[styles.modalTitle, { color: colors.text }]}>{t('buyCoins.confirmPayment')}</Text>
               <Text style={[styles.modalSub, { color: colors.textSecondary }]}>
                 {t('buyCoins.continueToFlouci')}
               </Text>
               {checkoutPreview ? (
-                <>
+                <View style={[styles.modalAmountBox, { backgroundColor: isDark ? colors.surfaceVariant : '#f8fafc', borderColor: colors.border }]}>
+                  <Text style={[styles.modalCoinsLabel, { color: colors.textTertiary }]}>{t('buyCoins.youReceive')}</Text>
                   <Text style={[styles.modalCoins, { color: colors.text }]}>
                     {checkoutPreview.coins.toFixed(2)} {t('buyCoins.coins')}
                   </Text>
+                  <View style={[styles.modalDivider, { backgroundColor: colors.border }]} />
+                  <Text style={[styles.modalCoinsLabel, { color: colors.textTertiary }]}>{t('buyCoins.youPay')}</Text>
                   <Text style={[styles.modalFiat, { color: colors.primary }]}>
                     {formatFiat(checkoutPreview.fiat, quote)}
                   </Text>
-                </>
+                </View>
               ) : null}
               <TouchableOpacity
-                style={[styles.buyNow, { backgroundColor: colors.primary, marginTop: 18 }]}
+                style={[styles.buyNow, { backgroundColor: colors.primary, marginTop: 18, flexDirection: 'row' }]}
                 disabled={busy}
                 onPress={() => void confirmCheckoutPreview()}
               >
-                {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.buyNowText}>{t('buyCoins.continueToFlouci')}</Text>}
+                {busy ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <>
+                    <Ionicons name="open-outline" size={18} color="#fff" style={{ marginRight: 8 }} />
+                    <Text style={styles.buyNowText}>{t('buyCoins.continueToFlouci')}</Text>
+                  </>
+                )}
               </TouchableOpacity>
               <TouchableOpacity
                 style={{ marginTop: 12, paddingVertical: 10 }}
@@ -776,28 +886,164 @@ export default function BuyCoinsScreen() {
 
 const styles = StyleSheet.create({
   fill: { flex: 1 },
-  centered: { justifyContent: 'center', alignItems: 'center' },
-  centerPad: { paddingHorizontal: 22 },
-  title: { fontSize: 28, fontWeight: '900', letterSpacing: -0.6, marginTop: 6 },
-  lede: { marginTop: 10, fontSize: 15, lineHeight: 21, maxWidth: 360 },
-  heroVisual: { position: 'absolute', top: -20, right: -30, width: 200, height: 200 },
-  blob: { position: 'absolute', borderRadius: 999 },
-  blobOne: { width: 140, height: 140, top: 0, right: 0 },
-  blobTwo: { width: 90, height: 90, top: 40, right: 60, opacity: 0.5 },
+  centerPad: { paddingHorizontal: 22, alignItems: 'center' },
+  skeletonHero: { height: 168, borderRadius: 24 },
+  skeletonCard: { height: 280, borderRadius: 22 },
+  skeletonPack: { height: 160, borderRadius: 20 },
+  errorIconWrap: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+  },
+  errorTitle: { fontSize: 20, fontWeight: '800', textAlign: 'center' },
+  retryBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 22,
+    paddingVertical: 13,
+    borderRadius: 14,
+  },
+  retryBtnText: { color: '#fff', fontWeight: '800', fontSize: 15 },
+  heroOuter: {
+    borderRadius: 24,
+    marginBottom: 4,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.22,
+    shadowRadius: 16,
+    elevation: 8,
+  },
+  heroCard: {
+    borderRadius: 24,
+    padding: 20,
+    overflow: 'hidden',
+  },
+  heroDecor1: {
+    position: 'absolute',
+    top: -40,
+    right: -30,
+    width: 130,
+    height: 130,
+    borderRadius: 65,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+  },
+  heroDecor2: {
+    position: 'absolute',
+    bottom: -30,
+    left: -20,
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+  },
+  heroTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+    zIndex: 1,
+  },
+  heroIconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  heroStatusPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 999,
+  },
+  heroStatusText: { fontSize: 11, fontWeight: '800' },
+  heroTitle: {
+    fontSize: 24,
+    fontWeight: '900',
+    letterSpacing: -0.5,
+    color: '#fff',
+    zIndex: 1,
+  },
+  heroSub: {
+    marginTop: 6,
+    fontSize: 14,
+    lineHeight: 20,
+    color: 'rgba(255,255,255,0.82)',
+    zIndex: 1,
+  },
+  heroRateRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 14,
+    zIndex: 1,
+  },
+  heroRatePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(255,255,255,0.14)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
+  },
+  heroRateText: { color: 'rgba(255,255,255,0.95)', fontSize: 12, fontWeight: '700' },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 12,
+  },
+  sectionIconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sectionHeaderTitle: { fontSize: 16, fontWeight: '800' },
+  sectionHeaderSub: { fontSize: 12, fontWeight: '600', marginTop: 1 },
   pendingBlock: {
-    marginTop: 18,
+    marginTop: 16,
     borderRadius: 16,
     borderWidth: StyleSheet.hairlineWidth,
     paddingHorizontal: 14,
     paddingBottom: 6,
   },
-  pendingTitle: { fontSize: 14, fontWeight: '800', paddingVertical: 12 },
+  pendingHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 12,
+  },
+  pendingHeaderIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pendingHeaderSub: { fontSize: 12, fontWeight: '600', marginTop: 2 },
+  pendingTitle: { fontSize: 15, fontWeight: '800' },
   pendingRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
     paddingVertical: 12,
     borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  pendingCoinIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   pendingActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   pendingRemoveBtn: {
@@ -815,19 +1061,39 @@ const styles = StyleSheet.create({
   noticeCard: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: 10,
-    padding: 12,
+    gap: 12,
+    padding: 14,
     borderRadius: 14,
     borderWidth: StyleSheet.hairlineWidth,
-    marginTop: 18,
+    marginTop: 16,
   },
-  noticeBody: { flex: 1, fontSize: 13, lineHeight: 18 },
+  noticeIconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  noticeTitle: { fontSize: 14, fontWeight: '800', marginBottom: 4 },
+  noticeBody: { fontSize: 13, lineHeight: 18 },
   amountCard: {
-    marginTop: 22,
+    marginTop: 0,
     borderRadius: 22,
     borderWidth: StyleSheet.hairlineWidth,
     paddingHorizontal: 18,
     paddingVertical: 20,
+    overflow: 'hidden',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.08,
+    shadowRadius: 16,
+    elevation: 6,
+  },
+  amountCardAccent: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 3,
   },
   amountLabel: { fontSize: 13, fontWeight: '600', letterSpacing: 0.2 },
   amountHint: { marginTop: 6, fontSize: 11, fontWeight: '600' },
@@ -852,25 +1118,34 @@ const styles = StyleSheet.create({
   },
   amountUnit: { fontSize: 19, fontWeight: '700' },
   divider: { height: StyleSheet.hairlineWidth, marginVertical: 14, opacity: 0.85 },
+  payRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  payIconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   payLabel: { fontSize: 13, fontWeight: '600' },
-  payValue: { marginTop: 4, fontSize: 26, fontWeight: '800' },
+  payValue: { marginTop: 2, fontSize: 26, fontWeight: '800' },
   sliderTrackShell: { borderRadius: 999, paddingHorizontal: 4, paddingVertical: 6 },
   sliderLegend: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 4 },
   legendText: { fontSize: 11, fontWeight: '700' },
-  buyNow: { borderRadius: 14, paddingVertical: 14, alignItems: 'center', justifyContent: 'center' },
-  buyNowText: { color: '#fff', fontWeight: '900', fontSize: 16 },
-  sectionTitle: {
-    marginTop: 26,
-    marginBottom: 12,
-    fontSize: 12,
-    letterSpacing: 1.6,
-    textTransform: 'uppercase',
-    fontWeight: '800',
+  buyNow: {
+    flexDirection: 'row',
+    borderRadius: 14,
+    paddingVertical: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.28,
+    shadowRadius: 10,
+    elevation: 4,
   },
-  packSection: { marginTop: 26 },
-  packSectionHint: { marginTop: -4, marginBottom: 14, fontSize: 13, lineHeight: 19, fontWeight: '500' },
+  buyNowText: { color: '#fff', fontWeight: '900', fontSize: 16 },
+  packSection: { marginTop: 24 },
+  packSectionHint: { fontSize: 13, lineHeight: 19, fontWeight: '500' },
   packList: { gap: 14 },
-  secondaryBtn: { alignSelf: 'flex-start', paddingHorizontal: 16, paddingVertical: 11, borderRadius: 12, borderWidth: 1 },
   modalRoot: { flex: 1 },
   modalAlign: {
     flex: 1,
@@ -881,13 +1156,32 @@ const styles = StyleSheet.create({
     borderRadius: 22,
     borderWidth: StyleSheet.hairlineWidth,
     padding: 22,
+    alignItems: 'center',
     shadowOffset: { width: 0, height: 16 },
     shadowOpacity: 0.2,
     shadowRadius: 24,
     elevation: 12,
   },
-  modalTitle: { fontSize: 20, fontWeight: '900' },
-  modalSub: { marginTop: 8, fontSize: 13, lineHeight: 18 },
-  modalCoins: { marginTop: 18, fontSize: 17, fontWeight: '800', textAlign: 'center' },
-  modalFiat: { marginTop: 6, fontSize: 32, fontWeight: '900', textAlign: 'center' },
+  modalIconWrap: {
+    width: 56,
+    height: 56,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+  },
+  modalTitle: { fontSize: 20, fontWeight: '900', textAlign: 'center' },
+  modalSub: { marginTop: 8, fontSize: 13, lineHeight: 18, textAlign: 'center' },
+  modalAmountBox: {
+    alignSelf: 'stretch',
+    marginTop: 18,
+    borderRadius: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    padding: 16,
+    alignItems: 'center',
+  },
+  modalCoinsLabel: { fontSize: 11, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 },
+  modalDivider: { height: StyleSheet.hairlineWidth, alignSelf: 'stretch', marginVertical: 12 },
+  modalCoins: { marginTop: 4, fontSize: 18, fontWeight: '800', textAlign: 'center' },
+  modalFiat: { marginTop: 4, fontSize: 30, fontWeight: '900', textAlign: 'center' },
 });
